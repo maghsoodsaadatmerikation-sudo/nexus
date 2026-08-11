@@ -1,3 +1,0 @@
-git add .
-git commit -m "chore: add final NEXUS Prototype-0.1 verification protocol"
-git push origin main
