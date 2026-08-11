@@ -1,0 +1,137 @@
+name: NEXUS Verification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Verification mode"
+        required: true
+        type: choice
+        default: verify
+        options:
+          - bootstrap
+          - verify
+
+env:
+  RUST_IMAGE: rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Python
+        run: sudo apt-get update && sudo apt-get install -y python3
+
+      - name: Static verification matrix
+        run: python3 scripts/verify_test_matrix.py
+
+  bootstrap:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'bootstrap'
+    needs: preflight
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Docker
+        run: docker --version
+
+      - name: Bootstrap Cargo.lock
+        env:
+          RUST_IMAGE: ${{ env.RUST_IMAGE }}
+        run: bash scripts/bootstrap-docker.sh
+
+      - name: Upload Cargo.lock candidate
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        with:
+          name: cargo-lock-candidate
+          path: Cargo.lock
+          if-no-files-found: error
+
+  verify:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'verify')
+    needs: preflight
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Verify pinned environment and gates
+        id: verify
+        env:
+          RUST_IMAGE: ${{ env.RUST_IMAGE }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          RUNNER_OS: ${{ runner.os }}
+        run: bash scripts/verify-docker.sh
+
+      - name: Self-audit verification evidence
+        id: self-audit
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          bash scripts/verify-manifest.sh \
+            verification-manifest.txt \
+            "build_verification_${GITHUB_RUN_ID}.log"
+
+      - name: Bundle verification evidence
+        if: success()
+        run: |
+          tar -czf verification-bundle.tar.gz \
+            verification-manifest.txt \
+            "build_verification_${GITHUB_RUN_ID}.log" \
+            Cargo.lock
+          test -s verification-bundle.tar.gz
+
+      - name: Attest verification bundle
+        if: success()
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: verification-bundle.tar.gz
+
+      - name: Upload verification log
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        with:
+          name: verification-log
+          path: build_verification_*.log
+          if-no-files-found: error
+
+      - name: Upload verification manifest
+        if: success()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        with:
+          name: verification-manifest
+          path: verification-manifest.txt
+          if-no-files-found: error
+
+      - name: Upload verified Cargo.lock
+        if: success()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        with:
+          name: cargo-lock-verified
+          path: Cargo.lock
+          if-no-files-found: error
+
+      - name: Upload attested verification bundle
+        if: success()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        with:
+          name: verification-bundle
+          path: verification-bundle.tar.gz
+          if-no-files-found: error
