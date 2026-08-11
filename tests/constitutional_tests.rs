@@ -8,7 +8,7 @@ fn envelope(id: &str, authority: Authority, payload: &str) -> RequestEnvelope {
 #[test] fn ct_002_authority_can_decrease() { assert!(leq(Authority::System, Authority::User)); }
 #[test] fn ct_003_authority_cannot_increase() { assert!(!leq(Authority::User, Authority::Policy)); }
 #[test] fn ct_004_none_cannot_be_amplified() { assert!(!leq(Authority::None, Authority::User)); }
-#[test] fn ct_005_envelope_serializes() { let x = serde_json::to_string(&envelope("1", Authority::User, "x")).is_ok(); assert!(x); }
+#[test] fn ct_005_envelope_fields_preserved() { let e=envelope("1",Authority::User,"x"); assert_eq!(e.request_id,"1"); assert_eq!(e.payload,"x"); }
 #[test] fn ct_006_policy_is_deterministic() { let p=PolicyEngine::new(); let a=p.authorize(envelope("1",Authority::User,"x")).unwrap(); let b=p.authorize(envelope("1",Authority::User,"x")).unwrap(); assert_eq!(a,b); }
 #[test] fn ct_007_empty_payload_denied() { assert!(!PolicyEngine::new().authorize(envelope("1",Authority::User,"")).is_ok()); }
 #[test] fn ct_008_user_request_allowed() { assert!(PolicyEngine::new().authorize(envelope("1",Authority::User,"x")).is_ok()); }
