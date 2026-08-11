@@ -1,0 +1,118 @@
+name: NEXUS Verification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Verification mode"
+        required: true
+        type: choice
+        default: verify
+        options:
+          - bootstrap
+          - verify
+
+env:
+  # 🔒 Official Docker Hub rust:1.85.0 multi-arch index digest
+  RUST_IMAGE: rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install Python
+        run: sudo apt-get update && sudo apt-get install -y python3
+      - name: Static Test Matrix
+        run: python3 scripts/verify_test_matrix.py
+
+  bootstrap:
+    if: >
+      github.event_name == 'workflow_dispatch' &&
+      inputs.mode == 'bootstrap'
+    needs: preflight
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Bootstrap Cargo.lock
+        env:
+          RUST_IMAGE: ${{ env.RUST_IMAGE }}
+        run: ./scripts/bootstrap-docker.sh
+      - name: Upload Cargo.lock Candidate
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        with:
+          name: cargo-lock-candidate
+          path: Cargo.lock
+          if-no-files-found: error
+
+  verify:
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.mode == 'verify')
+    needs: preflight
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Verify
+        id: verify
+        env:
+          RUST_IMAGE: ${{ env.RUST_IMAGE }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: ./scripts/verify-docker.sh
+
+      - name: Self-audit verification evidence
+        id: self-audit
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          ./scripts/verify-manifest.sh \
+            verification-manifest.txt \
+            "build_verification_${GITHUB_RUN_ID}.log"
+
+      - name: Upload Verification Log
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        with:
+          name: verification-log
+          path: build_verification_*.log
+
+      - name: Upload Verification Manifest
+        if: success()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        with:
+          name: verification-manifest
+          path: verification-manifest.txt
+
+      - name: Upload Cargo.lock (Verified)
+        if: success()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        with:
+          name: cargo-lock-verified
+          path: Cargo.lock
+
+      - name: Bundle verification evidence
+        if: success()
+        run: |
+          tar -czf verification-bundle.tar.gz \
+            verification-manifest.txt \
+            build_verification_${GITHUB_RUN_ID}.log \
+            Cargo.lock
+
+      - name: Attest Build Provenance
+        if: success()
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: verification-bundle.tar.gz
