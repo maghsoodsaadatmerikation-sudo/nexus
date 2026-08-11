@@ -23,7 +23,7 @@ if [[ ! "$RUST_IMAGE" =~ ^rust@sha256:[0-9a-f]{64}$ ]]; then
 fi
 
 [[ -f Cargo.toml ]] || { echo "[FATAL] Cargo.toml missing."; exit 1; }
-[[ -x scripts/run_gates.sh ]] || { echo "[FATAL] scripts/run_gates.sh missing or not executable."; exit 1; }
+[[ -f scripts/run_gates.sh ]] || { echo "[FATAL] scripts/run_gates.sh missing."; exit 1; }
 [[ -s Cargo.lock ]] || { echo "[FATAL] Cargo.lock missing or empty."; exit 1; }
 
 rm -f "$MANIFEST_FILE"
@@ -52,7 +52,7 @@ if ! {
       -v "$PROJECT_ROOT:/app" \
       -w /app \
       "$RUST_IMAGE" \
-      ./scripts/run_gates.sh
+      bash scripts/run_gates.sh
     echo "[VERIFY] Gates completed."
 } >"$RAW_LOG" 2>&1; then
     mv "$RAW_LOG" "$LOG_FILE"
