@@ -15,6 +15,7 @@ on:
           - verify
 
 env:
+  # Official Docker Hub rust:1.85.0 multi-arch index digest.
   RUST_IMAGE: rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
 
 jobs:
@@ -42,7 +43,7 @@ jobs:
       - name: Checkout exact commit
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Install Docker
+      - name: Verify Docker availability
         run: docker --version
 
       - name: Bootstrap Cargo.lock
@@ -65,6 +66,7 @@ jobs:
       contents: read
       id-token: write
       attestations: write
+      artifact-metadata: write
 
     steps:
       - name: Checkout exact commit
