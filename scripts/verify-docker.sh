@@ -10,7 +10,6 @@ cd "$PROJECT_ROOT"
 
 RUN_ID="$GITHUB_RUN_ID"
 COMMIT_HASH="$GITHUB_SHA"
-
 LOG_FILE="build_verification_${RUN_ID}.log"
 RAW_LOG="${LOG_FILE}.tmp"
 MANIFEST_FILE="verification-manifest.txt"
@@ -18,26 +17,21 @@ MANIFEST_FILE="verification-manifest.txt"
 cleanup() { rm -f "$RAW_LOG"; }
 trap cleanup EXIT
 
-if [[ "$RUST_IMAGE" != rust@sha256:* ]]; then
-    echo "[FATAL] Docker image is not digest-pinned."
+if [[ ! "$RUST_IMAGE" =~ ^rust@sha256:[0-9a-f]{64}$ ]]; then
+    echo "[FATAL] Docker image is not digest-pinned to a 64-hex SHA-256 digest."
     exit 1
 fi
 
-if [[ ! -s Cargo.lock ]]; then
-    echo "[FATAL] Cargo.lock missing or empty."
-    exit 1
-fi
+[[ -f Cargo.toml ]] || { echo "[FATAL] Cargo.toml missing."; exit 1; }
+[[ -x scripts/run_gates.sh ]] || { echo "[FATAL] scripts/run_gates.sh missing or not executable."; exit 1; }
+[[ -s Cargo.lock ]] || { echo "[FATAL] Cargo.lock missing or empty."; exit 1; }
 
+rm -f "$MANIFEST_FILE"
 docker pull "$RUST_IMAGE"
-
 LOCAL_IMAGE_ID="$(docker image inspect "$RUST_IMAGE" --format '{{.Id}}')"
-
-TOOLCHAIN_INFO="$(
-    docker run --rm "$RUST_IMAGE" sh -c 'rustc --version; cargo --version'
-)"
+TOOLCHAIN_INFO="$(docker run --rm -e HOME=/tmp/home -e CARGO_HOME=/tmp/cargo "$RUST_IMAGE" sh -c 'rustc --version; cargo --version')"
 RUSTC_VERSION="$(printf '%s\n' "$TOOLCHAIN_INFO" | sed -n '1p')"
 CARGO_VERSION="$(printf '%s\n' "$TOOLCHAIN_INFO" | sed -n '2p')"
-
 LOCK_HASH_BEFORE="$(sha256sum Cargo.lock | awk '{print $1}')"
 
 if ! {
@@ -51,14 +45,14 @@ if ! {
     echo "$CARGO_VERSION"
     echo "Cargo.lock SHA-256 (before): $LOCK_HASH_BEFORE"
     echo "[VERIFY] Executing Gates..."
-
     docker run --rm \
       --user "$(id -u):$(id -g)" \
+      -e HOME=/tmp/home \
+      -e CARGO_HOME=/tmp/cargo \
       -v "$PROJECT_ROOT:/app" \
       -w /app \
       "$RUST_IMAGE" \
       ./scripts/run_gates.sh
-
     echo "[VERIFY] Gates completed."
 } >"$RAW_LOG" 2>&1; then
     mv "$RAW_LOG" "$LOG_FILE"
@@ -67,13 +61,13 @@ if ! {
 fi
 
 mv "$RAW_LOG" "$LOG_FILE"
-
 LOCK_HASH_AFTER="$(sha256sum Cargo.lock | awk '{print $1}')"
 
 if [[ "$LOCK_HASH_BEFORE" != "$LOCK_HASH_AFTER" ]]; then
     {
         echo "Cargo.lock SHA-256 (after): $LOCK_HASH_AFTER"
         echo "Cargo.lock invariant: FAIL"
+        echo "Status: FAIL"
     } >>"$LOG_FILE"
     exit 1
 fi
@@ -86,7 +80,6 @@ fi
 } >>"$LOG_FILE"
 
 LOG_HASH="$(sha256sum "$LOG_FILE" | awk '{print $1}')"
-
 cat >"$MANIFEST_FILE" <<EOF
 NEXUS Verification Manifest
 ===========================
