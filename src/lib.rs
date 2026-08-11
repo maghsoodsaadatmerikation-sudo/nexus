@@ -3,7 +3,7 @@
 //! NEXUS Constitutional Core — Prototype 0.1.
 //!
 //! The core deliberately separates computation from epistemic authority.
-//! The executor accepts only an `AuthorizedRequest`.  Construction of that
+//! The executor accepts only an `AuthorizedRequest`. Construction of that
 //! type is restricted to the crate's policy boundary.
 
 use std::marker::PhantomData;
@@ -24,8 +24,8 @@ impl RequestId {
 
 /// Input presented to the policy boundary.
 ///
-/// The core treats the payload as opaque data.  It does not interpret
-/// meaning, diagnose a person, or infer an identity from it.
+/// The core treats the payload as opaque data. It does not interpret meaning,
+/// diagnose a person, or infer an identity from it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
     id: RequestId,
@@ -51,7 +51,7 @@ impl Request {
 
 /// Marker proving that a request crossed the policy boundary.
 ///
-/// The constructor is intentionally private.  External callers cannot forge
+/// The constructor is intentionally private. External callers cannot forge
 /// an `AuthorizedRequest` merely by constructing a value with the same data.
 #[derive(Debug)]
 pub struct AuthorizedRequest {
@@ -80,9 +80,9 @@ pub enum PolicyDecision {
     Denied,
 }
 
-/// The only public entry point for creating an `AuthorizedRequest`.
+/// The public entry point for creating an `AuthorizedRequest`.
 ///
-/// This type is the constitutional policy boundary.  It can authorize or
+/// This type is the constitutional policy boundary. It can authorize or
 /// reject access, but it does not interpret the request payload.
 pub struct PolicyEngine {
     _private: (),
@@ -95,7 +95,7 @@ impl PolicyEngine {
 
     pub fn authorize(&self, request: Request) -> Result<AuthorizedRequest, PolicyDecision> {
         // Prototype policy: an empty payload is rejected; non-empty opaque
-        // payloads may cross the boundary.  No semantic interpretation occurs.
+        // payloads may cross the boundary. No semantic interpretation occurs.
         if request.payload().is_empty() {
             return Err(PolicyDecision::Denied);
         }
@@ -116,7 +116,7 @@ impl Default for PolicyEngine {
 /// Output produced by the executor.
 ///
 /// The executor is intentionally incapable of producing an interpretation or
-/// diagnostic.  It receives only an already-authorized opaque request.
+/// diagnostic. It receives only an already-authorized opaque request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionReceipt {
     request_id: RequestId,
@@ -179,6 +179,9 @@ mod tests {
         let policy = PolicyEngine::new();
         let request = Request::new(RequestId::new(2), Vec::<u8>::new());
 
-        assert_eq!(policy.authorize(request), Err(PolicyDecision::Denied));
+        assert!(matches!(
+            policy.authorize(request),
+            Err(PolicyDecision::Denied)
+        ));
     }
 }
