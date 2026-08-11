@@ -3,10 +3,13 @@ name = "nexus-constitutional-core"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
-description = "Minimal constitutional boundary core for NEXUS Prototype-0.1"
 
 [lib]
 name = "nexus_constitutional_core"
 path = "src/lib.rs"
 
 [dependencies]
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+trybuild = "1.0"
