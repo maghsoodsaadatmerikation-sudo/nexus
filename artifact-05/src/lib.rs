@@ -140,8 +140,6 @@ async fn submit<D: ConstitutionalDelegate>(
         }
     };
 
-    let request_id = envelope.request_id.clone();
-
     match state.delegate.submit(envelope) {
         Ok(submission) => {
             state.statuses.write().expect("status lock poisoned")
