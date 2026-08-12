@@ -2,7 +2,7 @@ name: NEXUS Artifact 05
 
 on:
   push:
-    branches: [main, artifact-05, artifact-05-hardening]
+    branches: [main, artifact-05, artifact-05-hardening, prototype-0.2-gateway-boundary]
   pull_request:
     branches: [main]
     paths:
@@ -34,6 +34,11 @@ jobs:
           docker pull "$RUST_IMAGE"
           docker run --rm "$RUST_IMAGE" sh -c 'rustc --version && cargo --version'
 
+      - name: Enforce transport-only boundary
+        run: |
+          set -euo pipefail
+          ! grep -Eq 'PolicyEngine::|Executor::|\.authorize\(|\.execute\(|mutate_policy' artifact-05/src/lib.rs
+
       - name: Generate Artifact 05 lockfile and run contract gates
         run: |
           set -euo pipefail
@@ -46,6 +51,6 @@ jobs:
               cargo generate-lockfile
               cargo fmt -- --check
               cargo build --locked
-              cargo test --locked
+              cargo test --all-targets --locked
               cargo test --doc --locked
             '
