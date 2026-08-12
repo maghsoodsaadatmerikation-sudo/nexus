@@ -12,12 +12,63 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::{Arc, RwLock}};
 use uuid::Uuid;
 
+/// Transport-only representation of authority. Conversion is syntactic; it does not
+/// authorize or elevate anything. Constitutional authorization remains in the delegate.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum WireAuthority {
+    None,
+    User,
+    Policy,
+    System,
+}
+
+impl From<WireAuthority> for Authority {
+    fn from(value: WireAuthority) -> Self {
+        match value {
+            WireAuthority::None => Authority::None,
+            WireAuthority::User => Authority::User,
+            WireAuthority::Policy => Authority::Policy,
+            WireAuthority::System => Authority::System,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct SubmitRequest {
     pub request_id: Option<String>,
-    pub authority: Authority,
-    pub action: Action,
+    pub authority: WireAuthority,
+    pub action: String,
+    pub subject: Option<String>,
+    pub value: Option<String>,
+    pub option: Option<String>,
     pub payload: String,
+}
+
+impl SubmitRequest {
+    /// Shape validation only. This function intentionally performs no policy decision.
+    fn into_envelope(self) -> Result<RequestEnvelope, &'static str> {
+        let request_id = self.request_id.unwrap_or_else(|| Uuid::new_v4().to_string());
+        let action = match self.action.as_str() {
+            "reflect" => Action::Reflect {
+                subject: self.subject.ok_or("missing_subject")?,
+            },
+            "present" => Action::Present {
+                value: self.value.ok_or("missing_value")?,
+            },
+            "select" => Action::Select {
+                option: self.option.ok_or("missing_option")?,
+            },
+            _ => return Err("invalid_action"),
+        };
+
+        Ok(RequestEnvelope::new(
+            request_id,
+            self.authority.into(),
+            action,
+            self.payload,
+        ))
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -76,15 +127,20 @@ async fn submit<D: ConstitutionalDelegate>(
     State(state): State<AppState<D>>,
     Json(input): Json<SubmitRequest>,
 ) -> impl IntoResponse {
-    // Transport responsibility ends at parsing, shape validation, envelope
-    // construction, delegation, and serialization. No policy decision is made here.
-    let request_id = input.request_id.unwrap_or_else(|| Uuid::new_v4().to_string());
-    let envelope = RequestEnvelope::new(
-        request_id.clone(),
-        input.authority,
-        input.action,
-        input.payload,
-    );
+    // HTTP responsibility ends at parsing, shape validation, envelope construction,
+    // delegation, and serialization. No constitutional decision is made here.
+    let envelope = match input.into_envelope() {
+        Ok(envelope) => envelope,
+        Err(error) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse { error }),
+            )
+                .into_response();
+        }
+    };
+
+    let request_id = envelope.request_id.clone();
 
     match state.delegate.submit(envelope) {
         Ok(submission) => {
@@ -128,6 +184,9 @@ async fn status<D: ConstitutionalDelegate>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::Body;
+    use axum::http::Request;
+    use http_body_util::BodyExt;
     use std::sync::{Arc, Mutex};
 
     #[derive(Clone, Default)]
@@ -139,6 +198,10 @@ mod tests {
             self.0.lock().unwrap().push(envelope);
             Ok(Submission { request_id: id })
         }
+    }
+
+    async fn body_json(response: axum::response::Response) -> serde_json::Value {
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap()
     }
 
     #[tokio::test]
@@ -153,11 +216,11 @@ mod tests {
             "subject": "opaque",
             "payload": "opaque"
         });
-        let request = axum::http::Request::builder()
+        let request = Request::builder()
             .method("POST")
             .uri("/v1/requests")
             .header("content-type", "application/json")
-            .body(axum::body::Body::from(body.to_string()))
+            .body(Body::from(body.to_string()))
             .unwrap();
 
         let response = tower::ServiceExt::oneshot(router, request).await.unwrap();
@@ -167,5 +230,41 @@ mod tests {
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].request_id, "r-05");
         assert_eq!(recorded[0].payload, "opaque");
+        assert_eq!(recorded[0].authority, Authority::User);
+    }
+
+    #[tokio::test]
+    async fn malformed_shape_is_rejected_before_delegation() {
+        let delegate = RecordingDelegate::default();
+        let router = router(AppState::new(delegate.clone()));
+        let body = serde_json::json!({
+            "authority": "user",
+            "action": "reflect",
+            "payload": "opaque"
+        });
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/requests")
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+
+        let response = tower::ServiceExt::oneshot(router, request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(body_json(response).await["error"], "missing_subject");
+        assert!(delegate.0.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn unknown_request_is_not_found() {
+        let router = router(AppState::new(RecordingDelegate::default()));
+        let request = Request::builder()
+            .method("GET")
+            .uri("/v1/requests/unknown")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = tower::ServiceExt::oneshot(router, request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }
