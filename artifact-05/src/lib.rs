@@ -9,7 +9,10 @@ use axum::{
 };
 use nexus_constitutional_core::{Action, Authority, RequestEnvelope};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::{Arc, RwLock}};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 use uuid::Uuid;
 
 /// Transport-only representation of authority. Conversion is syntactic; it does not
@@ -48,7 +51,9 @@ pub struct SubmitRequest {
 impl SubmitRequest {
     /// Shape validation only. This function intentionally performs no policy decision.
     fn into_envelope(self) -> Result<RequestEnvelope, &'static str> {
-        let request_id = self.request_id.unwrap_or_else(|| Uuid::new_v4().to_string());
+        let request_id = self
+            .request_id
+            .unwrap_or_else(|| Uuid::new_v4().to_string());
         let action = match self.action.as_str() {
             "reflect" => Action::Reflect {
                 subject: self.subject.ok_or("missing_subject")?,
@@ -131,18 +136,15 @@ async fn submit<D: ConstitutionalDelegate>(
     // delegation, and serialization. No constitutional decision is made here.
     let envelope = match input.into_envelope() {
         Ok(envelope) => envelope,
-        Err(error) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse { error }),
-            )
-                .into_response();
-        }
+        Err(error) => return (StatusCode::BAD_REQUEST, Json(ErrorResponse { error })).into_response(),
     };
 
     match state.delegate.submit(envelope) {
         Ok(submission) => {
-            state.statuses.write().expect("status lock poisoned")
+            state
+                .statuses
+                .write()
+                .expect("status lock poisoned")
                 .insert(submission.request_id.clone(), RequestStatus::Pending);
             (
                 StatusCode::ACCEPTED,
@@ -155,7 +157,9 @@ async fn submit<D: ConstitutionalDelegate>(
         }
         Err(_) => (
             StatusCode::BAD_GATEWAY,
-            Json(ErrorResponse { error: "constitutional_delegate_unavailable" }),
+            Json(ErrorResponse {
+                error: "constitutional_delegate_unavailable",
+            }),
         )
             .into_response(),
     }
@@ -165,15 +169,26 @@ async fn status<D: ConstitutionalDelegate>(
     State(state): State<AppState<D>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match state.statuses.read().expect("status lock poisoned").get(&id).cloned() {
+    match state
+        .statuses
+        .read()
+        .expect("status lock poisoned")
+        .get(&id)
+        .cloned()
+    {
         Some(status) => (
             StatusCode::OK,
-            Json(AcceptedResponse { request_id: id, status }),
+            Json(AcceptedResponse {
+                request_id: id,
+                status,
+            }),
         )
             .into_response(),
         None => (
             StatusCode::NOT_FOUND,
-            Json(ErrorResponse { error: "request_not_found" }),
+            Json(ErrorResponse {
+                error: "request_not_found",
+            }),
         )
             .into_response(),
     }
@@ -199,7 +214,15 @@ mod tests {
     }
 
     async fn body_json(response: axum::response::Response) -> serde_json::Value {
-        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap()
+        serde_json::from_slice(
+            &response
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes(),
+        )
+        .unwrap()
     }
 
     #[tokio::test]
