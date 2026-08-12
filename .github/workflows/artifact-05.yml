@@ -13,6 +13,9 @@ on:
       - '.github/workflows/artifact-05.yml'
   workflow_dispatch:
 
+env:
+  RUST_IMAGE: rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
+
 permissions:
   contents: read
 
@@ -20,30 +23,29 @@ jobs:
   contract:
     name: Artifact 05 contract
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: artifact-05
     steps:
       - name: Checkout exact revision
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Install pinned Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@fb51252c7ba57d633bc668f941da052e410add48
-        with:
-          toolchain: 1.85.0
-          components: rustfmt
+      - name: Verify pinned environment
+        run: |
+          set -euo pipefail
+          test "${RUST_IMAGE#rust@sha256:}" != "$RUST_IMAGE"
+          docker pull "$RUST_IMAGE"
+          docker run --rm "$RUST_IMAGE" sh -c 'rustc --version && cargo --version'
 
-      - name: Generate development lockfile
-        run: cargo generate-lockfile
-
-      - name: Formatting
-        run: cargo fmt -- --check
-
-      - name: Locked build
-        run: cargo build --locked
-
-      - name: Locked contract tests
-        run: cargo test --locked
-
-      - name: Locked documentation tests
-        run: cargo test --doc --locked
+      - name: Generate Artifact 05 lockfile and run contract gates
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace/artifact-05 \
+            "$RUST_IMAGE" \
+            sh -c '
+              cargo generate-lockfile
+              cargo fmt -- --check
+              cargo build --locked
+              cargo test --locked
+              cargo test --doc --locked
+            '
