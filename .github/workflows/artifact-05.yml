@@ -2,7 +2,10 @@ name: NEXUS Artifact 05
 
 on:
   push:
-    branches: [artifact-05]
+    branches:
+      - artifact-05
+      - artifact-05-hardening
+      - prototype-0.2-gateway
   pull_request:
     branches: [main]
     paths:
@@ -10,6 +13,7 @@ on:
       - 'src/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - 'scripts/verify_artifact_05_boundary.sh'
       - '.github/workflows/artifact-05.yml'
   workflow_dispatch:
 
@@ -24,13 +28,13 @@ jobs:
       run:
         working-directory: artifact-05
     steps:
-      - name: Checkout
+      - name: Checkout exact ref
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Install Rust
+      - name: Install Rust 1.85.0
         uses: actions-rust-lang/setup-rust-toolchain@fb51252c7ba57d633bc668f941da052e410add48
         with:
-          toolchain: stable
+          toolchain: 1.85.0
           components: rustfmt
 
       - name: Generate development lockfile
@@ -38,6 +42,10 @@ jobs:
 
       - name: Formatting
         run: cargo fmt -- --check
+
+      - name: Static authority-boundary check
+        working-directory: .
+        run: bash scripts/verify_artifact_05_boundary.sh
 
       - name: Build
         run: cargo build
