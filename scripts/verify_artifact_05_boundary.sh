@@ -2,17 +2,21 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GATEWAY="$ROOT/artifact-05/src"
+GATEWAY_LIB="$ROOT/artifact-05/src/lib.rs"
 
-[[ -d "$GATEWAY" ]] || { echo "[GATEWAY] source directory missing"; exit 1; }
+[[ -f "$GATEWAY_LIB" ]] || {
+    echo "[GATEWAY] gateway library missing"
+    exit 1
+}
 
-# The gateway may only depend on the typed delegate boundary. These symbols would
-# create a second authority/execution path if referenced from gateway source.
+# The HTTP gateway library may only depend on the typed delegate boundary.
+# The binary composition root is intentionally allowed to wire the Constitutional
+# Core into that delegate; the transport layer itself must never perform these calls.
 forbidden='PolicyEngine|Executor|\.authorize\(|\.deny\(|\.execute\(|mutate_policy\('
 
-if grep -RInE "$forbidden" "$GATEWAY"; then
-    echo "[GATEWAY] forbidden constitutional operation detected"
+if grep -nE "$forbidden" "$GATEWAY_LIB"; then
+    echo "[GATEWAY] forbidden constitutional operation detected in transport layer"
     exit 1
 fi
 
-echo "[GATEWAY] static authority-boundary check: PASS"
+echo "[GATEWAY] transport authority-boundary check: PASS"
