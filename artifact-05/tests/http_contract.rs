@@ -1,5 +1,10 @@
-use axum::{body::Body, http::{Request, StatusCode}};
-use nexus_artifact_05_gateway::{router, AppState, ConstitutionalDelegate, DelegateError, Submission};
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+};
+use nexus_artifact_05_gateway::{
+    router, AppState, ConstitutionalDelegate, DelegateError, Submission,
+};
 use nexus_constitutional_core::RequestEnvelope;
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
