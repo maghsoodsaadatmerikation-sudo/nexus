@@ -16,6 +16,7 @@ use uuid::Uuid;
 pub struct SubmitRequest {
     pub request_id: Option<String>,
     pub authority: Authority,
+    #[serde(flatten)]
     pub action: Action,
     pub payload: String,
 }
@@ -30,7 +31,6 @@ pub struct AcceptedResponse {
 #[serde(rename_all = "lowercase")]
 pub enum RequestStatus {
     Pending,
-    Completed,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -76,15 +76,10 @@ async fn submit<D: ConstitutionalDelegate>(
     State(state): State<AppState<D>>,
     Json(input): Json<SubmitRequest>,
 ) -> impl IntoResponse {
-    // Transport responsibility ends at parsing, shape validation, envelope
-    // construction, delegation, and serialization. No policy decision is made here.
+    // HTTP transport only parses the envelope, validates its required shape,
+    // delegates it, and serializes the transport response. It does not apply policy.
     let request_id = input.request_id.unwrap_or_else(|| Uuid::new_v4().to_string());
-    let envelope = RequestEnvelope::new(
-        request_id.clone(),
-        input.authority,
-        input.action,
-        input.payload,
-    );
+    let envelope = RequestEnvelope::new(request_id, input.authority, input.action, input.payload);
 
     match state.delegate.submit(envelope) {
         Ok(submission) => {
@@ -144,8 +139,7 @@ mod tests {
     #[tokio::test]
     async fn gateway_delegates_without_authorizing() {
         let delegate = RecordingDelegate::default();
-        let router = router(AppState::new(delegate.clone()));
-
+        let app = router(AppState::new(delegate.clone()));
         let body = serde_json::json!({
             "request_id": "r-05",
             "authority": "user",
@@ -160,12 +154,27 @@ mod tests {
             .body(axum::body::Body::from(body.to_string()))
             .unwrap();
 
-        let response = tower::ServiceExt::oneshot(router, request).await.unwrap();
+        let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
         assert_eq!(response.status(), StatusCode::ACCEPTED);
 
         let recorded = delegate.0.lock().unwrap();
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].request_id, "r-05");
         assert_eq!(recorded[0].payload, "opaque");
+        assert_eq!(recorded[0].action, Action::Reflect { subject: "opaque".into() });
+    }
+
+    #[tokio::test]
+    async fn malformed_action_shape_is_rejected() {
+        let app = router(AppState::new(RecordingDelegate::default()));
+        let body = r#"{"request_id":"r-bad","authority":"user","action":"reflect","payload":"opaque"}"#;
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/v1/requests")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(body))
+            .unwrap();
+        let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 }
