@@ -79,13 +79,7 @@ async fn submit<D: ConstitutionalDelegate>(
     // HTTP transport only parses the envelope, validates its required shape,
     // delegates it, and serializes the transport response. It does not apply policy.
     let request_id = input.request_id.unwrap_or_else(|| Uuid::new_v4().to_string());
-    let envelope = RequestEnvelope::new(
-        request_id,
-        input.authority,
-        input.action,
-        input.payload,
-    );
-    let envelope_id = envelope.request_id.clone();
+    let envelope = RequestEnvelope::new(request_id, input.authority, input.action, input.payload);
 
     match state.delegate.submit(envelope) {
         Ok(submission) => {
