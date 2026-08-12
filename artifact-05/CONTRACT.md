@@ -6,15 +6,15 @@ Artifact 05 exposes the Constitutional Core through HTTP without creating a seco
 
 ## Boundary
 
-The gateway MAY:
+The HTTP layer MAY:
 
 - parse HTTP requests;
-- validate request shape;
+- validate required request shape through typed deserialization;
 - construct `RequestEnvelope`;
 - delegate the envelope to the Constitutional Core boundary;
 - serialize transport responses.
 
-The gateway MUST NOT:
+The HTTP layer MUST NOT:
 
 - authorize;
 - deny;
@@ -25,7 +25,9 @@ The gateway MUST NOT:
 
 ## HTTP contract
 
-`POST /v1/requests` accepts JSON with:
+`POST /v1/requests` accepts the typed envelope shape below. `action` is a tagged core action: its required companion field depends on the action variant.
+
+Reflect example:
 
 ```json
 {
@@ -37,7 +39,31 @@ The gateway MUST NOT:
 }
 ```
 
-A successfully delegated request returns `202 Accepted`:
+Present example:
+
+```json
+{
+  "request_id": "optional-client-id",
+  "authority": "user",
+  "action": "present",
+  "value": "opaque",
+  "payload": "opaque"
+}
+```
+
+Select example:
+
+```json
+{
+  "request_id": "optional-client-id",
+  "authority": "user",
+  "action": "select",
+  "option": "opaque",
+  "payload": "opaque"
+}
+```
+
+A successfully delegated request returns `202 Accepted` and is represented as `pending` at the transport boundary:
 
 ```json
 {
@@ -46,11 +72,13 @@ A successfully delegated request returns `202 Accepted`:
 }
 ```
 
+Malformed JSON or a malformed action shape is rejected by the HTTP extractor with `422 Unprocessable Entity`; it never reaches the constitutional delegate.
+
 `GET /v1/requests/{id}` returns the transport-visible request status or `404` when unknown.
 
 ## Authority invariant
 
-HTTP is not an authority source. The gateway forwards the supplied envelope; constitutional authorization remains exclusively in the core delegate.
+HTTP is not an authority source. The gateway forwards the typed envelope; constitutional authorization remains exclusively in the core delegate.
 
 ## Verification boundary
 
