@@ -18,8 +18,6 @@ env:
 
 permissions:
   contents: read
-  id-token: write
-  attestations: write
 
 jobs:
   contract:
