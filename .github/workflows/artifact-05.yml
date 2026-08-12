@@ -7,14 +7,15 @@ on:
       - artifact-05-hardening
       - prototype-0.2-gateway
   pull_request:
-    branches: [main]
+    branches:
+      - main
     paths:
-      - 'artifact-05/**'
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'scripts/verify_artifact_05_boundary.sh'
-      - '.github/workflows/artifact-05.yml'
+      - artifact-05/**
+      - src/**
+      - Cargo.toml
+      - Cargo.lock
+      - scripts/verify_artifact_05_boundary.sh
+      - .github/workflows/artifact-05.yml
   workflow_dispatch:
 
 permissions:
@@ -44,8 +45,7 @@ jobs:
         run: cargo fmt -- --check
 
       - name: Static authority-boundary check
-        working-directory: .
-        run: bash scripts/verify_artifact_05_boundary.sh
+        run: bash ../scripts/verify_artifact_05_boundary.sh
 
       - name: Build
         run: cargo build
