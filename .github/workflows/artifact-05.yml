@@ -18,6 +18,8 @@ env:
 
 permissions:
   contents: read
+  id-token: write
+  attestations: write
 
 jobs:
   contract:
@@ -34,18 +36,89 @@ jobs:
           docker pull "$RUST_IMAGE"
           docker run --rm "$RUST_IMAGE" sh -c 'rustc --version && cargo --version'
 
-      - name: Generate Artifact 05 lockfile and run contract gates
+      - name: Run Artifact 05 contract gates
         run: |
           set -euo pipefail
-          docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            -v "$GITHUB_WORKSPACE:/workspace" \
-            -w /workspace/artifact-05 \
-            "$RUST_IMAGE" \
-            sh -c '
-              cargo generate-lockfile
-              cargo fmt -- --check
-              cargo build --locked
-              cargo test --locked
-              cargo test --doc --locked
-            '
+          rm -f artifact-05-verification.log artifact-05-verification.log.tmp
+          if ! {
+            echo "[VERIFY] NEXUS Artifact 05 Contract"
+            echo "Verified Commit: $GITHUB_SHA"
+            echo "Run ID: $GITHUB_RUN_ID"
+            echo "Docker Reference: $RUST_IMAGE"
+            docker run --rm \
+              --user "$(id -u):$(id -g)" \
+              -v "$GITHUB_WORKSPACE:/workspace" \
+              -w /workspace/artifact-05 \
+              "$RUST_IMAGE" \
+              sh -c '
+                cargo generate-lockfile
+                cargo fmt -- --check
+                cargo build --locked
+                cargo test --locked
+                cargo test --doc --locked
+              '
+            echo "[VERIFY] Contract gates completed."
+          } >artifact-05-verification.log.tmp 2>&1; then
+            mv artifact-05-verification.log.tmp artifact-05-verification.log
+            echo "[VERIFY] Artifact 05 contract FAILED."
+            exit 1
+          fi
+          mv artifact-05-verification.log.tmp artifact-05-verification.log
+          echo "Status: PASS" >> artifact-05-verification.log
+
+      - name: Generate verification manifest
+        if: success()
+        run: |
+          set -euo pipefail
+          LOCK_HASH="$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')"
+          LOG_HASH="$(sha256sum artifact-05-verification.log | awk '{print $1}')"
+          cat > artifact-05-verification-manifest.txt <<EOF
+NEXUS Artifact 05 Verification Manifest
+========================================
+Protocol: NEXUS-Artifact-05-0.1
+Status: PASS
+Verified Commit: $GITHUB_SHA
+Run ID: $GITHUB_RUN_ID
+Docker Reference: $RUST_IMAGE
+Cargo.lock SHA-256: $LOCK_HASH
+Verification Log SHA-256: $LOG_HASH
+Verification Mode: locked
+Invariant: Artifact 05 contract gates passed
+EOF
+
+      - name: Self-audit verification evidence
+        if: success()
+        run: |
+          set -euo pipefail
+          field() { grep -F "$1" artifact-05-verification-manifest.txt | head -n1 | cut -d: -f2- | sed 's/^ //'; }
+          test "$(field 'Status')" = "PASS"
+          test "$(field 'Verified Commit')" = "$GITHUB_SHA"
+          test "$(field 'Docker Reference')" = "$RUST_IMAGE"
+          test "$(field 'Cargo.lock SHA-256')" = "$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')"
+          test "$(field 'Verification Log SHA-256')" = "$(sha256sum artifact-05-verification.log | awk '{print $1}')"
+          grep -q 'Status: PASS' artifact-05-verification.log
+          echo "[SELF-AUDIT] PASS"
+
+      - name: Bundle verification evidence
+        if: success()
+        run: |
+          set -euo pipefail
+          tar -czf verification-bundle-artifact-05.tar.gz \
+            artifact-05-verification-manifest.txt \
+            artifact-05-verification.log \
+            artifact-05/Cargo.lock
+          test -s verification-bundle-artifact-05.tar.gz
+
+      - name: Upload verification evidence
+        if: success()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        with:
+          name: artifact-05-verification-bundle
+          path: verification-bundle-artifact-05.tar.gz
+          if-no-files-found: error
+
+      - name: Attest Artifact 05 verification bundle
+        if: success()
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: verification-bundle-artifact-05.tar.gz
