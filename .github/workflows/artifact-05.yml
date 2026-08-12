@@ -21,37 +21,66 @@ on:
 permissions:
   contents: read
 
+env:
+  RUST_IMAGE: rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
+
 jobs:
   contract:
     name: Artifact 05 contract
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: artifact-05
     steps:
       - name: Checkout exact ref
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Install Rust 1.85.0
-        uses: actions-rust-lang/setup-rust-toolchain@fb51252c7ba57d633bc668f941da052e410add48
-        with:
-          toolchain: 1.85.0
-          components: rustfmt
+      - name: Verify pinned toolchain identity
+        run: |
+          docker pull "$RUST_IMAGE"
+          docker run --rm "$RUST_IMAGE" sh -c 'rustc --version && cargo --version'
 
       - name: Generate development lockfile
-        run: cargo generate-lockfile
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace/artifact-05 \
+            "$RUST_IMAGE" \
+            cargo generate-lockfile
 
       - name: Formatting
-        run: cargo fmt -- --check
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace/artifact-05 \
+            "$RUST_IMAGE" \
+            cargo fmt -- --check
 
       - name: Static authority-boundary check
-        run: bash ../scripts/verify_artifact_05_boundary.sh
+        run: bash scripts/verify_artifact_05_boundary.sh
 
       - name: Build
-        run: cargo build
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace/artifact-05 \
+            "$RUST_IMAGE" \
+            cargo build --locked
 
       - name: Contract tests
-        run: cargo test
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace/artifact-05 \
+            "$RUST_IMAGE" \
+            cargo test --locked
 
       - name: Documentation tests
-        run: cargo test --doc
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace/artifact-05 \
+            "$RUST_IMAGE" \
+            cargo test --doc --locked
