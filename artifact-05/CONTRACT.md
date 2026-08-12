@@ -1,85 +1,88 @@
-# Artifact 05 — HTTP Gateway Contract v0.1
+# Artifact 05 — HTTP Gateway Boundary Contract
 
 ## Purpose
 
-Artifact 05 exposes the Constitutional Core through HTTP without creating a second authority layer.
+Artifact 05 is a transport boundary. It converts HTTP input into a `RequestEnvelope`, delegates that envelope to a constitutional boundary, and serializes the transport result.
 
-## Boundary
+The gateway does **not** own epistemic or policy authority.
 
-The HTTP layer MAY:
+## Allowed operations
 
-- parse HTTP requests;
-- validate required request shape through typed deserialization;
-- construct `RequestEnvelope`;
-- delegate the envelope to the Constitutional Core boundary;
-- serialize transport responses.
+```text
+parse
+validate_shape
+envelope
+delegate
+serialize
+```
 
-The HTTP layer MUST NOT:
+## Forbidden operations in the gateway
 
-- authorize;
-- deny;
-- interpret payload meaning;
-- execute constitutional actions;
-- mutate policy;
-- increase authority.
+```text
+authorize
+deny
+interpret
+execute
+mutate_policy
+```
+
+The integration adapter may supply a `ConstitutionalDelegate`; the gateway library itself has no `PolicyEngine` or `Executor` dependency and cannot manufacture an `AuthorizedRequest`.
 
 ## HTTP contract
 
-`POST /v1/requests` accepts the typed envelope shape below. `action` is a tagged core action: its required companion field depends on the action variant.
+### POST /v1/requests
 
-Reflect example:
+A syntactically valid request is delegated and returns:
 
-```json
-{
-  "request_id": "optional-client-id",
-  "authority": "user",
-  "action": "reflect",
-  "subject": "opaque",
-  "payload": "opaque"
-}
+```http
+202 Accepted
 ```
 
-Present example:
+Response shape:
 
 ```json
 {
-  "request_id": "optional-client-id",
-  "authority": "user",
-  "action": "present",
-  "value": "opaque",
-  "payload": "opaque"
-}
-```
-
-Select example:
-
-```json
-{
-  "request_id": "optional-client-id",
-  "authority": "user",
-  "action": "select",
-  "option": "opaque",
-  "payload": "opaque"
-}
-```
-
-A successfully delegated request returns `202 Accepted` and is represented as `pending` at the transport boundary:
-
-```json
-{
-  "request_id": "...",
+  "request_id": "r-05",
   "status": "pending"
 }
 ```
 
-Malformed JSON or a malformed action shape is rejected by the HTTP extractor with `422 Unprocessable Entity`; it never reaches the constitutional delegate.
+`202` means the transport accepted the request for downstream processing. It does not assert that execution has completed.
 
-`GET /v1/requests/{id}` returns the transport-visible request status or `404` when unknown.
+### GET /v1/requests/{id}
+
+Known request: `200 OK`.
+
+Unknown request: `404 Not Found`.
+
+### Invalid transport shape
+
+Malformed JSON, invalid action shape, or an explicitly empty request ID is rejected at the transport boundary with `422 Unprocessable Entity`.
+
+### Downstream delegate failure
+
+If the constitutional delegate is unavailable, the gateway returns `502 Bad Gateway`.
+
+The gateway does not convert that failure into a policy decision.
+
+## Boundary proof
+
+The contract tests cover:
+
+- delegation without authorization;
+- `202 Accepted` semantics;
+- pending status retrieval;
+- malformed action rejection;
+- empty request-ID rejection;
+- delegate failure translation;
+- unknown request handling.
+
+The CI workflow additionally rejects direct `PolicyEngine`, `Executor`, `.authorize()`, or `.execute()` references inside `artifact-05/src/lib.rs`.
 
 ## Authority invariant
 
 HTTP is not an authority source. The gateway forwards the typed envelope; constitutional authorization remains exclusively in the core delegate.
 
-## Verification boundary
+## Verification rule
 
-This artifact is developed from the immutable `prototype-0.1-verification-sealed` boundary. It does not modify that tag.
+Prototype-0.2 must not replace or rewrite the sealed Prototype-0.1 tag. Changes are developed on `prototype-0.2-gateway-boundary` and must pass the Artifact 05 workflow before any merge or new seal is created.
