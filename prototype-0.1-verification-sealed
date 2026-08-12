@@ -1,0 +1,13 @@
+NEXUS Prototype-0.1 — Verification-0.1.1 Sealed
+
+Verified commit:
+625ae016f795ef951e9b1a0b7df0b9987e9d29f3
+
+Verification:
+Gates 0-3 PASS
+Cargo.lock invariant MATCH
+Manifest SELF-AUDIT PASS
+Build provenance attestation PASS
+
+Verification bundle:
+sha256:dd8dec810f6deb87393b5c728ab718caed1a25e661cc770661f177f859c2d699
