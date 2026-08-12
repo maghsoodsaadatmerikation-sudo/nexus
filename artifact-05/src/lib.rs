@@ -50,10 +50,18 @@ pub trait ConstitutionalDelegate: Send + Sync + 'static {
 #[derive(Debug, Clone, Copy)]
 pub struct DelegateError;
 
-#[derive(Clone)]
 pub struct AppState<D> {
     pub delegate: Arc<D>,
     pub statuses: Arc<RwLock<HashMap<String, RequestStatus>>>,
+}
+
+impl<D> Clone for AppState<D> {
+    fn clone(&self) -> Self {
+        Self {
+            delegate: Arc::clone(&self.delegate),
+            statuses: Arc::clone(&self.statuses),
+        }
+    }
 }
 
 impl<D: ConstitutionalDelegate> AppState<D> {
@@ -76,8 +84,6 @@ async fn submit<D: ConstitutionalDelegate>(
     State(state): State<AppState<D>>,
     Json(input): Json<SubmitRequest>,
 ) -> impl IntoResponse {
-    // HTTP transport only parses the envelope, validates its required shape,
-    // delegates it, and serializes the transport response. It does not apply policy.
     let request_id = input.request_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let envelope = RequestEnvelope::new(request_id, input.authority, input.action, input.payload);
 
@@ -91,14 +97,12 @@ async fn submit<D: ConstitutionalDelegate>(
                     request_id: submission.request_id,
                     status: RequestStatus::Pending,
                 }),
-            )
-                .into_response()
+            ).into_response()
         }
         Err(_) => (
             StatusCode::BAD_GATEWAY,
             Json(ErrorResponse { error: "constitutional_delegate_unavailable" }),
-        )
-            .into_response(),
+        ).into_response(),
     }
 }
 
@@ -110,13 +114,11 @@ async fn status<D: ConstitutionalDelegate>(
         Some(status) => (
             StatusCode::OK,
             Json(AcceptedResponse { request_id: id, status }),
-        )
-            .into_response(),
+        ).into_response(),
         None => (
             StatusCode::NOT_FOUND,
             Json(ErrorResponse { error: "request_not_found" }),
-        )
-            .into_response(),
+        ).into_response(),
     }
 }
 
@@ -153,10 +155,8 @@ mod tests {
             .header("content-type", "application/json")
             .body(axum::body::Body::from(body.to_string()))
             .unwrap();
-
         let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
         assert_eq!(response.status(), StatusCode::ACCEPTED);
-
         let recorded = delegate.0.lock().unwrap();
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].request_id, "r-05");
