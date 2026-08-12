@@ -1,5 +1,10 @@
-use axum::{body::Body, http::{Request, StatusCode}};
-use nexus_artifact_05_gateway::{router, AppState, ConstitutionalDelegate, DelegateError, Submission};
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+};
+use nexus_artifact_05_gateway::{
+    router, AppState, ConstitutionalDelegate, DelegateError, Submission,
+};
 use nexus_constitutional_core::RequestEnvelope;
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
@@ -24,13 +29,15 @@ async fn post_returns_202_and_delegates_exact_wire_input() {
         .method("POST")
         .uri("/v1/requests")
         .header("content-type", "application/json")
-        .body(Body::from(r#"{
+        .body(Body::from(
+            r#"{
             "request_id":"contract-001",
             "authority":"user",
             "action":"reflect",
             "subject":"opaque",
             "payload":"opaque"
-        }"#))
+        }"#,
+        ))
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
@@ -51,11 +58,13 @@ async fn invalid_action_is_rejected_without_delegate_call() {
         .method("POST")
         .uri("/v1/requests")
         .header("content-type", "application/json")
-        .body(Body::from(r#"{
+        .body(Body::from(
+            r#"{
             "authority":"user",
             "action":"authorize",
             "payload":"opaque"
-        }"#))
+        }"#,
+        ))
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
