@@ -21,6 +21,23 @@ pub struct SubmitRequest {
     pub payload: String,
 }
 
+impl SubmitRequest {
+    fn into_envelope(self) -> Result<RequestEnvelope, &'static str> {
+        let request_id = match self.request_id {
+            Some(id) if !id.trim().is_empty() => id,
+            Some(_) => return Err("request_id_empty"),
+            None => Uuid::new_v4().to_string(),
+        };
+
+        Ok(RequestEnvelope::new(
+            request_id,
+            self.authority,
+            self.action,
+            self.payload,
+        ))
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AcceptedResponse {
     pub request_id: String,
@@ -43,6 +60,9 @@ pub struct Submission {
     pub request_id: String,
 }
 
+/// The HTTP layer receives an already-formed envelope and delegates it.
+/// It has no API for authorization, denial, interpretation, execution, or
+/// policy mutation. Those operations remain outside the transport boundary.
 pub trait ConstitutionalDelegate: Send + Sync + 'static {
     fn submit(&self, envelope: RequestEnvelope) -> Result<Submission, DelegateError>;
 }
@@ -84,12 +104,23 @@ async fn submit<D: ConstitutionalDelegate>(
     State(state): State<AppState<D>>,
     Json(input): Json<SubmitRequest>,
 ) -> impl IntoResponse {
-    let request_id = input.request_id.unwrap_or_else(|| Uuid::new_v4().to_string());
-    let envelope = RequestEnvelope::new(request_id, input.authority, input.action, input.payload);
+    let envelope = match input.into_envelope() {
+        Ok(envelope) => envelope,
+        Err(error) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(ErrorResponse { error }),
+            )
+                .into_response();
+        }
+    };
 
     match state.delegate.submit(envelope) {
         Ok(submission) => {
-            state.statuses.write().expect("status lock poisoned")
+            state
+                .statuses
+                .write()
+                .expect("status lock poisoned")
                 .insert(submission.request_id.clone(), RequestStatus::Pending);
             (
                 StatusCode::ACCEPTED,
@@ -97,12 +128,16 @@ async fn submit<D: ConstitutionalDelegate>(
                     request_id: submission.request_id,
                     status: RequestStatus::Pending,
                 }),
-            ).into_response()
+            )
+                .into_response()
         }
         Err(_) => (
             StatusCode::BAD_GATEWAY,
-            Json(ErrorResponse { error: "constitutional_delegate_unavailable" }),
-        ).into_response(),
+            Json(ErrorResponse {
+                error: "constitutional_delegate_unavailable",
+            }),
+        )
+            .into_response(),
     }
 }
 
@@ -110,15 +145,28 @@ async fn status<D: ConstitutionalDelegate>(
     State(state): State<AppState<D>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match state.statuses.read().expect("status lock poisoned").get(&id).cloned() {
+    match state
+        .statuses
+        .read()
+        .expect("status lock poisoned")
+        .get(&id)
+        .cloned()
+    {
         Some(status) => (
             StatusCode::OK,
-            Json(AcceptedResponse { request_id: id, status }),
-        ).into_response(),
+            Json(AcceptedResponse {
+                request_id: id,
+                status,
+            }),
+        )
+            .into_response(),
         None => (
             StatusCode::NOT_FOUND,
-            Json(ErrorResponse { error: "request_not_found" }),
-        ).into_response(),
+            Json(ErrorResponse {
+                error: "request_not_found",
+            }),
+        )
+            .into_response(),
     }
 }
 
@@ -138,6 +186,24 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Default)]
+    struct FailingDelegate;
+
+    impl ConstitutionalDelegate for FailingDelegate {
+        fn submit(&self, _envelope: RequestEnvelope) -> Result<Submission, DelegateError> {
+            Err(DelegateError)
+        }
+    }
+
+    fn request(body: &str) -> axum::http::Request<axum::body::Body> {
+        axum::http::Request::builder()
+            .method("POST")
+            .uri("/v1/requests")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(body.to_owned()))
+            .unwrap()
+    }
+
     #[tokio::test]
     async fn gateway_delegates_without_authorizing() {
         let delegate = RecordingDelegate::default();
@@ -149,14 +215,12 @@ mod tests {
             "subject": "opaque",
             "payload": "opaque"
         });
-        let request = axum::http::Request::builder()
-            .method("POST")
-            .uri("/v1/requests")
-            .header("content-type", "application/json")
-            .body(axum::body::Body::from(body.to_string()))
+
+        let response = tower::ServiceExt::oneshot(app, request(&body.to_string()))
+            .await
             .unwrap();
-        let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
         assert_eq!(response.status(), StatusCode::ACCEPTED);
+
         let recorded = delegate.0.lock().unwrap();
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].request_id, "r-05");
@@ -165,16 +229,87 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn accepted_request_can_be_read_back_as_pending() {
+        let app = router(AppState::new(RecordingDelegate::default()));
+        let body = serde_json::json!({
+            "request_id": "r-status",
+            "authority": "user",
+            "action": "reflect",
+            "subject": "opaque",
+            "payload": "opaque"
+        });
+
+        let response = tower::ServiceExt::oneshot(app.clone(), request(&body.to_string()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+
+        let response = tower::ServiceExt::oneshot(
+            app,
+            axum::http::Request::builder()
+                .method("GET")
+                .uri("/v1/requests/r-status")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
     async fn malformed_action_shape_is_rejected() {
         let app = router(AppState::new(RecordingDelegate::default()));
         let body = r#"{"request_id":"r-bad","authority":"user","action":"reflect","payload":"opaque"}"#;
-        let request = axum::http::Request::builder()
-            .method("POST")
-            .uri("/v1/requests")
-            .header("content-type", "application/json")
-            .body(axum::body::Body::from(body))
-            .unwrap();
-        let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
+        let response = tower::ServiceExt::oneshot(app, request(body)).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn empty_request_id_is_rejected_at_transport_boundary() {
+        let app = router(AppState::new(RecordingDelegate::default()));
+        let body = serde_json::json!({
+            "request_id": "   ",
+            "authority": "user",
+            "action": "reflect",
+            "subject": "opaque",
+            "payload": "opaque"
+        });
+        let response = tower::ServiceExt::oneshot(app, request(&body.to_string()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn delegate_failure_is_translated_without_policy_decision() {
+        let app = router(AppState::new(FailingDelegate));
+        let body = serde_json::json!({
+            "request_id": "r-fail",
+            "authority": "user",
+            "action": "reflect",
+            "subject": "opaque",
+            "payload": "opaque"
+        });
+        let response = tower::ServiceExt::oneshot(app, request(&body.to_string()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    }
+
+    #[tokio::test]
+    async fn unknown_request_status_is_not_found() {
+        let app = router(AppState::new(RecordingDelegate::default()));
+        let response = tower::ServiceExt::oneshot(
+            app,
+            axum::http::Request::builder()
+                .method("GET")
+                .uri("/v1/requests/does-not-exist")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }
