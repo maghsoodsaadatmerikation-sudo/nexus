@@ -76,8 +76,8 @@ async fn submit<D: ConstitutionalDelegate>(
     State(state): State<AppState<D>>,
     Json(input): Json<SubmitRequest>,
 ) -> impl IntoResponse {
-    // HTTP responsibility ends at parsing, shape validation, envelope creation,
-    // delegation, and serialization. No policy decision is made here.
+    // Transport responsibility ends at parsing, shape validation, envelope
+    // construction, delegation, and serialization. No policy decision is made here.
     let request_id = input.request_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let envelope = RequestEnvelope::new(
         request_id.clone(),
@@ -97,11 +97,13 @@ async fn submit<D: ConstitutionalDelegate>(
                     status: RequestStatus::Pending,
                 }),
             )
+                .into_response()
         }
         Err(_) => (
             StatusCode::BAD_GATEWAY,
-            Json(AcceptedResponse { request_id, status: RequestStatus::Pending }),
-        ),
+            Json(ErrorResponse { error: "constitutional_delegate_unavailable" }),
+        )
+            .into_response(),
     }
 }
 
@@ -110,8 +112,16 @@ async fn status<D: ConstitutionalDelegate>(
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     match state.statuses.read().expect("status lock poisoned").get(&id).cloned() {
-        Some(status) => (StatusCode::OK, Json(AcceptedResponse { request_id: id, status })).into_response(),
-        None => (StatusCode::NOT_FOUND, Json(ErrorResponse { error: "request_not_found" })).into_response(),
+        Some(status) => (
+            StatusCode::OK,
+            Json(AcceptedResponse { request_id: id, status }),
+        )
+            .into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse { error: "request_not_found" }),
+        )
+            .into_response(),
     }
 }
 
