@@ -11,12 +11,14 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/artifact-05.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   contract:
+    name: Artifact 05 contract
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -37,5 +39,11 @@ jobs:
       - name: Formatting
         run: cargo fmt -- --check
 
+      - name: Build
+        run: cargo build
+
       - name: Contract tests
         run: cargo test
+
+      - name: Documentation tests
+        run: cargo test --doc
