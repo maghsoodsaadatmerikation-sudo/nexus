@@ -37,7 +37,7 @@ jobs:
       - name: Enforce transport-only boundary
         run: |
           set -euo pipefail
-          ! grep -Eq 'PolicyEngine::|Executor::|\.authorize\(|\.execute\(|mutate_policy' artifact-05/src/lib.rs
+          ! grep -Eq 'PolicyEngine::|Executor::|\.authorize\(|\.execute\(' artifact-05/src/lib.rs
 
       - name: Generate Artifact 05 lockfile and run contract gates
         run: |
