@@ -2,7 +2,7 @@ name: NEXUS Artifact 05
 
 on:
   push:
-    branches: [main, artifact-05, artifact-05-hardening]
+    branches: [artifact-05, artifact-05-hardening]
   pull_request:
     branches: [main]
     paths:
@@ -18,6 +18,8 @@ env:
 
 permissions:
   contents: read
+  id-token: write
+  attestations: write
 
 jobs:
   contract:
@@ -114,3 +116,9 @@ EOF
           name: artifact-05-verification-bundle
           path: verification-bundle-artifact-05.tar.gz
           if-no-files-found: error
+
+      - name: Attest Artifact 05 verification bundle
+        if: success()
+        uses: actions/attest@c32b4b8b198b65d0bd9d63490e847ff7b53989d4
+        with:
+          subject-path: verification-bundle-artifact-05.tar.gz
