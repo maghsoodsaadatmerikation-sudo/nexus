@@ -2,7 +2,7 @@ name: NEXUS Artifact 05
 
 on:
   push:
-    branches: [artifact-05, artifact-05-hardening]
+    branches: [main, artifact-05, artifact-05-hardening]
   pull_request:
     branches: [main]
     paths:
