@@ -6,6 +6,7 @@ pub mod authority;
 pub mod decision;
 pub mod envelope;
 pub mod erasure;
+pub mod epistemic;
 pub mod executor;
 pub mod policy;
 
@@ -16,6 +17,7 @@ pub use audit::{AuditEvent, AuditEventKind, AuditLog};
 pub use authority::{leq, Authority};
 pub use decision::{DenialReason, PolicyDecision};
 pub use envelope::RequestEnvelope;
+pub use epistemic::{Alternative, Claim, ClaimOrigin, DecisionWorkspace, HumanJudgment, Uncertainty};
 pub use executor::{ExecutionReceipt, Executor};
 pub use policy::PolicyEngine;
 
