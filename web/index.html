@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NEXUS — Human Judgment Workspace</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17202a;background:#f5f7fa}
+    *{box-sizing:border-box} body{margin:0}.wrap{max-width:1100px;margin:auto;padding:32px 20px}
+    header{margin-bottom:24px} h1{margin:0 0 6px;font-size:32px} .tag{color:#5b6570}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:760px){.grid{grid-template-columns:1fr}}
+    .card{background:#fff;border:1px solid #dfe4ea;border-radius:14px;padding:18px;box-shadow:0 2px 8px #00000008}
+    label{display:block;font-weight:650;margin-bottom:7px} textarea,input{width:100%;border:1px solid #cbd3dc;border-radius:9px;padding:10px;font:inherit} textarea{min-height:100px;resize:vertical}
+    .full{grid-column:1/-1}.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1}
+    button{border:0;border-radius:9px;padding:10px 14px;font:inherit;font-weight:650;cursor:pointer;background:#17202a;color:#fff}.secondary{background:#e9edf2;color:#17202a}
+    .claim,.alt{border:1px solid #e1e6eb;border-radius:10px;padding:10px;margin-top:8px}.meta{font-size:12px;color:#69737d}.warning{padding:10px;border-radius:9px;background:#fff5d6;margin-top:10px}
+    .status{font-weight:700}.empty{color:#69737d}.decision{border-left:4px solid #17202a;padding-left:12px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+<header><h1>NEXUS</h1><div class="tag">Infrastructure for Human Judgment — the system can structure and challenge; the human owns the decision.</div></header>
+<div class="grid">
+<section class="card full"><label for="question">Question</label><textarea id="question" placeholder="What are you trying to decide or examine?"></textarea></section>
+<section class="card"><label for="goal">Goal</label><textarea id="goal" placeholder="What outcome matters?"></textarea></section>
+<section class="card"><label for="constraints">Constraints</label><textarea id="constraints" placeholder="One constraint per line"></textarea></section>
+<section class="card"><label for="values">Values</label><textarea id="values" placeholder="One value per line"></textarea></section>
+<section class="card"><label>Claims / evidence</label><div class="row"><input id="claimText" placeholder="Claim or evidence"><input id="claimSource" placeholder="Source / origin"></div><div style="margin-top:8px"><button class="secondary" onclick="addClaim()">Add claim</button></div><div id="claims" class="empty">No claims yet.</div></section>
+<section class="card"><label>Alternatives</label><div class="row"><input id="altLabel" placeholder="Option"><input id="altConsequences" placeholder="Possible consequences"></div><div style="margin-top:8px"><button class="secondary" onclick="addAlternative()">Add option</button></div><div id="alts" class="empty">No alternatives yet.</div></section>
+<section class="card full"><label>Human judgment</label><div class="warning">Machine analysis may inform this workspace, but it cannot populate this field. Only an explicit human entry becomes a judgment.</div><div class="row" style="margin-top:10px"><textarea id="decision" placeholder="Your decision"></textarea><textarea id="rationale" placeholder="Your rationale"></textarea></div></section>
+<section class="card full"><div class="row"><button onclick="saveWorkspace()">Save locally</button><button class="secondary" onclick="exportWorkspace()">Export JSON</button><button class="secondary" onclick="clearWorkspace()">Clear</button><div class="status" id="status">No human judgment recorded.</div></div></section>
+<section class="card full"><div class="meta">NEXUS principle: evidence, interpretation and alternatives do not become authority. The final judgment remains explicitly human.</div></section>
+</div></div>
+<script>
+const claims=[], alts=[];
+function addClaim(){const text=claimText.value.trim();if(!text)return;claims.push({text,origin:claimSource.value.trim()||'Human-provided',uncertainty:'Unknown'});claimText.value='';claimSource.value='';render();}
+function addAlternative(){const label=altLabel.value.trim();if(!label)return;alts.push({label,consequences:altConsequences.value.trim()});altLabel.value='';altConsequences.value='';render();}
+function render(){claimsEl.innerHTML=claims.length?claims.map((c,i)=>`<div class="claim"><b>${esc(c.text)}</b><div class="meta">Origin: ${esc(c.origin)} · Uncertainty: ${c.uncertainty}</div></div>`).join(''):'<span class="empty">No claims yet.</span>';altsEl.innerHTML=alts.length?alts.map(a=>`<div class="alt"><b>${esc(a.label)}</b><div class="meta">${esc(a.consequences)}</div></div>`).join(''):'<span class="empty">No alternatives yet.</span>';const has=decision.value.trim().length>0;status.textContent=has?'Human judgment recorded.':'No human judgment recorded.';}
+function saveWorkspace(){const data=collect();localStorage.setItem('nexus.workspace',JSON.stringify(data));status.textContent=data.judgment?'Human judgment recorded locally.':'Workspace saved; no human judgment recorded.';}
+function collect(){return {id:crypto.randomUUID(),question:question.value,goal:goal.value,constraints:lines(constraints.value),values:lines(values.value),claims:[...claims],alternatives:[...alts],judgment:decision.value.trim()?{decision:decision.value,rationale:rationale.value}:null,principle:'Human authority remains explicit'};}
+function exportWorkspace(){const blob=new Blob([JSON.stringify(collect(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='nexus-workspace.json';a.click();URL.revokeObjectURL(a.href);}
+function clearWorkspace(){if(!confirm('Clear this workspace?'))return;localStorage.removeItem('nexus.workspace');location.reload();}
+function lines(s){return s.split('\n').map(x=>x.trim()).filter(Boolean)} function esc(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+const claimsEl=document.getElementById('claims'),altsEl=document.getElementById('alts'),status=document.getElementById('status');
+['question','goal','constraints','values','decision','rationale'].forEach(id=>document.getElementById(id).addEventListener('input',render));render();
+</script>
+</body></html>
