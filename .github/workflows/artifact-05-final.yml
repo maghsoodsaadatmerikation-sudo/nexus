@@ -1,0 +1,122 @@
+name: NEXUS Artifact 05 Final
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+env:
+  RUST_IMAGE: rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
+
+jobs:
+  verify:
+    name: Artifact 05 Contract Verification
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Verify pinned Docker image
+        run: |
+          set -euo pipefail
+          case "$RUST_IMAGE" in
+            rust@sha256:*) ;;
+            *) echo 'RUST_IMAGE is not digest pinned'; exit 1 ;;
+          esac
+          docker pull "$RUST_IMAGE"
+
+      - name: Build and test Artifact 05 in pinned environment
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace/artifact-05 \
+            "$RUST_IMAGE" \
+            sh -euxc '
+              cargo generate-lockfile
+              cargo fmt -- --check
+              cargo build --locked
+              cargo test --locked
+              cargo test --doc --locked
+            '
+
+      - name: Create verification log
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          {
+            echo "NEXUS Artifact 05 Verification"
+            echo "Protocol: NEXUS-Artifact-05-0.1"
+            echo "Verified Commit: $GITHUB_SHA"
+            echo "Run ID: $GITHUB_RUN_ID"
+            echo "Docker Reference: $RUST_IMAGE"
+            echo "Status: PASS"
+          } > artifact-05-verification.log
+
+      - name: Generate manifest
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          LOCK_HASH="$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')"
+          LOG_HASH="$(sha256sum artifact-05-verification.log | awk '{print $1}')"
+          cat > artifact-05-verification-manifest.txt <<EOF
+NEXUS Artifact 05 Verification Manifest
+========================================
+Protocol: NEXUS-Artifact-05-0.1
+Status: PASS
+Verified Commit: $GITHUB_SHA
+Run ID: $GITHUB_RUN_ID
+Docker Reference: $RUST_IMAGE
+Cargo.lock SHA-256: $LOCK_HASH
+Verification Log SHA-256: $LOG_HASH
+Verification Mode: locked
+Invariant: Artifact 05 contract gates passed
+EOF
+
+      - name: Self-audit evidence
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          grep -q '^Status: PASS$' artifact-05-verification-manifest.txt
+          grep -q "^Verified Commit: $GITHUB_SHA$" artifact-05-verification-manifest.txt
+          grep -q '^Docker Reference: rust@sha256:' artifact-05-verification-manifest.txt
+          test "$(grep '^Cargo.lock SHA-256:' artifact-05-verification-manifest.txt | cut -d' ' -f3)" = "$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')"
+          test "$(grep '^Verification Log SHA-256:' artifact-05-verification-manifest.txt | cut -d' ' -f4)" = "$(sha256sum artifact-05-verification.log | awk '{print $1}')"
+          echo '[SELF-AUDIT] PASS'
+
+      - name: Bundle evidence
+        run: |
+          set -euo pipefail
+          tar -czf verification-bundle-artifact-05.tar.gz \
+            artifact-05-verification-manifest.txt \
+            artifact-05-verification.log \
+            artifact-05/Cargo.lock
+          test -s verification-bundle-artifact-05.tar.gz
+
+      - name: Attest evidence bundle
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: verification-bundle-artifact-05.tar.gz
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        with:
+          name: artifact-05-final-evidence
+          path: |
+            artifact-05-verification.log
+            artifact-05-verification-manifest.txt
+            verification-bundle-artifact-05.tar.gz
+          if-no-files-found: error
