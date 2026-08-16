@@ -56,3 +56,4 @@ The `epistemic` module is deliberately a **recording and structuring layer**. It
 **No real verification -> no claim of PASS -> no seal.**
 
 See the repository workflows and `artifact-05/` for the verification protocol.
+
