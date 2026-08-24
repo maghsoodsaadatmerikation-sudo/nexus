@@ -26,19 +26,49 @@ jobs:
       - name: Checkout exact commit
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Verify pinned Docker image
+      - name: GATE 0 — pinned environment and manifest inputs
         run: |
           set -euo pipefail
           case "$RUST_IMAGE" in
             rust@sha256:*) ;;
-            *) echo 'RUST_IMAGE is not digest pinned'; exit 1 ;;
+            *) echo 'GATE 0 FAIL: RUST_IMAGE is not digest pinned'; exit 1 ;;
           esac
           docker pull "$RUST_IMAGE"
+          test -f artifact-05/Cargo.toml
+          test -f artifact-05/Cargo.lock
+          echo 'GATE 0 PASS'
 
-      - name: Build and test Artifact 05 in pinned environment
+      - name: GATE 1 — build
         run: |
           set -euo pipefail
-          test -f artifact-05/Cargo.lock
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace/artifact-05 \
+            "$RUST_IMAGE" \
+            sh -euxc '
+              cargo fmt -- --check
+              cargo build --locked
+            '
+          echo 'GATE 1 PASS'
+
+      - name: GATE 2 — tests
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace/artifact-05 \
+            "$RUST_IMAGE" \
+            sh -euxc '
+              cargo test --locked
+              cargo test --doc --locked
+            '
+          echo 'GATE 2 PASS'
+
+      - name: GATE 3 — evidence integrity and lock invariant
+        run: |
+          set -euo pipefail
           LOCK_HASH_BEFORE="$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')"
           {
             echo "[VERIFY] NEXUS Artifact 05 Contract"
@@ -46,23 +76,18 @@ jobs:
             echo "Run ID: $GITHUB_RUN_ID"
             echo "Docker Reference: $RUST_IMAGE"
             echo "Cargo.lock SHA-256 before: $LOCK_HASH_BEFORE"
-            docker run --rm \
-              --user "$(id -u):$(id -g)" \
-              -v "$GITHUB_WORKSPACE:/workspace" \
-              -w /workspace/artifact-05 \
-              "$RUST_IMAGE" \
-              sh -euxc '
-                cargo fmt -- --check
-                cargo build --locked
-                cargo test --locked
-                cargo test --doc --locked
-              '
-            LOCK_HASH_AFTER="$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')"
-            echo "Cargo.lock SHA-256 after: $LOCK_HASH_AFTER"
-            test "$LOCK_HASH_BEFORE" = "$LOCK_HASH_AFTER"
-            echo "Cargo.lock invariant: MATCH"
-            echo "Status: PASS"
-          } > artifact-05-verification.log 2>&1
+            echo 'GATE 0 PASS'
+            echo 'GATE 1 PASS'
+            echo 'GATE 2 PASS'
+            echo 'GATE 3 — evidence integrity'
+          } > artifact-05-verification.log
+          LOCK_HASH_AFTER="$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')"
+          echo "Cargo.lock SHA-256 after: $LOCK_HASH_AFTER" >> artifact-05-verification.log
+          test "$LOCK_HASH_BEFORE" = "$LOCK_HASH_AFTER"
+          echo 'Cargo.lock invariant: MATCH' >> artifact-05-verification.log
+          echo 'GATE 3 PASS' >> artifact-05-verification.log
+          echo 'Status: PASS' >> artifact-05-verification.log
+          echo 'GATE 3 PASS'
 
       - name: Generate manifest
         env:
@@ -98,6 +123,7 @@ EOF
           test "$(grep '^Verification Log SHA-256:' artifact-05-verification-manifest.txt | cut -d' ' -f4)" = "$(sha256sum artifact-05-verification.log | awk '{print $1}')"
           grep -q '^Cargo.lock invariant: MATCH$' artifact-05-verification.log
           grep -q '^Status: PASS$' artifact-05-verification.log
+          grep -q '^GATE 3 PASS$' artifact-05-verification.log
           echo '[SELF-AUDIT] PASS'
 
       - name: Bundle evidence
