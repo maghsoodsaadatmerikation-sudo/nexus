@@ -34,33 +34,31 @@ jobs:
       - name: Build and test Artifact 05 in pinned environment
         run: |
           set -euo pipefail
-          docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            -v "$GITHUB_WORKSPACE:/workspace" \
-            -w /workspace/artifact-05 \
-            "$RUST_IMAGE" \
-            sh -euxc '
-              cargo generate-lockfile
-              cargo fmt -- --check
-              cargo build --locked
-              cargo test --locked
-              cargo test --doc --locked
-            '
-
-      - name: Create verification log
-        env:
-          GITHUB_SHA: ${{ github.sha }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
-        run: |
-          set -euo pipefail
+          test -f artifact-05/Cargo.lock
+          LOCK_HASH_BEFORE="$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')"
           {
-            echo "NEXUS Artifact 05 Verification"
-            echo "Protocol: NEXUS-Artifact-05-0.1"
+            echo "[VERIFY] NEXUS Artifact 05 Contract"
             echo "Verified Commit: $GITHUB_SHA"
             echo "Run ID: $GITHUB_RUN_ID"
             echo "Docker Reference: $RUST_IMAGE"
+            echo "Cargo.lock SHA-256 before: $LOCK_HASH_BEFORE"
+            docker run --rm \
+              --user "$(id -u):$(id -g)" \
+              -v "$GITHUB_WORKSPACE:/workspace" \
+              -w /workspace/artifact-05 \
+              "$RUST_IMAGE" \
+              sh -euxc '
+                cargo fmt -- --check
+                cargo build --locked
+                cargo test --locked
+                cargo test --doc --locked
+              '
+            LOCK_HASH_AFTER="$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')"
+            echo "Cargo.lock SHA-256 after: $LOCK_HASH_AFTER"
+            test "$LOCK_HASH_BEFORE" = "$LOCK_HASH_AFTER"
+            echo "Cargo.lock invariant: MATCH"
             echo "Status: PASS"
-          } > artifact-05-verification.log
+          } > artifact-05-verification.log 2>&1
 
       - name: Generate manifest
         env:
@@ -94,6 +92,8 @@ EOF
           grep -q '^Docker Reference: rust@sha256:' artifact-05-verification-manifest.txt
           test "$(grep '^Cargo.lock SHA-256:' artifact-05-verification-manifest.txt | cut -d' ' -f3)" = "$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')"
           test "$(grep '^Verification Log SHA-256:' artifact-05-verification-manifest.txt | cut -d' ' -f4)" = "$(sha256sum artifact-05-verification.log | awk '{print $1}')"
+          grep -q '^Cargo.lock invariant: MATCH$' artifact-05-verification.log
+          grep -q '^Status: PASS$' artifact-05-verification.log
           echo '[SELF-AUDIT] PASS'
 
       - name: Bundle evidence
