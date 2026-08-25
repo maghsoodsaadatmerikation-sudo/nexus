@@ -25,7 +25,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout exact commit
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
 
       - name: Install Python
         run: sudo apt-get update && sudo apt-get install -y python3
@@ -41,7 +41,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout exact commit
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
 
       - name: Verify Docker availability
         run: docker --version
@@ -52,7 +52,7 @@ jobs:
         run: bash scripts/bootstrap-docker.sh
 
       - name: Upload Cargo.lock candidate
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: cargo-lock-candidate
           path: Cargo.lock
@@ -70,7 +70,7 @@ jobs:
 
     steps:
       - name: Checkout exact commit
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
 
       - name: Verify pinned environment and gates
         id: verify
@@ -108,7 +108,7 @@ jobs:
 
       - name: Upload verification log
         if: always()
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: verification-log
           path: build_verification_*.log
@@ -116,7 +116,7 @@ jobs:
 
       - name: Upload verification manifest
         if: success()
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: verification-manifest
           path: verification-manifest.txt
@@ -124,7 +124,7 @@ jobs:
 
       - name: Upload verified Cargo.lock
         if: success()
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: cargo-lock-verified
           path: Cargo.lock
@@ -132,7 +132,7 @@ jobs:
 
       - name: Upload attested verification bundle
         if: success()
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: verification-bundle
           path: verification-bundle.tar.gz
