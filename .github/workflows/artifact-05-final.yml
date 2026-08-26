@@ -14,7 +14,7 @@ on:
     branches: [main]
 
 env:
-  RUST_IMAGE: rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e5
+  RUST_IMAGE: rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
 
 jobs:
   verify:
