@@ -1,12 +1,6 @@
 name: NEXUS Artifact 05 Final
 
 on:
-  push:
-    branches: [main]
-  schedule:
-    - cron: '0 0 * * *'
-    - cron: '0 8 * * *'
-    - cron: '0 16 * * *'
   workflow_dispatch:
   workflow_run:
     workflows: [NEXUS Verification]
@@ -63,29 +57,19 @@ jobs:
       - name: GATE 1 — build
         run: |
           set -euo pipefail
-          docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            -v "$GITHUB_WORKSPACE:/workspace" \
-            -w /workspace/artifact-05 \
-            "$RUST_IMAGE" \
-            sh -euxc '
-              cargo fmt -- --check
-              cargo build --locked
-            '
+          docker run --rm --user "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:/workspace" -w /workspace/artifact-05 "$RUST_IMAGE" sh -euxc '
+            cargo fmt -- --check
+            cargo build --locked
+          '
           echo 'GATE 1 PASS'
 
       - name: GATE 2 — tests
         run: |
           set -euo pipefail
-          docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            -v "$GITHUB_WORKSPACE:/workspace" \
-            -w /workspace/artifact-05 \
-            "$RUST_IMAGE" \
-            sh -euxc '
-              cargo test --locked
-              cargo test --doc --locked
-            '
+          docker run --rm --user "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:/workspace" -w /workspace/artifact-05 "$RUST_IMAGE" sh -euxc '
+            cargo test --locked
+            cargo test --doc --locked
+          '
           echo 'GATE 2 PASS'
 
       - name: GATE 3 — evidence integrity and lock invariant
@@ -153,10 +137,7 @@ EOF
       - name: Bundle evidence
         run: |
           set -euo pipefail
-          tar -czf verification-bundle-artifact-05.tar.gz \
-            artifact-05-verification-manifest.txt \
-            artifact-05-verification.log \
-            artifact-05/Cargo.lock
+          tar -czf verification-bundle-artifact-05.tar.gz artifact-05-verification-manifest.txt artifact-05-verification.log artifact-05/Cargo.lock
           test -s verification-bundle-artifact-05.tar.gz
 
       - name: Attest evidence bundle
