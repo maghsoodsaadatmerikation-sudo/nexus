@@ -8,7 +8,6 @@ on:
     - cron: '0 8 * * *'
     - cron: '0 16 * * *'
   workflow_dispatch:
-  workflow_call:
   workflow_run:
     workflows: [NEXUS Verification]
     types: [completed]
