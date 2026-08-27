@@ -136,3 +136,15 @@ jobs:
           name: verification-bundle
           path: verification-bundle.tar.gz
           if-no-files-found: error
+
+  artifact_05:
+    name: Artifact 05
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'verify')
+    needs: verify
+    uses: ./.github/workflows/artifact-05-final.yml
+    with:
+      verified_sha: ${{ github.sha }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
