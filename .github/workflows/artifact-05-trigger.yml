@@ -1,24 +1,14 @@
 name: NEXUS Artifact 05 Trigger
 
 on:
-  workflow_run:
-    workflows: [NEXUS Verification]
-    types: [completed]
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write
-  attestations: write
 
 jobs:
-  artifact_05:
-    name: Run Artifact 05 on verified commit
-    if: github.event.workflow_run.conclusion == 'success'
-    uses: ./.github/workflows/artifact-05-final.yml
-    with:
-      target_sha: ${{ github.event.workflow_run.head_sha }}
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
+  notice:
+    name: Artifact 05 trigger is superseded
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'Artifact 05 now triggers directly from NEXUS Verification via artifact-05-final.yml.'
