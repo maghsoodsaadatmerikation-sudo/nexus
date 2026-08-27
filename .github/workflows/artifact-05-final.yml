@@ -2,6 +2,11 @@ name: NEXUS Artifact 05 Final
 
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      verified_sha:
+        required: true
+        type: string
   workflow_run:
     workflows: [NEXUS Verification]
     types: [completed]
@@ -25,10 +30,11 @@ jobs:
         id: target
         shell: bash
         env:
+          CALLER_SHA: ${{ inputs.verified_sha }}
           WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          if [ -n "$WORKFLOW_RUN_SHA" ]; then TARGET_SHA="$WORKFLOW_RUN_SHA"; else TARGET_SHA="$GITHUB_SHA"; fi
+          if [ -n "$CALLER_SHA" ]; then TARGET_SHA="$CALLER_SHA"; elif [ -n "$WORKFLOW_RUN_SHA" ]; then TARGET_SHA="$WORKFLOW_RUN_SHA"; else TARGET_SHA="$GITHUB_SHA"; fi
           test -n "$TARGET_SHA"
           echo "sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
           echo "Verification target: $TARGET_SHA"
