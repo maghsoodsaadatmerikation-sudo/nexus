@@ -8,10 +8,17 @@ on:
     - cron: '0 8 * * *'
     - cron: '0 16 * * *'
   workflow_dispatch:
-  workflow_run:
-    workflows: [NEXUS Verification]
-    types: [completed]
-    branches: [main]
+  workflow_call:
+    inputs:
+      target_sha:
+        description: "Exact commit to verify"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
 
 env:
   RUST_IMAGE: rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
@@ -19,20 +26,17 @@ env:
 jobs:
   verify:
     name: Artifact 05 Contract Verification
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
     steps:
       - name: Resolve verification target
         id: target
         shell: bash
+        env:
+          INPUT_TARGET_SHA: ${{ inputs.target_sha }}
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
-            TARGET_SHA="${{ github.event.workflow_run.head_sha }}"
+          if [ -n "$INPUT_TARGET_SHA" ]; then
+            TARGET_SHA="$INPUT_TARGET_SHA"
           else
             TARGET_SHA="$GITHUB_SHA"
           fi
