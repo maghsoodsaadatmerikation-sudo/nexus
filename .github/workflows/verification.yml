@@ -69,3 +69,14 @@ jobs:
           path: |
             verification-manifest.txt
             verification-bundle.tar.gz
+
+  artifact_05:
+    name: Artifact 05 Final
+    needs: evidence
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/artifact-05-final.yml
+    with:
+      verified_sha: ${{ github.sha }}
