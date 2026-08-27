@@ -6,6 +6,11 @@ on:
     types: [completed]
     branches: [main]
 
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
 jobs:
   artifact_05:
     name: Run Artifact 05 on verified commit
@@ -13,7 +18,3 @@ jobs:
     uses: ./.github/workflows/artifact-05-final.yml
     with:
       target_sha: ${{ github.event.workflow_run.head_sha }}
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
