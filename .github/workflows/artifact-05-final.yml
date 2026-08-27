@@ -7,10 +7,6 @@ on:
       verified_sha:
         required: true
         type: string
-  workflow_run:
-    workflows: [NEXUS Verification]
-    types: [completed]
-    branches: [main]
 
 permissions:
   contents: read
@@ -23,7 +19,6 @@ env:
 jobs:
   verify:
     name: Artifact 05 Contract Verification
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     steps:
       - name: Resolve verification target
@@ -31,17 +26,18 @@ jobs:
         shell: bash
         env:
           CALLER_SHA: ${{ inputs.verified_sha }}
-          WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          if [ -n "$CALLER_SHA" ]; then TARGET_SHA="$CALLER_SHA"; elif [ -n "$WORKFLOW_RUN_SHA" ]; then TARGET_SHA="$WORKFLOW_RUN_SHA"; else TARGET_SHA="$GITHUB_SHA"; fi
+          if [ -n "$CALLER_SHA" ]; then TARGET_SHA="$CALLER_SHA"; else TARGET_SHA="$GITHUB_SHA"; fi
           test -n "$TARGET_SHA"
           echo "sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
           echo "Verification target: $TARGET_SHA"
+
       - name: Checkout exact commit
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ steps.target.outputs.sha }}
+
       - name: GATE 0 — pinned environment and manifest inputs
         run: |
           set -euo pipefail
@@ -50,16 +46,19 @@ jobs:
           test -f artifact-05/Cargo.toml
           test -f artifact-05/Cargo.lock
           echo 'GATE 0 PASS'
+
       - name: GATE 1 — build
         run: |
           set -euo pipefail
           docker run --rm --user "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:/workspace" -w /workspace/artifact-05 "$RUST_IMAGE" sh -euxc 'cargo fmt -- --check; cargo build --locked'
           echo 'GATE 1 PASS'
+
       - name: GATE 2 — tests
         run: |
           set -euo pipefail
           docker run --rm --user "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:/workspace" -w /workspace/artifact-05 "$RUST_IMAGE" sh -euxc 'cargo test --locked; cargo test --doc --locked'
           echo 'GATE 2 PASS'
+
       - name: GATE 3 — evidence integrity and lock invariant
         env:
           VERIFIED_COMMIT: ${{ steps.target.outputs.sha }}
@@ -81,6 +80,7 @@ jobs:
           echo 'GATE 3 PASS' >> artifact-05-verification.log
           echo 'Status: PASS' >> artifact-05-verification.log
           echo 'GATE 3 PASS'
+
       - name: Generate manifest
         env:
           VERIFIED_COMMIT: ${{ steps.target.outputs.sha }}
@@ -102,6 +102,7 @@ Verification Log SHA-256: $LOG_HASH
 Verification Mode: locked
 Invariant: Artifact 05 contract gates passed
 EOF
+
       - name: Self-audit evidence
         env:
           VERIFIED_COMMIT: ${{ steps.target.outputs.sha }}
@@ -116,15 +117,18 @@ EOF
           grep -q '^Status: PASS$' artifact-05-verification.log
           grep -q '^GATE 3 PASS$' artifact-05-verification.log
           echo '[SELF-AUDIT] PASS'
+
       - name: Bundle evidence
         run: |
           set -euo pipefail
           tar -czf verification-bundle-artifact-05.tar.gz artifact-05-verification-manifest.txt artifact-05-verification.log artifact-05/Cargo.lock
           test -s verification-bundle-artifact-05.tar.gz
+
       - name: Attest evidence bundle
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
         with:
           subject-path: verification-bundle-artifact-05.tar.gz
+
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
