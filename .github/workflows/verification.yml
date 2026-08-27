@@ -73,6 +73,7 @@ jobs:
   artifact_05:
     name: Artifact 05 Final
     needs: evidence
+    if: ${{ needs.evidence.result == 'success' }}
     permissions:
       contents: read
       id-token: write
