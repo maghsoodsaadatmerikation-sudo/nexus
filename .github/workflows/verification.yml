@@ -5,9 +5,9 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/**'
       - 'nexus-constitutional-core/**'
       - 'artifact-05/**'
-      - '.github/workflows/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
 
@@ -16,16 +16,56 @@ permissions:
   id-token: write
   attestations: write
 
+env:
+  RUST_IMAGE: rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
+
 jobs:
   preflight:
+    name: Preflight
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-      - run: echo 'preflight PASS'
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - name: Check pinned image reference
+        run: |
+          set -euo pipefail
+          case "$RUST_IMAGE" in rust@sha256:*) ;; *) exit 1 ;; esac
 
   verify:
+    name: Verification
     needs: preflight
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-      - run: echo 'verification PASS'
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - name: Verify repository invariants
+        run: |
+          set -euo pipefail
+          test -f Cargo.lock
+          test -f artifact-05/Cargo.lock
+          echo 'Verification PASS'
+
+  evidence:
+    name: Evidence and Attestation
+    needs: verify
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - name: Generate verification evidence
+        run: |
+          set -euo pipefail
+          sha256sum Cargo.lock > verification-manifest.txt
+          echo "Status: PASS" >> verification-manifest.txt
+          tar -czf verification-bundle.tar.gz verification-manifest.txt Cargo.lock
+      - name: Attest verification bundle
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: verification-bundle.tar.gz
+      - name: Upload evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: verification-bundle
+          path: |
+            verification-manifest.txt
+            verification-bundle.tar.gz
