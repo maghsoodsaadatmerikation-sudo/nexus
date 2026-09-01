@@ -1,4 +1,7 @@
-use crate::{Alternative, Claim, DecisionWorkspace, HumanJudgment};
+use crate::{
+    Alternative, AnalysisBatch, AnalysisObservationKind, Claim, ClaimOrigin, DecisionWorkspace,
+    HumanJudgment,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -8,14 +11,27 @@ pub const WORKSPACE_SCHEMA_VERSION: u32 = 1;
 pub struct ProvenanceId(pub String);
 
 impl ProvenanceId {
-    pub fn new(value: impl Into<String>) -> Self { Self(value.into()) }
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WorkspaceEventKind {
     WorkspaceCreated,
-    ClaimAdded { claim_id: String },
-    AlternativeAdded { alternative_id: String },
+    ClaimAdded {
+        claim_id: String,
+    },
+    AlternativeAdded {
+        alternative_id: String,
+    },
+    MachineAnalysisRecorded {
+        claim_id: String,
+        adapter_id: String,
+        run_id: String,
+        observation_kind: AnalysisObservationKind,
+        source_ids: Vec<String>,
+    },
     HumanJudgmentTransition {
         previous: Option<HumanJudgment>,
         current: HumanJudgment,
@@ -41,6 +57,8 @@ pub enum WorkspaceStoreError {
     UnsupportedSchemaVersion { found: u32, supported: u32 },
     InvalidAuditSequence,
     InvalidWorkspaceCreationEvent,
+    ClaimAuditMismatch,
+    AlternativeAuditMismatch,
     JudgmentAuditMismatch,
 }
 
@@ -57,7 +75,8 @@ pub struct InMemoryWorkspaceRepository {
 impl WorkspaceRepository for InMemoryWorkspaceRepository {
     fn save(&mut self, snapshot: WorkspaceSnapshot) -> Result<(), WorkspaceStoreError> {
         validate_snapshot(&snapshot)?;
-        self.snapshots.insert(snapshot.workspace.id.clone(), snapshot);
+        self.snapshots
+            .insert(snapshot.workspace.id.clone(), snapshot);
         Ok(())
     }
 
@@ -101,9 +120,13 @@ impl WorkspaceEngine {
         })
     }
 
-    pub fn workspace(&self) -> &DecisionWorkspace { &self.workspace }
+    pub fn workspace(&self) -> &DecisionWorkspace {
+        &self.workspace
+    }
 
-    pub fn events(&self) -> &[WorkspaceEvent] { &self.events }
+    pub fn events(&self) -> &[WorkspaceEvent] {
+        &self.events
+    }
 
     pub fn add_claim(&mut self, claim: Claim, provenance_id: ProvenanceId) {
         let claim_id = claim.id.clone();
@@ -118,6 +141,29 @@ impl WorkspaceEngine {
             provenance_id,
             WorkspaceEventKind::AlternativeAdded { alternative_id },
         );
+    }
+
+    pub fn record_analysis_batch(&mut self, batch: AnalysisBatch) {
+        let provenance_id = batch.provenance_id();
+        for observation in batch.observations {
+            let claim_id = observation.id.clone();
+            self.workspace.add_claim(Claim {
+                id: claim_id.clone(),
+                text: observation.text,
+                origin: ClaimOrigin::MachineAnalysis,
+                uncertainty: observation.uncertainty,
+            });
+            self.append_event(
+                provenance_id.clone(),
+                WorkspaceEventKind::MachineAnalysisRecorded {
+                    claim_id,
+                    adapter_id: batch.adapter_id.clone(),
+                    run_id: batch.run_id.clone(),
+                    observation_kind: observation.kind,
+                    source_ids: observation.source_ids,
+                },
+            );
+        }
     }
 
     pub fn record_human_judgment(
@@ -178,6 +224,45 @@ fn validate_snapshot(snapshot: &WorkspaceSnapshot) -> Result<(), WorkspaceStoreE
         return Err(WorkspaceStoreError::InvalidAuditSequence);
     }
 
+    let audited_claim_ids: Vec<&str> = snapshot
+        .events
+        .iter()
+        .filter_map(|event| match &event.kind {
+            WorkspaceEventKind::ClaimAdded { claim_id }
+            | WorkspaceEventKind::MachineAnalysisRecorded { claim_id, .. } => {
+                Some(claim_id.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+    let workspace_claim_ids: Vec<&str> = snapshot
+        .workspace
+        .claims
+        .iter()
+        .map(|claim| claim.id.as_str())
+        .collect();
+    if audited_claim_ids != workspace_claim_ids {
+        return Err(WorkspaceStoreError::ClaimAuditMismatch);
+    }
+
+    let audited_alternative_ids: Vec<&str> = snapshot
+        .events
+        .iter()
+        .filter_map(|event| match &event.kind {
+            WorkspaceEventKind::AlternativeAdded { alternative_id } => Some(alternative_id.as_str()),
+            _ => None,
+        })
+        .collect();
+    let workspace_alternative_ids: Vec<&str> = snapshot
+        .workspace
+        .alternatives
+        .iter()
+        .map(|alternative| alternative.id.as_str())
+        .collect();
+    if audited_alternative_ids != workspace_alternative_ids {
+        return Err(WorkspaceStoreError::AlternativeAuditMismatch);
+    }
+
     let mut audited_judgment: Option<HumanJudgment> = None;
     for event in &snapshot.events {
         if let WorkspaceEventKind::HumanJudgmentTransition { previous, current } = &event.kind {
@@ -198,7 +283,9 @@ fn validate_snapshot(snapshot: &WorkspaceSnapshot) -> Result<(), WorkspaceStoreE
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ClaimOrigin, Uncertainty};
+    use crate::{
+        AnalysisObservation, AnalysisObservationKind, ClaimOrigin, Uncertainty,
+    };
 
     #[test]
     fn audit_events_are_append_only_and_sequenced() {
@@ -207,13 +294,18 @@ mod tests {
             Claim {
                 id: "c-1".into(),
                 text: "Evidence".into(),
-                origin: ClaimOrigin::ExternalEvidence { source: "source-1".into() },
+                origin: ClaimOrigin::ExternalEvidence {
+                    source: "source-1".into(),
+                },
                 uncertainty: Uncertainty::Medium,
             },
             ProvenanceId::new("source:1"),
         );
         engine.record_human_judgment(
-            HumanJudgment { decision: "A".into(), rationale: "Human choice".into() },
+            HumanJudgment {
+                decision: "A".into(),
+                rationale: "Human choice".into(),
+            },
             ProvenanceId::new("human:p1"),
         );
 
@@ -225,10 +317,45 @@ mod tests {
     }
 
     #[test]
+    fn machine_analysis_is_audited_without_creating_judgment() {
+        let mut engine = WorkspaceEngine::new("w-a", "Question", ProvenanceId::new("human:p"));
+        engine.record_analysis_batch(AnalysisBatch {
+            adapter_id: "challenge".into(),
+            run_id: "run-7".into(),
+            observations: vec![AnalysisObservation {
+                id: "m-1".into(),
+                kind: AnalysisObservationKind::Counterargument,
+                text: "Alternative explanation".into(),
+                uncertainty: Uncertainty::High,
+                source_ids: vec!["source:x".into()],
+            }],
+        });
+
+        assert_eq!(engine.workspace().claims.len(), 1);
+        assert_eq!(engine.workspace().claims[0].origin, ClaimOrigin::MachineAnalysis);
+        assert!(!engine.workspace().has_human_judgment());
+        assert!(matches!(
+            &engine.events()[1].kind,
+            WorkspaceEventKind::MachineAnalysisRecorded {
+                adapter_id,
+                run_id,
+                source_ids,
+                ..
+            } if adapter_id == "challenge" && run_id == "run-7" && source_ids == &vec!["source:x".to_string()]
+        ));
+    }
+
+    #[test]
     fn judgment_revisions_preserve_previous_and_current_values() {
         let mut engine = WorkspaceEngine::new("w-r", "Question", ProvenanceId::new("human:p"));
-        let first = HumanJudgment { decision: "A".into(), rationale: "First".into() };
-        let second = HumanJudgment { decision: "B".into(), rationale: "Revised".into() };
+        let first = HumanJudgment {
+            decision: "A".into(),
+            rationale: "First".into(),
+        };
+        let second = HumanJudgment {
+            decision: "B".into(),
+            rationale: "Revised".into(),
+        };
         engine.record_human_judgment(first.clone(), ProvenanceId::new("human:p"));
         engine.record_human_judgment(second.clone(), ProvenanceId::new("human:p"));
 
@@ -266,7 +393,8 @@ mod tests {
 
     #[test]
     fn tampered_sequence_is_rejected() {
-        let mut snapshot = WorkspaceEngine::new("w-4", "Question", ProvenanceId::new("human:p4")).snapshot();
+        let mut snapshot =
+            WorkspaceEngine::new("w-4", "Question", ProvenanceId::new("human:p4")).snapshot();
         snapshot.events[0].sequence = 9;
         assert!(matches!(
             WorkspaceEngine::from_snapshot(snapshot),
@@ -275,8 +403,25 @@ mod tests {
     }
 
     #[test]
+    fn unaudited_claim_is_rejected() {
+        let mut snapshot =
+            WorkspaceEngine::new("w-c", "Question", ProvenanceId::new("human:p")).snapshot();
+        snapshot.workspace.claims.push(Claim {
+            id: "injected".into(),
+            text: "Not audited".into(),
+            origin: ClaimOrigin::Human,
+            uncertainty: Uncertainty::Unknown,
+        });
+        assert!(matches!(
+            WorkspaceEngine::from_snapshot(snapshot),
+            Err(WorkspaceStoreError::ClaimAuditMismatch)
+        ));
+    }
+
+    #[test]
     fn unaudited_human_judgment_is_rejected() {
-        let mut snapshot = WorkspaceEngine::new("w-5", "Question", ProvenanceId::new("human:p5")).snapshot();
+        let mut snapshot =
+            WorkspaceEngine::new("w-5", "Question", ProvenanceId::new("human:p5")).snapshot();
         snapshot.workspace.judgment = Some(HumanJudgment {
             decision: "Injected".into(),
             rationale: "No transition event".into(),
@@ -291,11 +436,16 @@ mod tests {
     fn tampered_judgment_transition_is_rejected() {
         let mut engine = WorkspaceEngine::new("w-6", "Question", ProvenanceId::new("human:p6"));
         engine.record_human_judgment(
-            HumanJudgment { decision: "A".into(), rationale: "Human".into() },
+            HumanJudgment {
+                decision: "A".into(),
+                rationale: "Human".into(),
+            },
             ProvenanceId::new("human:p6"),
         );
         let mut snapshot = engine.snapshot();
-        if let WorkspaceEventKind::HumanJudgmentTransition { previous, .. } = &mut snapshot.events[1].kind {
+        if let WorkspaceEventKind::HumanJudgmentTransition { previous, .. } =
+            &mut snapshot.events[1].kind
+        {
             *previous = Some(HumanJudgment {
                 decision: "Injected".into(),
                 rationale: "Tampered".into(),
