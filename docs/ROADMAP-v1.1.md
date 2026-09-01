@@ -26,9 +26,9 @@ Verification basis: NEXUS Verification #251, run `33546980317` — PASS.
 
 ## Stage B — Backup and Recovery
 
-Status: **COMPLETE / VERIFIED**
+Status: **COMPLETE / VERIFIED; BROWSER SAFEGUARD ADDED**
 
-Implemented:
+Implemented and verified previously:
 
 - authenticated `scripts/workspace-backup.sh` operator helper;
 - validated `scripts/workspace-restore.sh` operator helper;
@@ -37,7 +37,19 @@ Implemented:
 - CI creates a workspace, exports its complete snapshot, destroys the backing data, starts a fresh instance, restores the snapshot, compares restored state with the backup, then restarts again and verifies persistence;
 - backup/restore script hashes are included in verification evidence.
 
-Verification basis: NEXUS Verification #251, run `33546980317` — PASS.
+Verification basis for the recovery boundary: NEXUS Verification #251, run `33546980317` — PASS.
+
+Additional ephemeral-host safeguard on `main`:
+
+- browser UI now has an explicit **Backup / recovery** section;
+- **Download verified backup** first fetches a fresh authenticated server snapshot rather than exporting potentially stale in-memory state;
+- the browser checks the minimum snapshot structure before download;
+- backup filenames include workspace ID and UTC timestamp;
+- restore performs local JSON/structure checks and then submits the snapshot to the existing authenticated `/v1/workspaces/import` boundary for authoritative server-side revalidation;
+- the UI explicitly tells operators to store backups independently of an ephemeral host;
+- workspace mutations prompt the operator to refresh the backup.
+
+This safeguard reduces data-loss risk on ephemeral hosting. It does not make ephemeral storage durable.
 
 ## Stage C — Production Observability
 
@@ -81,9 +93,9 @@ It is not durable production.
 
 ## Current v1.1 boundary
 
-Stages A through C are complete and verified. Stage D's repository-side deployment contract is ready, but the durable-production claim remains unverified until a real persistent host is provisioned and the documented recovery procedure passes there.
+Stages A through C are complete and verified. Stage B now also exposes its recovery capability directly to browser operators on ephemeral hosting. Stage D's repository-side deployment contract is ready, but the durable-production claim remains unverified until a real persistent host is provisioned and the documented recovery procedure passes there.
 
-No code or documentation change may convert an ephemeral deployment into a durable-production claim. That claim requires real persistent hosting evidence.
+No code, UI, backup download, or documentation change may convert an ephemeral deployment into a durable-production claim. That claim requires real persistent hosting evidence.
 
 ## Release discipline
 
