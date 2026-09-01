@@ -60,7 +60,9 @@ def main() -> None:
     if "NEXUS_API_TOKEN" not in stage_d:
         fail("Stage D harness must require authenticated access")
     token_record_lines = [
-        line.strip() for line in stage_d.splitlines() if line.strip().startswith("Token Recorded:")
+        line.strip()
+        for line in stage_d.splitlines()
+        if "Token Recorded:" in line and not line.lstrip().startswith("#")
     ]
     if token_record_lines != ["Token Recorded: NO"]:
         fail("Stage D harness must record only the explicit no-token marker")
