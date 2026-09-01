@@ -178,16 +178,15 @@ fn validate_snapshot(snapshot: &WorkspaceSnapshot) -> Result<(), WorkspaceStoreE
         return Err(WorkspaceStoreError::InvalidAuditSequence);
     }
 
-    let audited_judgment = snapshot.events.iter().fold(None, |current, event| match &event.kind {
-        WorkspaceEventKind::HumanJudgmentTransition { previous, current: next } => {
-            if previous.as_ref() == current.as_ref() {
-                Some(next.clone())
-            } else {
-                current
+    let mut audited_judgment: Option<HumanJudgment> = None;
+    for event in &snapshot.events {
+        if let WorkspaceEventKind::HumanJudgmentTransition { previous, current } = &event.kind {
+            if previous.as_ref() != audited_judgment.as_ref() {
+                return Err(WorkspaceStoreError::JudgmentAuditMismatch);
             }
+            audited_judgment = Some(current.clone());
         }
-        _ => current,
-    });
+    }
 
     if audited_judgment != snapshot.workspace.judgment {
         return Err(WorkspaceStoreError::JudgmentAuditMismatch);
@@ -269,10 +268,10 @@ mod tests {
     fn tampered_sequence_is_rejected() {
         let mut snapshot = WorkspaceEngine::new("w-4", "Question", ProvenanceId::new("human:p4")).snapshot();
         snapshot.events[0].sequence = 9;
-        assert_eq!(
+        assert!(matches!(
             WorkspaceEngine::from_snapshot(snapshot),
             Err(WorkspaceStoreError::InvalidAuditSequence)
-        );
+        ));
     }
 
     #[test]
@@ -282,9 +281,29 @@ mod tests {
             decision: "Injected".into(),
             rationale: "No transition event".into(),
         });
-        assert_eq!(
+        assert!(matches!(
             WorkspaceEngine::from_snapshot(snapshot),
             Err(WorkspaceStoreError::JudgmentAuditMismatch)
+        ));
+    }
+
+    #[test]
+    fn tampered_judgment_transition_is_rejected() {
+        let mut engine = WorkspaceEngine::new("w-6", "Question", ProvenanceId::new("human:p6"));
+        engine.record_human_judgment(
+            HumanJudgment { decision: "A".into(), rationale: "Human".into() },
+            ProvenanceId::new("human:p6"),
         );
+        let mut snapshot = engine.snapshot();
+        if let WorkspaceEventKind::HumanJudgmentTransition { previous, .. } = &mut snapshot.events[1].kind {
+            *previous = Some(HumanJudgment {
+                decision: "Injected".into(),
+                rationale: "Tampered".into(),
+            });
+        }
+        assert!(matches!(
+            WorkspaceEngine::from_snapshot(snapshot),
+            Err(WorkspaceStoreError::JudgmentAuditMismatch)
+        ));
     }
 }
