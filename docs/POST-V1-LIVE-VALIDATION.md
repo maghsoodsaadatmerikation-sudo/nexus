@@ -23,11 +23,11 @@ The public deployment was observed to:
 5. Create an authenticated workspace with a generated workspace identifier and schema v1 state.
 6. Materialize audit event `#0 WorkspaceCreated`.
 7. Add the human-origin claim: `Public Render deployment successfully created an authenticated NEXUS workspace.`
-8. Materialize audit event `#1 Claim Added` with provenance supplied by the operator.
+8. Materialize audit event `#1 Claim Added` using source/provenance identifier `production-validation-001`.
 9. Record the explicit human decision: `Proceed with post-release production validation.`
 10. Materialize audit event `#2 Human Judgment Transition`.
 
-The observed event order was therefore:
+The observed event order was:
 
 ```text
 #0 WorkspaceCreated
@@ -36,6 +36,10 @@ The observed event order was therefore:
 ```
 
 This live check confirms that the deployed browser/gateway/core path can preserve the explicit distinction between evidence-bearing state and a human judgment transition under authenticated use.
+
+## Epistemic scope
+
+This live session directly exercised an explicit human judgment transition. It did **not** exercise a machine-analysis adapter attempting to create HumanJudgment. The prohibition on implicit machine-to-human-judgment promotion remains established by the code boundary and automated verification; this live record does not claim more than was directly observed.
 
 ## What this validation does not prove
 
@@ -53,13 +57,26 @@ The validation instance uses a Render free web service. The free service does no
 
 For this reason the live instance is classified as:
 
-**public functional validation deployment — not durable production**.
+**PUBLIC / AUTHENTICATED / FUNCTIONALLY VALIDATED / EPHEMERAL**
 
-A durable production classification requires a host/storage configuration satisfying the deployment contract, especially persistent storage across restart/replacement.
+and not as durable production.
+
+The repository's container verification separately exercises persistence across container restart with a mounted volume. That CI result does not convert the external Render Free filesystem into durable storage.
 
 ## Security note
 
 The bearer token used during validation is intentionally omitted. Secrets must remain outside repository history, release notes, evidence documents, browser source, and public logs.
+
+## Durable-production exit criterion
+
+A future deployment may be classified as durable production only after all of the following are evidenced:
+
+- persistent storage is mounted for `NEXUS_DATA_DIR`;
+- a workspace survives a real service restart/replacement using that persistent storage;
+- bearer authentication remains fail-closed;
+- HTTPS remains enabled;
+- backup/recovery behavior is defined and tested;
+- the deployment commit has a successful NEXUS verification run.
 
 ## Evidence chain
 
