@@ -12,47 +12,49 @@ The constitutional invariant remains:
 
 ## Stage A — Operational Health
 
-Status: IN PROGRESS
+Status: **COMPLETE / VERIFIED**
 
-Objectives:
+Implemented:
 
-- define a container-level health contract;
-- verify the health contract in CI against the production-shaped container;
-- distinguish liveness/availability signals from epistemic correctness;
-- avoid exposing secrets or internal authority state through health checks.
+- container-level Docker health contract;
+- health state verified as `healthy` in the production-shaped CI container;
+- health re-verified after restart;
+- liveness deliberately kept separate from epistemic correctness and authority;
+- no secret or evidence payload is exposed by the health check.
 
-Exit criterion: the production container reports `healthy` under the same CI path that already verifies authenticated workspace creation and durable restart.
+Verification basis: NEXUS Verification #251, run `33546980317` — PASS.
 
 ## Stage B — Backup and Recovery
 
-Status: PLANNED
+Status: **COMPLETE / VERIFIED**
 
-Objectives:
+Implemented:
 
-- define a portable backup artifact for workspace state;
-- preserve schema version, provenance, uncertainty, audit history, and explicit human judgment transitions;
-- validate backup import before persistence;
-- provide an operator workflow suitable for ephemeral hosting;
-- prevent backup/restore from bypassing append-only history validation.
+- authenticated `scripts/workspace-backup.sh` operator helper;
+- validated `scripts/workspace-restore.sh` operator helper;
+- JSON syntax validation before local backup acceptance and before restore submission;
+- server-side snapshot revalidation remains mandatory on import;
+- CI creates a workspace, exports its complete snapshot, destroys the backing data, starts a fresh instance, restores the snapshot, compares restored state with the backup, then restarts again and verifies persistence;
+- backup/restore script hashes are included in verification evidence.
 
-Exit criterion: an exported validated snapshot can be restored into a fresh instance and replay-validates to the same epistemic state.
+Verification basis: NEXUS Verification #251, run `33546980317` — PASS.
 
 ## Stage C — Production Observability
 
-Status: PLANNED
+Status: **IN PROGRESS**
 
 Objectives:
 
-- operational metrics/logging that do not leak bearer tokens or evidence payloads;
+- operational startup/failure signals that do not leak bearer tokens or evidence payloads;
 - startup/restart visibility;
 - health and failure signals separated from epistemic claims;
 - documented retention and redaction rules.
 
-Exit criterion: operators can detect service failures without turning monitoring output into epistemic authority.
+Exit criterion: operators can detect service startup/failure without turning monitoring output into epistemic authority or exposing user evidence.
 
 ## Stage D — Durable Production Validation
 
-Status: BLOCKED ON DURABLE STORAGE
+Status: **BLOCKED ON DURABLE STORAGE**
 
 Objectives:
 
