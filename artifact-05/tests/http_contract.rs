@@ -92,7 +92,10 @@ async fn accepted_request_is_reported_as_pending() {
         .unwrap();
     let status: serde_json::Value = serde_json::from_slice(&status_body).unwrap();
     assert_eq!(status["request_id"], "pending-05");
-    assert_eq!(status["status"], serde_json::to_value(RequestStatus::Pending).unwrap());
+    assert_eq!(
+        status["status"],
+        serde_json::to_value(RequestStatus::Pending).unwrap()
+    );
 }
 
 #[tokio::test]
