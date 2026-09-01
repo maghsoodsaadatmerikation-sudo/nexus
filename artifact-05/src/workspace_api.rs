@@ -6,7 +6,8 @@ use axum::{
     Json,
 };
 use nexus_constitutional_core::{
-    Alternative, Claim, ClaimOrigin, HumanJudgment, ProvenanceId, Uncertainty, WorkspaceSnapshot,
+    Alternative, AnalysisBatch, Claim, ClaimOrigin, HumanJudgment, ProvenanceId, Uncertainty,
+    WorkspaceSnapshot,
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -45,6 +46,14 @@ pub trait WorkspaceDelegate: Send + Sync + 'static {
         alternative: Alternative,
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError>;
+
+    fn record_analysis_batch(
+        &self,
+        _workspace_id: &str,
+        _batch: AnalysisBatch,
+    ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+        Err(WorkspaceDelegateError::Unavailable)
+    }
 
     fn record_human_judgment(
         &self,
@@ -201,6 +210,20 @@ where
         .delegate
         .add_alternative(&id, alternative, ProvenanceId::new(input.provenance_id))
     {
+        Ok(snapshot) => (StatusCode::OK, Json(snapshot)).into_response(),
+        Err(error) => workspace_error_response(error),
+    }
+}
+
+pub(crate) async fn record_analysis_batch<D>(
+    State(state): State<AppState<D>>,
+    Path(id): Path<String>,
+    Json(batch): Json<AnalysisBatch>,
+) -> impl IntoResponse
+where
+    D: ConstitutionalDelegate + WorkspaceDelegate,
+{
+    match state.delegate.record_analysis_batch(&id, batch) {
         Ok(snapshot) => (StatusCode::OK, Json(snapshot)).into_response(),
         Err(error) => workspace_error_response(error),
     }
