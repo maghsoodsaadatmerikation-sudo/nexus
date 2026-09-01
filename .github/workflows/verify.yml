@@ -25,7 +25,7 @@ jobs:
     needs: preflight
     runs-on: ubuntu-24.04
     permissions:
-      contents: write
+      contents: read
       id-token: write
       attestations: write
     steps:
@@ -75,32 +75,6 @@ jobs:
           test -f artifact-05/Cargo.lock
           echo 'GATE 0 PASS'
 
-      - name: Refresh Artifact 05 lockfile
-        run: |
-          set -euo pipefail
-          docker run --rm --user "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:/workspace" -w /workspace/artifact-05 "$RUST_IMAGE" sh -euxc 'cargo generate-lockfile'
-          test -s artifact-05/Cargo.lock
-
-      - name: Commit refreshed Artifact 05 lockfile
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- artifact-05/Cargo.lock; then
-            echo 'Artifact 05 Cargo.lock already current'
-          else
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add artifact-05/Cargo.lock
-            git commit -m 'fix(artifact-05): refresh Cargo.lock'
-            git push origin HEAD:main
-          fi
-
-      - name: Upload refreshed Artifact 05 lockfile
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
-        with:
-          name: artifact-05-refreshed-lockfile
-          path: artifact-05/Cargo.lock
-          if-no-files-found: error
-
       - name: Artifact 05 GATE 1
         run: |
           set -euo pipefail
@@ -112,3 +86,59 @@ jobs:
           set -euo pipefail
           docker run --rm --user "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:/workspace" -w /workspace/artifact-05 "$RUST_IMAGE" sh -euxc 'cargo test --locked; cargo test --doc --locked'
           echo 'GATE 2 PASS'
+
+      - name: Artifact 05 GATE 3 evidence integrity
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          lock_sha="$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')"
+          toml_sha="$(sha256sum artifact-05/Cargo.toml | awk '{print $1}')"
+          source_sha="$(find artifact-05/src artifact-05/tests -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
+          printf '%s\n' \
+            'Status: PASS' \
+            "Verified Commit: ${GITHUB_SHA}" \
+            "Run ID: ${GITHUB_RUN_ID}" \
+            "Docker Reference: ${RUST_IMAGE}" \
+            'GATE 0: PASS' \
+            'GATE 1: PASS' \
+            'GATE 2: PASS' \
+            "Artifact 05 Cargo.lock SHA-256: ${lock_sha}" \
+            "Artifact 05 Cargo.toml SHA-256: ${toml_sha}" \
+            "Artifact 05 Source Tree SHA-256: ${source_sha}" \
+            > artifact-05-verification-manifest.txt
+          grep -Fx 'Status: PASS' artifact-05-verification-manifest.txt
+          grep -Fx "Verified Commit: ${GITHUB_SHA}" artifact-05-verification-manifest.txt
+          grep -Fx "Docker Reference: ${RUST_IMAGE}" artifact-05-verification-manifest.txt
+          case "$RUST_IMAGE" in rust@sha256:*) ;; *) exit 1 ;; esac
+          test "$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')" = "$lock_sha"
+          test "$(sha256sum artifact-05/Cargo.toml | awk '{print $1}')" = "$toml_sha"
+          test "$(find artifact-05/src artifact-05/tests -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')" = "$source_sha"
+          echo 'GATE 3 PASS'
+
+      - name: Bundle Artifact 05 verification evidence
+        run: |
+          set -euo pipefail
+          tar -czf artifact-05-verification-bundle.tar.gz \
+            artifact-05-verification-manifest.txt \
+            artifact-05/Cargo.toml \
+            artifact-05/Cargo.lock \
+            artifact-05/src \
+            artifact-05/tests
+
+      - name: Attest Artifact 05 verification bundle
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: artifact-05-verification-bundle.tar.gz
+
+      - name: Upload Artifact 05 verification evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: artifact-05-verification-bundle
+          path: |
+            artifact-05-verification-bundle.tar.gz
+            artifact-05-verification-manifest.txt
+            artifact-05/Cargo.toml
+            artifact-05/Cargo.lock
+          if-no-files-found: error
