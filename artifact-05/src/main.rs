@@ -166,7 +166,10 @@ impl CoreDelegate {
 async fn main() {
     let token = std::env::var("NEXUS_API_TOKEN")
         .expect("NEXUS_API_TOKEN is required for authenticated workspace access");
-    assert!(!token.trim().is_empty(), "NEXUS_API_TOKEN must not be empty");
+    assert!(
+        !token.trim().is_empty(),
+        "NEXUS_API_TOKEN must not be empty"
+    );
     let data_root = std::env::var_os("NEXUS_DATA_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("nexus-data"));
