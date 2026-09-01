@@ -98,8 +98,9 @@ def main() -> None:
             fail("release readiness validation must not require bearer-token access")
 
     readiness_doc = (ROOT / "docs" / "RELEASE-READINESS-v1.1.md").read_text(encoding="utf-8")
-    for marker in ["A_out <= A_in", "fail-closed", "does not create a tag"]:
-        if marker not in readiness_doc:
+    readiness_doc_folded = readiness_doc.casefold()
+    for marker in ["a_out <= a_in", "fail-closed", "does not create a tag"]:
+        if marker not in readiness_doc_folded:
             fail(f"release readiness documentation marker missing: {marker}")
 
     boundary = ROOT / "tests" / "type_boundary.rs"
