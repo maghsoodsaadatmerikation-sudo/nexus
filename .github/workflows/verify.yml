@@ -88,6 +88,43 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:/workspace" -w /workspace/artifact-05 "$RUST_IMAGE" sh -euxc 'cargo test --locked; cargo test --doc --locked'
           echo 'GATE 2 PASS'
 
+      - name: Deployment container smoke and durable restart
+        run: |
+          set -euo pipefail
+          smoke_data="$RUNNER_TEMP/nexus-smoke-data"
+          mkdir -p "$smoke_data"
+          chmod 0777 "$smoke_data"
+          cleanup() { docker rm -f nexus-smoke >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker build --pull=false -t nexus-ci-smoke .
+          docker run -d --name nexus-smoke \
+            -p 127.0.0.1:18080:3000 \
+            -e NEXUS_API_TOKEN=ci-smoke-token \
+            -v "$smoke_data:/data" \
+            nexus-ci-smoke
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/ >/dev/null
+          curl -fsS -X POST http://127.0.0.1:18080/v1/workspaces \
+            -H 'content-type: application/json' \
+            -H 'authorization: Bearer ci-smoke-token' \
+            --data '{"workspace_id":"ci-smoke","question":"deployment persistence smoke","provenance_id":"ci:smoke"}' \
+            >/dev/null
+          cleanup
+          docker run -d --name nexus-smoke \
+            -p 127.0.0.1:18080:3000 \
+            -e NEXUS_API_TOKEN=ci-smoke-token \
+            -v "$smoke_data:/data" \
+            nexus-ci-smoke
+          for _ in $(seq 1 30); do
+            if curl -fsS -H 'authorization: Bearer ci-smoke-token' http://127.0.0.1:18080/v1/workspaces/ci-smoke >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS -H 'authorization: Bearer ci-smoke-token' http://127.0.0.1:18080/v1/workspaces/ci-smoke >/dev/null
+          echo 'DEPLOYMENT SMOKE PASS'
+
       - name: Artifact 05 GATE 3 evidence integrity
         env:
           GITHUB_SHA: ${{ github.sha }}
@@ -98,6 +135,7 @@ jobs:
           toml_sha="$(sha256sum artifact-05/Cargo.toml | awk '{print $1}')"
           source_sha="$(find artifact-05/src artifact-05/tests -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
           web_sha="$(sha256sum web/index.html | awk '{print $1}')"
+          dockerfile_sha="$(sha256sum Dockerfile | awk '{print $1}')"
           printf '%s\n' \
             'Status: PASS' \
             "Verified Commit: ${GITHUB_SHA}" \
@@ -106,19 +144,23 @@ jobs:
             'GATE 0: PASS' \
             'GATE 1: PASS' \
             'GATE 2: PASS' \
+            'Deployment Smoke: PASS' \
             "Artifact 05 Cargo.lock SHA-256: ${lock_sha}" \
             "Artifact 05 Cargo.toml SHA-256: ${toml_sha}" \
             "Artifact 05 Source Tree SHA-256: ${source_sha}" \
             "Web Workspace SHA-256: ${web_sha}" \
+            "Deployment Dockerfile SHA-256: ${dockerfile_sha}" \
             > artifact-05-verification-manifest.txt
           grep -Fx 'Status: PASS' artifact-05-verification-manifest.txt
           grep -Fx "Verified Commit: ${GITHUB_SHA}" artifact-05-verification-manifest.txt
           grep -Fx "Docker Reference: ${RUST_IMAGE}" artifact-05-verification-manifest.txt
+          grep -Fx 'Deployment Smoke: PASS' artifact-05-verification-manifest.txt
           case "$RUST_IMAGE" in rust@sha256:*) ;; *) exit 1 ;; esac
           test "$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')" = "$lock_sha"
           test "$(sha256sum artifact-05/Cargo.toml | awk '{print $1}')" = "$toml_sha"
           test "$(find artifact-05/src artifact-05/tests -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')" = "$source_sha"
           test "$(sha256sum web/index.html | awk '{print $1}')" = "$web_sha"
+          test "$(sha256sum Dockerfile | awk '{print $1}')" = "$dockerfile_sha"
           echo 'GATE 3 PASS'
 
       - name: Bundle Artifact 05 verification evidence
@@ -130,7 +172,10 @@ jobs:
             artifact-05/Cargo.lock \
             artifact-05/src \
             artifact-05/tests \
-            web/index.html
+            web/index.html \
+            Dockerfile \
+            .dockerignore \
+            docs/DEPLOYMENT.md
 
       - name: Attest Artifact 05 verification bundle
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
@@ -147,4 +192,6 @@ jobs:
             artifact-05/Cargo.toml
             artifact-05/Cargo.lock
             web/index.html
+            Dockerfile
+            docs/DEPLOYMENT.md
           if-no-files-found: error
