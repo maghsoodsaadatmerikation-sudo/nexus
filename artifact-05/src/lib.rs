@@ -104,7 +104,10 @@ impl<D: ConstitutionalDelegate> AppState<D> {
 
     pub fn authenticated(delegate: D, token: impl Into<String>) -> Self {
         let token = token.into();
-        assert!(!token.trim().is_empty(), "authentication token must not be empty");
+        assert!(
+            !token.trim().is_empty(),
+            "authentication token must not be empty"
+        );
         Self {
             delegate: Arc::new(delegate),
             statuses: Arc::new(RwLock::new(HashMap::new())),
