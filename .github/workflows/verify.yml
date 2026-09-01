@@ -95,6 +95,23 @@ jobs:
           mkdir -p "$smoke_data"
           chmod 0777 "$smoke_data"
           cleanup() { docker rm -f nexus-smoke >/dev/null 2>&1 || true; }
+          wait_healthy() {
+            for _ in $(seq 1 30); do
+              health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' nexus-smoke)"
+              case "$health" in
+                healthy) return 0 ;;
+                unhealthy|missing)
+                  docker inspect nexus-smoke
+                  docker logs nexus-smoke || true
+                  return 1
+                  ;;
+              esac
+              sleep 1
+            done
+            docker inspect nexus-smoke
+            docker logs nexus-smoke || true
+            return 1
+          }
           trap cleanup EXIT
           docker build --pull=false -t nexus-ci-smoke .
           docker run -d --name nexus-smoke \
@@ -102,10 +119,7 @@ jobs:
             -e NEXUS_API_TOKEN=ci-smoke-token \
             -v "$smoke_data:/data" \
             nexus-ci-smoke
-          for _ in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:18080/ >/dev/null; then break; fi
-            sleep 1
-          done
+          wait_healthy
           curl -fsS http://127.0.0.1:18080/ >/dev/null
           curl -fsS -X POST http://127.0.0.1:18080/v1/workspaces \
             -H 'content-type: application/json' \
@@ -118,11 +132,9 @@ jobs:
             -e NEXUS_API_TOKEN=ci-smoke-token \
             -v "$smoke_data:/data" \
             nexus-ci-smoke
-          for _ in $(seq 1 30); do
-            if curl -fsS -H 'authorization: Bearer ci-smoke-token' http://127.0.0.1:18080/v1/workspaces/ci-smoke >/dev/null; then break; fi
-            sleep 1
-          done
+          wait_healthy
           curl -fsS -H 'authorization: Bearer ci-smoke-token' http://127.0.0.1:18080/v1/workspaces/ci-smoke >/dev/null
+          echo 'DEPLOYMENT HEALTH PASS'
           echo 'DEPLOYMENT SMOKE PASS'
 
       - name: Artifact 05 GATE 3 evidence integrity
@@ -144,6 +156,7 @@ jobs:
             'GATE 0: PASS' \
             'GATE 1: PASS' \
             'GATE 2: PASS' \
+            'Deployment Health: PASS' \
             'Deployment Smoke: PASS' \
             "Artifact 05 Cargo.lock SHA-256: ${lock_sha}" \
             "Artifact 05 Cargo.toml SHA-256: ${toml_sha}" \
@@ -154,6 +167,7 @@ jobs:
           grep -Fx 'Status: PASS' artifact-05-verification-manifest.txt
           grep -Fx "Verified Commit: ${GITHUB_SHA}" artifact-05-verification-manifest.txt
           grep -Fx "Docker Reference: ${RUST_IMAGE}" artifact-05-verification-manifest.txt
+          grep -Fx 'Deployment Health: PASS' artifact-05-verification-manifest.txt
           grep -Fx 'Deployment Smoke: PASS' artifact-05-verification-manifest.txt
           case "$RUST_IMAGE" in rust@sha256:*) ;; *) exit 1 ;; esac
           test "$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')" = "$lock_sha"
@@ -175,7 +189,8 @@ jobs:
             web/index.html \
             Dockerfile \
             .dockerignore \
-            docs/DEPLOYMENT.md
+            docs/DEPLOYMENT.md \
+            docs/ROADMAP-v1.1.md
 
       - name: Attest Artifact 05 verification bundle
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
@@ -194,4 +209,5 @@ jobs:
             web/index.html
             Dockerfile
             docs/DEPLOYMENT.md
+            docs/ROADMAP-v1.1.md
           if-no-files-found: error
