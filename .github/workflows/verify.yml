@@ -75,6 +75,19 @@ jobs:
           test -f artifact-05/Cargo.lock
           echo 'GATE 0 PASS'
 
+      - name: Refresh Artifact 05 lockfile
+        run: |
+          set -euo pipefail
+          docker run --rm --user "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:/workspace" -w /workspace/artifact-05 "$RUST_IMAGE" sh -euxc 'cargo generate-lockfile'
+          test -s artifact-05/Cargo.lock
+
+      - name: Upload refreshed Artifact 05 lockfile
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: artifact-05-refreshed-lockfile
+          path: artifact-05/Cargo.lock
+          if-no-files-found: error
+
       - name: Artifact 05 GATE 1
         run: |
           set -euo pipefail
