@@ -86,9 +86,7 @@ impl WorkspaceDelegate for CoreDelegate {
         workspace_id: &str,
         batch: AnalysisBatch,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
-        self.mutate_workspace(workspace_id, |engine| {
-            engine.record_analysis_batch(batch)
-        })
+        self.mutate_workspace(workspace_id, |engine| engine.record_analysis_batch(batch))
     }
 
     fn record_human_judgment(
