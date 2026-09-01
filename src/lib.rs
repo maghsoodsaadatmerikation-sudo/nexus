@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod actions;
+pub mod analysis;
 pub mod audit;
 pub mod authority;
 pub mod decision;
@@ -14,6 +15,9 @@ pub mod workspace;
 mod authorized;
 
 pub use actions::Action;
+pub use analysis::{
+    AnalysisAdapter, AnalysisBatch, AnalysisError, AnalysisObservation, AnalysisObservationKind,
+};
 pub use audit::{AuditEvent, AuditEventKind, AuditLog};
 pub use authority::{leq, Authority};
 pub use decision::{DenialReason, PolicyDecision};
@@ -32,7 +36,14 @@ mod tests {
 
     #[test]
     fn authorized_flow_is_deterministic() {
-        let envelope = RequestEnvelope::new("r-1", Authority::User, Action::Reflect { subject: "opaque".into() }, "payload");
+        let envelope = RequestEnvelope::new(
+            "r-1",
+            Authority::User,
+            Action::Reflect {
+                subject: "opaque".into(),
+            },
+            "payload",
+        );
         let request = PolicyEngine::new().authorize(envelope).expect("authorized");
         let receipt = Executor::new().execute(request);
         assert_eq!(receipt.request_id(), "r-1");
