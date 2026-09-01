@@ -25,10 +25,11 @@ The token is used for authenticated requests but is never written to the evidenc
 
 ## Phase 1 — Capture
 
-Choose an existing authenticated workspace that can act as the persistence witness:
+Choose an existing authenticated workspace that can act as the persistence witness and bind the evidence to the exact repository commit actually deployed:
 
 ```bash
 export NEXUS_WORKSPACE_ID=<workspace-id>
+export NEXUS_DEPLOYED_COMMIT=<40-character-deployed-commit>
 bash scripts/stage-d-evidence.sh capture ./stage-d-evidence
 ```
 
@@ -37,9 +38,10 @@ Expected evidence:
 - `before.json`
 - `before.sha256`
 - `workspace-id.txt`
+- `deployed-commit.txt`
 - `result-capture.txt` with `Status: PASS`
 
-The snapshot must remain outside the host being tested.
+The snapshot must remain outside the host being tested. `NEXUS_DEPLOYED_COMMIT` must identify the exact code revision running on the host; the later v1.1 release-readiness gate refuses evidence bound to a different commit.
 
 ## Phase 2 — Real replacement and survival verification
 
@@ -84,15 +86,16 @@ Stage D may move to `COMPLETE / VERIFIED` only when all of the following are tru
 1. HTTPS endpoint is active.
 2. Application port remains non-public behind the HTTPS boundary.
 3. Persistent storage is mounted for `NEXUS_DATA_DIR`.
-4. `capture` passes before replacement.
+4. `capture` passes before replacement and records the exact deployed repository commit.
 5. A real service/container replacement occurs.
 6. `verify-survival` passes without using restore first.
 7. A separate destructive recovery exercise is performed.
 8. `restore-verify` passes.
 9. Bearer authentication remains fail-closed.
 10. The exact deployed repository commit has a successful NEXUS Verification run.
+11. `scripts/v1.1-release-readiness.sh` validates the complete Stage D evidence pack against that exact commit.
 
-Until all ten conditions are evidenced, the deployment must not be called durable production and `v1.1.0` must not be sealed.
+Until all eleven conditions are evidenced, the deployment must not be called durable production and `v1.1.0` must not be sealed.
 
 ## Evidence hygiene
 
