@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod actions;
+pub mod adapters;
 pub mod analysis;
 pub mod audit;
 pub mod authority;
@@ -16,6 +17,10 @@ pub mod workspace_persistence;
 mod authorized;
 
 pub use actions::Action;
+pub use adapters::{
+    AiChallengeAdapter, ChallengeProvider, ChallengeRecord, EvidenceProvider, EvidenceRecord,
+    ResearchEvidenceAdapter,
+};
 pub use analysis::{
     AnalysisAdapter, AnalysisBatch, AnalysisError, AnalysisObservation, AnalysisObservationKind,
 };
