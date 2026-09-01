@@ -33,7 +33,10 @@ impl WorkspaceDelegate for CoreDelegate {
         question: String,
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
-        let mut repository = self.workspaces.lock().map_err(|_| WorkspaceDelegateError::Unavailable)?;
+        let mut repository = self
+            .workspaces
+            .lock()
+            .map_err(|_| WorkspaceDelegateError::Unavailable)?;
         if repository.load(&workspace_id).is_some() {
             return Err(WorkspaceDelegateError::AlreadyExists);
         }
@@ -45,7 +48,10 @@ impl WorkspaceDelegate for CoreDelegate {
         Ok(snapshot)
     }
 
-    fn get_workspace(&self, workspace_id: &str) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+    fn get_workspace(
+        &self,
+        workspace_id: &str,
+    ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         self.workspaces
             .lock()
             .map_err(|_| WorkspaceDelegateError::Unavailable)?
@@ -59,7 +65,9 @@ impl WorkspaceDelegate for CoreDelegate {
         claim: Claim,
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
-        self.mutate_workspace(workspace_id, |engine| engine.add_claim(claim, provenance_id))
+        self.mutate_workspace(workspace_id, |engine| {
+            engine.add_claim(claim, provenance_id)
+        })
     }
 
     fn add_alternative(
@@ -94,7 +102,10 @@ impl CoreDelegate {
     where
         F: FnOnce(&mut WorkspaceEngine),
     {
-        let mut repository = self.workspaces.lock().map_err(|_| WorkspaceDelegateError::Unavailable)?;
+        let mut repository = self
+            .workspaces
+            .lock()
+            .map_err(|_| WorkspaceDelegateError::Unavailable)?;
         let snapshot = repository
             .load(workspace_id)
             .ok_or(WorkspaceDelegateError::NotFound)?;
