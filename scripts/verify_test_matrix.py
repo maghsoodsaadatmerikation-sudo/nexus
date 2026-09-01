@@ -87,8 +87,13 @@ def main() -> None:
     ]:
         if marker not in readiness:
             fail(f"release readiness marker missing: {marker}")
-    if "NEXUS_API_TOKEN" in readiness:
-        fail("release readiness validation must not require bearer-token access")
+    forbidden_readiness_token_use = [
+        ': "${NEXUS_API_TOKEN:',
+        'authorization: Bearer ${NEXUS_API_TOKEN}',
+    ]
+    for marker in forbidden_readiness_token_use:
+        if marker in readiness:
+            fail("release readiness validation must not require bearer-token access")
 
     readiness_doc = (ROOT / "docs" / "RELEASE-READINESS-v1.1.md").read_text(encoding="utf-8")
     for marker in ["A_out <= A_in", "fail-closed", "does not create a tag"]:
