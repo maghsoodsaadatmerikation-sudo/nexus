@@ -13,8 +13,10 @@ REQUIRED = [
     ROOT / "scripts" / "bootstrap-docker.sh",
     ROOT / "scripts" / "stage-d-evidence.sh",
     ROOT / "scripts" / "v1.1-release-readiness.sh",
+    ROOT / "scripts" / "v1.1-release-candidate.sh",
     ROOT / "docs" / "STAGE-D-EVIDENCE.md",
     ROOT / "docs" / "RELEASE-READINESS-v1.1.md",
+    ROOT / "docs" / "RELEASE-CANDIDATE-v1.1.md",
 ]
 
 def fail(message: str) -> None:
@@ -89,11 +91,7 @@ def main() -> None:
     ]:
         if marker not in readiness:
             fail(f"release readiness marker missing: {marker}")
-    forbidden_readiness_token_use = [
-        ': "${NEXUS_API_TOKEN:',
-        'authorization: Bearer ${NEXUS_API_TOKEN}',
-    ]
-    for marker in forbidden_readiness_token_use:
+    for marker in [': "${NEXUS_API_TOKEN:', 'authorization: Bearer ${NEXUS_API_TOKEN}']:
         if marker in readiness:
             fail("release readiness validation must not require bearer-token access")
 
@@ -103,6 +101,26 @@ def main() -> None:
         if marker not in readiness_doc_folded:
             fail(f"release readiness documentation marker missing: {marker}")
 
+    candidate = (ROOT / "scripts" / "v1.1-release-candidate.sh").read_text(encoding="utf-8")
+    for marker in [
+        "V1.1 RELEASE CANDIDATE: BLOCKED",
+        "V1.1 RELEASE CANDIDATE: READY",
+        "READY FOR HUMAN RELEASE DECISION",
+        "Release Action Performed: NO",
+        "Tag Created: NO",
+        "GitHub Release Published: NO",
+        "v1.1-release-readiness.sh",
+    ]:
+        if marker not in candidate:
+            fail(f"release candidate marker missing: {marker}")
+    if "NEXUS_API_TOKEN" in candidate or "authorization: Bearer" in candidate:
+        fail("release candidate packaging must not require bearer-token access")
+
+    candidate_doc = (ROOT / "docs" / "RELEASE-CANDIDATE-v1.1.md").read_text(encoding="utf-8").casefold()
+    for marker in ["a_out <= a_in", "fail-closed", "human release boundary", "does not create a tag"]:
+        if marker not in candidate_doc:
+            fail(f"release candidate documentation marker missing: {marker}")
+
     boundary = ROOT / "tests" / "type_boundary.rs"
     if not boundary.is_file():
         fail("tests/type_boundary.rs missing")
@@ -111,6 +129,7 @@ def main() -> None:
     print("[PREFLIGHT] Locked gate matrix: PASS")
     print("[PREFLIGHT] Stage D evidence boundary: PASS")
     print("[PREFLIGHT] Stage E release-readiness boundary: PASS")
+    print("[PREFLIGHT] Stage F release-candidate boundary: PASS")
     print("[PREFLIGHT] Type-boundary target: PASS")
     print("[PREFLIGHT] TEST-MATRIX: PASS")
 
