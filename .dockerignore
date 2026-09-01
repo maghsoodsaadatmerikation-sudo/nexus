@@ -1,0 +1,7 @@
+.git
+.github
+**/target
+nexus-data
+*.log
+verification-bundle.tar.gz
+artifact-05-verification-bundle.tar.gz
