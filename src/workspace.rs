@@ -16,7 +16,10 @@ pub enum WorkspaceEventKind {
     WorkspaceCreated,
     ClaimAdded { claim_id: String },
     AlternativeAdded { alternative_id: String },
-    HumanJudgmentRecorded,
+    HumanJudgmentTransition {
+        previous: Option<HumanJudgment>,
+        current: HumanJudgment,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,7 +39,9 @@ pub struct WorkspaceSnapshot {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorkspaceStoreError {
     UnsupportedSchemaVersion { found: u32, supported: u32 },
-    DuplicateWorkspace(String),
+    InvalidAuditSequence,
+    InvalidWorkspaceCreationEvent,
+    JudgmentAuditMismatch,
 }
 
 pub trait WorkspaceRepository {
@@ -51,12 +56,7 @@ pub struct InMemoryWorkspaceRepository {
 
 impl WorkspaceRepository for InMemoryWorkspaceRepository {
     fn save(&mut self, snapshot: WorkspaceSnapshot) -> Result<(), WorkspaceStoreError> {
-        if snapshot.schema_version != WORKSPACE_SCHEMA_VERSION {
-            return Err(WorkspaceStoreError::UnsupportedSchemaVersion {
-                found: snapshot.schema_version,
-                supported: WORKSPACE_SCHEMA_VERSION,
-            });
-        }
+        validate_snapshot(&snapshot)?;
         self.snapshots.insert(snapshot.workspace.id.clone(), snapshot);
         Ok(())
     }
@@ -92,12 +92,7 @@ impl WorkspaceEngine {
     }
 
     pub fn from_snapshot(snapshot: WorkspaceSnapshot) -> Result<Self, WorkspaceStoreError> {
-        if snapshot.schema_version != WORKSPACE_SCHEMA_VERSION {
-            return Err(WorkspaceStoreError::UnsupportedSchemaVersion {
-                found: snapshot.schema_version,
-                supported: WORKSPACE_SCHEMA_VERSION,
-            });
-        }
+        validate_snapshot(&snapshot)?;
         let next_sequence = snapshot.events.last().map_or(0, |event| event.sequence + 1);
         Ok(Self {
             workspace: snapshot.workspace,
@@ -130,8 +125,15 @@ impl WorkspaceEngine {
         judgment: HumanJudgment,
         provenance_id: ProvenanceId,
     ) {
-        self.workspace.record_human_judgment(judgment);
-        self.append_event(provenance_id, WorkspaceEventKind::HumanJudgmentRecorded);
+        let previous = self.workspace.judgment.clone();
+        self.workspace.record_human_judgment(judgment.clone());
+        self.append_event(
+            provenance_id,
+            WorkspaceEventKind::HumanJudgmentTransition {
+                previous,
+                current: judgment,
+            },
+        );
     }
 
     pub fn snapshot(&self) -> WorkspaceSnapshot {
@@ -150,6 +152,48 @@ impl WorkspaceEngine {
         });
         self.next_sequence += 1;
     }
+}
+
+fn validate_snapshot(snapshot: &WorkspaceSnapshot) -> Result<(), WorkspaceStoreError> {
+    if snapshot.schema_version != WORKSPACE_SCHEMA_VERSION {
+        return Err(WorkspaceStoreError::UnsupportedSchemaVersion {
+            found: snapshot.schema_version,
+            supported: WORKSPACE_SCHEMA_VERSION,
+        });
+    }
+
+    if !matches!(
+        snapshot.events.first().map(|event| &event.kind),
+        Some(WorkspaceEventKind::WorkspaceCreated)
+    ) {
+        return Err(WorkspaceStoreError::InvalidWorkspaceCreationEvent);
+    }
+
+    if snapshot
+        .events
+        .iter()
+        .enumerate()
+        .any(|(index, event)| event.sequence != index as u64)
+    {
+        return Err(WorkspaceStoreError::InvalidAuditSequence);
+    }
+
+    let audited_judgment = snapshot.events.iter().fold(None, |current, event| match &event.kind {
+        WorkspaceEventKind::HumanJudgmentTransition { previous, current: next } => {
+            if previous.as_ref() == current.as_ref() {
+                Some(next.clone())
+            } else {
+                current
+            }
+        }
+        _ => current,
+    });
+
+    if audited_judgment != snapshot.workspace.judgment {
+        return Err(WorkspaceStoreError::JudgmentAuditMismatch);
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -182,6 +226,21 @@ mod tests {
     }
 
     #[test]
+    fn judgment_revisions_preserve_previous_and_current_values() {
+        let mut engine = WorkspaceEngine::new("w-r", "Question", ProvenanceId::new("human:p"));
+        let first = HumanJudgment { decision: "A".into(), rationale: "First".into() };
+        let second = HumanJudgment { decision: "B".into(), rationale: "Revised".into() };
+        engine.record_human_judgment(first.clone(), ProvenanceId::new("human:p"));
+        engine.record_human_judgment(second.clone(), ProvenanceId::new("human:p"));
+
+        assert!(matches!(
+            &engine.events()[2].kind,
+            WorkspaceEventKind::HumanJudgmentTransition { previous: Some(previous), current }
+                if previous == &first && current == &second
+        ));
+    }
+
+    #[test]
     fn persistence_round_trip_preserves_workspace_and_audit_history() {
         let engine = WorkspaceEngine::new("w-2", "Question", ProvenanceId::new("human:p2"));
         let snapshot = engine.snapshot();
@@ -204,5 +263,28 @@ mod tests {
             WorkspaceEngine::from_snapshot(snapshot),
             Err(WorkspaceStoreError::UnsupportedSchemaVersion { .. })
         ));
+    }
+
+    #[test]
+    fn tampered_sequence_is_rejected() {
+        let mut snapshot = WorkspaceEngine::new("w-4", "Question", ProvenanceId::new("human:p4")).snapshot();
+        snapshot.events[0].sequence = 9;
+        assert_eq!(
+            WorkspaceEngine::from_snapshot(snapshot),
+            Err(WorkspaceStoreError::InvalidAuditSequence)
+        );
+    }
+
+    #[test]
+    fn unaudited_human_judgment_is_rejected() {
+        let mut snapshot = WorkspaceEngine::new("w-5", "Question", ProvenanceId::new("human:p5")).snapshot();
+        snapshot.workspace.judgment = Some(HumanJudgment {
+            decision: "Injected".into(),
+            rationale: "No transition event".into(),
+        });
+        assert_eq!(
+            WorkspaceEngine::from_snapshot(snapshot),
+            Err(WorkspaceStoreError::JudgmentAuditMismatch)
+        );
     }
 }
