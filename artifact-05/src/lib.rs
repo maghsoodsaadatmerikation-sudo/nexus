@@ -15,10 +15,30 @@ use std::{
 };
 use uuid::Uuid;
 
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WireAuthority {
+    None,
+    User,
+    Policy,
+    System,
+}
+
+impl From<WireAuthority> for Authority {
+    fn from(value: WireAuthority) -> Self {
+        match value {
+            WireAuthority::None => Authority::None,
+            WireAuthority::User => Authority::User,
+            WireAuthority::Policy => Authority::Policy,
+            WireAuthority::System => Authority::System,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct SubmitRequest {
     pub request_id: Option<String>,
-    pub authority: Authority,
+    pub authority: WireAuthority,
     #[serde(flatten)]
     pub action: Action,
     pub payload: String,
@@ -90,7 +110,12 @@ async fn submit<D: ConstitutionalDelegate>(
     let request_id = input
         .request_id
         .unwrap_or_else(|| Uuid::new_v4().to_string());
-    let envelope = RequestEnvelope::new(request_id, input.authority, input.action, input.payload);
+    let envelope = RequestEnvelope::new(
+        request_id,
+        input.authority.into(),
+        input.action,
+        input.payload,
+    );
 
     match state.delegate.submit(envelope) {
         Ok(submission) => {
