@@ -11,6 +11,8 @@ REQUIRED = [
     ROOT / "scripts" / "verify-docker.sh",
     ROOT / "scripts" / "verify-manifest.sh",
     ROOT / "scripts" / "bootstrap-docker.sh",
+    ROOT / "scripts" / "stage-d-evidence.sh",
+    ROOT / "docs" / "STAGE-D-EVIDENCE.md",
 ]
 
 def fail(message: str) -> None:
@@ -35,10 +37,35 @@ def main() -> None:
         if marker not in gates:
             fail(f"required gate command missing: {marker}")
 
-    for path in REQUIRED[2:]:
+    for path in REQUIRED[2:6]:
         text = path.read_text(encoding="utf-8")
         if re.search(r"Add your specific|copy it over|TEST-MATRIX:\s*PASS", text):
             fail(f"placeholder verification logic detected: {path.relative_to(ROOT)}")
+
+    stage_d = (ROOT / "scripts" / "stage-d-evidence.sh").read_text(encoding="utf-8")
+    for marker in [
+        "capture)",
+        "verify-survival)",
+        "restore-verify)",
+        "Token Recorded: NO",
+        "workspace-backup.sh",
+        "workspace-restore.sh",
+    ]:
+        if marker not in stage_d:
+            fail(f"Stage D evidence harness marker missing: {marker}")
+    if "NEXUS_API_TOKEN" not in stage_d:
+        fail("Stage D harness must require authenticated access")
+    if re.search(r"Token Recorded:\s*(?!NO)", stage_d):
+        fail("Stage D harness must not record bearer-token material")
+
+    stage_d_doc = (ROOT / "docs" / "STAGE-D-EVIDENCE.md").read_text(encoding="utf-8")
+    for marker in [
+        "A_out <= A_in",
+        "real service/container replacement",
+        "must not be sealed",
+    ]:
+        if marker not in stage_d_doc:
+            fail(f"Stage D evidence protocol marker missing: {marker}")
 
     boundary = ROOT / "tests" / "type_boundary.rs"
     if not boundary.is_file():
@@ -46,6 +73,7 @@ def main() -> None:
 
     print("[PREFLIGHT] Repository structure: PASS")
     print("[PREFLIGHT] Locked gate matrix: PASS")
+    print("[PREFLIGHT] Stage D evidence boundary: PASS")
     print("[PREFLIGHT] Type-boundary target: PASS")
     print("[PREFLIGHT] TEST-MATRIX: PASS")
 
