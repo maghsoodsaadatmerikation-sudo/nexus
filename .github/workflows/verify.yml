@@ -20,9 +20,20 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y python3
       - name: Static verification matrix
         run: |
+          set -euo pipefail
           python3 scripts/verify_test_matrix.py
           bash -n scripts/workspace-backup.sh
           bash -n scripts/workspace-restore.sh
+          bash -n scripts/stage-d-evidence.sh
+          bash -n scripts/v1.1-release-readiness.sh
+          incomplete="$RUNNER_TEMP/stage-d-incomplete"
+          mkdir -p "$incomplete"
+          if bash scripts/v1.1-release-readiness.sh "$incomplete" "$GITHUB_SHA" >"$RUNNER_TEMP/readiness.out" 2>"$RUNNER_TEMP/readiness.err"; then
+            echo 'release-readiness gate incorrectly accepted incomplete Stage D evidence'
+            exit 1
+          fi
+          grep -F 'V1.1 RELEASE READINESS: BLOCKED' "$RUNNER_TEMP/readiness.err" >/dev/null
+          echo 'V1.1 RELEASE READINESS FAIL-CLOSED: PASS'
 
   verify:
     needs: preflight
@@ -181,6 +192,10 @@ jobs:
           dockerfile_sha="$(sha256sum Dockerfile | awk '{print $1}')"
           backup_script_sha="$(sha256sum scripts/workspace-backup.sh | awk '{print $1}')"
           restore_script_sha="$(sha256sum scripts/workspace-restore.sh | awk '{print $1}')"
+          stage_d_script_sha="$(sha256sum scripts/stage-d-evidence.sh | awk '{print $1}')"
+          readiness_script_sha="$(sha256sum scripts/v1.1-release-readiness.sh | awk '{print $1}')"
+          stage_d_doc_sha="$(sha256sum docs/STAGE-D-EVIDENCE.md | awk '{print $1}')"
+          readiness_doc_sha="$(sha256sum docs/RELEASE-READINESS-v1.1.md | awk '{print $1}')"
           observability_sha="$(sha256sum docs/OBSERVABILITY.md | awk '{print $1}')"
           printf '%s\n' \
             'Status: PASS' \
@@ -194,6 +209,7 @@ jobs:
             'Backup Recovery: PASS' \
             'Operational Observability: PASS' \
             'Deployment Smoke: PASS' \
+            'V1.1 Release Readiness Fail-Closed: PASS' \
             "Artifact 05 Cargo.lock SHA-256: ${lock_sha}" \
             "Artifact 05 Cargo.toml SHA-256: ${toml_sha}" \
             "Artifact 05 Source Tree SHA-256: ${source_sha}" \
@@ -201,6 +217,10 @@ jobs:
             "Deployment Dockerfile SHA-256: ${dockerfile_sha}" \
             "Workspace Backup Script SHA-256: ${backup_script_sha}" \
             "Workspace Restore Script SHA-256: ${restore_script_sha}" \
+            "Stage D Evidence Script SHA-256: ${stage_d_script_sha}" \
+            "V1.1 Release Readiness Script SHA-256: ${readiness_script_sha}" \
+            "Stage D Evidence Contract SHA-256: ${stage_d_doc_sha}" \
+            "V1.1 Release Readiness Contract SHA-256: ${readiness_doc_sha}" \
             "Observability Contract SHA-256: ${observability_sha}" \
             > artifact-05-verification-manifest.txt
           grep -Fx 'Status: PASS' artifact-05-verification-manifest.txt
@@ -210,6 +230,7 @@ jobs:
           grep -Fx 'Backup Recovery: PASS' artifact-05-verification-manifest.txt
           grep -Fx 'Operational Observability: PASS' artifact-05-verification-manifest.txt
           grep -Fx 'Deployment Smoke: PASS' artifact-05-verification-manifest.txt
+          grep -Fx 'V1.1 Release Readiness Fail-Closed: PASS' artifact-05-verification-manifest.txt
           case "$RUST_IMAGE" in rust@sha256:*) ;; *) exit 1 ;; esac
           test "$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')" = "$lock_sha"
           test "$(sha256sum artifact-05/Cargo.toml | awk '{print $1}')" = "$toml_sha"
@@ -218,6 +239,10 @@ jobs:
           test "$(sha256sum Dockerfile | awk '{print $1}')" = "$dockerfile_sha"
           test "$(sha256sum scripts/workspace-backup.sh | awk '{print $1}')" = "$backup_script_sha"
           test "$(sha256sum scripts/workspace-restore.sh | awk '{print $1}')" = "$restore_script_sha"
+          test "$(sha256sum scripts/stage-d-evidence.sh | awk '{print $1}')" = "$stage_d_script_sha"
+          test "$(sha256sum scripts/v1.1-release-readiness.sh | awk '{print $1}')" = "$readiness_script_sha"
+          test "$(sha256sum docs/STAGE-D-EVIDENCE.md | awk '{print $1}')" = "$stage_d_doc_sha"
+          test "$(sha256sum docs/RELEASE-READINESS-v1.1.md | awk '{print $1}')" = "$readiness_doc_sha"
           test "$(sha256sum docs/OBSERVABILITY.md | awk '{print $1}')" = "$observability_sha"
           echo 'GATE 3 PASS'
 
@@ -235,8 +260,12 @@ jobs:
             .dockerignore \
             scripts/workspace-backup.sh \
             scripts/workspace-restore.sh \
+            scripts/stage-d-evidence.sh \
+            scripts/v1.1-release-readiness.sh \
             docs/DEPLOYMENT.md \
             docs/OBSERVABILITY.md \
+            docs/STAGE-D-EVIDENCE.md \
+            docs/RELEASE-READINESS-v1.1.md \
             docs/ROADMAP-v1.1.md
 
       - name: Attest Artifact 05 verification evidence
@@ -257,7 +286,11 @@ jobs:
             Dockerfile
             scripts/workspace-backup.sh
             scripts/workspace-restore.sh
+            scripts/stage-d-evidence.sh
+            scripts/v1.1-release-readiness.sh
             docs/DEPLOYMENT.md
             docs/OBSERVABILITY.md
+            docs/STAGE-D-EVIDENCE.md
+            docs/RELEASE-READINESS-v1.1.md
             docs/ROADMAP-v1.1.md
           if-no-files-found: error
