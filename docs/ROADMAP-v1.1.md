@@ -56,14 +56,21 @@ Verification basis: NEXUS Verification #255, run `33547337891` — PASS.
 
 ## Stage D — Durable Production Validation
 
-Status: **BLOCKED ON DURABLE STORAGE**
+Status: **HOST CONTRACT READY / EXTERNAL PROVISIONING REQUIRED**
 
-Objectives:
+Prepared:
 
-- deploy with persistent storage;
-- survive a real host/service restart or replacement;
-- verify backup/recovery;
-- verify fail-closed bearer authentication and HTTPS;
+- `deploy/oci/docker-compose.yml` binds the application to loopback and mounts durable host storage at `/data`;
+- `deploy/oci/README.md` defines the OCI persistent-host deployment and the exact Stage D evidence procedure;
+- bearer authentication remains fail-closed and secret material is not committed;
+- the deployment contract preserves the existing Docker health check and persistent `NEXUS_DATA_DIR` semantics.
+
+Still required as runtime evidence:
+
+- provision a real persistent host/storage resource;
+- expose the service through HTTPS while keeping application port 3000 non-public;
+- survive real container/service replacement with workspace state intact;
+- execute destructive backup/restore recovery on the host;
 - record deployment evidence separately from release evidence.
 
 The current Render Free deployment remains classified as:
@@ -74,10 +81,10 @@ It is not durable production.
 
 ## Current v1.1 boundary
 
-Stages A through C are complete and verified. Stage D cannot be truthfully closed on the current Render Free service because durable storage is unavailable there.
+Stages A through C are complete and verified. Stage D's repository-side deployment contract is ready, but the durable-production claim remains unverified until a real persistent host is provisioned and the documented recovery procedure passes there.
 
 No code or documentation change may convert an ephemeral deployment into a durable-production claim. That claim requires real persistent hosting evidence.
 
 ## Release discipline
 
-No `v1.1.0` seal is permitted while Stage D remains blocked. Documentation alone is not evidence of runtime success.
+No `v1.1.0` seal is permitted while Stage D lacks real host evidence. Documentation alone is not evidence of runtime success.
