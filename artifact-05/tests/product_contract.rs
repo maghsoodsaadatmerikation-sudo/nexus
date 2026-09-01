@@ -1,4 +1,7 @@
-use axum::{body::Body, http::{Request, StatusCode}};
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+};
 use nexus_artifact_05_gateway::{
     router, AppState, ConstitutionalDelegate, DelegateError, Submission, WorkspaceDelegate,
     WorkspaceDelegateError,
@@ -14,7 +17,9 @@ struct ProductDelegate;
 
 impl ConstitutionalDelegate for ProductDelegate {
     fn submit(&self, envelope: RequestEnvelope) -> Result<Submission, DelegateError> {
-        Ok(Submission { request_id: envelope.request_id })
+        Ok(Submission {
+            request_id: envelope.request_id,
+        })
     }
 }
 
@@ -37,7 +42,10 @@ impl WorkspaceDelegate for ProductDelegate {
         Ok(snapshot)
     }
 
-    fn get_workspace(&self, _workspace_id: &str) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+    fn get_workspace(
+        &self,
+        _workspace_id: &str,
+    ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         Err(WorkspaceDelegateError::NotFound)
     }
 
@@ -93,11 +101,18 @@ fn create_request(token: Option<&str>) -> Request<Body> {
 async fn authenticated_workspace_rejects_missing_or_wrong_bearer() {
     let app = router(AppState::authenticated(ProductDelegate, "secret"));
     assert_eq!(
-        app.clone().oneshot(create_request(None)).await.unwrap().status(),
+        app.clone()
+            .oneshot(create_request(None))
+            .await
+            .unwrap()
+            .status(),
         StatusCode::UNAUTHORIZED
     );
     assert_eq!(
-        app.oneshot(create_request(Some("wrong"))).await.unwrap().status(),
+        app.oneshot(create_request(Some("wrong")))
+            .await
+            .unwrap()
+            .status(),
         StatusCode::UNAUTHORIZED
     );
 }
@@ -106,7 +121,10 @@ async fn authenticated_workspace_rejects_missing_or_wrong_bearer() {
 async fn authenticated_workspace_accepts_matching_bearer() {
     let app = router(AppState::authenticated(ProductDelegate, "secret"));
     assert_eq!(
-        app.oneshot(create_request(Some("secret"))).await.unwrap().status(),
+        app.oneshot(create_request(Some("secret")))
+            .await
+            .unwrap()
+            .status(),
         StatusCode::CREATED
     );
 }
@@ -114,8 +132,8 @@ async fn authenticated_workspace_accepts_matching_bearer() {
 #[tokio::test]
 async fn import_revalidates_snapshot_before_acceptance() {
     let app = router(AppState::authenticated(ProductDelegate, "secret"));
-    let mut snapshot = WorkspaceEngine::new("imported", "Question", ProvenanceId::new("human:owner"))
-        .snapshot();
+    let mut snapshot =
+        WorkspaceEngine::new("imported", "Question", ProvenanceId::new("human:owner")).snapshot();
     snapshot.events[0].sequence = 7;
     let request = Request::builder()
         .method("POST")
