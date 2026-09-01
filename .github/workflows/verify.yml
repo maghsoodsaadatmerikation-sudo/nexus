@@ -19,7 +19,10 @@ jobs:
       - name: Install Python
         run: sudo apt-get update && sudo apt-get install -y python3
       - name: Static verification matrix
-        run: python3 scripts/verify_test_matrix.py
+        run: |
+          python3 scripts/verify_test_matrix.py
+          bash -n scripts/workspace-backup.sh
+          bash -n scripts/workspace-restore.sh
 
   verify:
     needs: preflight
@@ -88,10 +91,12 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:/workspace" -w /workspace/artifact-05 "$RUST_IMAGE" sh -euxc 'cargo test --locked; cargo test --doc --locked'
           echo 'GATE 2 PASS'
 
-      - name: Deployment container smoke and durable restart
+      - name: Deployment health, backup recovery, and durable restart
         run: |
           set -euo pipefail
           smoke_data="$RUNNER_TEMP/nexus-smoke-data"
+          backup="$RUNNER_TEMP/ci-smoke-backup.json"
+          restored="$RUNNER_TEMP/ci-smoke-restored.json"
           mkdir -p "$smoke_data"
           chmod 0777 "$smoke_data"
           cleanup() { docker rm -f nexus-smoke >/dev/null 2>&1 || true; }
@@ -112,29 +117,43 @@ jobs:
             docker logs nexus-smoke || true
             return 1
           }
+          start_container() {
+            docker run -d --name nexus-smoke \
+              -p 127.0.0.1:18080:3000 \
+              -e NEXUS_API_TOKEN=ci-smoke-token \
+              -v "$smoke_data:/data" \
+              nexus-ci-smoke
+            wait_healthy
+          }
           trap cleanup EXIT
           docker build --pull=false -t nexus-ci-smoke .
-          docker run -d --name nexus-smoke \
-            -p 127.0.0.1:18080:3000 \
-            -e NEXUS_API_TOKEN=ci-smoke-token \
-            -v "$smoke_data:/data" \
-            nexus-ci-smoke
-          wait_healthy
+          start_container
           curl -fsS http://127.0.0.1:18080/ >/dev/null
           curl -fsS -X POST http://127.0.0.1:18080/v1/workspaces \
             -H 'content-type: application/json' \
             -H 'authorization: Bearer ci-smoke-token' \
-            --data '{"workspace_id":"ci-smoke","question":"deployment persistence smoke","provenance_id":"ci:smoke"}' \
+            --data '{"workspace_id":"ci-smoke","question":"backup recovery and persistence smoke","provenance_id":"ci:smoke"}' \
             >/dev/null
+          NEXUS_BASE_URL=http://127.0.0.1:18080 \
+          NEXUS_API_TOKEN=ci-smoke-token \
+          NEXUS_WORKSPACE_ID=ci-smoke \
+            bash scripts/workspace-backup.sh "$backup"
           cleanup
-          docker run -d --name nexus-smoke \
-            -p 127.0.0.1:18080:3000 \
-            -e NEXUS_API_TOKEN=ci-smoke-token \
-            -v "$smoke_data:/data" \
-            nexus-ci-smoke
-          wait_healthy
+          find "$smoke_data" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          start_container
+          NEXUS_BASE_URL=http://127.0.0.1:18080 \
+          NEXUS_API_TOKEN=ci-smoke-token \
+            bash scripts/workspace-restore.sh "$backup" >/dev/null
+          curl -fsS \
+            -H 'authorization: Bearer ci-smoke-token' \
+            http://127.0.0.1:18080/v1/workspaces/ci-smoke \
+            > "$restored"
+          python3 -c 'import json,sys; assert json.load(open(sys.argv[1])) == json.load(open(sys.argv[2]))' "$backup" "$restored"
+          cleanup
+          start_container
           curl -fsS -H 'authorization: Bearer ci-smoke-token' http://127.0.0.1:18080/v1/workspaces/ci-smoke >/dev/null
           echo 'DEPLOYMENT HEALTH PASS'
+          echo 'BACKUP RECOVERY PASS'
           echo 'DEPLOYMENT SMOKE PASS'
 
       - name: Artifact 05 GATE 3 evidence integrity
@@ -148,6 +167,8 @@ jobs:
           source_sha="$(find artifact-05/src artifact-05/tests -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
           web_sha="$(sha256sum web/index.html | awk '{print $1}')"
           dockerfile_sha="$(sha256sum Dockerfile | awk '{print $1}')"
+          backup_script_sha="$(sha256sum scripts/workspace-backup.sh | awk '{print $1}')"
+          restore_script_sha="$(sha256sum scripts/workspace-restore.sh | awk '{print $1}')"
           printf '%s\n' \
             'Status: PASS' \
             "Verified Commit: ${GITHUB_SHA}" \
@@ -157,17 +178,21 @@ jobs:
             'GATE 1: PASS' \
             'GATE 2: PASS' \
             'Deployment Health: PASS' \
+            'Backup Recovery: PASS' \
             'Deployment Smoke: PASS' \
             "Artifact 05 Cargo.lock SHA-256: ${lock_sha}" \
             "Artifact 05 Cargo.toml SHA-256: ${toml_sha}" \
             "Artifact 05 Source Tree SHA-256: ${source_sha}" \
             "Web Workspace SHA-256: ${web_sha}" \
             "Deployment Dockerfile SHA-256: ${dockerfile_sha}" \
+            "Workspace Backup Script SHA-256: ${backup_script_sha}" \
+            "Workspace Restore Script SHA-256: ${restore_script_sha}" \
             > artifact-05-verification-manifest.txt
           grep -Fx 'Status: PASS' artifact-05-verification-manifest.txt
           grep -Fx "Verified Commit: ${GITHUB_SHA}" artifact-05-verification-manifest.txt
           grep -Fx "Docker Reference: ${RUST_IMAGE}" artifact-05-verification-manifest.txt
           grep -Fx 'Deployment Health: PASS' artifact-05-verification-manifest.txt
+          grep -Fx 'Backup Recovery: PASS' artifact-05-verification-manifest.txt
           grep -Fx 'Deployment Smoke: PASS' artifact-05-verification-manifest.txt
           case "$RUST_IMAGE" in rust@sha256:*) ;; *) exit 1 ;; esac
           test "$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')" = "$lock_sha"
@@ -175,6 +200,8 @@ jobs:
           test "$(find artifact-05/src artifact-05/tests -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')" = "$source_sha"
           test "$(sha256sum web/index.html | awk '{print $1}')" = "$web_sha"
           test "$(sha256sum Dockerfile | awk '{print $1}')" = "$dockerfile_sha"
+          test "$(sha256sum scripts/workspace-backup.sh | awk '{print $1}')" = "$backup_script_sha"
+          test "$(sha256sum scripts/workspace-restore.sh | awk '{print $1}')" = "$restore_script_sha"
           echo 'GATE 3 PASS'
 
       - name: Bundle Artifact 05 verification evidence
@@ -189,10 +216,12 @@ jobs:
             web/index.html \
             Dockerfile \
             .dockerignore \
+            scripts/workspace-backup.sh \
+            scripts/workspace-restore.sh \
             docs/DEPLOYMENT.md \
             docs/ROADMAP-v1.1.md
 
-      - name: Attest Artifact 05 verification bundle
+      - name: Attest Artifact 05 verification evidence
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
         with:
           subject-path: artifact-05-verification-bundle.tar.gz
@@ -208,6 +237,8 @@ jobs:
             artifact-05/Cargo.lock
             web/index.html
             Dockerfile
+            scripts/workspace-backup.sh
+            scripts/workspace-restore.sh
             docs/DEPLOYMENT.md
             docs/ROADMAP-v1.1.md
           if-no-files-found: error
