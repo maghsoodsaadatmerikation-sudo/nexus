@@ -1,7 +1,7 @@
 use crate::{AppState, ConstitutionalDelegate, ErrorResponse};
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{header, HeaderMap, StatusCode},
     response::IntoResponse,
     Json,
 };
@@ -27,6 +27,13 @@ pub trait WorkspaceDelegate: Send + Sync + 'static {
         question: String,
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError>;
+
+    fn import_workspace(
+        &self,
+        _snapshot: WorkspaceSnapshot,
+    ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+        Err(WorkspaceDelegateError::Unavailable)
+    }
 
     fn get_workspace(
         &self,
@@ -137,11 +144,15 @@ pub struct RecordJudgmentRequest {
 
 pub(crate) async fn create_workspace<D>(
     State(state): State<AppState<D>>,
+    headers: HeaderMap,
     Json(input): Json<CreateWorkspaceRequest>,
 ) -> impl IntoResponse
 where
     D: ConstitutionalDelegate + WorkspaceDelegate,
 {
+    if !workspace_authorized(&state, &headers) {
+        return unauthorized();
+    }
     let workspace_id = input
         .workspace_id
         .unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -155,13 +166,34 @@ where
     }
 }
 
+pub(crate) async fn import_workspace<D>(
+    State(state): State<AppState<D>>,
+    headers: HeaderMap,
+    Json(snapshot): Json<WorkspaceSnapshot>,
+) -> impl IntoResponse
+where
+    D: ConstitutionalDelegate + WorkspaceDelegate,
+{
+    if !workspace_authorized(&state, &headers) {
+        return unauthorized();
+    }
+    match state.delegate.import_workspace(snapshot) {
+        Ok(snapshot) => (StatusCode::CREATED, Json(snapshot)).into_response(),
+        Err(error) => workspace_error_response(error),
+    }
+}
+
 pub(crate) async fn get_workspace<D>(
     State(state): State<AppState<D>>,
+    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> impl IntoResponse
 where
     D: ConstitutionalDelegate + WorkspaceDelegate,
 {
+    if !workspace_authorized(&state, &headers) {
+        return unauthorized();
+    }
     match state.delegate.get_workspace(&id) {
         Ok(snapshot) => (StatusCode::OK, Json(snapshot)).into_response(),
         Err(error) => workspace_error_response(error),
@@ -170,12 +202,16 @@ where
 
 pub(crate) async fn add_claim<D>(
     State(state): State<AppState<D>>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Json(input): Json<AddClaimRequest>,
 ) -> impl IntoResponse
 where
     D: ConstitutionalDelegate + WorkspaceDelegate,
 {
+    if !workspace_authorized(&state, &headers) {
+        return unauthorized();
+    }
     let claim = Claim {
         id: input.claim_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
         text: input.text,
@@ -193,12 +229,16 @@ where
 
 pub(crate) async fn add_alternative<D>(
     State(state): State<AppState<D>>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Json(input): Json<AddAlternativeRequest>,
 ) -> impl IntoResponse
 where
     D: ConstitutionalDelegate + WorkspaceDelegate,
 {
+    if !workspace_authorized(&state, &headers) {
+        return unauthorized();
+    }
     let alternative = Alternative {
         id: input
             .alternative_id
@@ -217,12 +257,16 @@ where
 
 pub(crate) async fn record_analysis_batch<D>(
     State(state): State<AppState<D>>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Json(batch): Json<AnalysisBatch>,
 ) -> impl IntoResponse
 where
     D: ConstitutionalDelegate + WorkspaceDelegate,
 {
+    if !workspace_authorized(&state, &headers) {
+        return unauthorized();
+    }
     match state.delegate.record_analysis_batch(&id, batch) {
         Ok(snapshot) => (StatusCode::OK, Json(snapshot)).into_response(),
         Err(error) => workspace_error_response(error),
@@ -231,12 +275,16 @@ where
 
 pub(crate) async fn record_human_judgment<D>(
     State(state): State<AppState<D>>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Json(input): Json<RecordJudgmentRequest>,
 ) -> impl IntoResponse
 where
     D: ConstitutionalDelegate + WorkspaceDelegate,
 {
+    if !workspace_authorized(&state, &headers) {
+        return unauthorized();
+    }
     let judgment = HumanJudgment {
         decision: input.decision,
         rationale: input.rationale,
@@ -249,6 +297,27 @@ where
         Ok(snapshot) => (StatusCode::OK, Json(snapshot)).into_response(),
         Err(error) => workspace_error_response(error),
     }
+}
+
+fn workspace_authorized<D>(state: &AppState<D>, headers: &HeaderMap) -> bool {
+    let Some(expected) = state.auth_token.as_deref() else {
+        return true;
+    };
+    headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .is_some_and(|provided| provided.as_bytes() == expected.as_bytes())
+}
+
+fn unauthorized() -> axum::response::Response {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(ErrorResponse {
+            error: "workspace_authentication_required",
+        }),
+    )
+        .into_response()
 }
 
 fn workspace_error_response(error: WorkspaceDelegateError) -> axum::response::Response {
