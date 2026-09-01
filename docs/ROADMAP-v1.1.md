@@ -41,16 +41,18 @@ Verification basis: NEXUS Verification #251, run `33546980317` — PASS.
 
 ## Stage C — Production Observability
 
-Status: **IN PROGRESS**
+Status: **COMPLETE / VERIFIED**
 
-Objectives:
+Implemented:
 
-- operational startup/failure signals that do not leak bearer tokens or evidence payloads;
-- startup/restart visibility;
-- health and failure signals separated from epistemic claims;
-- documented retention and redaction rules.
+- redacted lifecycle marker on application startup;
+- operational server-exit error marker;
+- startup marker reports bind address, data directory, and only `auth=configured`, never the bearer-token value;
+- `docs/OBSERVABILITY.md` defines allowed signals, prohibited payload logging, retention/redaction guidance, and the boundary between service health and epistemic correctness;
+- CI observes the startup marker on each production-shaped container start and fails if the CI bearer token appears in application logs;
+- observability contract hash and PASS state are included in verification evidence.
 
-Exit criterion: operators can detect service startup/failure without turning monitoring output into epistemic authority or exposing user evidence.
+Verification basis: NEXUS Verification #255, run `33547337891` — PASS.
 
 ## Stage D — Durable Production Validation
 
@@ -70,6 +72,12 @@ The current Render Free deployment remains classified as:
 
 It is not durable production.
 
+## Current v1.1 boundary
+
+Stages A through C are complete and verified. Stage D cannot be truthfully closed on the current Render Free service because durable storage is unavailable there.
+
+No code or documentation change may convert an ephemeral deployment into a durable-production claim. That claim requires real persistent hosting evidence.
+
 ## Release discipline
 
-No `v1.1.0` seal is permitted until all claimed stages have real verification evidence. Documentation alone is not evidence of runtime success.
+No `v1.1.0` seal is permitted while Stage D remains blocked. Documentation alone is not evidence of runtime success.
