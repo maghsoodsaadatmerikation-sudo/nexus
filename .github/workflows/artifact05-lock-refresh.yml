@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   RUST_IMAGE: rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
@@ -22,6 +22,18 @@ jobs:
           docker pull "$RUST_IMAGE"
           docker run --rm --user "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:/workspace" -w /workspace/artifact-05 "$RUST_IMAGE" sh -euxc 'cargo generate-lockfile'
           test -s artifact-05/Cargo.lock
+      - name: Commit generated lockfile if changed
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- artifact-05/Cargo.lock; then
+            echo 'Artifact 05 Cargo.lock already current'
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add artifact-05/Cargo.lock
+            git commit -m 'build(artifact-05): refresh Cargo.lock'
+            git push origin HEAD:main
+          fi
       - name: Upload Artifact 05 Cargo.lock candidate
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
