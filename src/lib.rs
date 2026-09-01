@@ -9,6 +9,7 @@ pub mod erasure;
 pub mod epistemic;
 pub mod executor;
 pub mod policy;
+pub mod workspace;
 
 mod authorized;
 
@@ -20,6 +21,10 @@ pub use envelope::RequestEnvelope;
 pub use epistemic::{Alternative, Claim, ClaimOrigin, DecisionWorkspace, HumanJudgment, Uncertainty};
 pub use executor::{ExecutionReceipt, Executor};
 pub use policy::PolicyEngine;
+pub use workspace::{
+    InMemoryWorkspaceRepository, ProvenanceId, WorkspaceEngine, WorkspaceEvent, WorkspaceEventKind,
+    WorkspaceRepository, WorkspaceSnapshot, WorkspaceStoreError, WORKSPACE_SCHEMA_VERSION,
+};
 
 #[cfg(test)]
 mod tests {
