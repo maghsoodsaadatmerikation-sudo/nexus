@@ -12,7 +12,9 @@ REQUIRED = [
     ROOT / "scripts" / "verify-manifest.sh",
     ROOT / "scripts" / "bootstrap-docker.sh",
     ROOT / "scripts" / "stage-d-evidence.sh",
+    ROOT / "scripts" / "v1.1-release-readiness.sh",
     ROOT / "docs" / "STAGE-D-EVIDENCE.md",
+    ROOT / "docs" / "RELEASE-READINESS-v1.1.md",
 ]
 
 def fail(message: str) -> None:
@@ -48,6 +50,8 @@ def main() -> None:
         "verify-survival)",
         "restore-verify)",
         "Token Recorded: NO",
+        "NEXUS_DEPLOYED_COMMIT",
+        "deployed-commit.txt",
         "workspace-backup.sh",
         "workspace-restore.sh",
     ]:
@@ -66,9 +70,30 @@ def main() -> None:
         "A_out <= A_in",
         "real service/container replacement",
         "must not be sealed",
+        "deployed-commit.txt",
+        "v1.1-release-readiness.sh",
     ]:
         if marker not in stage_d_doc:
             fail(f"Stage D evidence protocol marker missing: {marker}")
+
+    readiness = (ROOT / "scripts" / "v1.1-release-readiness.sh").read_text(encoding="utf-8")
+    for marker in [
+        "V1.1 RELEASE READINESS: BLOCKED",
+        "V1.1 RELEASE READINESS: PASS",
+        "Release Action Performed: NO",
+        "deployed-commit.txt",
+        "after-survival.json",
+        "after-restore.json",
+    ]:
+        if marker not in readiness:
+            fail(f"release readiness marker missing: {marker}")
+    if "NEXUS_API_TOKEN" in readiness:
+        fail("release readiness validation must not require bearer-token access")
+
+    readiness_doc = (ROOT / "docs" / "RELEASE-READINESS-v1.1.md").read_text(encoding="utf-8")
+    for marker in ["A_out <= A_in", "fail-closed", "does not create a tag"]:
+        if marker not in readiness_doc:
+            fail(f"release readiness documentation marker missing: {marker}")
 
     boundary = ROOT / "tests" / "type_boundary.rs"
     if not boundary.is_file():
@@ -77,6 +102,7 @@ def main() -> None:
     print("[PREFLIGHT] Repository structure: PASS")
     print("[PREFLIGHT] Locked gate matrix: PASS")
     print("[PREFLIGHT] Stage D evidence boundary: PASS")
+    print("[PREFLIGHT] Stage E release-readiness boundary: PASS")
     print("[PREFLIGHT] Type-boundary target: PASS")
     print("[PREFLIGHT] TEST-MATRIX: PASS")
 
