@@ -80,6 +80,7 @@ pub struct DelegateError;
 pub struct AppState<D> {
     pub delegate: Arc<D>,
     pub statuses: Arc<RwLock<HashMap<String, RequestStatus>>>,
+    pub auth_token: Option<Arc<str>>,
 }
 
 impl<D> Clone for AppState<D> {
@@ -87,6 +88,7 @@ impl<D> Clone for AppState<D> {
         Self {
             delegate: Arc::clone(&self.delegate),
             statuses: Arc::clone(&self.statuses),
+            auth_token: self.auth_token.clone(),
         }
     }
 }
@@ -96,6 +98,17 @@ impl<D: ConstitutionalDelegate> AppState<D> {
         Self {
             delegate: Arc::new(delegate),
             statuses: Arc::new(RwLock::new(HashMap::new())),
+            auth_token: None,
+        }
+    }
+
+    pub fn authenticated(delegate: D, token: impl Into<String>) -> Self {
+        let token = token.into();
+        assert!(!token.trim().is_empty(), "authentication token must not be empty");
+        Self {
+            delegate: Arc::new(delegate),
+            statuses: Arc::new(RwLock::new(HashMap::new())),
+            auth_token: Some(Arc::<str>::from(token)),
         }
     }
 }
@@ -109,6 +122,10 @@ where
         .route("/v1/requests", post(submit::<D>))
         .route("/v1/requests/{id}", get(status::<D>))
         .route("/v1/workspaces", post(workspace_api::create_workspace::<D>))
+        .route(
+            "/v1/workspaces/import",
+            post(workspace_api::import_workspace::<D>),
+        )
         .route(
             "/v1/workspaces/{id}",
             get(workspace_api::get_workspace::<D>),
