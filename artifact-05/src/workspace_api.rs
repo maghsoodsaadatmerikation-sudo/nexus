@@ -27,7 +27,10 @@ pub trait WorkspaceDelegate: Send + Sync + 'static {
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError>;
 
-    fn get_workspace(&self, workspace_id: &str) -> Result<WorkspaceSnapshot, WorkspaceDelegateError>;
+    fn get_workspace(
+        &self,
+        workspace_id: &str,
+    ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError>;
 
     fn add_claim(
         &self,
@@ -70,7 +73,9 @@ impl From<WireClaimOrigin> for ClaimOrigin {
     fn from(value: WireClaimOrigin) -> Self {
         match value {
             WireClaimOrigin::Human => ClaimOrigin::Human,
-            WireClaimOrigin::ExternalEvidence { source } => ClaimOrigin::ExternalEvidence { source },
+            WireClaimOrigin::ExternalEvidence { source } => {
+                ClaimOrigin::ExternalEvidence { source }
+            }
             WireClaimOrigin::MachineAnalysis => ClaimOrigin::MachineAnalysis,
         }
     }
@@ -192,11 +197,10 @@ where
         label: input.label,
         consequences: input.consequences,
     };
-    match state.delegate.add_alternative(
-        &id,
-        alternative,
-        ProvenanceId::new(input.provenance_id),
-    ) {
+    match state
+        .delegate
+        .add_alternative(&id, alternative, ProvenanceId::new(input.provenance_id))
+    {
         Ok(snapshot) => (StatusCode::OK, Json(snapshot)).into_response(),
         Err(error) => workspace_error_response(error),
     }
@@ -229,7 +233,9 @@ fn workspace_error_response(error: WorkspaceDelegateError) -> axum::response::Re
         WorkspaceDelegateError::NotFound => (StatusCode::NOT_FOUND, "workspace_not_found"),
         WorkspaceDelegateError::AlreadyExists => (StatusCode::CONFLICT, "workspace_already_exists"),
         WorkspaceDelegateError::Invalid => (StatusCode::UNPROCESSABLE_ENTITY, "workspace_invalid"),
-        WorkspaceDelegateError::Unavailable => (StatusCode::BAD_GATEWAY, "workspace_delegate_unavailable"),
+        WorkspaceDelegateError::Unavailable => {
+            (StatusCode::BAD_GATEWAY, "workspace_delegate_unavailable")
+        }
     };
     (status, Json(ErrorResponse { error: message })).into_response()
 }
