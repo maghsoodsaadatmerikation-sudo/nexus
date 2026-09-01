@@ -55,8 +55,11 @@ def main() -> None:
             fail(f"Stage D evidence harness marker missing: {marker}")
     if "NEXUS_API_TOKEN" not in stage_d:
         fail("Stage D harness must require authenticated access")
-    if re.search(r"Token Recorded:\s*(?!NO)", stage_d):
-        fail("Stage D harness must not record bearer-token material")
+    token_record_lines = [
+        line.strip() for line in stage_d.splitlines() if line.strip().startswith("Token Recorded:")
+    ]
+    if token_record_lines != ["Token Recorded: NO"]:
+        fail("Stage D harness must record only the explicit no-token marker")
 
     stage_d_doc = (ROOT / "docs" / "STAGE-D-EVIDENCE.md").read_text(encoding="utf-8")
     for marker in [
