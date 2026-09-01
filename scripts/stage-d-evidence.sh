@@ -13,7 +13,8 @@ Required environment:
   NEXUS_API_TOKEN  Operator-held bearer token (never written to evidence)
 
 For capture only:
-  NEXUS_WORKSPACE_ID  Existing workspace to use as the persistence witness
+  NEXUS_WORKSPACE_ID    Existing workspace to use as the persistence witness
+  NEXUS_DEPLOYED_COMMIT Exact 40-character repository commit deployed on host
 
 The evidence directory must be stored independently of the host under test.
 EOF
@@ -68,6 +69,11 @@ EOF
 case "$mode" in
   capture)
     : "${NEXUS_WORKSPACE_ID:?NEXUS_WORKSPACE_ID is required for capture}"
+    : "${NEXUS_DEPLOYED_COMMIT:?NEXUS_DEPLOYED_COMMIT is required for capture}"
+    [[ "$NEXUS_DEPLOYED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+      echo 'NEXUS_DEPLOYED_COMMIT must be a full 40-character lowercase SHA' >&2
+      exit 1
+    }
     before="$evidence_dir/before.json"
     NEXUS_WORKSPACE_ID="$NEXUS_WORKSPACE_ID" \
       bash "$(dirname "$0")/workspace-backup.sh" "$before" >/dev/null
@@ -79,6 +85,7 @@ case "$mode" in
     snapshot_sha="$(sha256sum "$before" | awk '{print $1}')"
     printf '%s\n' "$workspace_id" > "$evidence_dir/workspace-id.txt"
     printf '%s\n' "$snapshot_sha" > "$evidence_dir/before.sha256"
+    printf '%s\n' "$NEXUS_DEPLOYED_COMMIT" > "$evidence_dir/deployed-commit.txt"
     write_result capture PASS "$snapshot_sha"
     printf 'Stage D capture PASS: %s\n' "$snapshot_sha"
     ;;
@@ -86,6 +93,7 @@ case "$mode" in
   verify-survival)
     before="$evidence_dir/before.json"
     test -f "$before"
+    test -f "$evidence_dir/deployed-commit.txt"
     workspace_id="$(snapshot_workspace_id "$before")"
     after="$evidence_dir/after-survival.json"
     curl --fail --silent --show-error \
@@ -103,6 +111,7 @@ case "$mode" in
   restore-verify)
     before="$evidence_dir/before.json"
     test -f "$before"
+    test -f "$evidence_dir/deployed-commit.txt"
     workspace_id="$(snapshot_workspace_id "$before")"
     NEXUS_BASE_URL="$NEXUS_BASE_URL" NEXUS_API_TOKEN="$NEXUS_API_TOKEN" \
       bash "$(dirname "$0")/workspace-restore.sh" "$before" >/dev/null
