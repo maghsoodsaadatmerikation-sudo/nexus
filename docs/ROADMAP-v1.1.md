@@ -99,7 +99,7 @@ It is not durable production.
 
 ## Stage E — Release Readiness Guard
 
-Status: **IMPLEMENTED / FAIL-CLOSED; AWAITS STAGE D EVIDENCE**
+Status: **COMPLETE / VERIFIED; RELEASE DECISION BLOCKED BY STAGE D**
 
 Implemented:
 
@@ -110,13 +110,16 @@ Implemented:
 - it rejects missing/incomplete evidence and credential-like material in result records;
 - it performs no tag, release, deployment, authorization, or epistemic action;
 - `docs/RELEASE-READINESS-v1.1.md` defines the gate and its fail-closed semantics;
-- CI must verify that ordinary repository verification cannot accidentally turn missing Stage D runtime evidence into release readiness.
+- CI explicitly verifies that ordinary repository verification cannot accidentally turn missing Stage D runtime evidence into release readiness;
+- the Stage D harness, release-readiness script, and their contract documents are hashed into Artifact 05 Gate 3 evidence and bundled in the verification artifact.
 
-Stage E can be implementation-complete while its release decision remains blocked. `V1.1 RELEASE READINESS: PASS` is permitted only after real Stage D host evidence exists for the exact deployed commit.
+Verification basis: NEXUS Verification #277, run `33557712059` — PASS.
+
+Stage E is implementation-complete and verified while its release decision correctly remains blocked. `V1.1 RELEASE READINESS: PASS` is permitted only after real Stage D host evidence exists for the exact deployed commit.
 
 ## Current v1.1 boundary
 
-Stages A through C are complete and verified. Stage D's repository-side deployment contract and evidence harness are ready but still require a real persistent external host. Stage E now provides a fail-closed release gate so Stage D cannot be bypassed by documentation, CI simulation, or operator assertion alone.
+Stages A through C are complete and verified. Stage D's repository-side deployment contract and evidence harness are ready but still require a real persistent external host. Stage E is complete and verified and now provides a fail-closed release gate so Stage D cannot be bypassed by documentation, CI simulation, or operator assertion alone.
 
 No code, UI, backup download, evidence harness, release-readiness script, or documentation change may convert an ephemeral deployment into a durable-production claim. That claim requires real persistent hosting evidence.
 
