@@ -63,6 +63,7 @@ async fn accepted_request_is_reported_as_pending() {
                 "request_id": "pending-05",
                 "authority": "user",
                 "action": "present",
+                "value": "opaque",
                 "payload": "opaque"
             })
             .to_string(),
