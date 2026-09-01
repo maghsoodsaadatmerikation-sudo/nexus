@@ -122,6 +122,10 @@ where
             post(workspace_api::add_alternative::<D>),
         )
         .route(
+            "/v1/workspaces/{id}/analysis",
+            post(workspace_api::record_analysis_batch::<D>),
+        )
+        .route(
             "/v1/workspaces/{id}/judgment",
             post(workspace_api::record_human_judgment::<D>),
         )
