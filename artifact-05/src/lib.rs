@@ -5,7 +5,7 @@ mod workspace_api;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{Html, IntoResponse},
     routing::{get, post},
     Json, Router,
 };
@@ -105,6 +105,7 @@ where
     D: ConstitutionalDelegate + WorkspaceDelegate,
 {
     Router::new()
+        .route("/", get(web_workspace))
         .route("/v1/requests", post(submit::<D>))
         .route("/v1/requests/{id}", get(status::<D>))
         .route("/v1/workspaces", post(workspace_api::create_workspace::<D>))
@@ -125,6 +126,10 @@ where
             post(workspace_api::record_human_judgment::<D>),
         )
         .with_state(state)
+}
+
+async fn web_workspace() -> Html<&'static str> {
+    Html(include_str!("../../web/index.html"))
 }
 
 async fn submit<D: ConstitutionalDelegate>(
