@@ -90,12 +90,7 @@ async fn submit<D: ConstitutionalDelegate>(
     let request_id = input
         .request_id
         .unwrap_or_else(|| Uuid::new_v4().to_string());
-    let envelope = RequestEnvelope::new(
-        request_id,
-        input.authority,
-        input.action,
-        input.payload,
-    );
+    let envelope = RequestEnvelope::new(request_id, input.authority, input.action, input.payload);
 
     match state.delegate.submit(envelope) {
         Ok(submission) => {
@@ -205,7 +200,12 @@ mod tests {
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].request_id, "r-05");
         assert_eq!(recorded[0].payload, "opaque");
-        assert_eq!(recorded[0].action, Action::Reflect { subject: "opaque".into() });
+        assert_eq!(
+            recorded[0].action,
+            Action::Reflect {
+                subject: "opaque".into()
+            }
+        );
     }
 
     #[tokio::test]
@@ -265,8 +265,11 @@ mod tests {
     #[tokio::test]
     async fn malformed_action_shape_is_rejected() {
         let app = router(AppState::new(RecordingDelegate::default()));
-        let body = r#"{"request_id":"r-bad","authority":"user","action":"reflect","payload":"opaque"}"#;
-        let response = tower::ServiceExt::oneshot(app, request(body)).await.unwrap();
+        let body =
+            r#"{"request_id":"r-bad","authority":"user","action":"reflect","payload":"opaque"}"#;
+        let response = tower::ServiceExt::oneshot(app, request(body))
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 }
