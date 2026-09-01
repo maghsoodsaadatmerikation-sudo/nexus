@@ -117,12 +117,28 @@ Verification basis: NEXUS Verification #277, run `33557712059` — PASS.
 
 Stage E is implementation-complete and verified while its release decision correctly remains blocked. `V1.1 RELEASE READINESS: PASS` is permitted only after real Stage D host evidence exists for the exact deployed commit.
 
+## Stage F — Release Candidate Manifest
+
+Status: **IMPLEMENTED / FAIL-CLOSED; AWAITS VERIFICATION AND STAGE D**
+
+Implemented:
+
+- `scripts/v1.1-release-candidate.sh` consumes an already-validated Stage D evidence pack through the Stage E gate;
+- it refuses to produce a candidate manifest when Stage E is blocked;
+- a candidate manifest binds the exact deployed commit, verification run ID, Stage D workspace snapshot hash, Stage D harness hash, and Stage E gate hash;
+- it explicitly records `Release Action Performed: NO`, `Tag Created: NO`, and `GitHub Release Published: NO`;
+- it does not create tags, publish releases, provision infrastructure, use bearer credentials, or make epistemic judgments;
+- `docs/RELEASE-CANDIDATE-v1.1.md` defines the human release boundary and states that a numeric verification run ID alone is not evidence that the run passed;
+- repository preflight now requires the Stage F implementation and its constitutional markers.
+
+Stage F may be implementation-complete while candidate generation remains blocked by Stage D. `Status: READY FOR HUMAN RELEASE DECISION` is permitted only after Stage E has passed on real Stage D evidence.
+
 ## Current v1.1 boundary
 
-Stages A through C are complete and verified. Stage D's repository-side deployment contract and evidence harness are ready but still require a real persistent external host. Stage E is complete and verified and now provides a fail-closed release gate so Stage D cannot be bypassed by documentation, CI simulation, or operator assertion alone.
+Stages A through C are complete and verified. Stage D's repository-side deployment contract and evidence harness are ready but still require a real persistent external host. Stage E is complete and verified and provides a fail-closed release gate. Stage F packages a valid Stage D + Stage E result into an auditable release-candidate manifest without performing the release itself.
 
-No code, UI, backup download, evidence harness, release-readiness script, or documentation change may convert an ephemeral deployment into a durable-production claim. That claim requires real persistent hosting evidence.
+No code, UI, backup download, evidence harness, readiness gate, candidate manifest, or documentation change may convert an ephemeral deployment into a durable-production claim. That claim requires real persistent hosting evidence.
 
 ## Release discipline
 
-No `v1.1.0` seal is permitted while Stage D lacks real host evidence or while the Stage E release-readiness gate has not passed against that evidence and the exact deployed commit. Documentation, CI simulation, or an evidence harness alone is not evidence of runtime success.
+No `v1.1.0` seal is permitted while Stage D lacks real host evidence, while Stage E has not passed against that evidence and the exact deployed commit, or before the referenced NEXUS Verification run is independently confirmed successful. Documentation, CI simulation, an evidence harness, or a release-candidate manifest alone is not evidence of runtime success.
