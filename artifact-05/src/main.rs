@@ -3,8 +3,8 @@ use nexus_artifact_05_gateway::{
     WorkspaceDelegateError,
 };
 use nexus_constitutional_core::{
-    Alternative, Claim, HumanJudgment, InMemoryWorkspaceRepository, PolicyEngine, ProvenanceId,
-    RequestEnvelope, WorkspaceEngine, WorkspaceRepository, WorkspaceSnapshot,
+    Alternative, AnalysisBatch, Claim, HumanJudgment, InMemoryWorkspaceRepository, PolicyEngine,
+    ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceRepository, WorkspaceSnapshot,
 };
 use std::{net::SocketAddr, sync::Mutex};
 
@@ -78,6 +78,16 @@ impl WorkspaceDelegate for CoreDelegate {
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         self.mutate_workspace(workspace_id, |engine| {
             engine.add_alternative(alternative, provenance_id)
+        })
+    }
+
+    fn record_analysis_batch(
+        &self,
+        workspace_id: &str,
+        batch: AnalysisBatch,
+    ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+        self.mutate_workspace(workspace_id, |engine| {
+            engine.record_analysis_batch(batch)
         })
     }
 
