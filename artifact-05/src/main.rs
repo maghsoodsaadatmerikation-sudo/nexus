@@ -3,19 +3,25 @@ use nexus_artifact_05_gateway::{
     WorkspaceDelegateError,
 };
 use nexus_constitutional_core::{
-    Alternative, AnalysisBatch, Claim, HumanJudgment, InMemoryWorkspaceRepository, PolicyEngine,
-    ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceRepository, WorkspaceSnapshot,
+    Alternative, AnalysisBatch, Claim, FileWorkspaceRepository, HumanJudgment, PolicyEngine,
+    ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceSnapshot,
 };
-use std::{net::SocketAddr, sync::Mutex};
+use std::{net::SocketAddr, path::PathBuf, sync::Mutex};
 
-#[derive(Default)]
 struct CoreDelegate {
-    workspaces: Mutex<InMemoryWorkspaceRepository>,
+    workspaces: Mutex<FileWorkspaceRepository>,
+}
+
+impl CoreDelegate {
+    fn new(root: PathBuf) -> Self {
+        Self {
+            workspaces: Mutex::new(FileWorkspaceRepository::new(root)),
+        }
+    }
 }
 
 impl ConstitutionalDelegate for CoreDelegate {
     fn submit(&self, envelope: RequestEnvelope) -> Result<Submission, DelegateError> {
-        // Authority/policy remains inside the Constitutional Core.
         let request = PolicyEngine::new()
             .authorize(envelope)
             .map_err(|_| DelegateError)?;
@@ -37,11 +43,37 @@ impl WorkspaceDelegate for CoreDelegate {
             .workspaces
             .lock()
             .map_err(|_| WorkspaceDelegateError::Unavailable)?;
-        if repository.load(&workspace_id).is_some() {
+        if repository
+            .load(&workspace_id)
+            .map_err(|_| WorkspaceDelegateError::Invalid)?
+            .is_some()
+        {
             return Err(WorkspaceDelegateError::AlreadyExists);
         }
-        let engine = WorkspaceEngine::new(workspace_id, question, provenance_id);
-        let snapshot = engine.snapshot();
+        let snapshot = WorkspaceEngine::new(workspace_id, question, provenance_id).snapshot();
+        repository
+            .save(snapshot.clone())
+            .map_err(|_| WorkspaceDelegateError::Invalid)?;
+        Ok(snapshot)
+    }
+
+    fn import_workspace(
+        &self,
+        snapshot: WorkspaceSnapshot,
+    ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+        WorkspaceEngine::from_snapshot(snapshot.clone())
+            .map_err(|_| WorkspaceDelegateError::Invalid)?;
+        let mut repository = self
+            .workspaces
+            .lock()
+            .map_err(|_| WorkspaceDelegateError::Unavailable)?;
+        if repository
+            .load(&snapshot.workspace.id)
+            .map_err(|_| WorkspaceDelegateError::Invalid)?
+            .is_some()
+        {
+            return Err(WorkspaceDelegateError::AlreadyExists);
+        }
         repository
             .save(snapshot.clone())
             .map_err(|_| WorkspaceDelegateError::Invalid)?;
@@ -56,6 +88,7 @@ impl WorkspaceDelegate for CoreDelegate {
             .lock()
             .map_err(|_| WorkspaceDelegateError::Unavailable)?
             .load(workspace_id)
+            .map_err(|_| WorkspaceDelegateError::Invalid)?
             .ok_or(WorkspaceDelegateError::NotFound)
     }
 
@@ -116,6 +149,7 @@ impl CoreDelegate {
             .map_err(|_| WorkspaceDelegateError::Unavailable)?;
         let snapshot = repository
             .load(workspace_id)
+            .map_err(|_| WorkspaceDelegateError::Invalid)?
             .ok_or(WorkspaceDelegateError::NotFound)?;
         let mut engine = WorkspaceEngine::from_snapshot(snapshot)
             .map_err(|_| WorkspaceDelegateError::Invalid)?;
@@ -130,7 +164,13 @@ impl CoreDelegate {
 
 #[tokio::main]
 async fn main() {
-    let app = router(AppState::new(CoreDelegate::default()));
+    let token = std::env::var("NEXUS_API_TOKEN")
+        .expect("NEXUS_API_TOKEN is required for authenticated workspace access");
+    assert!(!token.trim().is_empty(), "NEXUS_API_TOKEN must not be empty");
+    let data_root = std::env::var_os("NEXUS_DATA_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("nexus-data"));
+    let app = router(AppState::authenticated(CoreDelegate::new(data_root), token));
     let addr: SocketAddr = "127.0.0.1:3000".parse().expect("valid address");
     let listener = tokio::net::TcpListener::bind(addr)
         .await
