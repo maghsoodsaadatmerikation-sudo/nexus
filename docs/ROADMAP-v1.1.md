@@ -68,12 +68,15 @@ Verification basis: NEXUS Verification #255, run `33547337891` — PASS.
 
 ## Stage D — Durable Production Validation
 
-Status: **HOST CONTRACT READY / EXTERNAL PROVISIONING REQUIRED**
+Status: **HOST CONTRACT + EVIDENCE HARNESS READY / EXTERNAL PROVISIONING REQUIRED**
 
 Prepared:
 
 - `deploy/oci/docker-compose.yml` binds the application to loopback and mounts durable host storage at `/data`;
 - `deploy/oci/README.md` defines the OCI persistent-host deployment and the exact Stage D evidence procedure;
+- `scripts/stage-d-evidence.sh` provides a provider-agnostic operator harness for pre-replacement capture, post-replacement survival verification, and restore verification;
+- `docs/STAGE-D-EVIDENCE.md` defines the evidence protocol, completion criterion, and evidence hygiene;
+- the Stage D harness stores snapshot hashes and PASS state but never writes the bearer token into evidence;
 - bearer authentication remains fail-closed and secret material is not committed;
 - the deployment contract preserves the existing Docker health check and persistent `NEXUS_DATA_DIR` semantics.
 
@@ -81,8 +84,10 @@ Still required as runtime evidence:
 
 - provision a real persistent host/storage resource;
 - expose the service through HTTPS while keeping application port 3000 non-public;
-- survive real container/service replacement with workspace state intact;
-- execute destructive backup/restore recovery on the host;
+- run Stage D `capture` from an operator machine with the evidence directory stored independently of the host;
+- perform a real service/container replacement without restoring first;
+- pass `verify-survival` against the pre-replacement snapshot;
+- execute a separate destructive backup/restore recovery exercise on the host and pass `restore-verify`;
 - record deployment evidence separately from release evidence.
 
 The current Render Free deployment remains classified as:
@@ -93,10 +98,10 @@ It is not durable production.
 
 ## Current v1.1 boundary
 
-Stages A through C are complete and verified. Stage B now also exposes its recovery capability directly to browser operators on ephemeral hosting. Stage D's repository-side deployment contract is ready, but the durable-production claim remains unverified until a real persistent host is provisioned and the documented recovery procedure passes there.
+Stages A through C are complete and verified. Stage B now also exposes its recovery capability directly to browser operators on ephemeral hosting. Stage D's repository-side deployment contract and evidence harness are ready, but the durable-production claim remains unverified until a real persistent host is provisioned and the documented Stage D procedure passes there.
 
-No code, UI, backup download, or documentation change may convert an ephemeral deployment into a durable-production claim. That claim requires real persistent hosting evidence.
+No code, UI, backup download, evidence harness, or documentation change may convert an ephemeral deployment into a durable-production claim. That claim requires real persistent hosting evidence.
 
 ## Release discipline
 
-No `v1.1.0` seal is permitted while Stage D lacks real host evidence. Documentation alone is not evidence of runtime success.
+No `v1.1.0` seal is permitted while Stage D lacks real host evidence. Documentation, CI simulation, or an evidence harness alone is not evidence of runtime success.
