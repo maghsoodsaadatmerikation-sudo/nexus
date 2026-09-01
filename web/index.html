@@ -1,110 +1,39 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>NEXUS — Human Judgment Workspace</title>
-  <style>
-    :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17202a;background:#f5f7fa}
-    *{box-sizing:border-box}body{margin:0}.wrap{max-width:1120px;margin:auto;padding:32px 20px}header{margin-bottom:24px}h1{margin:0 0 6px;font-size:32px}.tag,.meta{color:#66717d}.meta{font-size:12px}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:760px){.grid{grid-template-columns:1fr}}.card{background:#fff;border:1px solid #dfe4ea;border-radius:14px;padding:18px;box-shadow:0 2px 8px #00000008}.full{grid-column:1/-1}
-    label{display:block;font-weight:650;margin-bottom:7px}textarea,input,select{width:100%;border:1px solid #cbd3dc;border-radius:9px;padding:10px;font:inherit;background:#fff}textarea{min-height:96px;resize:vertical}.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1;min-width:150px}
-    button{border:0;border-radius:9px;padding:10px 14px;font:inherit;font-weight:650;cursor:pointer;background:#17202a;color:#fff}.secondary{background:#e9edf2;color:#17202a}button:disabled{opacity:.5;cursor:not-allowed}
-    .claim,.alt,.event{border:1px solid #e1e6eb;border-radius:10px;padding:10px;margin-top:8px}.warning{padding:10px;border-radius:9px;background:#fff5d6;margin-top:10px}.status{font-weight:700}.empty{color:#69737d}.decision{border-left:4px solid #17202a;padding-left:12px}.error{color:#9d1c1c}.ok{color:#1f6b3a}.pill{display:inline-block;padding:3px 8px;border-radius:999px;background:#eef1f4;font-size:12px;margin-right:6px}.history{max-height:280px;overflow:auto}
-  </style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NEXUS — Human Judgment Workspace</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#17202a;background:#f5f7fa}*{box-sizing:border-box}body{margin:0}.wrap{max-width:1080px;margin:auto;padding:28px 18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:760px){.grid{grid-template-columns:1fr}}.card{background:#fff;border:1px solid #dfe4ea;border-radius:14px;padding:16px}.full{grid-column:1/-1}.row{display:flex;gap:9px;flex-wrap:wrap}.row>*{flex:1;min-width:150px}input,textarea,select{width:100%;padding:9px;border:1px solid #cbd3dc;border-radius:8px;font:inherit}textarea{min-height:82px}button{padding:9px 13px;border:0;border-radius:8px;background:#17202a;color:#fff;font-weight:650;cursor:pointer}.secondary{background:#e9edf2;color:#17202a}.meta,.empty{color:#68737d;font-size:12px}.item{border:1px solid #e1e6eb;border-radius:9px;padding:9px;margin-top:7px}.warning{background:#fff5d6;padding:9px;border-radius:8px}.error{color:#9d1c1c}.ok{color:#1f6b3a}.history{max-height:280px;overflow:auto}label{display:block;font-weight:650;margin:0 0 6px}h1{margin-bottom:4px}
+</style>
 </head>
-<body>
-<div class="wrap">
-  <header>
-    <h1>NEXUS</h1>
-    <div class="tag">Infrastructure for human judgment. Evidence and machine analysis remain non-authoritative; only explicit human action records a judgment.</div>
-  </header>
-  <div class="grid">
-    <section class="card full">
-      <div class="row">
-        <div><label for="workspaceId">Workspace ID</label><input id="workspaceId" placeholder="Generated automatically"></div>
-        <div><label for="provenance">Your provenance ID</label><input id="provenance" value="human:owner" placeholder="human:... or source:..."></div>
-      </div>
-      <div style="margin-top:10px" class="row">
-        <button id="loadBtn" class="secondary" onclick="loadWorkspace()">Load workspace</button>
-        <button id="refreshBtn" class="secondary" onclick="refreshWorkspace()">Refresh</button>
-        <div id="connection" class="status">No workspace loaded.</div>
-      </div>
-    </section>
-
-    <section class="card full">
-      <label for="question">Question</label>
-      <textarea id="question" placeholder="What are you trying to decide or examine?"></textarea>
-      <div style="margin-top:8px"><button id="createBtn" onclick="createWorkspace()">Create workspace</button></div>
-    </section>
-
-    <section class="card">
-      <label>Claims / evidence</label>
-      <input id="claimText" placeholder="Claim or evidence">
-      <div class="row" style="margin-top:8px">
-        <select id="claimOrigin">
-          <option value="human">Human</option>
-          <option value="external_evidence">External evidence</option>
-          <option value="machine_analysis">Machine analysis</option>
-        </select>
-        <select id="claimUncertainty">
-          <option value="unknown">Unknown uncertainty</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-        </select>
-      </div>
-      <input id="claimSource" style="margin-top:8px" placeholder="Source ID / URL (for external evidence)">
-      <div style="margin-top:8px"><button class="secondary" onclick="addClaim()">Add claim</button></div>
-      <div id="claims" class="empty">No claims yet.</div>
-    </section>
-
-    <section class="card">
-      <label>Alternatives</label>
-      <input id="altLabel" placeholder="Option">
-      <textarea id="altConsequences" style="margin-top:8px" placeholder="One possible consequence per line"></textarea>
-      <div style="margin-top:8px"><button class="secondary" onclick="addAlternative()">Add option</button></div>
-      <div id="alts" class="empty">No alternatives yet.</div>
-    </section>
-
-    <section class="card full">
-      <label>Human judgment</label>
-      <div class="warning">Machine analysis can appear among claims, but it cannot populate this field. Submitting this form is the explicit human transition recorded in the audit history.</div>
-      <div class="row" style="margin-top:10px"><textarea id="decision" placeholder="Your decision"></textarea><textarea id="rationale" placeholder="Your rationale"></textarea></div>
-      <div style="margin-top:8px"><button onclick="recordJudgment()">Record human judgment</button></div>
-      <div id="judgmentView" class="empty" style="margin-top:10px">No human judgment recorded.</div>
-    </section>
-
-    <section class="card full">
-      <label>Provenance / audit history</label>
-      <div id="history" class="history empty">No audit events yet.</div>
-    </section>
-
-    <section class="card full">
-      <div class="row">
-        <button class="secondary" onclick="exportWorkspace()">Export verified snapshot JSON</button>
-        <div id="status" class="status">Ready.</div>
-      </div>
-    </section>
-  </div>
-</div>
+<body><main class="wrap">
+<h1>NEXUS</h1><p class="meta">Human judgment infrastructure. Machine analysis remains non-authoritative.</p>
+<div class="grid">
+<section class="card full"><div class="row">
+<div><label>API token</label><input id="token" type="password" autocomplete="off" placeholder="NEXUS_API_TOKEN"></div>
+<div><label>Workspace ID</label><input id="workspaceId" placeholder="Generated automatically"></div>
+<div><label>Provenance ID</label><input id="provenance" value="human:owner"></div>
+</div><div class="row" style="margin-top:9px"><button class="secondary" onclick="loadWorkspace()">Load</button><button class="secondary" onclick="document.getElementById('importFile').click()">Import verified snapshot</button><input id="importFile" type="file" accept="application/json" hidden onchange="importWorkspace(this.files[0])"><span id="connection" class="meta">No workspace loaded.</span></div></section>
+<section class="card full"><label>Question</label><textarea id="question" placeholder="What are you trying to decide or examine?"></textarea><button onclick="createWorkspace()">Create workspace</button></section>
+<section class="card"><label>Claims / evidence</label><input id="claimText" placeholder="Claim or evidence"><div class="row" style="margin-top:7px"><select id="claimOrigin"><option value="human">Human</option><option value="external_evidence">External evidence</option><option value="machine_analysis">Machine analysis</option></select><select id="claimUncertainty"><option value="unknown">Unknown</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div><input id="claimSource" style="margin-top:7px" placeholder="Source ID / URL"><button class="secondary" style="margin-top:7px" onclick="addClaim()">Add claim</button><div id="claims" class="empty">No claims yet.</div></section>
+<section class="card"><label>Alternatives</label><input id="altLabel" placeholder="Option"><textarea id="altConsequences" style="margin-top:7px" placeholder="One consequence per line"></textarea><button class="secondary" onclick="addAlternative()">Add option</button><div id="alts" class="empty">No alternatives yet.</div></section>
+<section class="card full"><label>Human judgment</label><div class="warning">Only this explicit human action can populate judgment. Machine analysis cannot do so.</div><div class="row" style="margin-top:8px"><textarea id="decision" placeholder="Your decision"></textarea><textarea id="rationale" placeholder="Your rationale"></textarea></div><button onclick="recordJudgment()">Record human judgment</button><div id="judgmentView" class="empty">No human judgment recorded.</div></section>
+<section class="card full"><label>Audit / provenance replay</label><div id="history" class="history empty">No events yet.</div></section>
+<section class="card full"><div class="row"><button class="secondary" onclick="exportWorkspace()">Export snapshot JSON</button><span id="status">Ready.</span></div></section>
+</div></main>
 <script>
-let snapshot=null;
-const $=id=>document.getElementById(id);
-function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function lines(s){return s.split('\n').map(x=>x.trim()).filter(Boolean)}
-function provenance(){return $('provenance').value.trim()||'human:owner'}
-function currentId(){return $('workspaceId').value.trim()}
-function setStatus(text,error=false){$('status').textContent=text;$('status').className='status '+(error?'error':'ok')}
-async function api(path,options={}){const response=await fetch(path,{...options,headers:{'content-type':'application/json',...(options.headers||{})}});let body=null;try{body=await response.json()}catch{}if(!response.ok)throw new Error(body?.error||`HTTP ${response.status}`);return body}
-async function createWorkspace(){const question=$('question').value.trim();if(!question)return setStatus('Enter a question first.',true);try{const body={question,provenance_id:provenance()};if(currentId())body.workspace_id=currentId();snapshot=await api('/v1/workspaces',{method:'POST',body:JSON.stringify(body)});$('workspaceId').value=snapshot.workspace.id;render();setStatus('Workspace created and persisted.') }catch(e){setStatus(e.message,true)}}
-async function loadWorkspace(){if(!currentId())return setStatus('Enter a workspace ID.',true);try{snapshot=await api(`/v1/workspaces/${encodeURIComponent(currentId())}`);$('question').value=snapshot.workspace.question;render();setStatus('Workspace loaded from gateway.')}catch(e){setStatus(e.message,true)}}
-async function refreshWorkspace(){if(!currentId())return setStatus('No workspace to refresh.',true);await loadWorkspace()}
-async function addClaim(){if(!currentId())return setStatus('Create or load a workspace first.',true);const text=$('claimText').value.trim();if(!text)return setStatus('Enter a claim.',true);const kind=$('claimOrigin').value;const origin=kind==='external_evidence'?{kind,source:$('claimSource').value.trim()||'unspecified'}:{kind};try{snapshot=await api(`/v1/workspaces/${encodeURIComponent(currentId())}/claims`,{method:'POST',body:JSON.stringify({text,origin,uncertainty:$('claimUncertainty').value,provenance_id:provenance()})});$('claimText').value='';$('claimSource').value='';render();setStatus('Claim recorded with provenance.')}catch(e){setStatus(e.message,true)}}
-async function addAlternative(){if(!currentId())return setStatus('Create or load a workspace first.',true);const label=$('altLabel').value.trim();if(!label)return setStatus('Enter an alternative.',true);try{snapshot=await api(`/v1/workspaces/${encodeURIComponent(currentId())}/alternatives`,{method:'POST',body:JSON.stringify({label,consequences:lines($('altConsequences').value),provenance_id:provenance()})});$('altLabel').value='';$('altConsequences').value='';render();setStatus('Alternative recorded.')}catch(e){setStatus(e.message,true)}}
-async function recordJudgment(){if(!currentId())return setStatus('Create or load a workspace first.',true);const decision=$('decision').value.trim(),rationale=$('rationale').value.trim();if(!decision)return setStatus('Human decision is required.',true);try{snapshot=await api(`/v1/workspaces/${encodeURIComponent(currentId())}/judgment`,{method:'POST',body:JSON.stringify({decision,rationale,provenance_id:provenance()})});render();setStatus('Explicit human judgment transition recorded.')}catch(e){setStatus(e.message,true)}}
-function originText(origin){if(origin==='Human'||origin?.Human!==undefined)return'Human';if(origin==='MachineAnalysis'||origin?.MachineAnalysis!==undefined)return'Machine analysis';if(origin?.ExternalEvidence)return`External evidence · ${origin.ExternalEvidence.source}`;return typeof origin==='string'?origin:JSON.stringify(origin)}
-function eventName(kind){if(typeof kind==='string')return kind;if(kind.ClaimAdded)return`Claim added · ${kind.ClaimAdded.claim_id}`;if(kind.AlternativeAdded)return`Alternative added · ${kind.AlternativeAdded.alternative_id}`;if(kind.HumanJudgmentTransition)return'Human judgment transition';return Object.keys(kind)[0]||'Event'}
-function render(){if(!snapshot){$('connection').textContent='No workspace loaded.';return}const w=snapshot.workspace;$('connection').textContent=`Connected · schema v${snapshot.schema_version} · ${w.id}`;$('claims').innerHTML=w.claims.length?w.claims.map(c=>`<div class="claim"><b>${esc(c.text)}</b><div class="meta">${esc(originText(c.origin))} · uncertainty: ${esc(c.uncertainty)} · id: ${esc(c.id)}</div></div>`).join(''):'<span class="empty">No claims yet.</span>';$('alts').innerHTML=w.alternatives.length?w.alternatives.map(a=>`<div class="alt"><b>${esc(a.label)}</b><div class="meta">${a.consequences.map(esc).join(' · ')||'No consequences recorded'} · id: ${esc(a.id)}</div></div>`).join(''):'<span class="empty">No alternatives yet.</span>';if(w.judgment){$('decision').value=w.judgment.decision;$('rationale').value=w.judgment.rationale;$('judgmentView').innerHTML=`<div class="decision"><b>${esc(w.judgment.decision)}</b><div>${esc(w.judgment.rationale)}</div></div>`}else{$('judgmentView').innerHTML='<span class="empty">No human judgment recorded.</span>'}$('history').innerHTML=snapshot.events.length?snapshot.events.map(e=>`<div class="event"><span class="pill">#${e.sequence}</span><b>${esc(eventName(e.kind))}</b><div class="meta">Provenance: ${esc(e.provenance_id?.[0]??e.provenance_id)}</div></div>`).join(''):'<span class="empty">No audit events yet.</span>'}
+let snapshot=null;const $=id=>document.getElementById(id);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const provenance=()=>$('provenance').value.trim()||'human:owner';const currentId=()=>$('workspaceId').value.trim();const lines=s=>s.split('\n').map(x=>x.trim()).filter(Boolean);
+function setStatus(t,e=false){$('status').textContent=t;$('status').className=e?'error':'ok'}
+async function api(path,options={}){const token=$('token').value;const headers={'content-type':'application/json',...(options.headers||{})};if(token)headers.authorization=`Bearer ${token}`;const r=await fetch(path,{...options,headers});let b=null;try{b=await r.json()}catch{}if(!r.ok)throw new Error(b?.error||`HTTP ${r.status}`);return b}
+async function createWorkspace(){const question=$('question').value.trim();if(!question)return setStatus('Enter a question.',true);try{const body={question,provenance_id:provenance()};if(currentId())body.workspace_id=currentId();snapshot=await api('/v1/workspaces',{method:'POST',body:JSON.stringify(body)});$('workspaceId').value=snapshot.workspace.id;render();setStatus('Workspace created and durably persisted.')}catch(e){setStatus(e.message,true)}}
+async function loadWorkspace(){if(!currentId())return setStatus('Enter a workspace ID.',true);try{snapshot=await api(`/v1/workspaces/${encodeURIComponent(currentId())}`);$('question').value=snapshot.workspace.question;render();setStatus('Workspace loaded.')}catch(e){setStatus(e.message,true)}}
+async function importWorkspace(file){if(!file)return;try{const parsed=JSON.parse(await file.text());snapshot=await api('/v1/workspaces/import',{method:'POST',body:JSON.stringify(parsed)});$('workspaceId').value=snapshot.workspace.id;$('question').value=snapshot.workspace.question;render();setStatus('Snapshot validated and imported.')}catch(e){setStatus(e.message,true)}finally{$('importFile').value=''}}
+async function addClaim(){if(!currentId())return setStatus('Load a workspace first.',true);const text=$('claimText').value.trim();if(!text)return;const kind=$('claimOrigin').value;const origin=kind==='external_evidence'?{kind,source:$('claimSource').value.trim()||'unspecified'}:{kind};try{snapshot=await api(`/v1/workspaces/${encodeURIComponent(currentId())}/claims`,{method:'POST',body:JSON.stringify({text,origin,uncertainty:$('claimUncertainty').value,provenance_id:provenance()})});render();setStatus('Claim recorded.')}catch(e){setStatus(e.message,true)}}
+async function addAlternative(){const label=$('altLabel').value.trim();if(!currentId()||!label)return setStatus('Workspace and option required.',true);try{snapshot=await api(`/v1/workspaces/${encodeURIComponent(currentId())}/alternatives`,{method:'POST',body:JSON.stringify({label,consequences:lines($('altConsequences').value),provenance_id:provenance()})});render();setStatus('Alternative recorded.')}catch(e){setStatus(e.message,true)}}
+async function recordJudgment(){const decision=$('decision').value.trim();if(!currentId()||!decision)return setStatus('Workspace and human decision required.',true);try{snapshot=await api(`/v1/workspaces/${encodeURIComponent(currentId())}/judgment`,{method:'POST',body:JSON.stringify({decision,rationale:$('rationale').value.trim(),provenance_id:provenance()})});render();setStatus('Human judgment transition recorded.')}catch(e){setStatus(e.message,true)}}
+function eventName(k){if(typeof k==='string')return k;const n=Object.keys(k)[0]||'Event';return n.replace(/([a-z])([A-Z])/g,'$1 $2')}
+function render(){if(!snapshot)return;const w=snapshot.workspace;$('connection').textContent=`schema v${snapshot.schema_version} · ${w.id}`;$('claims').innerHTML=w.claims.length?w.claims.map(c=>`<div class="item"><b>${esc(c.text)}</b><div class="meta">origin: ${esc(JSON.stringify(c.origin))} · uncertainty: ${esc(c.uncertainty)}</div></div>`).join(''):'No claims yet.';$('alts').innerHTML=w.alternatives.length?w.alternatives.map(a=>`<div class="item"><b>${esc(a.label)}</b><div class="meta">${a.consequences.map(esc).join(' · ')}</div></div>`).join(''):'No alternatives yet.';$('judgmentView').innerHTML=w.judgment?`<div class="item"><b>${esc(w.judgment.decision)}</b><div>${esc(w.judgment.rationale)}</div></div>`:'No human judgment recorded.';$('history').innerHTML=snapshot.events.map(e=>`<div class="item"><b>#${e.sequence} ${esc(eventName(e.kind))}</b><div class="meta">provenance: ${esc(e.provenance_id?.[0]??e.provenance_id)}</div></div>`).join('')}
 function exportWorkspace(){if(!snapshot)return setStatus('Load a workspace first.',true);const blob=new Blob([JSON.stringify(snapshot,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`nexus-${snapshot.workspace.id}.json`;a.click();URL.revokeObjectURL(a.href)}
-render();
-</script>
-</body>
-</html>
+</script></body></html>
