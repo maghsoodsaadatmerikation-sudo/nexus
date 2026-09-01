@@ -11,6 +11,7 @@ pub mod epistemic;
 pub mod executor;
 pub mod policy;
 pub mod workspace;
+pub mod workspace_persistence;
 
 mod authorized;
 
@@ -29,6 +30,7 @@ pub use workspace::{
     InMemoryWorkspaceRepository, ProvenanceId, WorkspaceEngine, WorkspaceEvent, WorkspaceEventKind,
     WorkspaceRepository, WorkspaceSnapshot, WorkspaceStoreError, WORKSPACE_SCHEMA_VERSION,
 };
+pub use workspace_persistence::{DurableWorkspaceError, FileWorkspaceRepository};
 
 #[cfg(test)]
 mod tests {
