@@ -119,7 +119,7 @@ Stage E is implementation-complete and verified while its release decision corre
 
 ## Stage F — Release Candidate Manifest
 
-Status: **IMPLEMENTED / FAIL-CLOSED; AWAITS VERIFICATION AND STAGE D**
+Status: **IMPLEMENTED / VERIFIED / FAIL-CLOSED; BLOCKED BY STAGE D**
 
 Implemented:
 
@@ -131,11 +131,13 @@ Implemented:
 - `docs/RELEASE-CANDIDATE-v1.1.md` defines the human release boundary and states that a numeric verification run ID alone is not evidence that the run passed;
 - repository preflight now requires the Stage F implementation and its constitutional markers.
 
-Stage F may be implementation-complete while candidate generation remains blocked by Stage D. `Status: READY FOR HUMAN RELEASE DECISION` is permitted only after Stage E has passed on real Stage D evidence.
+Verification basis: NEXUS Verification #283, run `33558401612` — PASS. The run completed successfully on commit `84ac95b81d660f74f17c12bc25065b78a014cf12`, and its Artifact 05 verification manifest independently matched the bundled file hashes.
+
+Stage F is implementation-complete and verified while candidate generation remains correctly blocked by Stage D. `Status: READY FOR HUMAN RELEASE DECISION` is permitted only after Stage E has passed on real Stage D evidence.
 
 ## Current v1.1 boundary
 
-Stages A through C are complete and verified. Stage D's repository-side deployment contract and evidence harness are ready but still require a real persistent external host. Stage E is complete and verified and provides a fail-closed release gate. Stage F packages a valid Stage D + Stage E result into an auditable release-candidate manifest without performing the release itself.
+Stages A through C are complete and verified. Stage D's repository-side deployment contract and evidence harness are ready but still require a real persistent external host. Stage E is complete and verified and provides a fail-closed release gate. Stage F is complete and verified as a fail-closed release-candidate boundary, but remains blocked by Stage D runtime evidence.
 
 No code, UI, backup download, evidence harness, readiness gate, candidate manifest, or documentation change may convert an ephemeral deployment into a durable-production claim. That claim requires real persistent hosting evidence.
 
