@@ -7,8 +7,8 @@ use nexus_artifact_05_gateway::{
     WorkspaceDelegate, WorkspaceDelegateError,
 };
 use nexus_constitutional_core::{
-    Alternative, Claim, HumanJudgment, InMemoryWorkspaceRepository, ProvenanceId, RequestEnvelope,
-    WorkspaceEngine, WorkspaceRepository, WorkspaceSnapshot,
+    Alternative, AnalysisBatch, Claim, HumanJudgment, InMemoryWorkspaceRepository, ProvenanceId,
+    RequestEnvelope, WorkspaceEngine, WorkspaceRepository, WorkspaceSnapshot,
 };
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
@@ -75,6 +75,16 @@ impl WorkspaceDelegate for RecordingDelegate {
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         self.mutate(workspace_id, |engine| {
             engine.add_alternative(alternative, provenance_id)
+        })
+    }
+
+    fn record_analysis_batch(
+        &self,
+        workspace_id: &str,
+        batch: AnalysisBatch,
+    ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+        self.mutate(workspace_id, |engine| {
+            engine.record_analysis_batch(batch)
         })
     }
 
@@ -235,22 +245,48 @@ async fn workspace_lifecycle_is_delegated_and_auditable() {
         .body(Body::from(
             serde_json::json!({
                 "claim_id": "c-http",
-                "text": "Machine analysis remains non-authoritative",
-                "origin": {"kind": "machine_analysis"},
+                "text": "Human-provided evidence remains explicit",
+                "origin": {"kind": "human"},
                 "uncertainty": "medium",
-                "provenance_id": "machine:analysis-1"
+                "provenance_id": "human:owner"
             })
             .to_string(),
         ))
         .unwrap();
     let claim_response = app.clone().oneshot(claim).await.unwrap();
     assert_eq!(claim_response.status(), StatusCode::OK);
-    let claim_body = axum::body::to_bytes(claim_response.into_body(), usize::MAX)
+
+    let analysis = Request::builder()
+        .method("POST")
+        .uri("/v1/workspaces/w-http/analysis")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::json!({
+                "adapter_id": "challenge-adapter",
+                "run_id": "run-http-1",
+                "observations": [{
+                    "id": "m-http",
+                    "kind": "Counterargument",
+                    "text": "A machine-generated counterargument",
+                    "uncertainty": "High",
+                    "source_ids": ["source:example"]
+                }]
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let analysis_response = app.clone().oneshot(analysis).await.unwrap();
+    assert_eq!(analysis_response.status(), StatusCode::OK);
+    let analysis_body = axum::body::to_bytes(analysis_response.into_body(), usize::MAX)
         .await
         .unwrap();
-    let claim_snapshot: serde_json::Value = serde_json::from_slice(&claim_body).unwrap();
-    assert!(claim_snapshot["workspace"]["judgment"].is_null());
-    assert_eq!(claim_snapshot["events"].as_array().unwrap().len(), 2);
+    let analysis_snapshot: serde_json::Value = serde_json::from_slice(&analysis_body).unwrap();
+    assert!(analysis_snapshot["workspace"]["judgment"].is_null());
+    assert_eq!(analysis_snapshot["workspace"]["claims"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        analysis_snapshot["workspace"]["claims"][1]["origin"],
+        "MachineAnalysis"
+    );
 
     let judgment = Request::builder()
         .method("POST")
@@ -280,7 +316,7 @@ async fn workspace_lifecycle_is_delegated_and_auditable() {
         .unwrap();
     let snapshot: serde_json::Value = serde_json::from_slice(&get_body).unwrap();
     assert_eq!(snapshot["workspace"]["judgment"]["decision"], "Option A");
-    assert_eq!(snapshot["events"].as_array().unwrap().len(), 3);
+    assert_eq!(snapshot["events"].as_array().unwrap().len(), 4);
 }
 
 #[tokio::test]
