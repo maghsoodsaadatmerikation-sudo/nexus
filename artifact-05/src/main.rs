@@ -173,8 +173,8 @@ async fn main() {
     let data_root = std::env::var_os("NEXUS_DATA_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("nexus-data"));
-    let bind_addr = std::env::var("NEXUS_BIND_ADDR")
-        .unwrap_or_else(|_| "127.0.0.1:3000".to_owned());
+    let bind_addr =
+        std::env::var("NEXUS_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".to_owned());
     let addr: SocketAddr = bind_addr.parse().expect("valid NEXUS_BIND_ADDR");
     let app = router(AppState::authenticated(CoreDelegate::new(data_root), token));
     let listener = tokio::net::TcpListener::bind(addr)
