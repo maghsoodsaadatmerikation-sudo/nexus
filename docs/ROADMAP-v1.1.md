@@ -75,6 +75,7 @@ Prepared:
 - `deploy/oci/docker-compose.yml` binds the application to loopback and mounts durable host storage at `/data`;
 - `deploy/oci/README.md` defines the OCI persistent-host deployment and the exact Stage D evidence procedure;
 - `scripts/stage-d-evidence.sh` provides a provider-agnostic operator harness for pre-replacement capture, post-replacement survival verification, and restore verification;
+- Stage D capture binds its evidence to the exact deployed 40-character repository commit;
 - `docs/STAGE-D-EVIDENCE.md` defines the evidence protocol, completion criterion, and evidence hygiene;
 - the Stage D harness stores snapshot hashes and PASS state but never writes the bearer token into evidence;
 - bearer authentication remains fail-closed and secret material is not committed;
@@ -96,12 +97,29 @@ The current Render Free deployment remains classified as:
 
 It is not durable production.
 
+## Stage E — Release Readiness Guard
+
+Status: **IMPLEMENTED / FAIL-CLOSED; AWAITS STAGE D EVIDENCE**
+
+Implemented:
+
+- `scripts/v1.1-release-readiness.sh` validates a complete Stage D evidence pack offline;
+- the gate requires capture, survival, and restore PASS records to share the exact captured snapshot hash;
+- it requires post-replacement and post-restore snapshots to be JSON-equivalent to the captured state;
+- it binds the evidence pack to the exact deployed repository commit;
+- it rejects missing/incomplete evidence and credential-like material in result records;
+- it performs no tag, release, deployment, authorization, or epistemic action;
+- `docs/RELEASE-READINESS-v1.1.md` defines the gate and its fail-closed semantics;
+- CI must verify that ordinary repository verification cannot accidentally turn missing Stage D runtime evidence into release readiness.
+
+Stage E can be implementation-complete while its release decision remains blocked. `V1.1 RELEASE READINESS: PASS` is permitted only after real Stage D host evidence exists for the exact deployed commit.
+
 ## Current v1.1 boundary
 
-Stages A through C are complete and verified. Stage B now also exposes its recovery capability directly to browser operators on ephemeral hosting. Stage D's repository-side deployment contract and evidence harness are ready, but the durable-production claim remains unverified until a real persistent host is provisioned and the documented Stage D procedure passes there.
+Stages A through C are complete and verified. Stage D's repository-side deployment contract and evidence harness are ready but still require a real persistent external host. Stage E now provides a fail-closed release gate so Stage D cannot be bypassed by documentation, CI simulation, or operator assertion alone.
 
-No code, UI, backup download, evidence harness, or documentation change may convert an ephemeral deployment into a durable-production claim. That claim requires real persistent hosting evidence.
+No code, UI, backup download, evidence harness, release-readiness script, or documentation change may convert an ephemeral deployment into a durable-production claim. That claim requires real persistent hosting evidence.
 
 ## Release discipline
 
-No `v1.1.0` seal is permitted while Stage D lacks real host evidence. Documentation, CI simulation, or an evidence harness alone is not evidence of runtime success.
+No `v1.1.0` seal is permitted while Stage D lacks real host evidence or while the Stage E release-readiness gate has not passed against that evidence and the exact deployed commit. Documentation, CI simulation, or an evidence harness alone is not evidence of runtime success.
