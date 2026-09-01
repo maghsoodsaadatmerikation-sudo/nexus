@@ -5,9 +5,25 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  RUST_IMAGE: rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
+
 jobs:
-  probe:
-    runs-on: ubuntu-latest
+  preflight:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
-      - name: Startup probe
-        run: echo "NEXUS workflow startup PASS"
+      - name: Preflight probe
+        run: echo "preflight PASS"
+
+  verify:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Verification probe
+        run: echo "verification PASS"
