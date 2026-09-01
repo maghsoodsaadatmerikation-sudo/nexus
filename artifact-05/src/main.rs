@@ -176,9 +176,17 @@ async fn main() {
     let bind_addr =
         std::env::var("NEXUS_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".to_owned());
     let addr: SocketAddr = bind_addr.parse().expect("valid NEXUS_BIND_ADDR");
+    eprintln!(
+        "NEXUS_OP event=startup bind_addr={} data_dir={} auth=configured",
+        addr,
+        data_root.display()
+    );
     let app = router(AppState::authenticated(CoreDelegate::new(data_root), token));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("bind gateway");
-    axum::serve(listener, app).await.expect("serve gateway");
+    if let Err(error) = axum::serve(listener, app).await {
+        eprintln!("NEXUS_OP event=server_exit error={error}");
+        std::process::exit(1);
+    }
 }
