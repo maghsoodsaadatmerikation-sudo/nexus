@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+mod workspace_api;
+
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -14,6 +16,8 @@ use std::{
     sync::{Arc, RwLock},
 };
 use uuid::Uuid;
+
+pub use workspace_api::{WorkspaceDelegate, WorkspaceDelegateError};
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -96,10 +100,27 @@ impl<D: ConstitutionalDelegate> AppState<D> {
     }
 }
 
-pub fn router<D: ConstitutionalDelegate>(state: AppState<D>) -> Router {
+pub fn router<D>(state: AppState<D>) -> Router
+where
+    D: ConstitutionalDelegate + WorkspaceDelegate,
+{
     Router::new()
         .route("/v1/requests", post(submit::<D>))
         .route("/v1/requests/{id}", get(status::<D>))
+        .route("/v1/workspaces", post(workspace_api::create_workspace::<D>))
+        .route("/v1/workspaces/{id}", get(workspace_api::get_workspace::<D>))
+        .route(
+            "/v1/workspaces/{id}/claims",
+            post(workspace_api::add_claim::<D>),
+        )
+        .route(
+            "/v1/workspaces/{id}/alternatives",
+            post(workspace_api::add_alternative::<D>),
+        )
+        .route(
+            "/v1/workspaces/{id}/judgment",
+            post(workspace_api::record_human_judgment::<D>),
+        )
         .with_state(state)
 }
 
@@ -175,6 +196,9 @@ async fn status<D: ConstitutionalDelegate>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nexus_constitutional_core::{
+        Alternative, Claim, HumanJudgment, ProvenanceId, WorkspaceSnapshot,
+    };
     use std::sync::{Arc, Mutex};
 
     #[derive(Clone, Default)]
@@ -188,12 +212,96 @@ mod tests {
         }
     }
 
+    impl WorkspaceDelegate for RecordingDelegate {
+        fn create_workspace(
+            &self,
+            _workspace_id: String,
+            _question: String,
+            _provenance_id: ProvenanceId,
+        ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+            Err(WorkspaceDelegateError::Unavailable)
+        }
+
+        fn get_workspace(&self, _workspace_id: &str) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+            Err(WorkspaceDelegateError::Unavailable)
+        }
+
+        fn add_claim(
+            &self,
+            _workspace_id: &str,
+            _claim: Claim,
+            _provenance_id: ProvenanceId,
+        ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+            Err(WorkspaceDelegateError::Unavailable)
+        }
+
+        fn add_alternative(
+            &self,
+            _workspace_id: &str,
+            _alternative: Alternative,
+            _provenance_id: ProvenanceId,
+        ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+            Err(WorkspaceDelegateError::Unavailable)
+        }
+
+        fn record_human_judgment(
+            &self,
+            _workspace_id: &str,
+            _judgment: HumanJudgment,
+            _provenance_id: ProvenanceId,
+        ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+            Err(WorkspaceDelegateError::Unavailable)
+        }
+    }
+
     #[derive(Clone, Copy, Default)]
     struct FailingDelegate;
 
     impl ConstitutionalDelegate for FailingDelegate {
         fn submit(&self, _envelope: RequestEnvelope) -> Result<Submission, DelegateError> {
             Err(DelegateError)
+        }
+    }
+
+    impl WorkspaceDelegate for FailingDelegate {
+        fn create_workspace(
+            &self,
+            _workspace_id: String,
+            _question: String,
+            _provenance_id: ProvenanceId,
+        ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+            Err(WorkspaceDelegateError::Unavailable)
+        }
+
+        fn get_workspace(&self, _workspace_id: &str) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+            Err(WorkspaceDelegateError::Unavailable)
+        }
+
+        fn add_claim(
+            &self,
+            _workspace_id: &str,
+            _claim: Claim,
+            _provenance_id: ProvenanceId,
+        ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+            Err(WorkspaceDelegateError::Unavailable)
+        }
+
+        fn add_alternative(
+            &self,
+            _workspace_id: &str,
+            _alternative: Alternative,
+            _provenance_id: ProvenanceId,
+        ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+            Err(WorkspaceDelegateError::Unavailable)
+        }
+
+        fn record_human_judgment(
+            &self,
+            _workspace_id: &str,
+            _judgment: HumanJudgment,
+            _provenance_id: ProvenanceId,
+        ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+            Err(WorkspaceDelegateError::Unavailable)
         }
     }
 
