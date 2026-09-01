@@ -83,9 +83,7 @@ impl WorkspaceDelegate for RecordingDelegate {
         workspace_id: &str,
         batch: AnalysisBatch,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
-        self.mutate(workspace_id, |engine| {
-            engine.record_analysis_batch(batch)
-        })
+        self.mutate(workspace_id, |engine| engine.record_analysis_batch(batch))
     }
 
     fn record_human_judgment(
@@ -282,7 +280,13 @@ async fn workspace_lifecycle_is_delegated_and_auditable() {
         .unwrap();
     let analysis_snapshot: serde_json::Value = serde_json::from_slice(&analysis_body).unwrap();
     assert!(analysis_snapshot["workspace"]["judgment"].is_null());
-    assert_eq!(analysis_snapshot["workspace"]["claims"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        analysis_snapshot["workspace"]["claims"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
     assert_eq!(
         analysis_snapshot["workspace"]["claims"][1]["origin"],
         "MachineAnalysis"
