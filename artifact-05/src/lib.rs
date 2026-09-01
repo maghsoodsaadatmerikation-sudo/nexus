@@ -108,7 +108,10 @@ where
         .route("/v1/requests", post(submit::<D>))
         .route("/v1/requests/{id}", get(status::<D>))
         .route("/v1/workspaces", post(workspace_api::create_workspace::<D>))
-        .route("/v1/workspaces/{id}", get(workspace_api::get_workspace::<D>))
+        .route(
+            "/v1/workspaces/{id}",
+            get(workspace_api::get_workspace::<D>),
+        )
         .route(
             "/v1/workspaces/{id}/claims",
             post(workspace_api::add_claim::<D>),
@@ -222,7 +225,10 @@ mod tests {
             Err(WorkspaceDelegateError::Unavailable)
         }
 
-        fn get_workspace(&self, _workspace_id: &str) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+        fn get_workspace(
+            &self,
+            _workspace_id: &str,
+        ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
             Err(WorkspaceDelegateError::Unavailable)
         }
 
@@ -273,7 +279,10 @@ mod tests {
             Err(WorkspaceDelegateError::Unavailable)
         }
 
-        fn get_workspace(&self, _workspace_id: &str) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+        fn get_workspace(
+            &self,
+            _workspace_id: &str,
+        ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
             Err(WorkspaceDelegateError::Unavailable)
         }
 
