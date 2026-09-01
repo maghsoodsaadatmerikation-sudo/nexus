@@ -49,17 +49,20 @@ A production release must preserve four boundaries:
 - append-only audit history and provenance replay visible in the browser
 - contract tests for missing/wrong/correct authentication and invalid import rejection
 
-### F. Release — READY TO SEAL
-- CI verification
-- manifest self-audit
-- evidence bundle
-- artifact attestation
-- release seal only after real PASS
+### F. Release — COMPLETE / SEALED
+- CI verification: PASS
+- manifest self-audit: PASS
+- evidence bundle: GENERATED
+- artifact attestation: GENERATED
+- release seal created only after real PASS
+- seal record: `release-v1.0-sealed`
 
 ## Current status
 
-Stages A through E are implemented and verified under the pinned Docker verification environment. The latest product verification passed the constitutional core, self-audit, Artifact 05 Gates 0–3, test suite, evidence bundling, and attestations. Machine analysis remains non-authoritative, human judgment remains an explicit human transition, and workspace persistence rejects invalid or rewritten histories.
+Stages A through F are complete. NEXUS v1.0 is sealed against the real successful verification of source revision `ee04bb05e8a07e9f5148d8ed85b6caf0aee27ac7`, workflow run `33540467578` (#233). That run passed the constitutional core, self-audit, Artifact 05 Gates 0–3, product contract tests, evidence bundling, and attestations. The release seal records the exact core and Artifact 05 evidence artifact digests.
 
-## Current priority
+The seal does not create epistemic authority: machine analysis remains non-authoritative, human judgment remains an explicit human transition, and execution remains behind constitutional authorization.
 
-Stage F is the only remaining stage: bind the verified revision and its CI evidence into the release seal, then verify the seal commit itself. No release is considered sealed before that final real PASS.
+## Completion rule
+
+No real verification -> no PASS -> no seal. The v1.0 seal was created only after the referenced real SUCCESS run. The seal/documentation head is itself subject to the same verification workflow; a failing head supersedes completion status until repaired.
