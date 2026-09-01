@@ -23,4 +23,7 @@ ENV NEXUS_DATA_DIR=/data
 ENV NEXUS_BIND_ADDR=0.0.0.0:3000
 EXPOSE 3000
 
+HEALTHCHECK --interval=10s --timeout=3s --start-period=2s --retries=3 \
+  CMD bash -ec 'exec 3<>/dev/tcp/127.0.0.1/3000; printf "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3; grep -q "200 OK" <&3'
+
 ENTRYPOINT ["/usr/local/bin/nexus"]
