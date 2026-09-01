@@ -48,3 +48,20 @@ jobs:
 
       - name: Bundle verification evidence
         run: tar -czf verification-bundle.tar.gz verification-manifest.txt "build_verification_${GITHUB_RUN_ID}.log" Cargo.lock
+
+      - name: Attest verification bundle
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: verification-bundle.tar.gz
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: verification-bundle
+          path: |
+            verification-bundle.tar.gz
+            verification-manifest.txt
+            build_verification_*.log
+            Cargo.lock
+          if-no-files-found: error
