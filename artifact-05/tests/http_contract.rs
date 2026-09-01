@@ -45,7 +45,10 @@ impl WorkspaceDelegate for RecordingDelegate {
         Ok(snapshot)
     }
 
-    fn get_workspace(&self, workspace_id: &str) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+    fn get_workspace(
+        &self,
+        workspace_id: &str,
+    ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         self.workspaces
             .lock()
             .unwrap()
@@ -59,7 +62,9 @@ impl WorkspaceDelegate for RecordingDelegate {
         claim: Claim,
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
-        self.mutate(workspace_id, |engine| engine.add_claim(claim, provenance_id))
+        self.mutate(workspace_id, |engine| {
+            engine.add_claim(claim, provenance_id)
+        })
     }
 
     fn add_alternative(
