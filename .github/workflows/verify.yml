@@ -30,6 +30,12 @@ jobs:
           RUNNER_OS: ${{ runner.os }}
         run: bash scripts/readonly-verification.sh
 
+      - name: Verify durable-host deployment configuration
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: bash scripts/verify-render-blueprint.sh
+
       - name: Attest constitutional-core verification bundle
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
         with:
@@ -75,4 +81,21 @@ jobs:
             docs/RELEASE-READINESS-v1.1.md
             docs/RELEASE-CANDIDATE-v1.1.md
             docs/ROADMAP-v1.1.md
+          if-no-files-found: error
+
+      - name: Attest Render Stage D configuration bundle
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: render-deployment-bundle.tar.gz
+
+      - name: Upload Render Stage D configuration evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: render-stage-d-configuration
+          path: |
+            render-deployment-bundle.tar.gz
+            render-deployment-manifest.txt
+            render.yaml
+            scripts/verify-render-blueprint.sh
+            docs/RENDER-STAGE-D.md
           if-no-files-found: error
