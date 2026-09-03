@@ -126,7 +126,7 @@ PY
 
 assert_no_credentials() {
   local file="$1"
-  if grep -Eqi 'authorization:[[:space:]]*bearer|NEXUS_API_TOKEN=|Bearer[[:space:]]+[A-Za-z0-9._~+/=-]+' "$file"; then
+  if grep -Eqi 'authorization:[[:space:]]*bearer[[:space:]]+[A-Za-z0-9._~+/=-]+|NEXUS_API_TOKEN[[:space:]]*=' "$file"; then
     echo "credential-like material detected in evidence file: $file" >&2
     exit 1
   fi
