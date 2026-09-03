@@ -12,20 +12,22 @@ The constitutional invariant remains:
 bash scripts/v1.1-release-candidate.sh ./stage-d-evidence <40-character-deployed-commit> <verification-run-id>
 ```
 
-The command is fail-closed. It can produce `V1.1 RELEASE CANDIDATE: READY` only when `scripts/v1.1-release-readiness.sh` has independently accepted the complete Stage D evidence pack for the exact deployed commit.
+The command is fail-closed. It can produce `V1.1 RELEASE CANDIDATE: READY` only when `scripts/v1.1-release-readiness.sh` accepts the complete lifecycle-bound Stage D evidence pack for the exact deployed commit.
 
 The generated manifest binds:
 
 - the exact deployed repository commit;
 - the NEXUS Verification run ID supplied by the operator;
+- an explicit `Verification Run Independently Checked: NO` marker, so a numeric run ID is never silently treated as proof of success;
 - the Stage D workspace snapshot SHA-256;
 - the Stage D evidence-harness SHA-256;
 - the Stage E release-readiness-gate SHA-256;
+- PASS/recorded markers for HTTPS/auth preflight, capture, real-replacement corroboration, survival, destructive absence, and restore;
 - explicit `Release Action Performed: NO`, `Tag Created: NO`, and `GitHub Release Published: NO` markers.
 
 ## Human release boundary
 
-`Status: READY FOR HUMAN RELEASE DECISION` is deliberately not a release action. A human/operator still owns the decision to create the `v1.1.0` tag and GitHub Release after confirming that the referenced verification run completed successfully for the exact commit.
+`Status: READY FOR HUMAN RELEASE DECISION` is deliberately not a release action. A human/operator still owns the decision to create the `v1.1.0` tag and GitHub Release after independently confirming that the referenced verification run completed successfully for the exact deployed commit and that the provider lifecycle evidence corresponds to the actual service replacement/destructive exercise.
 
 This stage must not infer that a run succeeded from a numeric run ID alone. Runtime verification status remains external evidence that must be checked directly.
 

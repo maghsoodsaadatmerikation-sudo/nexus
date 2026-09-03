@@ -8,6 +8,8 @@ Usage:
 
 Creates an offline v1.1 release-candidate manifest only after the Stage E
 release-readiness gate passes. It never creates a tag or publishes a release.
+The verification run ID is recorded for independent GitHub cross-checking; this
+script does not claim to verify GitHub remotely.
 EOF
 }
 
@@ -33,6 +35,11 @@ fi
 
 grep -Fx 'V1.1 RELEASE READINESS: PASS' "$readiness_output" >/dev/null || fail 'Stage E PASS marker missing'
 grep -Fx "Deployed Commit: ${expected_commit}" "$readiness_output" >/dev/null || fail 'Stage E commit binding mismatch'
+grep -Fx 'Stage D HTTPS/Auth Preflight: PASS' "$readiness_output" >/dev/null || fail 'Stage D preflight marker missing'
+grep -Fx 'Stage D Replacement Event: RECORDED' "$readiness_output" >/dev/null || fail 'Stage D replacement marker missing'
+grep -Fx 'Stage D Survival: PASS' "$readiness_output" >/dev/null || fail 'Stage D survival marker missing'
+grep -Fx 'Stage D Destructive Absence: PASS' "$readiness_output" >/dev/null || fail 'Stage D destructive absence marker missing'
+grep -Fx 'Stage D Restore: PASS' "$readiness_output" >/dev/null || fail 'Stage D restore marker missing'
 grep -Fx 'Release Action Performed: NO' "$readiness_output" >/dev/null || fail 'Stage E release-action boundary missing'
 
 snapshot_sha="$(awk -F': ' '/^Workspace Snapshot SHA-256:/ {print $2}' "$readiness_output")"
@@ -46,9 +53,16 @@ NEXUS v1.1 Release Candidate
 Status: READY FOR HUMAN RELEASE DECISION
 Deployed Commit: ${expected_commit}
 Verification Run ID: ${verification_run_id}
+Verification Run Independently Checked: NO
 Workspace Snapshot SHA-256: ${snapshot_sha}
 Stage D Evidence Harness SHA-256: ${stage_d_sha}
 Stage E Readiness Gate SHA-256: ${readiness_sha}
+Stage D HTTPS/Auth Preflight: PASS
+Stage D Capture: PASS
+Stage D Replacement Event: RECORDED
+Stage D Survival: PASS
+Stage D Destructive Absence: PASS
+Stage D Restore: PASS
 Stage D: PASS
 Stage E: PASS
 Authority Expansion: NONE

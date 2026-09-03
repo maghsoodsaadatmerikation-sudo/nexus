@@ -14,6 +14,7 @@ REQUIRED = [
     ROOT / "scripts" / "stage-d-evidence.sh",
     ROOT / "scripts" / "v1.1-release-readiness.sh",
     ROOT / "scripts" / "v1.1-release-candidate.sh",
+    ROOT / "scripts" / "test-stage-d-readiness.sh",
     ROOT / "docs" / "STAGE-D-EVIDENCE.md",
     ROOT / "docs" / "RELEASE-READINESS-v1.1.md",
     ROOT / "docs" / "RELEASE-CANDIDATE-v1.1.md",
@@ -48,33 +49,44 @@ def main() -> None:
 
     stage_d = (ROOT / "scripts" / "stage-d-evidence.sh").read_text(encoding="utf-8")
     for marker in [
+        "preflight)",
         "capture)",
+        "record-replacement)",
         "verify-survival)",
+        "verify-absence)",
         "restore-verify)",
         "Token Recorded: NO",
+        "Authority Expansion: NONE",
         "NEXUS_DEPLOYED_COMMIT",
-        "deployed-commit.txt",
+        "NEXUS_REPLACEMENT_EVENT_ID",
+        "NEXUS_DESTRUCTIVE_EVENT_ID",
+        "replacement-event.txt",
+        "destructive-event.txt",
+        "absence-response.json",
         "workspace-backup.sh",
         "workspace-restore.sh",
     ]:
         if marker not in stage_d:
             fail(f"Stage D evidence harness marker missing: {marker}")
     if "NEXUS_API_TOKEN" not in stage_d:
-        fail("Stage D harness must require authenticated access")
+        fail("Stage D harness must require authenticated access for network phases")
     token_record_lines = [
         line.strip()
         for line in stage_d.splitlines()
         if "Token Recorded:" in line and not line.lstrip().startswith("#")
     ]
-    if token_record_lines != ["Token Recorded: NO"]:
-        fail("Stage D harness must record only the explicit no-token marker")
+    if not token_record_lines or any(line != "Token Recorded: NO" for line in token_record_lines):
+        fail("Stage D harness must record only explicit no-token markers")
 
     stage_d_doc = (ROOT / "docs" / "STAGE-D-EVIDENCE.md").read_text(encoding="utf-8")
     for marker in [
         "A_out <= A_in",
         "real service/container replacement",
+        "verify-absence",
         "must not be sealed",
         "deployed-commit.txt",
+        "replacement-event.txt",
+        "destructive-event.txt",
         "v1.1-release-readiness.sh",
     ]:
         if marker not in stage_d_doc:
@@ -86,8 +98,12 @@ def main() -> None:
         "V1.1 RELEASE READINESS: PASS",
         "Release Action Performed: NO",
         "deployed-commit.txt",
+        "replacement-event.txt",
         "after-survival.json",
+        "absence-response.json",
+        "destructive-event.txt",
         "after-restore.json",
+        "Stage D Destructive Absence: PASS",
     ]:
         if marker not in readiness:
             fail(f"release readiness marker missing: {marker}")
@@ -97,7 +113,7 @@ def main() -> None:
 
     readiness_doc = (ROOT / "docs" / "RELEASE-READINESS-v1.1.md").read_text(encoding="utf-8")
     readiness_doc_folded = readiness_doc.casefold()
-    for marker in ["a_out <= a_in", "fail-closed", "does not create a tag"]:
+    for marker in ["a_out <= a_in", "fail-closed", "does not create a tag", "destructive absence"]:
         if marker not in readiness_doc_folded:
             fail(f"release readiness documentation marker missing: {marker}")
 
@@ -106,6 +122,8 @@ def main() -> None:
         "V1.1 RELEASE CANDIDATE: BLOCKED",
         "V1.1 RELEASE CANDIDATE: READY",
         "READY FOR HUMAN RELEASE DECISION",
+        "Verification Run Independently Checked: NO",
+        "Stage D Destructive Absence: PASS",
         "Release Action Performed: NO",
         "Tag Created: NO",
         "GitHub Release Published: NO",
@@ -117,9 +135,19 @@ def main() -> None:
         fail("release candidate packaging must not require bearer-token access")
 
     candidate_doc = (ROOT / "docs" / "RELEASE-CANDIDATE-v1.1.md").read_text(encoding="utf-8").casefold()
-    for marker in ["a_out <= a_in", "fail-closed", "human release boundary", "does not create a tag"]:
+    for marker in ["a_out <= a_in", "fail-closed", "human release boundary", "does not create a tag", "independently checked"]:
         if marker not in candidate_doc:
             fail(f"release candidate documentation marker missing: {marker}")
+
+    lifecycle_test = (ROOT / "scripts" / "test-stage-d-readiness.sh").read_text(encoding="utf-8")
+    for marker in [
+        "STAGE D LIFECYCLE READINESS TESTS: PASS",
+        "missing replacement evidence",
+        "invalid destructive absence evidence",
+        "different deployed commit",
+    ]:
+        if marker not in lifecycle_test:
+            fail(f"Stage D lifecycle test marker missing: {marker}")
 
     boundary = ROOT / "tests" / "type_boundary.rs"
     if not boundary.is_file():
@@ -127,7 +155,7 @@ def main() -> None:
 
     print("[PREFLIGHT] Repository structure: PASS")
     print("[PREFLIGHT] Locked gate matrix: PASS")
-    print("[PREFLIGHT] Stage D evidence boundary: PASS")
+    print("[PREFLIGHT] Stage D lifecycle evidence boundary: PASS")
     print("[PREFLIGHT] Stage E release-readiness boundary: PASS")
     print("[PREFLIGHT] Stage F release-candidate boundary: PASS")
     print("[PREFLIGHT] Type-boundary target: PASS")
