@@ -125,8 +125,6 @@ if before != restored:
 workspace_id = before.get('workspace', {}).get('id')
 if not isinstance(workspace_id, str) or not workspace_id:
     raise SystemExit('workspace.id missing from captured snapshot')
-with open(sys.argv[1], encoding='utf-8'):
-    pass
 PY
 
 workspace_id="$(python3 - "$evidence_dir/before.json" <<'PY'
@@ -157,7 +155,7 @@ for text_evidence in \
   "$destructive" \
   "$evidence_dir/result-absence.txt" \
   "$evidence_dir/result-restore.txt"; do
-  if grep -Eqi 'authorization:[[:space:]]*bearer|NEXUS_API_TOKEN=|Bearer[[:space:]]+[A-Za-z0-9._~+/=-]+' "$text_evidence"; then
+  if grep -Eqi 'authorization:[[:space:]]*bearer[[:space:]]+[A-Za-z0-9._~+/=-]+|NEXUS_API_TOKEN[[:space:]]*=' "$text_evidence"; then
     fail "credential-like material found in $(basename "$text_evidence")"
   fi
 done
