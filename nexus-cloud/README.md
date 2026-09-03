@@ -26,14 +26,24 @@ the adapter's upstream client.
 
 ## Verification
 
-The adapter has an independent CI contract at
-`.github/workflows/cloud-adapter.yml`. The workflow pins the setup action and
-`uv` version, installs Python 3.13, syncs strictly from `uv.lock`, compiles the
-Python sources, and runs the transport contract tests.
+The adapter has two deliberately separate verification layers:
 
-This verification proves only the cloud transport boundary. It does **not**
-elevate the adapter into an authority-bearing component and does **not** satisfy
-the v1.1 Stage D durable-production evidence requirement.
+1. `.github/workflows/cloud-adapter.yml` is a read-only contract workflow for
+   pushes and pull requests. It pins the setup action and `uv` version, installs
+   Python 3.13, syncs strictly from `uv.lock`, compiles the Python sources, and
+   runs the transport contract tests.
+2. `.github/workflows/cloud-adapter-evidence.yml` runs only on `main` pushes or
+   explicit dispatch. It repeats the frozen contract verification, generates a
+   self-audited manifest bound to the exact commit, hashes the source, tests,
+   lockfile, and both cloud workflows, bundles that evidence, creates a GitHub
+   artifact attestation for the bundle, and uploads the bundle plus checksum.
+
+The evidence manifest states its scope explicitly: `Authority Claim: NONE`,
+`Epistemic Claim: TRANSPORT-CONTRACT-ONLY`, and `Stage D Claim: NOT SATISFIED`.
+A successful cloud-adapter attestation therefore proves only that the named
+commit passed this transport contract. It does **not** elevate the adapter into
+an authority-bearing component and does **not** satisfy the v1.1 Stage D
+durable-production evidence requirement.
 
 For local verification:
 

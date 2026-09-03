@@ -1,13 +1,8 @@
-name: NEXUS Cloud Adapter Verification
+name: NEXUS Cloud Adapter Evidence
 
 on:
   push:
-    paths:
-      - "nexus-cloud/**"
-      - "scripts/cloud-adapter-evidence.sh"
-      - ".github/workflows/cloud-adapter.yml"
-      - ".github/workflows/cloud-adapter-evidence.yml"
-  pull_request:
+    branches: [main]
     paths:
       - "nexus-cloud/**"
       - "scripts/cloud-adapter-evidence.sh"
@@ -17,9 +12,11 @@ on:
 
 permissions:
   contents: read
+  id-token: write
+  attestations: write
 
 jobs:
-  contract:
+  evidence:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout exact commit
@@ -36,8 +33,23 @@ jobs:
         working-directory: nexus-cloud
         run: uv python install 3.13
 
-      - name: Verify contract and evidence harness without write authority
+      - name: Verify, generate, and self-audit transport evidence
         env:
           VERIFIED_COMMIT: ${{ github.sha }}
           RUNNER_OS_NAME: ${{ runner.os }}
         run: bash scripts/cloud-adapter-evidence.sh
+
+      - name: Attest transport evidence bundle
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: nexus-cloud-verification-bundle.tar.gz
+
+      - name: Upload transport evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-cloud-verification-evidence
+          path: |
+            nexus-cloud-verification-bundle.tar.gz
+            nexus-cloud-verification-bundle.sha256
+            nexus-cloud-verification-manifest.txt
+          if-no-files-found: error
