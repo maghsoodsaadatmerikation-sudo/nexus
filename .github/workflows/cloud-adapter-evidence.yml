@@ -1,0 +1,115 @@
+name: NEXUS Cloud Adapter Evidence
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "nexus-cloud/**"
+      - ".github/workflows/cloud-adapter.yml"
+      - ".github/workflows/cloud-adapter-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  evidence:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        with:
+          version: "0.12.4"
+          enable-cache: "false"
+          working-directory: nexus-cloud
+
+      - name: Install project Python
+        working-directory: nexus-cloud
+        run: uv python install 3.13
+
+      - name: Verify locked transport contract
+        working-directory: nexus-cloud
+        run: |
+          set -euo pipefail
+          uv sync --frozen
+          uv run --frozen python -m compileall -q main.py tests
+          uv run --frozen pytest -q
+          echo 'NEXUS CLOUD ADAPTER CONTRACT: PASS'
+
+      - name: Generate and self-audit evidence manifest
+        env:
+          VERIFIED_COMMIT: ${{ github.sha }}
+          RUNNER_OS_NAME: ${{ runner.os }}
+        run: |
+          set -euo pipefail
+          main_sha="$(sha256sum nexus-cloud/main.py | awk '{print $1}')"
+          tests_sha="$(find nexus-cloud/tests -type f -name '*.py' -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
+          pyproject_sha="$(sha256sum nexus-cloud/pyproject.toml | awk '{print $1}')"
+          lock_sha="$(sha256sum nexus-cloud/uv.lock | awk '{print $1}')"
+          contract_workflow_sha="$(sha256sum .github/workflows/cloud-adapter.yml | awk '{print $1}')"
+          evidence_workflow_sha="$(sha256sum .github/workflows/cloud-adapter-evidence.yml | awk '{print $1}')"
+          python_version="$(cd nexus-cloud && uv run --frozen python --version 2>&1)"
+          uv_version="$(uv --version)"
+
+          printf '%s\n' \
+            'Status: PASS' \
+            "Verified Commit: ${VERIFIED_COMMIT}" \
+            "Runner OS: ${RUNNER_OS_NAME}" \
+            "Python Version: ${python_version}" \
+            "uv Version: ${uv_version}" \
+            'Authority Claim: NONE' \
+            'Epistemic Claim: TRANSPORT-CONTRACT-ONLY' \
+            'Stage D Claim: NOT SATISFIED' \
+            "Cloud main.py SHA-256: ${main_sha}" \
+            "Cloud tests SHA-256: ${tests_sha}" \
+            "Cloud pyproject.toml SHA-256: ${pyproject_sha}" \
+            "Cloud uv.lock SHA-256: ${lock_sha}" \
+            "Cloud contract workflow SHA-256: ${contract_workflow_sha}" \
+            "Cloud evidence workflow SHA-256: ${evidence_workflow_sha}" \
+            > nexus-cloud-verification-manifest.txt
+
+          grep -Fx 'Status: PASS' nexus-cloud-verification-manifest.txt
+          grep -Fx "Verified Commit: ${VERIFIED_COMMIT}" nexus-cloud-verification-manifest.txt
+          grep -Fx 'Authority Claim: NONE' nexus-cloud-verification-manifest.txt
+          grep -Fx 'Epistemic Claim: TRANSPORT-CONTRACT-ONLY' nexus-cloud-verification-manifest.txt
+          grep -Fx 'Stage D Claim: NOT SATISFIED' nexus-cloud-verification-manifest.txt
+          test "$(sha256sum nexus-cloud/main.py | awk '{print $1}')" = "$main_sha"
+          test "$(find nexus-cloud/tests -type f -name '*.py' -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')" = "$tests_sha"
+          test "$(sha256sum nexus-cloud/pyproject.toml | awk '{print $1}')" = "$pyproject_sha"
+          test "$(sha256sum nexus-cloud/uv.lock | awk '{print $1}')" = "$lock_sha"
+          test "$(sha256sum .github/workflows/cloud-adapter.yml | awk '{print $1}')" = "$contract_workflow_sha"
+          test "$(sha256sum .github/workflows/cloud-adapter-evidence.yml | awk '{print $1}')" = "$evidence_workflow_sha"
+          echo 'NEXUS CLOUD ADAPTER EVIDENCE SELF-AUDIT: PASS'
+
+      - name: Bundle transport evidence
+        run: |
+          set -euo pipefail
+          tar -czf nexus-cloud-verification-bundle.tar.gz \
+            nexus-cloud-verification-manifest.txt \
+            nexus-cloud/main.py \
+            nexus-cloud/tests \
+            nexus-cloud/pyproject.toml \
+            nexus-cloud/uv.lock \
+            .github/workflows/cloud-adapter.yml \
+            .github/workflows/cloud-adapter-evidence.yml
+          sha256sum nexus-cloud-verification-bundle.tar.gz > nexus-cloud-verification-bundle.sha256
+
+      - name: Attest transport evidence bundle
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: nexus-cloud-verification-bundle.tar.gz
+
+      - name: Upload transport evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-cloud-verification-evidence
+          path: |
+            nexus-cloud-verification-bundle.tar.gz
+            nexus-cloud-verification-bundle.sha256
+            nexus-cloud-verification-manifest.txt
+          if-no-files-found: error
