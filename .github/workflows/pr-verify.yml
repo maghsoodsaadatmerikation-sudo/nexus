@@ -30,3 +30,9 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
           RUNNER_OS: ${{ runner.os }}
         run: bash scripts/readonly-verification.sh
+
+      - name: Verify durable-host Blueprint without provider authority
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: bash scripts/verify-render-blueprint.sh
