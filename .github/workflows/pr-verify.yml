@@ -31,6 +31,12 @@ jobs:
           RUNNER_OS: ${{ runner.os }}
         run: bash scripts/readonly-verification.sh
 
+      - name: Test lifecycle-bound Stage D release gates
+        run: |
+          set -euo pipefail
+          bash -n scripts/test-stage-d-readiness.sh
+          bash scripts/test-stage-d-readiness.sh
+
       - name: Verify durable-host Blueprint without provider authority
         env:
           GITHUB_SHA: ${{ github.sha }}
