@@ -1,0 +1,42 @@
+name: NEXUS Cloud Adapter Verification
+
+on:
+  push:
+    paths:
+      - "nexus-cloud/**"
+      - ".github/workflows/cloud-adapter.yml"
+  pull_request:
+    paths:
+      - "nexus-cloud/**"
+      - ".github/workflows/cloud-adapter.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        with:
+          version: "0.12.4"
+          enable-cache: "false"
+          working-directory: nexus-cloud
+
+      - name: Install project Python
+        working-directory: nexus-cloud
+        run: uv python install 3.13
+
+      - name: Verify locked environment and transport contract
+        working-directory: nexus-cloud
+        run: |
+          set -euo pipefail
+          uv sync --frozen
+          uv run --frozen python -m compileall -q main.py tests
+          uv run --frozen pytest -q
+          echo 'NEXUS CLOUD ADAPTER CONTRACT: PASS'

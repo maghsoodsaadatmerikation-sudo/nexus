@@ -5,14 +5,42 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response, status
 
 
 def _core_url() -> str | None:
+    """Return a normalized secure core URL, or fail closed.
+
+    The cloud adapter is a public transport edge. Its upstream configuration must
+    therefore be an origin-only HTTPS URL: no credentials, path prefix, query, or
+    fragment are accepted. Invalid configuration is treated the same as missing
+    configuration so no request is forwarded over an ambiguous/insecure route.
+    """
     value = os.getenv("NEXUS_CORE_URL", "").strip().rstrip("/")
-    return value or None
+    if not value:
+        return None
+
+    try:
+        parsed = urlsplit(value)
+        # Accessing .port performs additional validation (for example, malformed
+        # or out-of-range port values) that urlsplit alone deliberately defers.
+        _ = parsed.port
+    except ValueError:
+        return None
+
+    if parsed.scheme.lower() != "https" or not parsed.hostname:
+        return None
+    if parsed.username is not None or parsed.password is not None:
+        return None
+    if parsed.path or parsed.query or parsed.fragment:
+        return None
+    if any(character.isspace() for character in parsed.netloc):
+        return None
+
+    return value
 
 
 @asynccontextmanager
@@ -65,7 +93,7 @@ async def delegate_to_constitutional_gateway(path: str, request: Request) -> Res
     if core_url is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="NEXUS constitutional core is not configured",
+            detail="NEXUS constitutional core is not securely configured",
         )
 
     headers = {"authorization": authorization}
