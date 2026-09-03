@@ -22,7 +22,7 @@ PASS requires all of the following:
 - complete capture evidence bound to the exact deployed 40-character repository commit;
 - a sanitized replacement lifecycle event bound to that same commit before survival verification;
 - a post-replacement snapshot JSON-equivalent to the captured snapshot;
-- a separate destructive lifecycle event and an observed authenticated HTTP 404 `workspace_not_found` result before any restore;
+- a separate destructive lifecycle event plus **destructive absence** proof: an observed authenticated HTTP 404 `workspace_not_found` result before any restore;
 - a post-restore snapshot JSON-equivalent to the captured snapshot;
 - the captured snapshot hash to match `before.sha256` and every snapshot-bearing phase result;
 - all required phase results to be `Status: PASS`, `Token Recorded: NO`, and `Authority Expansion: NONE`;
