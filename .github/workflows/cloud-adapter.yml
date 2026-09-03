@@ -4,11 +4,15 @@ on:
   push:
     paths:
       - "nexus-cloud/**"
+      - "scripts/cloud-adapter-evidence.sh"
       - ".github/workflows/cloud-adapter.yml"
+      - ".github/workflows/cloud-adapter-evidence.yml"
   pull_request:
     paths:
       - "nexus-cloud/**"
+      - "scripts/cloud-adapter-evidence.sh"
       - ".github/workflows/cloud-adapter.yml"
+      - ".github/workflows/cloud-adapter-evidence.yml"
   workflow_dispatch:
 
 permissions:
@@ -32,11 +36,8 @@ jobs:
         working-directory: nexus-cloud
         run: uv python install 3.13
 
-      - name: Verify locked environment and transport contract
-        working-directory: nexus-cloud
-        run: |
-          set -euo pipefail
-          uv sync --frozen
-          uv run --frozen python -m compileall -q main.py tests
-          uv run --frozen pytest -q
-          echo 'NEXUS CLOUD ADAPTER CONTRACT: PASS'
+      - name: Verify contract and evidence harness without write authority
+        env:
+          VERIFIED_COMMIT: ${{ github.sha }}
+          RUNNER_OS_NAME: ${{ runner.os }}
+        run: bash scripts/cloud-adapter-evidence.sh
