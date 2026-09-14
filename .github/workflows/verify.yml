@@ -27,6 +27,12 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      - name: Verify v1.3 production-hardening contract
+        run: |
+          set -euo pipefail
+          bash -n scripts/v1.3-production-hardening.sh
+          bash scripts/v1.3-production-hardening.sh
+
       - name: Verify v1.2 release-boundary integrity
         run: |
           set -euo pipefail
@@ -97,6 +103,8 @@ jobs:
             scripts/v1.2-durable-state-resilience.sh
             scripts/v1.2-operational-economy.sh
             scripts/v1.2-release-candidate.sh
+            scripts/v1.3-production-hardening.sh
+            docs/V1.3-ROADMAP.md
             v1.2-release-candidate-manifest.txt
           if-no-files-found: error
 
@@ -128,6 +136,7 @@ jobs:
             scripts/v1.2-durable-state-resilience.sh
             scripts/v1.2-operational-economy.sh
             scripts/v1.2-release-candidate.sh
+            scripts/v1.3-production-hardening.sh
             v1.2-release-candidate-manifest.txt
             docs/DEPLOYMENT.md
             docs/OBSERVABILITY.md
@@ -140,6 +149,7 @@ jobs:
             docs/V1.2-DURABLE-STATE.md
             docs/V1.2-OPERATIONAL-ECONOMY.md
             docs/V1.2-RELEASE-GATE.md
+            docs/V1.3-ROADMAP.md
             docs/RELEASE-v1.1.0.md
           if-no-files-found: error
 
