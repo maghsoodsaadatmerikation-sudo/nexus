@@ -1,0 +1,18 @@
+{
+  "schema": "nexus-live-deployment-attestation/v1",
+  "observed_at_utc": "2026-09-14T17:48:52Z",
+  "provider": "Railway",
+  "environment": "production",
+  "service": "nexus-stage-d",
+  "deployment_id": "1f63e3b9-768f-441e-a524-b061394b922e",
+  "deployment_status": "SUCCESS",
+  "deployed_commit": "480f8771c47e41d4d19b22ed4360bd32c4d2f70a",
+  "source_branch": "main",
+  "durable_data_mount": "/data",
+  "latest_sealed_release": "v1.3.0",
+  "latest_sealed_release_commit": "458260fcadc95b53d5e33fa2fabf806519a8cccd",
+  "reconciliation": "LIVE_BEHIND_RELEASE",
+  "authority_expansion": "NONE",
+  "epistemic_claim": "provider-observed deployment identity only",
+  "contains_authentication_material": false
+}
