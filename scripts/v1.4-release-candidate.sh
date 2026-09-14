@@ -43,7 +43,7 @@ G4 Claim Discipline: PASS
 G5 Durable-Boundary Continuity: PASS
 G6 Operational Economy: PASS
 Observed Live Commit: ${live_commit}
-Observed Live/Releasе Relation: ${relation}
+Observed Live/Release Relation: ${relation}
 Release Implies Deployment: NO
 Production Promotion Performed: NO
 Authority Expansion: NONE
