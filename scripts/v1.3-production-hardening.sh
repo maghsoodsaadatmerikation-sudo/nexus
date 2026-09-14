@@ -81,9 +81,11 @@ if grep -E 'run:.*workspace-restore\.sh|^[[:space:]]+(bash|sh)[[:space:]]+script
 fi
 echo 'V1.3 G5 FAILURE TRANSPARENCY: PASS'
 
-# G6 — operational economy remains fail-closed and preserves the durable boundary.
-grep -F 'No paid resource upgrade is part of this roadmap.' "$ROADMAP" >/dev/null || fail 'no-paid-upgrade rule missing'
-grep -F 'Progression must stop rather than silently incur cost.' "$ROADMAP" >/dev/null || fail 'cost fail-closed rule missing'
+# G6 — operational economy remains semantic and fail-closed even when roadmap prose is
+# updated from active-development wording to sealed-release wording.
+grep -F 'No paid resource upgrade' "$ROADMAP" >/dev/null || fail 'no-paid-upgrade rule missing'
+grep -E 'Progression (must )?stop(s)? rather than silently incur(ring)? cost' "$ROADMAP" >/dev/null \
+  || fail 'cost fail-closed rule missing'
 grep -F '/data' docs/DEPLOYMENT.md >/dev/null || fail 'durable /data boundary missing'
 echo 'V1.3 G6 OPERATIONAL ECONOMY: PASS'
 
