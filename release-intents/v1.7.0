@@ -1,0 +1,17 @@
+NEXUS v1.7.0 release intent
+
+This file is an explicit request to evaluate the exact commit containing it against the fail-closed v1.7 release gate.
+
+Required boundary:
+- historical v1.6.0 remains unchanged;
+- runtime target: 3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959;
+- Railway source binding must remain exact to that target;
+- Railway deployment b0e78cf8-af51-4092-9bf6-99e1ac5cc13b must be SUCCESS;
+- durable mount must remain /data;
+- canonical source-tree SHA-256 must be d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7;
+- independent runtime identity and public production observation must match exactly;
+- runtime identity metadata remains non-authoritative;
+- no paid upgrade, secret disclosure, or authority expansion is authorized;
+- the exact release-intent commit must pass NEXUS Verification before any v1.7.0 tag or release is created.
+
+No PASS may be inferred from this intent file itself.
