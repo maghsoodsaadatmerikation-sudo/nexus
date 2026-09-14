@@ -1,6 +1,8 @@
 {
   "schema": "nexus-live-deployment-attestation/v1",
-  "observed_at_utc": "2026-09-14T17:48:52Z",
+  "observed_at_utc": "2026-09-14T17:50:00Z",
+  "observation_precision": "minute",
+  "observation_method": "connected Railway API read-only status and deployment lookup",
   "provider": "Railway",
   "environment": "production",
   "service": "nexus-stage-d",
