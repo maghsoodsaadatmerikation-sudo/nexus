@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-import datetime
 import hashlib
 import json
 import os
+import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -173,6 +173,24 @@ def restore():
     print(f"STAGE_D_RESTORE_PASS sha256={sha}", flush=True)
 
 
+def readiness():
+    proc = subprocess.run(
+        ["bash", "/operator/v1.1-release-readiness.sh", str(EVIDENCE), COMMIT],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    output = proc.stdout
+    write_text("result-release-readiness.txt", output)
+    print(output, end="", flush=True)
+    if proc.returncode != 0:
+        raise SystemExit(proc.returncode)
+    if "V1.1 RELEASE READINESS: PASS" not in output:
+        raise SystemExit("release readiness did not emit PASS marker")
+    print("STAGE_D_RELEASE_READINESS_PASS", flush=True)
+
+
 if MODE == "prepare":
     prepare()
 elif MODE == "survival":
@@ -181,6 +199,8 @@ elif MODE == "absence":
     absence()
 elif MODE == "restore":
     restore()
+elif MODE == "readiness":
+    readiness()
 else:
     raise SystemExit(f"unsupported STAGE_D_MODE: {MODE}")
 
