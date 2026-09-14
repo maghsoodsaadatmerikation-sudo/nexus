@@ -191,6 +191,32 @@ def readiness():
     print("STAGE_D_RELEASE_READINESS_PASS", flush=True)
 
 
+def candidate():
+    run_id = os.environ["NEXUS_VERIFICATION_RUN_ID"]
+    output_path = EVIDENCE / "v1.1-release-candidate-manifest.txt"
+    proc = subprocess.run(
+        [
+            "bash",
+            "/operator/v1.1-release-candidate.sh",
+            str(EVIDENCE),
+            COMMIT,
+            run_id,
+            str(output_path),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    print(proc.stdout, end="", flush=True)
+    if proc.returncode != 0:
+        raise SystemExit(proc.returncode)
+    manifest = output_path.read_text(encoding="utf-8")
+    if "Status: READY FOR HUMAN RELEASE DECISION" not in manifest:
+        raise SystemExit("release candidate manifest missing READY marker")
+    print("STAGE_F_RELEASE_CANDIDATE_READY", flush=True)
+
+
 if MODE == "prepare":
     prepare()
 elif MODE == "survival":
@@ -201,6 +227,8 @@ elif MODE == "restore":
     restore()
 elif MODE == "readiness":
     readiness()
+elif MODE == "candidate":
+    candidate()
 else:
     raise SystemExit(f"unsupported STAGE_D_MODE: {MODE}")
 
