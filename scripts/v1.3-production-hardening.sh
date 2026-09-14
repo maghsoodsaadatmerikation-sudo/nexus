@@ -74,8 +74,10 @@ done
 if grep -E 'gh[[:space:]]+release[[:space:]]+create|git[[:space:]]+tag|git[[:space:]]+push.*refs/tags' "$VERIFY_WORKFLOW" >/dev/null; then
   fail 'release mutation found in verification workflow'
 fi
-if grep -E 'workspace-restore\.sh|/v1/workspaces/import' "$VERIFY_WORKFLOW" >/dev/null; then
-  fail 'production restore/repair authority found in verification workflow'
+# Merely uploading restore tooling as evidence is allowed; executing repair from the verification
+# workflow is not. Match executable run forms rather than artifact-path mentions.
+if grep -E 'run:.*workspace-restore\.sh|^[[:space:]]+(bash|sh)[[:space:]]+scripts/workspace-restore\.sh|curl.*\/v1\/workspaces\/import' "$VERIFY_WORKFLOW" >/dev/null; then
+  fail 'production restore/repair execution found in verification workflow'
 fi
 echo 'V1.3 G5 FAILURE TRANSPARENCY: PASS'
 
