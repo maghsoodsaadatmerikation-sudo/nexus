@@ -1,8 +1,20 @@
 # NEXUS v1.6.0 — Exact Promotion Execution Record
 
-Status: **CANDIDATE / AWAITING EXACT-COMMIT VERIFICATION**
+Status: **SEALED / VERIFIED AT THE STATED EXACT-PROMOTION BOUNDARY**
 
-NEXUS v1.6.0 advances the v1.5 promotion-safety boundary by recording an exact provider-side source pin and a successful post-change production deployment on the existing Railway service.
+Release tag: `v1.6.0`
+
+Sealed candidate commit:
+
+```text
+60fc683808d4bed11b051546d7215aff50df0ade
+```
+
+NEXUS Verification run:
+
+```text
+34881242396 — SUCCESS
+```
 
 ## Constitutional invariant
 
@@ -47,19 +59,27 @@ NEXUS records this discrepancy rather than erasing it. That trigger/context fiel
 
 Accordingly, v1.6.0 does **not** claim that Railway trigger metadata independently proves the selected source, nor does it claim independent binary reproducibility from the provider metadata alone.
 
-## Release gate
+## Release gate — PASS
 
-The historical `v1.6.0` release may be created only after the exact release-intent commit completes `NEXUS Verification` successfully. The release automation must bind the tag and release notes to that exact successful workflow-run SHA.
+The exact release-intent candidate `60fc683808d4bed11b051546d7215aff50df0ade` completed `NEXUS Verification` successfully in run `34881242396`. GitHub release `v1.6.0` was published with `target_commitish` equal to that exact verified candidate.
+
+The canonical promotion evidence digest recorded in the release is:
+
+```text
+sha256:5a8a3542356257881540480a521dbb21aad0e78bee905c56bbacad8e8bfd4aef
+```
 
 ## Claim boundary
 
-If the release gate passes, v1.6.0 may claim:
+v1.6.0 may claim:
 
 - exact provider-side production source pin to the sealed v1.4.0 commit;
 - a new successful provider deployment after that pin;
 - preserved `/data` persistence and authentication configuration;
 - no paid expansion and no new authority surface introduced by the promotion.
 
-It may not claim formal epistemic proof, universal security, universal availability, or stronger provider provenance than the recorded evidence supports.
+It may not claim formal epistemic proof, universal security, universal availability, independent binary reproducibility from Railway trigger metadata, or stronger provider provenance than the recorded evidence supports.
+
+The `v1.6.0` tag is the immutable historical boundary. This file on `main` is a post-seal record and does not alter that historical tag.
 
 Canonical provider evidence: `evidence/v1.6/railway-promotion-evidence.json`.
