@@ -102,4 +102,12 @@ The live validation adds deployment-path evidence; it does not weaken or rewrite
 
 **PASS WITH DEPLOYMENT LIMITATION.**
 
-The post-v1 NEXUS implementation has been exercised successfully through a real public HTTPS deployment, authenticated human workflow, fail-closed unauthenticated control, and browser-based secret-free backup export. Durable-production status remains intentionally unclaimed until persistent hosting storage is available and validated.
+The post-v1 NEXUS implementation was exercised successfully through a real public HTTPS deployment, authenticated human workflow, fail-closed unauthenticated control, and browser-based secret-free backup export. At the time of this record, durable-production status remained intentionally unclaimed because that specific Render deployment lacked persistent storage.
+
+## 2026-09-14 durable-host successor
+
+This historical limitation was later addressed by a separate persistent-host lifecycle exercise and release boundary. NEXUS `v1.1.0` was sealed against deployed commit `480f8771c47e41d4d19b22ed4360bd32c4d2f70a` after evidence showed HTTPS/auth preflight PASS, persistent capture PASS, a real service replacement event, post-replacement survival PASS, destructive backing-state absence with authenticated `404 workspace_not_found` PASS, restore PASS, and release-readiness PASS.
+
+The exact deployed commit had NEXUS Verification run `34824938788` — SUCCESS — independently checked before release. The v1.1 witness snapshot SHA-256 is `71271177cadc1dd67afdf0ddbc913c89c54b326df66bdb2f1dd803da94107d7b`.
+
+This addendum does not retroactively convert the historical Render free instance into durable storage. It records that the durable-host exit criterion was subsequently satisfied on a different deployment and sealed separately in `v1.1.0`. See `docs/RELEASE-v1.1.0.md`.
