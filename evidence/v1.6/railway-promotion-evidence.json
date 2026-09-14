@@ -1,0 +1,71 @@
+{
+  "schema": "nexus.v1.6.railway-promotion-evidence.v1",
+  "constitutional_invariant": "A_out <= A_in",
+  "provider": "Railway",
+  "project": {
+    "id": "2ac7887b-d67a-48be-8a7b-bd54092893ae",
+    "name": "NEXUS Stage D"
+  },
+  "environment": {
+    "id": "56c4bc45-0e62-4aa9-832f-884bb1aa620c",
+    "name": "production"
+  },
+  "service": {
+    "id": "0032fc74-2c52-475d-b9df-9dca59237d93",
+    "name": "nexus-stage-d",
+    "domain": "nexus-stage-d-production.up.railway.app",
+    "target_port": 3000
+  },
+  "promotion_target": {
+    "release": "v1.4.0",
+    "commit_sha": "dcf49302e8a8c4c935de3aad0585b19132bad2cd"
+  },
+  "provider_source_binding": {
+    "repo": "maghsoodsaadatmerikation-sudo/nexus",
+    "commit_sha": "dcf49302e8a8c4c935de3aad0585b19132bad2cd",
+    "binding_type": "source.commitSha",
+    "status": "OBSERVED_ACTIVE"
+  },
+  "post_change_deployment": {
+    "id": "bc72bf4d-7e0b-4f19-9a74-25ca2f76d917",
+    "status": "SUCCESS",
+    "created_at": "2026-09-14T18:27:13.578Z",
+    "updated_at": "2026-09-14T18:27:40.536Z",
+    "container_image_digest": "sha256:7c5741aafbd62520f5d5c734163820dfae59e9e05c3d0b131e96efc1359e6260",
+    "trigger_metadata": {
+      "commit_hash": "81f493b1fe3bc964bba51df905c2d448af13bdf4",
+      "branch": "main",
+      "commit_message": "fix(v1.5): preserve fail-closed promotion contract wording"
+    },
+    "metadata_interpretation": "Trigger/context metadata is retained verbatim and is not used as proof of selected source identity after the active provider source was pinned with source.commitSha."
+  },
+  "durability": {
+    "volume_id": "cc47a350-6c7e-4487-89d9-c4b390f94884",
+    "mount_path": "/data",
+    "status": "PRESERVED"
+  },
+  "runtime_observation": {
+    "startup_log": "NEXUS_OP event=startup bind_addr=0.0.0.0:3000 data_dir=/data auth=configured",
+    "secret_values_recorded": false
+  },
+  "variable_names": [
+    "NEXUS_API_TOKEN",
+    "NEXUS_BIND_ADDR",
+    "NEXUS_DATA_DIR",
+    "PORT"
+  ],
+  "mutation_scope": {
+    "intended_configuration_change": "Pin production source to exact commit SHA",
+    "new_service_created": false,
+    "volume_replaced": false,
+    "paid_upgrade_authorized": false,
+    "secret_value_changed_or_recorded": false
+  },
+  "claim_boundary": {
+    "exact_provider_source_binding": true,
+    "successful_post_change_deployment": true,
+    "durable_mount_preserved": true,
+    "independent_binary_reproducibility_from_provider_trigger_metadata": false,
+    "formal_epistemic_proof": false
+  }
+}
