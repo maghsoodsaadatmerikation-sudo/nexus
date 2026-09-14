@@ -16,26 +16,39 @@ The system separates:
 - **Execution authority** — execution remains behind the constitutional authorization boundary.
 - **Auditability** — workspace transitions are persisted and replay-validated; release claims are tied to reproducible CI evidence.
 
-## v1.0.0 status
+## Current sealed release — v1.1.0
 
-`v1.0.0` is the first sealed production baseline.
+`v1.1.0` is the current sealed operational release boundary. It extends the v1.0 constitutional/product baseline with real durable-host lifecycle evidence.
 
-- Stage A — Constitutional Foundation: COMPLETE / VERIFIED
-- Stage B — Epistemic Engine: COMPLETE / VERIFIED
-- Stage C — Gateway: COMPLETE / VERIFIED
-- Stage D — Intelligence Adapters: COMPLETE / VERIFIED
-- Stage E — Product: COMPLETE / VERIFIED
-- Stage F — Release: COMPLETE / SEALED
+- Constitutional/product baseline: COMPLETE / VERIFIED
+- HTTPS/auth preflight on external host: PASS
+- Persistent workspace capture: PASS
+- Real service replacement event: RECORDED
+- Post-replacement survival: PASS
+- Destructive backing-state absence check: PASS
+- Restore verification: PASS
+- v1.1 release-readiness gate: PASS
+- Exact-commit GitHub verification: SUCCESS
+- Human release decision: APPROVED
+- Release: SEALED
 
-Sealed commit:
+Sealed deployed commit:
 
 ```text
-50b27c252de6d5a38eb6958b7e31ba7fe66f5545
+480f8771c47e41d4d19b22ed4360bd32c4d2f70a
 ```
 
-Final sealed verification: GitHub Actions Run `33540736899` (`NEXUS Verification #236`) — PASS.
+Independent verification: GitHub Actions Run `34824938788` — SUCCESS.
 
-The historical `v1.0.0` tag is a fixed verification boundary. Development after that tag does not retroactively change the release claims or evidence.
+Workspace snapshot SHA-256:
+
+```text
+71271177cadc1dd67afdf0ddbc913c89c54b326df66bdb2f1dd803da94107d7b
+```
+
+The v1.1 seal is an **operational verification boundary**. It does not claim formal proof of epistemic correctness and does not expand machine authority.
+
+The historical `v1.0.0` tag remains a fixed earlier boundary and is not rewritten by v1.1.
 
 ## Architecture
 
@@ -93,42 +106,44 @@ Authorization: Bearer <NEXUS_API_TOKEN>
 
 ## Container deployment
 
-A pinned Dockerfile is included for post-v1 productionization.
+A digest-pinned Dockerfile is included.
 
 ```sh
-docker build -t nexus:post-v1 .
+docker build -t nexus:v1.1 .
 mkdir -p nexus-data
 
 docker run --rm \
   -p 3000:3000 \
   -e NEXUS_API_TOKEN='replace-with-a-long-random-secret' \
   -v "$PWD/nexus-data:/data" \
-  nexus:post-v1
+  nexus:v1.1
 ```
 
-For a real hosted deployment, persistent storage at `/data`, HTTPS termination, and secret injection are required. See `docs/DEPLOYMENT.md`.
+For a hosted deployment, persistent storage at `/data`, HTTPS termination, secret injection, and lifecycle verification are required. See `docs/DEPLOYMENT.md`, `docs/STAGE-D-EVIDENCE.md`, and `docs/RELEASE-READINESS-v1.1.md`.
 
 ## Verification
 
-The verification workflow uses a digest-pinned Rust image and preserves the rule:
+The verification workflow preserves the rule:
 
 > **No real verification -> no claim of PASS -> no seal.**
 
-The pipeline verifies the constitutional core, self-audits its manifest, bundles evidence, creates build provenance attestations, and runs Artifact 05 Gates 0–3 with locked dependencies.
+The pipeline verifies the constitutional core, self-audits its manifest, bundles evidence, creates build provenance attestations, runs Artifact 05 gates with locked dependencies, and tests the release-gate logic fail-closed.
 
 ## Repository map
 
 ```text
-src/                         Constitutional core + epistemic engine + adapters
-artifact-05/                 HTTP gateway and product contract tests
-web/                         Browser workspace client
-docs/PRODUCTION-ROADMAP.md   Completed v1 roadmap
-docs/DEPLOYMENT.md           Post-v1 deployment contract
-.github/workflows/verify.yml Verification, evidence, and attestation
+src/                              Constitutional core + epistemic engine + adapters
+artifact-05/                      HTTP gateway and product contract tests
+web/                              Browser workspace client
+docs/PRODUCTION-ROADMAP.md        Release history and verified production boundary
+docs/DEPLOYMENT.md                Deployment contract
+docs/STAGE-D-EVIDENCE.md          Durable-host lifecycle evidence protocol
+docs/RELEASE-READINESS-v1.1.md    v1.1 release gate
+docs/RELEASE-v1.1.0.md            Sealed v1.1 release record
+.github/workflows/verify.yml      Verification, evidence, and attestation
 ```
 
-## Release
+## Releases
 
-NEXUS v1.0.0 — Constitutional Infrastructure:
-
-https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v1.0.0
+- NEXUS v1.1.0 — Durable Host Verification Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v1.1.0
+- NEXUS v1.0.0 — Constitutional Infrastructure: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v1.0.0
