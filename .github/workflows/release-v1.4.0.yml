@@ -1,0 +1,121 @@
+name: Publish NEXUS v1.4.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-v1.4.0.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    env:
+      TAG: v1.4.0
+      TARGET_SHA: dcf49302e8a8c4c935de3aad0585b19132bad2cd
+      VERIFICATION_RUN: '34877496665'
+    steps:
+      - name: Checkout exact verified candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: dcf49302e8a8c4c935de3aad0585b19132bad2cd
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Rebuild v1.4 candidate manifest fail-closed
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          bash -n scripts/v1.4-deployment-truth.sh
+          bash scripts/v1.4-deployment-truth.sh
+          bash -n scripts/v1.4-release-candidate.sh
+          bash scripts/v1.4-release-candidate.sh "$TARGET_SHA" "$VERIFICATION_RUN" v1.4-release-candidate-manifest.txt
+          grep -Fx "Candidate Commit: $TARGET_SHA" v1.4-release-candidate-manifest.txt
+          grep -Fx "Verification Run ID: $VERIFICATION_RUN" v1.4-release-candidate-manifest.txt
+          grep -Fx 'Release Implies Deployment: NO' v1.4-release-candidate-manifest.txt
+          grep -Fx 'Production Promotion Performed: NO' v1.4-release-candidate-manifest.txt
+          grep -Fx 'Authority Expansion: NONE' v1.4-release-candidate-manifest.txt
+
+      - name: Independently confirm exact-candidate verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          run_sha="$(gh api "repos/${REPO}/actions/runs/${VERIFICATION_RUN}" --jq '.head_sha')"
+          run_status="$(gh api "repos/${REPO}/actions/runs/${VERIFICATION_RUN}" --jq '.status')"
+          run_conclusion="$(gh api "repos/${REPO}/actions/runs/${VERIFICATION_RUN}" --jq '.conclusion')"
+          test "$run_sha" = "$TARGET_SHA"
+          test "$run_status" = 'completed'
+          test "$run_conclusion" = 'success'
+          printf 'Exact candidate verification: SUCCESS\n'
+
+      - name: Publish verified v1.4.0 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving it unchanged."
+            exit 0
+          fi
+
+          cat > release-notes.md <<'EOF'
+          # NEXUS v1.4.0 — Deployment Truth & Evidence Reconciliation
+
+          **STATUS: SEALED / VERIFIED AT THE STATED RELEASE-TRUTH BOUNDARY**
+
+          NEXUS v1.4.0 makes release truth and deployment truth explicitly non-interchangeable while preserving:
+
+          `A_out <= A_in`
+
+          ## Exact release boundary
+
+          - Candidate commit: `dcf49302e8a8c4c935de3aad0585b19132bad2cd`
+          - NEXUS Verification run: `34877496665`
+          - Verification conclusion: `SUCCESS`
+          - Historical predecessor: `v1.3.0` @ `458260fcadc95b53d5e33fa2fabf806519a8cccd`
+
+          ## Observed production truth at candidate time
+
+          - Provider: Railway
+          - Service: `nexus-stage-d`
+          - Observed deployment status: `SUCCESS`
+          - Observed live commit: `480f8771c47e41d4d19b22ed4360bd32c4d2f70a`
+          - Durable data mount: `/data`
+          - Relation to latest sealed predecessor: `LIVE_BEHIND_RELEASE`
+
+          The live system was intentionally not promoted as part of this release. Therefore v1.4.0 being released does **not** mean v1.4.0 is deployed in production.
+
+          ## v1.4 gates
+
+          - G1 Historical seal integrity: PASS
+          - G2 Live deployment attestation: PASS
+          - G3 Release/deployment reconciliation: PASS
+          - G4 Claim discipline: PASS
+          - G5 Durable-boundary continuity: PASS
+          - G6 Operational economy: PASS
+          - G7 Exact-candidate release gate: PASS
+
+          ## Authority boundary
+
+          This release may record, compare, and attest deployment identity. It does not deploy, promote, repair, restore, authorize, or expand epistemic authority.
+
+          No paid resource upgrade was authorized or required. Production promotion remains a separate human/operator action requiring new provider-side evidence.
+
+          This seal is an operational release-truth boundary, not a claim of formal epistemic proof, universal availability, universal security, or current production deployment of this release.
+          EOF
+
+          gh release create "$TAG" \
+            --repo "$REPO" \
+            --target "$TARGET_SHA" \
+            --title "NEXUS v1.4.0 — Deployment Truth Sealed" \
+            --notes-file release-notes.md
+
+          gh release view "$TAG" --repo "$REPO" --json tagName,targetCommitish,name,isDraft,isPrerelease,url
