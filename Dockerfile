@@ -2,11 +2,15 @@ FROM rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5
 
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
+COPY Dockerfile ./Dockerfile
 COPY src ./src
 COPY artifact-05 ./artifact-05
 COPY web ./web
 
-RUN cargo build --manifest-path artifact-05/Cargo.toml --release --locked \
+RUN SOURCE_TREE_SHA256="$(find Cargo.toml Cargo.lock Dockerfile src artifact-05 web -type f ! -path '*/target/*' -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')" \
+    && test -n "$SOURCE_TREE_SHA256" \
+    && echo "NEXUS build source tree: $SOURCE_TREE_SHA256" \
+    && NEXUS_SOURCE_TREE_SHA256="$SOURCE_TREE_SHA256" cargo build --manifest-path artifact-05/Cargo.toml --release --locked \
     && test -x artifact-05/target/release/nexus-artifact-05-gateway
 
 FROM rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
