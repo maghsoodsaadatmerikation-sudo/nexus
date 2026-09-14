@@ -1,3 +1,4 @@
+use axum::{routing::get, Json};
 use nexus_artifact_05_gateway::{
     router, AppState, ConstitutionalDelegate, DelegateError, Submission, WorkspaceDelegate,
     WorkspaceDelegateError,
@@ -6,7 +7,23 @@ use nexus_constitutional_core::{
     Alternative, AnalysisBatch, Claim, FileWorkspaceRepository, HumanJudgment, PolicyEngine,
     ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceSnapshot,
 };
+use serde::Serialize;
 use std::{net::SocketAddr, path::PathBuf, sync::Mutex};
+
+#[derive(Debug, Serialize)]
+struct RuntimeIdentity {
+    schema: &'static str,
+    source_tree_sha256: &'static str,
+    authority: &'static str,
+}
+
+async fn runtime_identity() -> Json<RuntimeIdentity> {
+    Json(RuntimeIdentity {
+        schema: "nexus.runtime-identity.v1",
+        source_tree_sha256: option_env!("NEXUS_SOURCE_TREE_SHA256").unwrap_or("unavailable"),
+        authority: "non_authoritative_build_metadata",
+    })
+}
 
 struct CoreDelegate {
     workspaces: Mutex<FileWorkspaceRepository>,
@@ -181,7 +198,8 @@ async fn main() {
         addr,
         data_root.display()
     );
-    let app = router(AppState::authenticated(CoreDelegate::new(data_root), token));
+    let app = router(AppState::authenticated(CoreDelegate::new(data_root), token))
+        .route("/v1/runtime-identity", get(runtime_identity));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("bind gateway");
