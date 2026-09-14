@@ -1,0 +1,114 @@
+name: Publish NEXUS v1.5.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-v1.5.0.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    env:
+      TAG: v1.5.0
+      TARGET_SHA: 84d1c283494e1203e63d6a892351938dfc24a5ed
+      VERIFICATION_RUN: '34879097015'
+    steps:
+      - name: Checkout exact verified candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: 84d1c283494e1203e63d6a892351938dfc24a5ed
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Rebuild v1.5 candidate manifest fail-closed
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          bash -n scripts/v1.5-promotion-safety.sh
+          bash scripts/v1.5-promotion-safety.sh
+          bash -n scripts/v1.5-release-candidate.sh
+          bash scripts/v1.5-release-candidate.sh "$TARGET_SHA" "$VERIFICATION_RUN" v1.5-release-candidate-manifest.txt
+          grep -Fx "Candidate Commit: $TARGET_SHA" v1.5-release-candidate-manifest.txt
+          grep -Fx "Verification Run ID: $VERIFICATION_RUN" v1.5-release-candidate-manifest.txt
+          grep -Fx 'Production Promotion Performed: NO' v1.5-release-candidate-manifest.txt
+          grep -Fx 'Authority Expansion: NONE' v1.5-release-candidate-manifest.txt
+
+      - name: Independently confirm exact-candidate verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          run_sha="$(gh api "repos/${REPO}/actions/runs/${VERIFICATION_RUN}" --jq '.head_sha')"
+          run_status="$(gh api "repos/${REPO}/actions/runs/${VERIFICATION_RUN}" --jq '.status')"
+          run_conclusion="$(gh api "repos/${REPO}/actions/runs/${VERIFICATION_RUN}" --jq '.conclusion')"
+          test "$run_sha" = "$TARGET_SHA"
+          test "$run_status" = 'completed'
+          test "$run_conclusion" = 'success'
+          printf 'Exact candidate verification: SUCCESS\n'
+
+      - name: Publish verified v1.5.0 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving it unchanged."
+            exit 0
+          fi
+
+          cat > release-notes.md <<'EOF'
+          # NEXUS v1.5.0 — Promotion Safety & Rollback Readiness
+
+          **STATUS: SEALED / VERIFIED AT THE STATED PROMOTION-SAFETY BOUNDARY**
+
+          NEXUS v1.5.0 separates promotion readiness from promotion execution while preserving:
+
+          `A_out <= A_in`
+
+          ## Exact release boundary
+
+          - Candidate commit: `84d1c283494e1203e63d6a892351938dfc24a5ed`
+          - NEXUS Verification run: `34879097015`
+          - Verification conclusion: `SUCCESS`
+          - Promotion target: `v1.4.0` @ `dcf49302e8a8c4c935de3aad0585b19132bad2cd`
+          - Pre-cutover rollback anchor commit: `480f8771c47e41d4d19b22ed4360bd32c4d2f70a`
+          - Pre-cutover rollback anchor deployment: `1f63e3b9-768f-441e-a524-b061394b922e`
+          - Durable boundary: `/data`
+
+          ## v1.5 gates
+
+          - G1 Historical release integrity: PASS
+          - G2 Promotion target identity: PASS
+          - G3 Pre-cutover durable-state safety: PASS
+          - G4 Exact-SHA execution requirement: PASS
+          - G5 Post-cutover evidence requirement: PASS
+          - G6 Rollback readiness: PASS
+          - G7 Operational economy: PASS
+          - G8 Exact-candidate release gate: PASS
+
+          ## Production boundary
+
+          Production promotion was **not** performed as part of this release. The connected provider tooling available during this stage did not establish a verified exact-commit source pin for the existing primary service. NEXUS therefore blocked approximation through a moving branch rather than creating a false deployment claim.
+
+          A future production cutover requires an exact immutable target binding plus new provider-side post-cutover evidence proving deployment `SUCCESS`, the exact promoted identity, durable `/data`, and no authority expansion.
+
+          No paid resource upgrade, new service, or new volume was authorized or required.
+
+          This is an operational promotion-safety seal. It is not a claim that v1.5.0 or v1.4.0 is currently deployed in production, and it is not a formal proof of epistemic correctness, universal availability, or universal security.
+          EOF
+
+          gh release create "$TAG" \
+            --repo "$REPO" \
+            --target "$TARGET_SHA" \
+            --title "NEXUS v1.5.0 — Promotion Safety Sealed" \
+            --notes-file release-notes.md
+
+          gh release view "$TAG" --repo "$REPO" --json tagName,targetCommitish,name,isDraft,isPrerelease,url
