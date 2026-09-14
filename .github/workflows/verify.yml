@@ -51,6 +51,12 @@ jobs:
           bash -n scripts/v1.2-operational-economy.sh
           bash scripts/v1.2-operational-economy.sh
 
+      - name: Build v1.2 release-candidate manifest
+        run: |
+          set -euo pipefail
+          bash -n scripts/v1.2-release-candidate.sh
+          bash scripts/v1.2-release-candidate.sh "${GITHUB_SHA}" "${GITHUB_RUN_ID}" v1.2-release-candidate-manifest.txt
+
       - name: Run reusable read-only verification harness
         env:
           RUST_IMAGE: ${{ env.RUST_IMAGE }}
@@ -90,6 +96,8 @@ jobs:
             scripts/v1.2-continuous-verification.sh
             scripts/v1.2-durable-state-resilience.sh
             scripts/v1.2-operational-economy.sh
+            scripts/v1.2-release-candidate.sh
+            v1.2-release-candidate-manifest.txt
           if-no-files-found: error
 
       - name: Attest Artifact 05 verification bundle
@@ -119,6 +127,8 @@ jobs:
             scripts/v1.2-continuous-verification.sh
             scripts/v1.2-durable-state-resilience.sh
             scripts/v1.2-operational-economy.sh
+            scripts/v1.2-release-candidate.sh
+            v1.2-release-candidate-manifest.txt
             docs/DEPLOYMENT.md
             docs/OBSERVABILITY.md
             docs/STAGE-D-EVIDENCE.md
@@ -129,6 +139,7 @@ jobs:
             docs/V1.2-ROADMAP.md
             docs/V1.2-DURABLE-STATE.md
             docs/V1.2-OPERATIONAL-ECONOMY.md
+            docs/V1.2-RELEASE-GATE.md
             docs/RELEASE-v1.1.0.md
           if-no-files-found: error
 
