@@ -16,42 +16,47 @@ The system separates:
 - **Execution authority** — execution remains behind the constitutional authorization boundary.
 - **Auditability** — workspace transitions are persisted and replay-validated; release claims are tied to reproducible CI evidence.
 
-## Current sealed release — v1.2.0
+## Current sealed release — v1.3.0
 
-`v1.2.0` is the current sealed operational-resilience boundary. It preserves the durable-host evidence sealed in v1.1.0 and adds fail-closed controls for historical release integrity, continuous verification, durable-state resilience, operational economy, and release-candidate readiness.
+`v1.3.0` is the current sealed authority-preserving production-hardening boundary. It preserves the earlier durable-host and operational-resilience seals and adds fail-closed controls for historical seal integrity, gateway authority non-expansion, secret/evidence hygiene, provenance/dependency integrity, failure transparency, operational economy, and exact-candidate release readiness.
 
-- G1 Release-boundary integrity: PASS
-- G2 Continuous verification: PASS
-- G3 Durable-state resilience: PASS
-- G4 Operational economy: PASS
-- G5 Release-candidate gate: PASS
+- G1 Historical seal integrity: PASS
+- G2 Gateway authority non-expansion: PASS
+- G3 Secret and evidence hygiene: PASS
+- G4 Provenance and dependency integrity: PASS
+- G5 Failure transparency: PASS
+- G6 Operational economy: PASS
+- G7 Exact-candidate release gate: PASS
 - Exact-candidate GitHub verification: SUCCESS
+- Independent verification before publication: SUCCESS
 - Human release decision: APPROVED
 - Release: SEALED
 
 Sealed candidate commit:
 
 ```text
-fbe17b80206df5e63f7351cc97f1794eb8c88e17
+458260fcadc95b53d5e33fa2fabf806519a8cccd
 ```
 
-Independent verification: GitHub Actions Run `34848797043` — SUCCESS.
+Independent verification: GitHub Actions Run `34873937406` — SUCCESS.
+
+Release workflow: GitHub Actions Run `34874211266` — SUCCESS.
 
 Evidence artifact digests:
 
 ```text
-verification-bundle: sha256:3bf37901f06074c6b42cbe322427c21e1f6be8da10cfd01a55e160d3993370ba
-artifact-05-verification-bundle: sha256:1e6ee2695c8c40a015b15de00c8a8310a75ddc57922eab6d813179e6cc0547ac
-render-stage-d-configuration: sha256:e3f280cc6d2e3d30826cc96f1f57f048064ae910b480f041e46321dab878c932
+verification-bundle: sha256:d324c4c7ca0754e45c639b41cd3870e07c7b41712d1f7a532ffeeeaf47fedfab
+artifact-05-verification-bundle: sha256:ca4fd0f730c1fe248ad41a38f5d2a6523ead6ef9450611e2f10caac31b7e3e51
+render-stage-d-configuration: sha256:e97553dbb15da13d90ddb0723ea6d2418e9edfe7cbb0f3d3fd3701e5ee1b509c
 ```
 
-Continuous verification runs on source changes and at 00:00, 08:00, and 16:00 UTC. Scheduled verification may verify and attest evidence but does not carry release authority.
+Continuous verification runs on source changes and at 00:00, 08:00, and 16:00 UTC. Scheduled verification may observe, verify, attest, and report, but it does not carry release authority or production-repair authority.
 
-No paid resource upgrade was requested or performed for v1.2. The primary durable service and `/data` volume were preserved. Auxiliary evidence helpers are configured with restart policy `NEVER` and sleeping enabled; because the available Railway action rejects literal zero replicas, NEXUS does not claim provider-side zero replicas.
+No paid resource upgrade was authorized or required for v1.3. The primary durable service and `/data` volume remain the production persistence boundary. Auxiliary evidence helpers remain outside the production authority path. Because the available Railway API does not permit a literal zero-replica value for the configured helpers, NEXUS does not claim provider-side zero replicas or a provider-wide billing guarantee.
 
-The v1.2 seal is an **operational verification boundary**. It does not claim formal proof of epistemic correctness, universal availability, universal disaster recovery, or provider-wide billing guarantees, and it does not expand machine authority.
+The v1.3 seal is an **operational verification boundary**. It does not claim formal proof of epistemic correctness, universal security, universal availability, universal disaster recovery, or provider-wide billing guarantees, and it does not expand machine authority.
 
-Historical `v1.0.0` and `v1.1.0` tags remain immutable earlier boundaries.
+Historical `v1.0.0`, `v1.1.0`, and `v1.2.0` tags remain immutable earlier boundaries.
 
 ## Architecture
 
@@ -112,17 +117,17 @@ Authorization: Bearer <NEXUS_API_TOKEN>
 A digest-pinned Dockerfile is included.
 
 ```sh
-docker build -t nexus:v1.2 .
+docker build -t nexus:v1.3 .
 mkdir -p nexus-data
 
 docker run --rm \
   -p 3000:3000 \
   -e NEXUS_API_TOKEN='replace-with-a-long-random-secret' \
   -v "$PWD/nexus-data:/data" \
-  nexus:v1.2
+  nexus:v1.3
 ```
 
-For a hosted deployment, persistent storage at `/data`, HTTPS termination, secret injection, and lifecycle verification are required. See `docs/DEPLOYMENT.md` and the v1.2 operational-resilience contracts.
+For a hosted deployment, persistent storage at `/data`, HTTPS termination, secret injection, and lifecycle verification are required. See `docs/DEPLOYMENT.md` and the v1.3 production-hardening contracts.
 
 ## Verification
 
@@ -145,11 +150,15 @@ docs/V1.2-DURABLE-STATE.md            v1.2 durable-state contract
 docs/V1.2-OPERATIONAL-ECONOMY.md      v1.2 cost/resource boundary
 docs/V1.2-RELEASE-GATE.md             v1.2 release gate
 docs/RELEASE-v1.2.0.md                Sealed v1.2 release record
+docs/V1.3-ROADMAP.md                  v1.3 production-hardening roadmap
+docs/V1.3-RELEASE-GATE.md             v1.3 release gate
+docs/RELEASE-v1.3.0.md                Sealed v1.3 release record
 .github/workflows/verify.yml          Verification, evidence, and attestation
 ```
 
 ## Releases
 
+- NEXUS v1.3.0 — Production Hardening Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v1.3.0
 - NEXUS v1.2.0 — Operational Resilience Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v1.2.0
 - NEXUS v1.1.0 — Durable Host Verification Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v1.1.0
 - NEXUS v1.0.0 — Constitutional Infrastructure: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v1.0.0
