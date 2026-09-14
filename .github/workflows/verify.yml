@@ -27,6 +27,18 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      - name: Verify v1.5 promotion-safety contract
+        run: |
+          set -euo pipefail
+          bash -n scripts/v1.5-promotion-safety.sh
+          bash scripts/v1.5-promotion-safety.sh
+
+      - name: Build v1.5 release-candidate manifest
+        run: |
+          set -euo pipefail
+          bash -n scripts/v1.5-release-candidate.sh
+          bash scripts/v1.5-release-candidate.sh "${GITHUB_SHA}" "${GITHUB_RUN_ID}" v1.5-release-candidate-manifest.txt
+
       - name: Verify v1.4 deployment-truth contract
         run: |
           set -euo pipefail
@@ -118,12 +130,17 @@ jobs:
             scripts/v1.3-production-hardening.sh
             scripts/v1.4-deployment-truth.sh
             scripts/v1.4-release-candidate.sh
+            scripts/v1.5-promotion-safety.sh
+            scripts/v1.5-release-candidate.sh
             docs/V1.3-ROADMAP.md
             docs/V1.4-ROADMAP.md
             docs/V1.4-RELEASE-GATE.md
+            docs/V1.5-ROADMAP.md
+            docs/V1.5-RELEASE-GATE.md
             evidence/live-deployment-state.json
             v1.2-release-candidate-manifest.txt
             v1.4-release-candidate-manifest.txt
+            v1.5-release-candidate-manifest.txt
           if-no-files-found: error
 
       - name: Attest Artifact 05 verification bundle
@@ -157,8 +174,11 @@ jobs:
             scripts/v1.3-production-hardening.sh
             scripts/v1.4-deployment-truth.sh
             scripts/v1.4-release-candidate.sh
+            scripts/v1.5-promotion-safety.sh
+            scripts/v1.5-release-candidate.sh
             v1.2-release-candidate-manifest.txt
             v1.4-release-candidate-manifest.txt
+            v1.5-release-candidate-manifest.txt
             evidence/live-deployment-state.json
             docs/DEPLOYMENT.md
             docs/OBSERVABILITY.md
@@ -174,9 +194,12 @@ jobs:
             docs/V1.3-ROADMAP.md
             docs/V1.4-ROADMAP.md
             docs/V1.4-RELEASE-GATE.md
+            docs/V1.5-ROADMAP.md
+            docs/V1.5-RELEASE-GATE.md
             docs/RELEASE-v1.1.0.md
             docs/RELEASE-v1.2.0.md
             docs/RELEASE-v1.3.0.md
+            docs/RELEASE-v1.4.0.md
           if-no-files-found: error
 
       - name: Attest Render Stage D configuration bundle
