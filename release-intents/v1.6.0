@@ -1,0 +1,8 @@
+version=v1.6.0
+required_workflow=NEXUS Verification
+required_conclusion=success
+promotion_target=dcf49302e8a8c4c935de3aad0585b19132bad2cd
+provider=Railway
+service=nexus-stage-d
+deployment=bc72bf4d-7e0b-4f19-9a74-25ca2f76d917
+policy=fail-closed
