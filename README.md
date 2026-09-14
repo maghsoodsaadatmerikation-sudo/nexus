@@ -16,47 +16,58 @@ The system separates:
 - **Execution authority** — execution remains behind the constitutional authorization boundary.
 - **Auditability** — workspace transitions are persisted and replay-validated; release claims are tied to reproducible CI evidence.
 
-## Current sealed release — v1.3.0
+## Current sealed release — v1.4.0
 
-`v1.3.0` is the current sealed authority-preserving production-hardening boundary. It preserves the earlier durable-host and operational-resilience seals and adds fail-closed controls for historical seal integrity, gateway authority non-expansion, secret/evidence hygiene, provenance/dependency integrity, failure transparency, operational economy, and exact-candidate release readiness.
+`v1.4.0` is the current sealed **deployment-truth and evidence-reconciliation** boundary. It preserves the earlier durable-host, operational-resilience, and production-hardening seals while making three claims explicitly non-interchangeable:
+
+- **Released** — a verified Git tag/GitHub Release exists.
+- **Verified** — the exact candidate passed the stated verification workflow and gates.
+- **Observed live** — provider-side evidence identifies a production deployment commit.
+
+### v1.4 release boundary
 
 - G1 Historical seal integrity: PASS
-- G2 Gateway authority non-expansion: PASS
-- G3 Secret and evidence hygiene: PASS
-- G4 Provenance and dependency integrity: PASS
-- G5 Failure transparency: PASS
+- G2 Live deployment attestation: PASS
+- G3 Release/deployment reconciliation: PASS
+- G4 Claim discipline: PASS
+- G5 Durable-boundary continuity: PASS
 - G6 Operational economy: PASS
 - G7 Exact-candidate release gate: PASS
 - Exact-candidate GitHub verification: SUCCESS
-- Independent verification before publication: SUCCESS
-- Human release decision: APPROVED
+- Release workflow: SUCCESS
+- Human release authorization: APPROVED
 - Release: SEALED
 
 Sealed candidate commit:
 
 ```text
-458260fcadc95b53d5e33fa2fabf806519a8cccd
+dcf49302e8a8c4c935de3aad0585b19132bad2cd
 ```
 
-Independent verification: GitHub Actions Run `34873937406` — SUCCESS.
+Independent verification: GitHub Actions Run `34877496665` — SUCCESS.
 
-Release workflow: GitHub Actions Run `34874211266` — SUCCESS.
+Release workflow: GitHub Actions Run `34877753394` — SUCCESS.
 
-Evidence artifact digests:
+### Production truth at v1.4 candidate time
+
+Provider-side observation recorded the Railway primary service `nexus-stage-d` as:
 
 ```text
-verification-bundle: sha256:d324c4c7ca0754e45c639b41cd3870e07c7b41712d1f7a532ffeeeaf47fedfab
-artifact-05-verification-bundle: sha256:ca4fd0f730c1fe248ad41a38f5d2a6523ead6ef9450611e2f10caac31b7e3e51
-render-stage-d-configuration: sha256:e97553dbb15da13d90ddb0723ea6d2418e9edfe7cbb0f3d3fd3701e5ee1b509c
+deployment status: SUCCESS
+observed live commit: 480f8771c47e41d4d19b22ed4360bd32c4d2f70a
+durable data mount: /data
+relation to latest sealed predecessor: LIVE_BEHIND_RELEASE
 ```
+
+This is intentional evidence, not an error to hide. **Publishing v1.4.0 did not promote production to v1.4.0.** A production-promotion claim requires new provider-side evidence.
 
 Continuous verification runs on source changes and at 00:00, 08:00, and 16:00 UTC. Scheduled verification may observe, verify, attest, and report, but it does not carry release authority or production-repair authority.
 
-No paid resource upgrade was authorized or required for v1.3. The primary durable service and `/data` volume remain the production persistence boundary. Auxiliary evidence helpers remain outside the production authority path. Because the available Railway API does not permit a literal zero-replica value for the configured helpers, NEXUS does not claim provider-side zero replicas or a provider-wide billing guarantee.
+No paid resource upgrade was authorized or required for v1.4. The durable `/data` boundary remains the observed production persistence boundary. Auxiliary evidence helpers remain outside the production authority path.
 
-The v1.3 seal is an **operational verification boundary**. It does not claim formal proof of epistemic correctness, universal security, universal availability, universal disaster recovery, or provider-wide billing guarantees, and it does not expand machine authority.
+The v1.4 seal is an **operational release-truth boundary**. It does not claim formal proof of epistemic correctness, universal security, universal availability, universal disaster recovery, provider-wide billing guarantees, or that v1.4.0 is currently deployed in production.
 
-Historical `v1.0.0`, `v1.1.0`, and `v1.2.0` tags remain immutable earlier boundaries.
+Historical `v1.0.0`, `v1.1.0`, `v1.2.0`, and `v1.3.0` tags remain immutable earlier boundaries.
 
 ## Architecture
 
@@ -117,17 +128,17 @@ Authorization: Bearer <NEXUS_API_TOKEN>
 A digest-pinned Dockerfile is included.
 
 ```sh
-docker build -t nexus:v1.3 .
+docker build -t nexus:v1.4 .
 mkdir -p nexus-data
 
 docker run --rm \
   -p 3000:3000 \
   -e NEXUS_API_TOKEN='replace-with-a-long-random-secret' \
   -v "$PWD/nexus-data:/data" \
-  nexus:v1.3
+  nexus:v1.4
 ```
 
-For a hosted deployment, persistent storage at `/data`, HTTPS termination, secret injection, and lifecycle verification are required. See `docs/DEPLOYMENT.md` and the v1.3 production-hardening contracts.
+For a hosted deployment, persistent storage at `/data`, HTTPS termination, secret injection, lifecycle verification, and provider-side deployment attestation are required. See `docs/DEPLOYMENT.md`, `docs/V1.4-ROADMAP.md`, and `docs/V1.4-RELEASE-GATE.md`.
 
 ## Verification
 
@@ -135,7 +146,7 @@ The verification workflow preserves the rule:
 
 > **No real verification -> no claim of PASS -> no seal.**
 
-The pipeline verifies the constitutional core, self-audits its manifest, bundles evidence, creates build provenance attestations, runs Artifact 05 gates with locked dependencies, and tests release and operational gates fail-closed.
+The pipeline verifies the constitutional core, self-audits its manifest, bundles evidence, creates build provenance attestations, runs Artifact 05 gates with locked dependencies, tests release and operational gates fail-closed, and verifies deployment-truth reconciliation without mutating production.
 
 ## Repository map
 
@@ -146,18 +157,19 @@ web/                                  Browser workspace client
 docs/DEPLOYMENT.md                    Deployment contract
 docs/RELEASE-v1.1.0.md                Sealed durable-host release record
 docs/V1.2-ROADMAP.md                  v1.2 operational-resilience roadmap
-docs/V1.2-DURABLE-STATE.md            v1.2 durable-state contract
-docs/V1.2-OPERATIONAL-ECONOMY.md      v1.2 cost/resource boundary
-docs/V1.2-RELEASE-GATE.md             v1.2 release gate
 docs/RELEASE-v1.2.0.md                Sealed v1.2 release record
 docs/V1.3-ROADMAP.md                  v1.3 production-hardening roadmap
-docs/V1.3-RELEASE-GATE.md             v1.3 release gate
 docs/RELEASE-v1.3.0.md                Sealed v1.3 release record
+docs/V1.4-ROADMAP.md                  v1.4 deployment-truth roadmap
+docs/V1.4-RELEASE-GATE.md             v1.4 release/deployment claim gate
+docs/RELEASE-v1.4.0.md                Sealed v1.4 release record
+evidence/live-deployment-state.json   Provider-observed deployment attestation
 .github/workflows/verify.yml          Verification, evidence, and attestation
 ```
 
 ## Releases
 
+- NEXUS v1.4.0 — Deployment Truth Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v1.4.0
 - NEXUS v1.3.0 — Production Hardening Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v1.3.0
 - NEXUS v1.2.0 — Operational Resilience Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v1.2.0
 - NEXUS v1.1.0 — Durable Host Verification Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v1.1.0
