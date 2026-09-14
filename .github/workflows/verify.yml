@@ -25,12 +25,25 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Verify v1.2 release-boundary integrity
+        run: |
+          set -euo pipefail
+          bash -n scripts/v1.2-boundary-integrity.sh
+          bash scripts/v1.2-boundary-integrity.sh
 
       - name: Verify v1.2 continuous-verification contract
         run: |
           set -euo pipefail
           bash -n scripts/v1.2-continuous-verification.sh
           bash scripts/v1.2-continuous-verification.sh
+
+      - name: Verify v1.2 durable-state resilience contract
+        run: |
+          set -euo pipefail
+          bash -n scripts/v1.2-durable-state-resilience.sh
+          bash scripts/v1.2-durable-state-resilience.sh
 
       - name: Run reusable read-only verification harness
         env:
@@ -67,7 +80,9 @@ jobs:
             build_verification_*.log
             Cargo.lock
             scripts/readonly-verification.sh
+            scripts/v1.2-boundary-integrity.sh
             scripts/v1.2-continuous-verification.sh
+            scripts/v1.2-durable-state-resilience.sh
           if-no-files-found: error
 
       - name: Attest Artifact 05 verification bundle
@@ -93,7 +108,9 @@ jobs:
             scripts/v1.1-release-candidate.sh
             scripts/test-stage-d-readiness.sh
             scripts/readonly-verification.sh
+            scripts/v1.2-boundary-integrity.sh
             scripts/v1.2-continuous-verification.sh
+            scripts/v1.2-durable-state-resilience.sh
             docs/DEPLOYMENT.md
             docs/OBSERVABILITY.md
             docs/STAGE-D-EVIDENCE.md
@@ -102,6 +119,8 @@ jobs:
             docs/RELEASE-CANDIDATE-v1.1.md
             docs/ROADMAP-v1.1.md
             docs/V1.2-ROADMAP.md
+            docs/V1.2-DURABLE-STATE.md
+            docs/RELEASE-v1.1.0.md
           if-no-files-found: error
 
       - name: Attest Render Stage D configuration bundle
