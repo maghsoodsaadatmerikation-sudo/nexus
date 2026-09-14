@@ -75,18 +75,63 @@ A production release must preserve four boundaries:
 - human release decision: APPROVED
 - GitHub Release: PUBLISHED
 
+### I. v1.2 operational resilience — COMPLETE / SEALED
+- operational-resilience evidence established without widening constitutional authority
+- exact candidate independently verified before release
+- historical v1.1 boundary preserved
+
+### J. v1.3 production hardening — COMPLETE / SEALED
+- authority-preserving production hardening gates: PASS
+- secret/evidence hygiene and failure transparency: PASS
+- exact-candidate release gate: PASS
+- historical seals preserved
+
+### K. v1.4 deployment truth — COMPLETE / SEALED
+- release identity and observed provider deployment identity recorded separately
+- live deployment state reconciled without claiming an unperformed promotion
+- durable `/data` continuity preserved
+
+### L. v1.5 promotion safety — COMPLETE / SEALED
+- exact immutable promotion target required
+- rollback anchor recorded
+- moving branch approximation rejected fail-closed
+- no paid upgrade or destructive data mutation authorized
+
+### M. v1.6 exact promotion — COMPLETE / SEALED
+- exact provider-side source binding established
+- provider-side deployment completed successfully
+- durable `/data` state preserved
+- promotion evidence remained separate from release authorization
+
+### N. v1.7 runtime provenance — COMPLETE / SEALED
+- exact runtime target: `3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959`
+- Railway production source pin: exact immutable target
+- Railway deployment `b0e78cf8-af51-4092-9bf6-99e1ac5cc13b`: SUCCESS
+- durable mount `/data`: PRESERVED
+- canonical source-tree SHA-256: `d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7`
+- independent runtime-identity reconciliation: PASS
+- public production runtime reconciliation: PASS
+- runtime authority marker: `non_authoritative_build_metadata`
+- exact release candidate: `9847b293f3b37a574568ba4e450797b312a44984`
+- exact-candidate NEXUS Verification run `34887158522`: SUCCESS
+- v1.7 release gate run `34887347369`: SUCCESS
+- tag/release `v1.7.0`: PUBLISHED
+- no paid upgrade, new production service, new production volume, secret disclosure, or authority expansion authorized
+
 ## Current status
 
-NEXUS v1.1.0 is the current sealed operational boundary. The v1.0 constitutional/product baseline remains historically fixed; v1.1 adds real durable-host persistence/recovery evidence rather than rewriting the earlier seal.
+NEXUS `v1.7.0` is the current sealed operational boundary.
 
-The v1.1 Stage D evidence was produced on a real external host and bound to the exact deployed commit. The evidence sequence includes HTTPS/auth preflight, capture, provider/service replacement, post-replacement survival, destructive absence observation, and restore verification. The release-readiness gate passed only after the complete lifecycle-bound evidence pack was present and internally consistent.
+The observed Railway production service is pinned to exact runtime target `3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959`, with successful deployment `b0e78cf8-af51-4092-9bf6-99e1ac5cc13b` and the existing persistent `/data` boundary preserved. The public runtime-identity endpoint reported the canonical source-tree digest `d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7`, exactly matching independently computed repository evidence.
 
-The referenced exact deployed commit also has a successful NEXUS Verification run that was independently checked before the human release decision and publication of `v1.1.0`.
+The runtime identity is explicitly non-authoritative. It reports provenance evidence only and cannot authorize requests, create HumanJudgment, mutate policy, widen execution authority, or substitute for a release decision.
 
-The seal does not create epistemic authority: machine analysis remains non-authoritative, human judgment remains an explicit human transition, and execution remains behind constitutional authorization.
+Historical `v1.0.0` through `v1.6.0` releases remain immutable prior boundaries. v1.7 adds runtime-provenance evidence rather than rewriting their claims.
+
+No `v1.8` roadmap, release gate, or release intent is currently defined in the repository. Therefore the documented roadmap ends at the sealed v1.7 boundary; further version creation requires a separately defined engineering claim and evidence contract rather than version churn by inference.
 
 ## Completion rule
 
 No real verification -> no PASS -> no seal.
 
-A release tag is an immutable historical boundary. Later documentation or code changes do not retroactively alter the evidence or claims attached to `v1.0.0` or `v1.1.0`. Any future release must establish its own exact-commit verification and evidence appropriate to its new claims.
+A release tag is an immutable historical boundary. Later documentation or code changes do not retroactively alter the evidence or claims attached to earlier releases. Any future release must establish its own exact-commit verification and evidence appropriate to its new claims.
