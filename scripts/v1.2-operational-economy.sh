@@ -20,11 +20,15 @@ fail() {
 grep -F '/data' docs/DEPLOYMENT.md >/dev/null || fail 'durable /data boundary missing'
 grep -F 'persistent volume' docs/DEPLOYMENT.md >/dev/null || fail 'persistent volume requirement missing'
 
-# No paid upgrade is an allowed implicit dependency.
-grep -F 'No paid resource upgrade is part of this roadmap.' "$ROADMAP" >/dev/null \
+# No paid upgrade is an allowed implicit dependency. Check the semantic invariant,
+# not one historical sentence form, so sealing/documentation edits cannot weaken or
+# accidentally break the gate while the no-paid-upgrade rule remains explicit.
+grep -F 'No paid resource upgrade' "$ROADMAP" >/dev/null \
   || fail 'roadmap no-paid-upgrade rule missing'
+grep -F 'progression stops rather than silently incurring cost' "$ROADMAP" >/dev/null \
+  || fail 'roadmap fail-closed cost rule missing'
 grep -F 'Progression must stop rather than silently incur cost' "$CONTRACT" >/dev/null \
-  || fail 'fail-closed cost rule missing'
+  || fail 'contract fail-closed cost rule missing'
 
 # Evidence helpers must stay non-authoritative and separable from the production path.
 for helper in stage-d-runner stage-d-operator nexus-stage-d-operator nexus-stage-d-restore; do
