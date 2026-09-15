@@ -1,0 +1,60 @@
+name: NEXUS v1.9 Runtime Drift Watch
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 1 * * *'
+    - cron: '17 9 * * *'
+    - cron: '17 17 * * *'
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  observe-runtime:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Observe public runtime identity fail-closed
+        env:
+          URL: https://nexus-stage-d-production.up.railway.app/v1/runtime-identity
+          EXPECTED_DIGEST: d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="${RUNNER_TEMP}/runtime.json"
+          code="$(curl --silent --show-error --location --output "$response" --write-out '%{http_code}' --max-time 30 "$URL")"
+          test "$code" = "200"
+          test "$(jq -r '.schema' "$response")" = "nexus.runtime-identity.v1"
+          test "$(jq -r '.authority' "$response")" = "non_authoritative_build_metadata"
+          observed="$(jq -r '.source_tree_sha256' "$response")"
+          test "$observed" = "$EXPECTED_DIGEST"
+          jq -n \
+            --arg schema "nexus.v1.9.runtime-drift-observation.v1" \
+            --arg status "PASS" \
+            --arg endpoint "$URL" \
+            --arg http_status "$code" \
+            --arg runtime_schema "nexus.runtime-identity.v1" \
+            --arg authority "non_authoritative_build_metadata" \
+            --arg expected "$EXPECTED_DIGEST" \
+            --arg observed "$observed" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg observed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{schema:$schema,status:$status,endpoint:$endpoint,http_status:($http_status|tonumber),runtime_schema:$runtime_schema,authority:$authority,expected_source_tree_sha256:$expected,observed_source_tree_sha256:$observed,digest_match:($expected==$observed),workflow_run_id:$run_id,observed_at:$observed_at,mutation_scope:{production_write:false,deployment:false,rollback:false,promotion:false,authorization:false,human_judgment:false,policy_mutation:false}}' > v1.9-runtime-drift-evidence.json
+          sha256sum v1.9-runtime-drift-evidence.json > v1.9-runtime-drift-evidence.sha256
+          echo "V1.9 RUNTIME DRIFT WATCH: PASS"
+
+      - name: Attest drift evidence
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: v1.9-runtime-drift-evidence.json
+
+      - name: Upload drift evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: v1.9-runtime-drift-evidence
+          path: |
+            v1.9-runtime-drift-evidence.json
+            v1.9-runtime-drift-evidence.sha256
+          if-no-files-found: error
