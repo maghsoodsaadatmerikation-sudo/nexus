@@ -1,0 +1,119 @@
+name: NEXUS v1.8 Independent Rebuild
+
+on:
+  workflow_run:
+    workflows: ["NEXUS Verification"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+  attestations: write
+
+jobs:
+  rebuild:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        builder: [a, b]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact verified candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Build exact candidate and hash gateway executable
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          BUILDER: ${{ matrix.builder }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SHA"
+          grep -Eq '^FROM rust@sha256:[0-9a-f]{64}' Dockerfile
+          image="nexus-v1-8-${BUILDER}:${SHA}"
+          container="nexus-v1-8-extract-${BUILDER}-${GITHUB_RUN_ID}"
+          docker build --pull=false --no-cache -t "$image" .
+          docker create --name "$container" "$image" >/dev/null
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker cp "$container:/usr/local/bin/nexus" "nexus-${BUILDER}"
+          test -x "nexus-${BUILDER}"
+          sha256sum "nexus-${BUILDER}" > "build-${BUILDER}.sha256"
+          file "nexus-${BUILDER}" > "build-${BUILDER}.file.txt"
+          printf 'candidate=%s\nbuilder=%s\n' "$SHA" "$BUILDER" > "build-${BUILDER}.meta.txt"
+
+      - name: Upload independent rebuild evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: v1.8-build-${{ matrix.builder }}
+          path: |
+            build-${{ matrix.builder }}.sha256
+            build-${{ matrix.builder }}.file.txt
+            build-${{ matrix.builder }}.meta.txt
+          if-no-files-found: error
+
+  reconcile:
+    needs: rebuild
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact verified candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Download both independent evidence artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-a evidence-b
+          gh run download "$GITHUB_RUN_ID" --repo "$REPO" -n v1.8-build-a -D evidence-a
+          gh run download "$GITHUB_RUN_ID" --repo "$REPO" -n v1.8-build-b -D evidence-b
+
+      - name: Reconcile executable identities fail-closed
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          VERIFY_RUN: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SHA"
+          bash -n scripts/v1.8-reconcile-rebuilds.sh
+          bash scripts/v1.8-reconcile-rebuilds.sh \
+            evidence-a/build-a.sha256 \
+            evidence-b/build-b.sha256 \
+            v1.8-reproducibility-evidence.json \
+            "$SHA" "$VERIFY_RUN" "$GITHUB_RUN_ID"
+          sha256sum v1.8-reproducibility-evidence.json > v1.8-reproducibility-evidence.sha256
+          test "$(jq -r '.status' v1.8-reproducibility-evidence.json)" = PASS
+          test "$(jq -r '.executable_digest_match' v1.8-reproducibility-evidence.json)" = true
+          test "$(jq -r '.authority_expansion' v1.8-reproducibility-evidence.json)" = NONE
+
+      - name: Attest v1.8 reproducibility evidence
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: v1.8-reproducibility-evidence.json
+
+      - name: Upload reconciled v1.8 evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: v1.8-independent-rebuild-evidence
+          path: |
+            v1.8-reproducibility-evidence.json
+            v1.8-reproducibility-evidence.sha256
+            evidence-a/build-a.sha256
+            evidence-b/build-b.sha256
+            scripts/v1.8-reconcile-rebuilds.sh
+            docs/V1.8-ROADMAP.md
+          if-no-files-found: error
