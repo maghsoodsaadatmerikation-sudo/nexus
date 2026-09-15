@@ -1,0 +1,125 @@
+name: NEXUS v1.8 Release Gate
+
+on:
+  workflow_run:
+    workflows: ["NEXUS v1.8 Independent Rebuild"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  seal-v1-8:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact rebuild candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Evaluate explicit v1.8 release intent
+        id: intent
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test ! -f release-intents/v1.8.0; then
+            echo 'eligible=false' >> "$GITHUB_OUTPUT"
+            echo 'No v1.8 release intent on this commit; evidence-only run.'
+            exit 0
+          fi
+          message="$(gh api "repos/${REPO}/commits/${SHA}" --jq '.commit.message')"
+          if test "$message" != 'release(v1.8): request exact-candidate seal'; then
+            echo 'eligible=false' >> "$GITHUB_OUTPUT"
+            echo 'v1.8 intent exists but this is not the exact release-intent commit; no release mutation.'
+            exit 0
+          fi
+          echo 'eligible=true' >> "$GITHUB_OUTPUT"
+
+      - name: Validate exact-candidate verification and rebuild evidence
+        if: steps.intent.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          REBUILD_RUN: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse -q --verify refs/tags/v1.7.0 >/dev/null
+          test "$(git rev-list -n 1 v1.7.0)" = '9847b293f3b37a574568ba4e450797b312a44984'
+          if git ls-remote --exit-code --tags origin refs/tags/v1.8.0 >/dev/null 2>&1; then
+            echo 'v1.8.0 already exists; refusing duplicate seal'
+            exit 1
+          fi
+
+          mkdir -p rebuild-evidence
+          gh run download "$REBUILD_RUN" --repo "$REPO" -n v1.8-independent-rebuild-evidence -D rebuild-evidence
+          evidence='rebuild-evidence/v1.8-reproducibility-evidence.json'
+          test -f "$evidence"
+          test "$(jq -r '.schema' "$evidence")" = 'nexus.v1.8.independent-rebuild-evidence.v1'
+          test "$(jq -r '.status' "$evidence")" = PASS
+          test "$(jq -r '.candidate_sha' "$evidence")" = "$SHA"
+          test "$(jq -r '.independent_rebuild_run_id' "$evidence")" = "$REBUILD_RUN"
+          test "$(jq -r '.executable_digest_match' "$evidence")" = true
+          test "$(jq -r '.production_mutation_performed' "$evidence")" = false
+          test "$(jq -r '.paid_upgrade_required' "$evidence")" = false
+          test "$(jq -r '.secret_value_recorded' "$evidence")" = false
+          test "$(jq -r '.authority_expansion' "$evidence")" = NONE
+
+          verify_run="$(jq -r '.nexus_verification_run_id' "$evidence")"
+          test "$(gh api "repos/${REPO}/actions/runs/${verify_run}" --jq '.head_sha')" = "$SHA"
+          test "$(gh api "repos/${REPO}/actions/runs/${verify_run}" --jq '.status')" = completed
+          test "$(gh api "repos/${REPO}/actions/runs/${verify_run}" --jq '.conclusion')" = success
+
+          digest_a="$(jq -r '.builders.a.executable_sha256' "$evidence")"
+          digest_b="$(jq -r '.builders.b.executable_sha256' "$evidence")"
+          test "$digest_a" = "$digest_b"
+          test "${#digest_a}" = 64
+          printf 'V1.8 RELEASE GATE: PASS\nCandidate: %s\nExecutable SHA-256: %s\n' "$SHA" "$digest_a"
+
+      - name: Create immutable v1.8 historical release boundary
+        if: steps.intent.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          REBUILD_RUN: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence='rebuild-evidence/v1.8-reproducibility-evidence.json'
+          verify_run="$(jq -r '.nexus_verification_run_id' "$evidence")"
+          binary_sha="$(jq -r '.builders.a.executable_sha256' "$evidence")"
+          evidence_sha="$(sha256sum "$evidence" | awk '{print $1}')"
+          cat > /tmp/v1.8-release-notes.md <<EOF
+          # NEXUS v1.8.0 — Independent Rebuild Reproducibility Sealed
+
+          **STATUS: SEALED / VERIFIED AT THE STATED REPRODUCIBILITY BOUNDARY**
+
+          \`A_out <= A_in\`
+
+          - Exact release candidate: \`${SHA}\`
+          - NEXUS Verification run: \`${verify_run}\` — SUCCESS
+          - Independent rebuild run: \`${REBUILD_RUN}\` — SUCCESS
+          - Independent builders: two separate GitHub-hosted \`ubuntu-24.04\` jobs
+          - Build definition: repository Dockerfile with digest-pinned Rust base
+          - Gateway executable SHA-256 from builder A: \`${binary_sha}\`
+          - Gateway executable SHA-256 from builder B: \`${binary_sha}\`
+          - Byte identity: EXACT MATCH
+          - Evidence SHA-256: \`${evidence_sha}\`
+          - Production mutation performed: NO
+          - Paid upgrade required: NO
+          - Authority expansion: NONE
+
+          This seal establishes byte-identical gateway executables for the exact candidate across the two independent GitHub-hosted rebuild jobs in the recorded run under the stated pinned build definition. It does not claim reproducibility across arbitrary platforms, architectures, toolchains, future runner images, providers, or build systems; it does not prove source correctness, provider correctness, universal security, universal availability, or formal epistemic correctness.
+          EOF
+          gh release create v1.8.0 --target "$SHA" --title 'NEXUS v1.8.0 — Independent Rebuild Reproducibility Sealed' --notes-file /tmp/v1.8-release-notes.md
