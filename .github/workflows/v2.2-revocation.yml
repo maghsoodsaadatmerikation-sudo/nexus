@@ -18,7 +18,7 @@ jobs:
           persist-credentials: false
       - name: Verify revocation replay contract
         shell: bash
-        run: ./scripts/v2.2-revocation-verification.sh
+        run: bash ./scripts/v2.2-revocation-verification.sh
       - name: Build evidence manifest
         shell: bash
         run: |
