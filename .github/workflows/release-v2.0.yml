@@ -1,0 +1,136 @@
+name: NEXUS v2.0 Release Gate
+
+on:
+  workflow_run:
+    workflows: ["NEXUS v2.0 Capability Verification"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  seal-v2:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact capability candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Evaluate explicit v2.0 release intent
+        id: intent
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test ! -f release-intents/v2.0.0; then
+            echo 'eligible=false' >> "$GITHUB_OUTPUT"
+            echo 'No v2.0 release intent on exact candidate; verification only.'
+            exit 0
+          fi
+          message="$(gh api "repos/${REPO}/commits/${SHA}" --jq '.commit.message')"
+          if test "$message" != 'release(v2.0): request capability-delegation seal'; then
+            echo 'eligible=false' >> "$GITHUB_OUTPUT"
+            echo 'Release intent file exists but commit message is not exact; refusing mutation.'
+            exit 0
+          fi
+          echo 'eligible=true' >> "$GITHUB_OUTPUT"
+
+      - name: Require canonical exact-candidate verification
+        if: steps.intent.outputs.eligible == 'true'
+        id: canonical
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          V2_RUN: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/${REPO}/actions/runs/${V2_RUN}" --jq '.head_sha')" = "$SHA"
+          test "$(gh api "repos/${REPO}/actions/runs/${V2_RUN}" --jq '.conclusion')" = success
+          verify_run="$(gh api "repos/${REPO}/actions/runs?head_sha=${SHA}&event=push&per_page=100" --jq '[.workflow_runs[] | select(.name == "NEXUS Verification" and .status == "completed" and .conclusion == "success")][0].id // empty')"
+          test -n "$verify_run"
+          test "$(gh api "repos/${REPO}/actions/runs/${verify_run}" --jq '.head_sha')" = "$SHA"
+          echo "verify_run=${verify_run}" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin refs/tags/v2.0.0 >/dev/null 2>&1; then
+            echo 'v2.0.0 already exists; refusing duplicate seal'
+            exit 1
+          fi
+
+      - name: Validate and bind v2 evidence
+        if: steps.intent.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          V2_RUN: ${{ github.event.workflow_run.id }}
+          VERIFY_RUN: ${{ steps.canonical.outputs.verify_run }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p v2-release-evidence
+          gh run download "$V2_RUN" --repo "$REPO" -n nexus-v2-capability-evidence -D v2-release-evidence
+          test -f v2-release-evidence/manifest.txt
+          test -f v2-release-evidence/SHA256SUMS
+          grep -Fx 'schema=nexus.v2.capability-verification.v1' v2-release-evidence/manifest.txt
+          grep -Fx 'status=PASS' v2-release-evidence/manifest.txt
+          grep -Fx "candidate_sha=${SHA}" v2-release-evidence/manifest.txt
+          grep -Fx "workflow_run_id=${V2_RUN}" v2-release-evidence/manifest.txt
+          grep -Fx 'authority_rule=A_child<=A_parent<=A_in' v2-release-evidence/manifest.txt
+          grep -Fx 'production_mutation=false' v2-release-evidence/manifest.txt
+          grep -Fx 'authority_expansion=NONE' v2-release-evidence/manifest.txt
+          evidence_sha="$(sha256sum v2-release-evidence/nexus-v2-capability-evidence.tar.gz | awk '{print $1}')"
+          cat > v2.0-release-evidence.txt <<EOF
+          schema=nexus.v2.0.release-evidence.v1
+          status=PASS
+          candidate_sha=${SHA}
+          v2_capability_run_id=${V2_RUN}
+          nexus_verification_run_id=${VERIFY_RUN}
+          capability_evidence_sha256=${evidence_sha}
+          authority_rule=A_child<=A_parent<=A_in
+          production_mutation=false
+          paid_upgrade_required=false
+          authority_expansion=NONE
+          EOF
+          sha256sum v2.0-release-evidence.txt > v2.0-release-evidence.sha256
+
+      - name: Create v2.0 constitutional capability seal
+        if: steps.intent.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          V2_RUN: ${{ github.event.workflow_run.id }}
+          VERIFY_RUN: ${{ steps.canonical.outputs.verify_run }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence_sha="$(sha256sum v2.0-release-evidence.txt | awk '{print $1}')"
+          cat > /tmp/v2-release-notes.md <<EOF
+          # NEXUS v2.0.0 — Constitutional Capability Delegation Sealed
+
+          **STATUS: SEALED / VERIFIED AT THE STATED CAPABILITY-DELEGATION BOUNDARY**
+
+          \`A_child <= A_parent <= A_in\`
+
+          - Exact release candidate: \`${SHA}\`
+          - NEXUS v2.0 Capability Verification run: \`${V2_RUN}\` — SUCCESS
+          - Canonical NEXUS Verification run: \`${VERIFY_RUN}\` — SUCCESS
+          - Default deny / bounded scope / expiry / subject binding / revocation: verified by the exact-candidate locked test suite
+          - Production mutation performed by this release gate: NO
+          - Paid upgrade required: NO
+          - Authority expansion: NONE
+          - Release evidence SHA-256: \`${evidence_sha}\`
+
+          This seal establishes the deterministic capability-delegation boundary represented and tested by this exact candidate. It does not claim autonomous delegation, external identity federation, universal security, provider correctness, or authority beyond the parent/input authority.
+          EOF
+          gh release create v2.0.0 --target "$SHA" --title 'NEXUS v2.0.0 — Constitutional Capability Delegation Sealed' --notes-file /tmp/v2-release-notes.md
