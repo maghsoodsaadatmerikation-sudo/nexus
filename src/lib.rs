@@ -5,6 +5,7 @@ pub mod adapters;
 pub mod analysis;
 pub mod audit;
 pub mod authority;
+pub mod capability;
 pub mod decision;
 pub mod envelope;
 pub mod erasure;
@@ -26,6 +27,7 @@ pub use analysis::{
 };
 pub use audit::{AuditEvent, AuditEventKind, AuditLog};
 pub use authority::{leq, Authority};
+pub use capability::{CapabilityAction, CapabilityDenial, CapabilityGrant, RevocationSet, CAPABILITY_SCHEMA_VERSION};
 pub use decision::{DenialReason, PolicyDecision};
 pub use envelope::RequestEnvelope;
 pub use epistemic::{Alternative, Claim, ClaimOrigin, DecisionWorkspace, HumanJudgment, Uncertainty};
