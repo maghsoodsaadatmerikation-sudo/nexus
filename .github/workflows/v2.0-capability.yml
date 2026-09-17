@@ -1,0 +1,58 @@
+name: NEXUS v2.0 Capability Verification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  verify-v2-capability:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Run fail-closed capability verification
+        run: bash scripts/v2.0-capability-verification.sh
+
+      - name: Build exact-candidate evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-v2
+          cp Cargo.lock src/capability.rs docs/V2-CAPABILITY-DELEGATION.md scripts/v2.0-capability-verification.sh evidence-v2/
+          cat > evidence-v2/manifest.txt <<EOF
+          schema=nexus.v2.capability-verification.v1
+          status=PASS
+          candidate_sha=${GITHUB_SHA}
+          workflow_run_id=${GITHUB_RUN_ID}
+          authority_rule=A_child<=A_parent<=A_in
+          production_mutation=false
+          authority_expansion=NONE
+          EOF
+          (cd evidence-v2 && sha256sum Cargo.lock capability.rs V2-CAPABILITY-DELEGATION.md v2.0-capability-verification.sh manifest.txt > SHA256SUMS)
+          tar -czf nexus-v2-capability-evidence.tar.gz evidence-v2
+
+      - name: Attest v2 capability evidence
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: nexus-v2-capability-evidence.tar.gz
+
+      - name: Upload v2 capability evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-v2-capability-evidence
+          path: |
+            nexus-v2-capability-evidence.tar.gz
+            evidence-v2/manifest.txt
+            evidence-v2/SHA256SUMS
+          if-no-files-found: error
