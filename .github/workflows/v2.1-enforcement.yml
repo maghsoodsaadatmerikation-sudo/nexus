@@ -1,0 +1,55 @@
+name: NEXUS v2.1 Enforcement Verification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  verify-v2-1:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Check v2.1 enforcement contract
+        run: bash scripts/v2.1-enforcement-verification.sh
+      - name: Build exact-candidate evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-v2.1
+          cp Cargo.lock src/capability.rs scripts/v2.1-enforcement-verification.sh evidence-v2.1/
+          cat > evidence-v2.1/manifest.txt <<EOF
+          schema=nexus.v2.1.enforcement-verification.v1
+          status=PASS
+          candidate_sha=${GITHUB_SHA}
+          workflow_run_id=${GITHUB_RUN_ID}
+          authority_rule=A_child<=A_parent<=A_in
+          authorized_request_boundary=true
+          validity_window_fail_closed=true
+          audit_authority=non_authoritative
+          production_mutation=false
+          authority_expansion=NONE
+          EOF
+          (cd evidence-v2.1 && sha256sum Cargo.lock capability.rs v2.1-enforcement-verification.sh manifest.txt > SHA256SUMS)
+          tar -czf nexus-v2.1-enforcement-evidence.tar.gz evidence-v2.1
+      - name: Attest evidence archive
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: nexus-v2.1-enforcement-evidence.tar.gz
+      - name: Upload evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-v2.1-enforcement-evidence
+          path: |
+            evidence-v2.1/
+            nexus-v2.1-enforcement-evidence.tar.gz
+          if-no-files-found: error
