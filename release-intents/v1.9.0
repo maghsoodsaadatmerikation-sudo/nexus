@@ -1,0 +1,7 @@
+NEXUS v1.9.0 release intent
+
+This exact commit requests the fail-closed continuous runtime conformance seal defined by docs/V1.9-ROADMAP.md and .github/workflows/release-v1.9.yml.
+
+The release gate must independently require successful NEXUS Verification, the sealed v1.8.0 historical boundary, at least three successful scheduled drift observations from watcher baseline 82848b2cf938d397179a9ff4b35662334336a494, exact source-tree digest equality, valid evidence checksums, zero recorded production mutation by the watcher, no paid upgrade, and no authority expansion.
+
+No gate may be weakened to obtain a seal.
