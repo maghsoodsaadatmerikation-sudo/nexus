@@ -1,0 +1,5 @@
+NEXUS v2.1.0 release intent
+
+This file authorizes the fail-closed v2.1 release gate to create tag/release v2.1.0 only if the exact candidate independently passes both NEXUS v2.1 Enforcement Verification and canonical NEXUS Verification and the evidence bundle binds to that same candidate.
+
+Intent is not evidence. Intent is not PASS. Intent is not a seal.
