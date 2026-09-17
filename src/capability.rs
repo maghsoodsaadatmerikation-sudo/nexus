@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::{actions::Action, authority::{leq, Authority}};
 
 pub const CAPABILITY_SCHEMA_VERSION: u32 = 1;
+pub const REVOCATION_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CapabilityAction { Reflect, Present, Select }
@@ -36,11 +37,69 @@ pub enum CapabilityDenial {
     AuthorityAmplification, SubjectMismatch, OutOfScope, NotYetValid, Expired, Revoked,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RevocationEvent {
+    pub sequence: u64,
+    pub grant_id: String,
+    pub provenance_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RevocationSnapshot {
+    pub schema_version: u32,
+    pub events: Vec<RevocationEvent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RevocationReplayError {
+    UnsupportedSchema,
+    InvalidSequence,
+    EmptyGrantId,
+    EmptyProvenance,
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct RevocationSet { revoked: std::collections::BTreeSet<String> }
+pub struct RevocationSet {
+    revoked: std::collections::BTreeSet<String>,
+    events: Vec<RevocationEvent>,
+}
 impl RevocationSet {
-    pub fn revoke(&mut self, grant_id: impl Into<String>) { self.revoked.insert(grant_id.into()); }
+    pub fn revoke(&mut self, grant_id: impl Into<String>) {
+        self.revoke_with_provenance(grant_id, "legacy:unspecified");
+    }
+
+    pub fn revoke_with_provenance(&mut self, grant_id: impl Into<String>, provenance_id: impl Into<String>) {
+        let grant_id = grant_id.into();
+        let event = RevocationEvent {
+            sequence: self.events.len() as u64,
+            grant_id: grant_id.clone(),
+            provenance_id: provenance_id.into(),
+        };
+        self.revoked.insert(grant_id);
+        self.events.push(event);
+    }
+
     pub fn is_revoked(&self, grant_id: &str) -> bool { self.revoked.contains(grant_id) }
+    pub fn events(&self) -> &[RevocationEvent] { &self.events }
+
+    pub fn snapshot(&self) -> RevocationSnapshot {
+        RevocationSnapshot { schema_version: REVOCATION_SCHEMA_VERSION, events: self.events.clone() }
+    }
+
+    pub fn from_snapshot(snapshot: RevocationSnapshot) -> Result<Self, RevocationReplayError> {
+        if snapshot.schema_version != REVOCATION_SCHEMA_VERSION {
+            return Err(RevocationReplayError::UnsupportedSchema);
+        }
+        let mut set = Self::default();
+        for (index, event) in snapshot.events.into_iter().enumerate() {
+            if event.sequence != index as u64 { return Err(RevocationReplayError::InvalidSequence); }
+            if event.grant_id.is_empty() { return Err(RevocationReplayError::EmptyGrantId); }
+            if event.provenance_id.is_empty() { return Err(RevocationReplayError::EmptyProvenance); }
+            set.revoked.insert(event.grant_id.clone());
+            set.events.push(event);
+        }
+        Ok(set)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,4 +147,35 @@ mod tests {
     #[test] fn zero_length_validity_window_fails_closed() { let mut g=grant(); g.expires_at=g.issued_at; assert_eq!(g.validate(Authority::User,"worker",&action(),10,&RevocationSet::default()),Err(CapabilityDenial::InvalidValidityWindow)); }
     #[test] fn inverted_validity_window_fails_closed() { let mut g=grant(); g.expires_at=g.issued_at-1; assert_eq!(g.validate(Authority::User,"worker",&action(),10,&RevocationSet::default()),Err(CapabilityDenial::InvalidValidityWindow)); }
     #[test] fn audit_is_append_only_from_public_api() { let mut log=CapabilityAuditLog::default(); log.record(CapabilityAuditEvent{request_id:"r1".into(),grant_id:"g1".into(),outcome:CapabilityAuditOutcome::Authorized}); log.record(CapabilityAuditEvent{request_id:"r2".into(),grant_id:"g2".into(),outcome:CapabilityAuditOutcome::Denied(CapabilityDenial::Revoked)}); assert_eq!(log.events().len(),2); assert_eq!(log.events()[0].request_id,"r1"); }
+
+    #[test] fn revocation_replay_reconstructs_state() {
+        let mut r=RevocationSet::default();
+        r.revoke_with_provenance("g-1","human:p1");
+        r.revoke_with_provenance("g-2","human:p2");
+        let restored=RevocationSet::from_snapshot(r.snapshot()).unwrap();
+        assert!(restored.is_revoked("g-1")); assert!(restored.is_revoked("g-2"));
+        assert_eq!(restored.events().len(),2);
+    }
+    #[test] fn repeated_revocation_remains_revoked_and_observable() {
+        let mut r=RevocationSet::default();
+        r.revoke_with_provenance("g-1","human:p1"); r.revoke_with_provenance("g-1","human:p2");
+        assert!(r.is_revoked("g-1")); assert_eq!(r.events().len(),2);
+    }
+    #[test] fn broken_revocation_sequence_fails_closed() {
+        let mut s=RevocationSet::default().snapshot();
+        s.events.push(RevocationEvent{sequence:2,grant_id:"g".into(),provenance_id:"p".into()});
+        assert_eq!(RevocationSet::from_snapshot(s),Err(RevocationReplayError::InvalidSequence));
+    }
+    #[test] fn unsupported_revocation_schema_fails_closed() {
+        let mut s=RevocationSet::default().snapshot(); s.schema_version+=1;
+        assert_eq!(RevocationSet::from_snapshot(s),Err(RevocationReplayError::UnsupportedSchema));
+    }
+    #[test] fn empty_revocation_identity_fails_closed() {
+        let s=RevocationSnapshot{schema_version:REVOCATION_SCHEMA_VERSION,events:vec![RevocationEvent{sequence:0,grant_id:"".into(),provenance_id:"p".into()}]};
+        assert_eq!(RevocationSet::from_snapshot(s),Err(RevocationReplayError::EmptyGrantId));
+    }
+    #[test] fn empty_revocation_provenance_fails_closed() {
+        let s=RevocationSnapshot{schema_version:REVOCATION_SCHEMA_VERSION,events:vec![RevocationEvent{sequence:0,grant_id:"g".into(),provenance_id:"".into()}]};
+        assert_eq!(RevocationSet::from_snapshot(s),Err(RevocationReplayError::EmptyProvenance));
+    }
 }
