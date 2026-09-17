@@ -1,0 +1,5 @@
+NEXUS v2.0.0 release intent
+
+This file requests the fail-closed v2.0 release gate for this exact commit only.
+No PASS is implied by the presence of this file.
+The release gate must independently require successful exact-candidate capability verification and canonical NEXUS Verification before creating tag/release v2.0.0.
