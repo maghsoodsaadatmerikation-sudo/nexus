@@ -118,17 +118,46 @@ A production release must preserve four boundaries:
 - tag/release `v1.7.0`: PUBLISHED
 - no paid upgrade, new production service, new production volume, secret disclosure, or authority expansion authorized
 
+### O. v1.8 observation boundary — HISTORICAL / SEALED
+- later historical release boundary preserved; see its immutable release evidence
+- no later capability work rewrites its claims
+
+### P. v1.9 continuous runtime conformance — COMPLETE / SEALED
+- repeated read-only runtime observations bound to exact source evidence
+- release `v1.9.0` published against exact candidate `87ab795f16bbe68d8c014c5cf31ea66629e27998`
+- observation evidence remained non-authoritative
+- no production mutation or authority expansion
+
+### Q. v2.0 capability delegation — IMPLEMENTED / VERIFIED ENGINEERING MILESTONE / UNSEALED
+- bounded capability grant model introduced
+- `A_child <= A_parent <= A_in`
+- scope, subject, time, provenance, and revocation checks implemented
+- historical v2.0 release gate did not establish a valid seal; later releases do not retroactively repair that boundary
+
+### R. v2.1 capability enforcement boundary — COMPLETE / SEALED
+- capability validation moved before `AuthorizedRequest` construction
+- invalid validity intervals fail closed
+- append-only capability audit observations remain non-authoritative
+- exact release candidate: `4bed8ea9ec70bfeb0424c917edb71efb3fd6a3a8`
+- v2.1 enforcement verification run `35263378016`: SUCCESS
+- canonical NEXUS Verification run `35263377971`: SUCCESS
+- release `v2.1.0`: PUBLISHED
+- no cryptographic grant authenticity, durable/distributed revocation, federation, provider correctness, or universal-security claim
+
+### S. v2.2 revocation replay integrity — IN ENGINEERING
+- ordered provenance-bearing revocation events
+- fail-closed replay validation
+- effective revoked state reconstructed from event history rather than trusted as an independent snapshot field
+- no durable-storage or cryptographic-authenticity claim
+- not sealed until exact-candidate verification and v2.2 evidence pass
+
 ## Current status
 
-NEXUS `v1.7.0` is the current sealed operational boundary.
+NEXUS `v2.1.0` is the current sealed capability-enforcement boundary. v2.0 remains an unsealed engineering milestone; v2.1 does not retroactively seal it.
 
-The observed Railway production service is pinned to exact runtime target `3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959`, with successful deployment `b0e78cf8-af51-4092-9bf6-99e1ac5cc13b` and the existing persistent `/data` boundary preserved. The public runtime-identity endpoint reported the canonical source-tree digest `d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7`, exactly matching independently computed repository evidence.
+v2.2 revocation replay integrity is under engineering and carries no PASS or seal until its own exact-candidate verification and evidence contract succeed.
 
-The runtime identity is explicitly non-authoritative. It reports provenance evidence only and cannot authorize requests, create HumanJudgment, mutate policy, widen execution authority, or substitute for a release decision.
-
-Historical `v1.0.0` through `v1.6.0` releases remain immutable prior boundaries. v1.7 adds runtime-provenance evidence rather than rewriting their claims.
-
-No `v1.8` roadmap, release gate, or release intent is currently defined in the repository. Therefore the documented roadmap ends at the sealed v1.7 boundary; further version creation requires a separately defined engineering claim and evidence contract rather than version churn by inference.
+Historical release tags remain immutable boundaries. Runtime evidence, capability evidence, and release authority remain separate.
 
 ## Completion rule
 
