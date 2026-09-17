@@ -80,16 +80,22 @@ jobs:
           set -euo pipefail
           mkdir -p v2-release-evidence
           gh run download "$V2_RUN" --repo "$REPO" -n nexus-v2-capability-evidence -D v2-release-evidence
-          test -f v2-release-evidence/manifest.txt
-          test -f v2-release-evidence/SHA256SUMS
-          grep -Fx 'schema=nexus.v2.capability-verification.v1' v2-release-evidence/manifest.txt
-          grep -Fx 'status=PASS' v2-release-evidence/manifest.txt
-          grep -Fx "candidate_sha=${SHA}" v2-release-evidence/manifest.txt
-          grep -Fx "workflow_run_id=${V2_RUN}" v2-release-evidence/manifest.txt
-          grep -Fx 'authority_rule=A_child<=A_parent<=A_in' v2-release-evidence/manifest.txt
-          grep -Fx 'production_mutation=false' v2-release-evidence/manifest.txt
-          grep -Fx 'authority_expansion=NONE' v2-release-evidence/manifest.txt
-          evidence_sha="$(sha256sum v2-release-evidence/nexus-v2-capability-evidence.tar.gz | awk '{print $1}')"
+          MANIFEST='v2-release-evidence/evidence-v2/manifest.txt'
+          SUMS='v2-release-evidence/evidence-v2/SHA256SUMS'
+          ARCHIVE='v2-release-evidence/nexus-v2-capability-evidence.tar.gz'
+          test -f "$MANIFEST"
+          test -f "$SUMS"
+          test -f "$ARCHIVE"
+          grep -Fx 'schema=nexus.v2.capability-verification.v1' "$MANIFEST"
+          grep -Fx 'status=PASS' "$MANIFEST"
+          grep -Fx "candidate_sha=${SHA}" "$MANIFEST"
+          grep -Fx "workflow_run_id=${V2_RUN}" "$MANIFEST"
+          grep -Fx 'authority_rule=A_child<=A_parent<=A_in' "$MANIFEST"
+          grep -Fx 'production_mutation=false' "$MANIFEST"
+          grep -Fx 'authority_expansion=NONE' "$MANIFEST"
+          tar -tzf "$ARCHIVE" | grep -Fx 'evidence-v2/manifest.txt'
+          tar -tzf "$ARCHIVE" | grep -Fx 'evidence-v2/SHA256SUMS'
+          evidence_sha="$(sha256sum "$ARCHIVE" | awk '{print $1}')"
           cat > v2.0-release-evidence.txt <<EOF
           schema=nexus.v2.0.release-evidence.v1
           status=PASS
