@@ -32,7 +32,7 @@ pub struct CapabilityGrant {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CapabilityDenial {
-    UnsupportedSchema, EmptyIdentity, EmptyProvenance, EmptyScope, InvalidValidityWindow,
+    EmptyPayload, UnsupportedSchema, EmptyIdentity, EmptyProvenance, EmptyScope, InvalidValidityWindow,
     AuthorityAmplification, SubjectMismatch, OutOfScope, NotYetValid, Expired, Revoked,
 }
 
