@@ -21,6 +21,15 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      - name: Install compatible Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+          rustc --version
+          cargo --version
+
       - name: Run fail-closed capability verification
         run: bash scripts/v2.0-capability-verification.sh
 
