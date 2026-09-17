@@ -1,0 +1,139 @@
+name: NEXUS v1.9 Release Gate
+
+on:
+  workflow_run:
+    workflows: ["NEXUS Verification"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  seal-v1-9:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact verified candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Evaluate explicit v1.9 release intent
+        id: intent
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test ! -f release-intents/v1.9.0; then
+            echo 'eligible=false' >> "$GITHUB_OUTPUT"
+            echo 'No v1.9 release intent on this exact commit; evidence-only verification.'
+            exit 0
+          fi
+          message="$(gh api "repos/${REPO}/commits/${SHA}" --jq '.commit.message')"
+          if test "$message" != 'release(v1.9): request continuous-conformance seal'; then
+            echo 'eligible=false' >> "$GITHUB_OUTPUT"
+            echo 'Intent exists but commit message is not the exact release intent; no release mutation.'
+            exit 0
+          fi
+          echo 'eligible=true' >> "$GITHUB_OUTPUT"
+
+      - name: Validate temporal conformance window fail-closed
+        if: steps.intent.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          VERIFY_RUN: ${{ github.event.workflow_run.id }}
+          BASELINE_SHA: 82848b2cf938d397179a9ff4b35662334336a494
+          EXPECTED_DIGEST: d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse -q --verify refs/tags/v1.8.0 >/dev/null
+          test "$(git rev-list -n 1 v1.8.0)" = '8acb5c8045e4ed62123f36ccf31f2058ad4a164a'
+          if git ls-remote --exit-code --tags origin refs/tags/v1.9.0 >/dev/null 2>&1; then
+            echo 'v1.9.0 already exists; refusing duplicate seal'
+            exit 1
+          fi
+          test "$(gh api "repos/${REPO}/actions/runs/${VERIFY_RUN}" --jq '.head_sha')" = "$SHA"
+          test "$(gh api "repos/${REPO}/actions/runs/${VERIFY_RUN}" --jq '.conclusion')" = success
+
+          mapfile -t runs < <(gh api --paginate "repos/${REPO}/actions/workflows/v1.9-runtime-drift.yml/runs?branch=main&status=success&event=schedule&per_page=100" --jq ".workflow_runs[] | select(.head_sha == \"${BASELINE_SHA}\" and .status == \"completed\" and .conclusion == \"success\") | .id" | head -n 3)
+          test "${#runs[@]}" -ge 3
+
+          mkdir -p temporal-evidence
+          : > temporal-evidence/accepted-runs.txt
+          for run in "${runs[@]}"; do
+            dir="temporal-evidence/${run}"
+            mkdir -p "$dir"
+            gh run download "$run" --repo "$REPO" -n v1.9-runtime-drift-evidence -D "$dir"
+            evidence="$dir/v1.9-runtime-drift-evidence.json"
+            checksum="$dir/v1.9-runtime-drift-evidence.sha256"
+            test -f "$evidence"
+            test -f "$checksum"
+            (cd "$dir" && sha256sum -c v1.9-runtime-drift-evidence.sha256)
+            test "$(jq -r '.schema' "$evidence")" = 'nexus.v1.9.runtime-drift-observation.v1'
+            test "$(jq -r '.status' "$evidence")" = PASS
+            test "$(jq -r '.http_status' "$evidence")" = 200
+            test "$(jq -r '.runtime_schema' "$evidence")" = 'nexus.runtime-identity.v1'
+            test "$(jq -r '.authority' "$evidence")" = 'non_authoritative_build_metadata'
+            test "$(jq -r '.expected_source_tree_sha256' "$evidence")" = "$EXPECTED_DIGEST"
+            test "$(jq -r '.observed_source_tree_sha256' "$evidence")" = "$EXPECTED_DIGEST"
+            test "$(jq -r '.digest_match' "$evidence")" = true
+            for field in production_write deployment rollback promotion authorization human_judgment policy_mutation; do
+              test "$(jq -r ".mutation_scope.${field}" "$evidence")" = false
+            done
+            test "$(jq -r '.workflow_run_id' "$evidence")" = "$run"
+            printf '%s\n' "$run" >> temporal-evidence/accepted-runs.txt
+          done
+
+          jq -n --arg schema 'nexus.v1.9.release-evidence.v1' --arg status PASS --arg candidate "$SHA" --arg verification_run "$VERIFY_RUN" --arg baseline "$BASELINE_SHA" --arg digest "$EXPECTED_DIGEST" --argjson count "${#runs[@]}" --rawfile run_ids temporal-evidence/accepted-runs.txt '{schema:$schema,status:$status,candidate_sha:$candidate,nexus_verification_run_id:$verification_run,watcher_baseline_sha:$baseline,expected_source_tree_sha256:$digest,accepted_scheduled_observation_count:$count,accepted_run_ids:($run_ids|split("\n")|map(select(length>0))),digest_match_required:true,production_mutation_performed:false,paid_upgrade_required:false,authority_expansion:"NONE"}' > v1.9-release-evidence.json
+          sha256sum v1.9-release-evidence.json > v1.9-release-evidence.sha256
+          echo 'V1.9 RELEASE GATE: PASS'
+
+      - name: Create v1.9 continuous-conformance seal
+        if: steps.intent.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence='v1.9-release-evidence.json'
+          verify_run="$(jq -r '.nexus_verification_run_id' "$evidence")"
+          count="$(jq -r '.accepted_scheduled_observation_count' "$evidence")"
+          baseline="$(jq -r '.watcher_baseline_sha' "$evidence")"
+          digest="$(jq -r '.expected_source_tree_sha256' "$evidence")"
+          runs="$(jq -r '.accepted_run_ids | join(", ")' "$evidence")"
+          evidence_sha="$(sha256sum "$evidence" | awk '{print $1}')"
+          cat > /tmp/v1.9-release-notes.md <<EOF
+          # NEXUS v1.9.0 — Continuous Runtime Conformance Sealed
+
+          **STATUS: SEALED / VERIFIED AT THE STATED TEMPORAL-OBSERVATION BOUNDARY**
+
+          \`A_out <= A_in\`
+
+          - Exact release candidate: \`${SHA}\`
+          - NEXUS Verification run: \`${verify_run}\` — SUCCESS
+          - Watcher baseline commit: \`${baseline}\`
+          - Accepted scheduled observations: \`${count}\`
+          - Accepted workflow runs: \`${runs}\`
+          - Expected and observed source-tree SHA-256: \`${digest}\` — EXACT MATCH in every accepted observation
+          - Runtime schema: \`nexus.runtime-identity.v1\`
+          - Authority marker: \`non_authoritative_build_metadata\`
+          - Production mutation performed by watcher: NO
+          - Paid upgrade required: NO
+          - Authority expansion: NONE
+          - Release evidence SHA-256: \`${evidence_sha}\`
+
+          This seal establishes repeated read-only conformance observations during the recorded accepted observation window. It does not prove continuous availability or identity between observations, absence of transient unobserved drift, provider correctness, universal security, universal availability, or formal epistemic correctness.
+          EOF
+          gh release create v1.9.0 --target "$SHA" --title 'NEXUS v1.9.0 — Continuous Runtime Conformance Sealed' --notes-file /tmp/v1.9-release-notes.md
