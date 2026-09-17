@@ -27,7 +27,10 @@ pub use analysis::{
 };
 pub use audit::{AuditEvent, AuditEventKind, AuditLog};
 pub use authority::{leq, Authority};
-pub use capability::{CapabilityAction, CapabilityDenial, CapabilityGrant, RevocationSet, CAPABILITY_SCHEMA_VERSION};
+pub use capability::{
+    CapabilityAction, CapabilityAuditEvent, CapabilityAuditLog, CapabilityAuditOutcome,
+    CapabilityDenial, CapabilityGrant, RevocationSet, CAPABILITY_SCHEMA_VERSION,
+};
 pub use decision::{DenialReason, PolicyDecision};
 pub use envelope::RequestEnvelope;
 pub use epistemic::{Alternative, Claim, ClaimOrigin, DecisionWorkspace, HumanJudgment, Uncertainty};
