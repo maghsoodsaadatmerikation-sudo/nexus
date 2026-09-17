@@ -1,0 +1,47 @@
+name: NEXUS v2.2 Revocation Replay Verification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify revocation replay contract
+        shell: bash
+        run: ./scripts/v2.2-revocation-verification.sh
+      - name: Build evidence manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-v2.2
+          {
+            echo "schema=nexus.v2.2.revocation-replay.v1"
+            echo "status=PASS"
+            echo "candidate_sha=$GITHUB_SHA"
+            echo "workflow_run_id=$GITHUB_RUN_ID"
+            echo "authority_rule=A_child<=A_parent<=A_in"
+            echo "revocation_replay_fail_closed=true"
+            echo "revocation_effect=authority_reduction_only"
+            echo "durable_storage_claim=false"
+            echo "cryptographic_authenticity_claim=false"
+            echo "production_mutation=false"
+            echo "authority_expansion=NONE"
+          } > evidence-v2.2/manifest.txt
+          cp Cargo.lock src/capability.rs docs/V2.2-REVOCATION-REPLAY.md scripts/v2.2-revocation-verification.sh evidence-v2.2/
+          (cd evidence-v2.2 && sha256sum Cargo.lock capability.rs V2.2-REVOCATION-REPLAY.md v2.2-revocation-verification.sh > SHA256SUMS)
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-v2.2-revocation-evidence
+          path: evidence-v2.2/
+          if-no-files-found: error
