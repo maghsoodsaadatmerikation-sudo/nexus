@@ -10,38 +10,52 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout exact candidate
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
+          fetch-depth: 0
+
       - name: Verify revocation replay contract
         shell: bash
-        run: bash ./scripts/v2.2-revocation-verification.sh
-      - name: Build evidence manifest
+        run: |
+          set -euo pipefail
+          bash -n ./scripts/v2.2-revocation-verification.sh
+          bash ./scripts/v2.2-revocation-verification.sh
+
+      - name: Build exact-candidate evidence
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p evidence-v2.2
-          {
-            echo "schema=nexus.v2.2.revocation-replay.v1"
-            echo "status=PASS"
-            echo "candidate_sha=$GITHUB_SHA"
-            echo "workflow_run_id=$GITHUB_RUN_ID"
-            echo "authority_rule=A_child<=A_parent<=A_in"
-            echo "revocation_replay_fail_closed=true"
-            echo "revocation_effect=authority_reduction_only"
-            echo "durable_storage_claim=false"
-            echo "cryptographic_authenticity_claim=false"
-            echo "production_mutation=false"
-            echo "authority_expansion=NONE"
-          } > evidence-v2.2/manifest.txt
           cp Cargo.lock src/capability.rs docs/V2.2-REVOCATION-REPLAY.md scripts/v2.2-revocation-verification.sh evidence-v2.2/
-          (cd evidence-v2.2 && sha256sum Cargo.lock capability.rs V2.2-REVOCATION-REPLAY.md v2.2-revocation-verification.sh > SHA256SUMS)
-      - name: Upload evidence
-        uses: actions/upload-artifact@v4
+          cat > evidence-v2.2/manifest.txt <<EOF
+          schema=nexus.v2.2.revocation-replay.v1
+          status=PASS
+          candidate_sha=${GITHUB_SHA}
+          workflow_run_id=${GITHUB_RUN_ID}
+          authority_rule=A_child<=A_parent<=A_in
+          revocation_replay_fail_closed=true
+          revocation_effect=authority_reduction_only
+          duplicate_revocation_effective_state=idempotent
+          revocation_history=append_only_observation
+          durable_storage_claim=false
+          cryptographic_authenticity_claim=false
+          production_mutation=false
+          authority_expansion=NONE
+          EOF
+          (cd evidence-v2.2 && sha256sum Cargo.lock capability.rs V2.2-REVOCATION-REPLAY.md v2.2-revocation-verification.sh manifest.txt > SHA256SUMS)
+          tar -czf nexus-v2.2-revocation-evidence.tar.gz evidence-v2.2
+
+      - name: Upload exact-candidate evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: nexus-v2.2-revocation-evidence
-          path: evidence-v2.2/
+          path: |
+            nexus-v2.2-revocation-evidence.tar.gz
+            evidence-v2.2/manifest.txt
+            evidence-v2.2/SHA256SUMS
           if-no-files-found: error
