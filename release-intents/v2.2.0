@@ -1,0 +1,11 @@
+NEXUS v2.2.0 release intent
+
+Boundary: revocation replay integrity
+Invariant: A_child <= A_parent <= A_in
+
+Require exact-candidate canonical NEXUS Verification and NEXUS v2.2 Revocation Replay Verification to succeed before sealing.
+
+No real verification -> no PASS -> no seal.
+Production mutation: false
+Paid upgrade required: false
+Authority expansion: NONE
