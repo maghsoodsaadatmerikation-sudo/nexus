@@ -5,6 +5,8 @@ Invariant: A_child <= A_parent <= A_in
 
 Require exact-candidate canonical NEXUS Verification and NEXUS v2.2 Revocation Replay Verification to succeed before sealing.
 
+Recovery note: v2.2 verification is deliberately boundary-scoped; canonical NEXUS Verification independently owns full repository/toolchain verification and is rebound by the release gate.
+
 No real verification -> no PASS -> no seal.
 Production mutation: false
 Paid upgrade required: false
