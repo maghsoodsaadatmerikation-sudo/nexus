@@ -1,0 +1,142 @@
+name: NEXUS v2.2 Release Gate
+
+on:
+  workflow_run:
+    workflows: ["NEXUS v2.2 Revocation Replay Verification"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  seal-v2-2:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Require explicit exact-candidate release intent
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f release-intents/v2.2.0
+          message="$(gh api "repos/${REPO}/commits/${SHA}" --jq '.commit.message')"
+          test "$message" = 'release(v2.2): request revocation-replay seal'
+          if git ls-remote --exit-code --tags origin refs/tags/v2.2.0 >/dev/null 2>&1; then
+            echo 'v2.2.0 already exists; refusing duplicate seal'; exit 1
+          fi
+
+      - name: Require canonical exact-candidate verification
+        id: canonical
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          V22_RUN: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/${REPO}/actions/runs/${V22_RUN}" --jq '.head_sha')" = "$SHA"
+          test "$(gh api "repos/${REPO}/actions/runs/${V22_RUN}" --jq '.conclusion')" = success
+          verify_run="$(gh api "repos/${REPO}/actions/runs?head_sha=${SHA}&event=push&per_page=100" --jq '[.workflow_runs[] | select(.name == "NEXUS Verification" and .status == "completed" and .conclusion == "success")][0].id // empty')"
+          test -n "$verify_run"
+          test "$(gh api "repos/${REPO}/actions/runs/${verify_run}" --jq '.head_sha')" = "$SHA"
+          echo "verify_run=${verify_run}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate and bind v2.2 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          V22_RUN: ${{ github.event.workflow_run.id }}
+          VERIFY_RUN: ${{ steps.canonical.outputs.verify_run }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-evidence
+          gh run download "$V22_RUN" --repo "$REPO" -n nexus-v2.2-revocation-evidence -D release-evidence
+          M='release-evidence/evidence-v2.2/manifest.txt'
+          S='release-evidence/evidence-v2.2/SHA256SUMS'
+          A='release-evidence/nexus-v2.2-revocation-evidence.tar.gz'
+          test -f "$M"; test -f "$S"; test -f "$A"
+          grep -Fx 'schema=nexus.v2.2.revocation-replay.v1' "$M"
+          grep -Fx 'status=PASS' "$M"
+          grep -Fx "candidate_sha=${SHA}" "$M"
+          grep -Fx "workflow_run_id=${V22_RUN}" "$M"
+          grep -Fx 'authority_rule=A_child<=A_parent<=A_in' "$M"
+          grep -Fx 'revocation_replay_fail_closed=true' "$M"
+          grep -Fx 'revocation_effect=authority_reduction_only' "$M"
+          grep -Fx 'duplicate_revocation_effective_state=idempotent' "$M"
+          grep -Fx 'revocation_history=append_only_observation' "$M"
+          grep -Fx 'durable_storage_claim=false' "$M"
+          grep -Fx 'cryptographic_authenticity_claim=false' "$M"
+          grep -Fx 'production_mutation=false' "$M"
+          grep -Fx 'authority_expansion=NONE' "$M"
+          (cd release-evidence/evidence-v2.2 && sha256sum -c SHA256SUMS)
+          tar -tzf "$A" | grep -Fx 'evidence-v2.2/manifest.txt'
+          tar -tzf "$A" | grep -Fx 'evidence-v2.2/SHA256SUMS'
+          evidence_sha="$(sha256sum "$A" | awk '{print $1}')"
+          printf '%s\n' \
+            'schema=nexus.v2.2.release-evidence.v1' 'status=PASS' \
+            "candidate_sha=${SHA}" "v2.2_run_id=${V22_RUN}" "nexus_verification_run_id=${VERIFY_RUN}" \
+            "revocation_evidence_sha256=${evidence_sha}" 'authority_rule=A_child<=A_parent<=A_in' \
+            'revocation_effect=authority_reduction_only' 'production_mutation=false' \
+            'paid_upgrade_required=false' 'authority_expansion=NONE' > v2.2-release-evidence.txt
+          sha256sum v2.2-release-evidence.txt > v2.2-release-evidence.sha256
+
+      - name: Create v2.2 revocation replay seal
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          V22_RUN: ${{ github.event.workflow_run.id }}
+          VERIFY_RUN: ${{ steps.canonical.outputs.verify_run }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence_sha="$(sha256sum v2.2-release-evidence.txt | awk '{print $1}')"
+          cat > /tmp/notes.md <<EOF
+          # NEXUS v2.2.0 — Revocation Replay Integrity Sealed
+
+          **STATUS: SEALED / VERIFIED AT THE STATED REVOCATION-REPLAY BOUNDARY**
+
+          \`A_child <= A_parent <= A_in\`
+
+          - Exact release candidate: \`${SHA}\`
+          - NEXUS v2.2 Revocation Replay Verification run: \`${V22_RUN}\` — SUCCESS
+          - Canonical NEXUS Verification run: \`${VERIFY_RUN}\` — SUCCESS
+          - Ordered provenance-bearing revocation replay: VERIFIED
+          - Malformed replay fails closed: VERIFIED
+          - Duplicate revocation effective state: IDEMPOTENT; history remains observable
+          - Revocation effect: AUTHORITY REDUCTION ONLY
+          - Durable storage claim: NO
+          - Cryptographic authenticity claim: NO
+          - Production mutation: NO
+          - Paid upgrade required: NO
+          - Authority expansion: NONE
+          - Release evidence SHA-256: \`${evidence_sha}\`
+
+          This seal is deliberately narrow. It establishes reconstructible, structurally validated revocation replay for the exact candidate. It does not claim durable or distributed persistence, cryptographic event authenticity, consensus, external identity federation, provider correctness, universal security, or authority beyond the parent/input boundary.
+          EOF
+          gh release create v2.2.0 --target "$SHA" --title 'NEXUS v2.2.0 — Revocation Replay Integrity Sealed' --notes-file /tmp/notes.md
+
+      - name: Assert seal exists on exact candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/${REPO}/releases/tags/v2.2.0" --jq '.draft')" = false
+          test "$(gh api "repos/${REPO}/releases/tags/v2.2.0" --jq '.prerelease')" = false
+          test "$(gh api "repos/${REPO}/releases/tags/v2.2.0" --jq '.target_commitish')" = "$SHA"
