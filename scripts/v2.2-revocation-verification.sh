@@ -17,6 +17,8 @@ grep -Fq 'broken_revocation_sequence_fails_closed' src/capability.rs
 grep -Fq 'empty_revocation_provenance_fails_closed' src/capability.rs
 grep -Fq 'No real verification -> no PASS -> no seal.' docs/V2.2-REVOCATION-REPLAY.md
 
-./scripts/run_gates.sh
+# Do not rely on repository executable-mode metadata here. The canonical
+# verification contract is the script content; invoke it explicitly via bash.
+bash ./scripts/run_gates.sh
 
 echo "NEXUS V2.2 REVOCATION REPLAY CHECK: PASS"
