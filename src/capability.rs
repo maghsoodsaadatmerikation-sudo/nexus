@@ -81,6 +81,7 @@ impl RevocationSet {
 
     pub fn is_revoked(&self, grant_id: &str) -> bool { self.revoked.contains(grant_id) }
     pub fn events(&self) -> &[RevocationEvent] { &self.events }
+    pub fn epoch(&self) -> u64 { self.events.len() as u64 }
 
     pub fn snapshot(&self) -> RevocationSnapshot {
         RevocationSnapshot { schema_version: REVOCATION_SCHEMA_VERSION, events: self.events.clone() }
@@ -160,6 +161,15 @@ mod tests {
         let mut r=RevocationSet::default();
         r.revoke_with_provenance("g-1","human:p1"); r.revoke_with_provenance("g-1","human:p2");
         assert!(r.is_revoked("g-1")); assert_eq!(r.events().len(),2);
+    }
+    #[test] fn revocation_epoch_is_reconstructed_from_valid_history() {
+        let mut r = RevocationSet::default();
+        assert_eq!(r.epoch(), 0);
+        r.revoke_with_provenance("g-1", "human:p1");
+        r.revoke_with_provenance("g-2", "human:p2");
+        assert_eq!(r.epoch(), 2);
+        let restored = RevocationSet::from_snapshot(r.snapshot()).unwrap();
+        assert_eq!(restored.epoch(), 2);
     }
     #[test] fn broken_revocation_sequence_fails_closed() {
         let mut s=RevocationSet::default().snapshot();
