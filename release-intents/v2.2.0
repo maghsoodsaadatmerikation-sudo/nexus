@@ -7,7 +7,7 @@ Require exact-candidate canonical NEXUS Verification and NEXUS v2.2 Revocation R
 
 Recovery note: v2.2 verification is deliberately boundary-scoped; canonical NEXUS Verification independently owns full repository/toolchain verification and is rebound by the release gate.
 
-Candidate renewal: the constitutional type-boundary integration test is aligned with the current RequestEnvelope and ExecutionReceipt API. This release request intentionally binds a fresh exact candidate after that correction.
+Candidate renewal: the constitutional type-boundary integration test is aligned with the current RequestEnvelope and ExecutionReceipt API. The release gate now waits fail-closed for canonical verification of the same SHA, eliminating the observed workflow completion race without weakening either gate.
 
 No real verification -> no PASS -> no seal.
 Production mutation: false
