@@ -98,9 +98,11 @@ jobs:
           grep -Fx 'cryptographic_authenticity_claim=false' "$M"
           grep -Fx 'production_mutation=false' "$M"
           grep -Fx 'authority_expansion=NONE' "$M"
-          (cd release-evidence/evidence-v2.2 && sha256sum -c SHA256SUMS)
           tar -tzf "$A" | grep -Fx 'evidence-v2.2/manifest.txt'
           tar -tzf "$A" | grep -Fx 'evidence-v2.2/SHA256SUMS'
+          mkdir -p release-evidence/unpacked
+          tar -xzf "$A" -C release-evidence/unpacked
+          (cd release-evidence/unpacked/evidence-v2.2 && sha256sum -c SHA256SUMS)
           evidence_sha="$(sha256sum "$A" | awk '{print $1}')"
           printf '%s\n' \
             'schema=nexus.v2.2.release-evidence.v1' 'status=PASS' \
