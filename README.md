@@ -14,26 +14,26 @@ The system separates human authority, evidence, machine analysis, execution auth
 A_out <= A_in
 ```
 
-## Current sealed release — v2.2.0
+## Current sealed release — v2.3.0
 
-`v2.2.0` is the current sealed **revocation replay integrity** boundary.
+`v2.3.0` is the current sealed **revocation freshness / stale-authority defense** boundary.
 
-It preserves the earlier constitutional, runtime, and capability-enforcement boundaries while adding reconstructible, structurally validated revocation replay.
+It preserves the earlier constitutional, runtime, capability-enforcement, and revocation-replay boundaries while preventing cached delegated authorization from surviving a revocation-state transition.
 
-### v2.2 release boundary
+### v2.3 release boundary
 
-- Exact release candidate: `387efdf9d608d8e5ca5e706e9f6fa7480d49489c`
-- NEXUS v2.2 Revocation Replay Verification run `36343709684`: SUCCESS
-- Canonical NEXUS Verification run `36343709655`: SUCCESS
-- Release Gate run `36343740275`: SUCCESS
-- Ordered provenance-bearing revocation replay: VERIFIED
-- Malformed replay: FAIL-CLOSED
-- Duplicate revocation effective state: IDEMPOTENT; history remains observable
-- Revocation effect: authority reduction only
-- Release evidence SHA-256: `125cf27b5a17cffe1cccd0e956589d580e31ba51f90989f98e875bfaf8ef45fa`
+- Exact release candidate: `9da19fbc49ffed5752888d7ab41068266a59f918`
+- NEXUS v2.3 Revocation Freshness Verification run `36345103234`: SUCCESS
+- Canonical NEXUS Verification run `36345103184`: SUCCESS
+- Release Gate run `36345130192`: SUCCESS
+- Exact-candidate evidence attestation: VERIFIED
+- Newer and older revocation epochs: REJECTED FAIL-CLOSED
+- Equal-epoch divergent histories: REJECTED FAIL-CLOSED
+- Reauthorization after epoch transition: REQUIRED
+- Release evidence SHA-256: `6fcf7d3d2b2214c6fa301aa517346faa1efd49bab6407ad942bc2df8cfed0675`
 - No paid upgrade, new production service, new production volume, secret disclosure, or authority expansion was required or authorized.
 
-The v2.2 seal is a **revocation replay integrity boundary**. It does not claim durable or distributed persistence, cryptographic event authenticity, consensus, external identity federation, provider correctness, or universal security.
+The v2.3 seal is a **revocation freshness boundary**. It does not claim durable or distributed persistence, cryptographic event authenticity, consensus, external identity federation, provider correctness, universal security, or external-system linearizability.
 
 Historical release tags remain immutable earlier boundaries. In particular, v2.0 remains an unsealed engineering milestone; later releases do not retroactively seal it.
 
@@ -102,6 +102,8 @@ docs/V1.7-ROADMAP.md                      Runtime-provenance roadmap and complet
 docs/RELEASE-v1.7.0.md                    v1.7 release record
 docs/V2.2-REVOCATION-REPLAY.md             Revocation replay integrity contract
 docs/RELEASE-v2.2.0.md                    v2.2 sealed release record
+docs/V2.3-REVOCATION-FRESHNESS.md           Stale-authority defense contract
+docs/RELEASE-v2.3.0.md                    v2.3 sealed release record
 evidence/v1.7/production-runtime-evidence.json
                                            Production runtime-provenance evidence
 .github/workflows/v1.7-runtime-identity.yml Independent runtime identity reconciliation
@@ -113,6 +115,7 @@ evidence/v1.7/production-runtime-evidence.json
 
 ## Releases
 
+- NEXUS v2.3.0 — Revocation Freshness / Stale-Authority Defense Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v2.3.0
 - NEXUS v2.2.0 — Revocation Replay Integrity Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v2.2.0
 - NEXUS v2.1.0 — Capability Enforcement Boundary Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v2.1.0
 - NEXUS v1.7.0 — Runtime Provenance Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v1.7.0

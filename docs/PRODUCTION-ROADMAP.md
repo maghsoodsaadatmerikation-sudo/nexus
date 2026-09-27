@@ -156,7 +156,7 @@ A production release must preserve four boundaries:
 - release `v2.2.0`: PUBLISHED
 - no durable/distributed persistence, cryptographic authenticity, consensus, federation, provider-correctness, universal-security, production-mutation, paid-upgrade, or authority-expansion claim
 
-### T. v2.3 revocation freshness / stale-authority defense — IN ENGINEERING
+### T. v2.3 revocation freshness / stale-authority defense — COMPLETE / SEALED
 - delegated authorization bound to the observed revocation epoch
 - execution rechecks the current epoch before consuming delegated authority
 - newer revocation state rejects cached or replayed authorization fail-closed
@@ -164,15 +164,20 @@ A production release must preserve four boundaries:
 - divergent revocation histories fail closed even when their epochs are equal
 - reauthorization is required after any epoch transition
 - no distributed-consensus, durable-storage, cryptographic-authenticity, or race-free external-system claim
-- not sealed until exact-candidate canonical verification and v2.3-specific evidence pass
+- exact release candidate: `9da19fbc49ffed5752888d7ab41068266a59f918`
+- v2.3 revocation freshness verification run `36345103234`: SUCCESS
+- canonical NEXUS Verification run `36345103184`: SUCCESS
+- exact-candidate evidence attestation: VERIFIED
+- release evidence SHA-256: `6fcf7d3d2b2214c6fa301aa517346faa1efd49bab6407ad942bc2df8cfed0675`
+- release `v2.3.0`: PUBLISHED
 
 ## Current status
 
-NEXUS `v2.2.0` remains the current sealed revocation-replay-integrity boundary. v2.0 remains an unsealed engineering milestone; neither v2.1 nor v2.2 retroactively seals it.
+NEXUS `v2.3.0` is the current sealed revocation-freshness / stale-authority-defense boundary. v2.0 remains an unsealed engineering milestone; later releases do not retroactively seal it.
 
 The v2.2 seal is narrow: it establishes reconstructible, structurally validated revocation replay for the exact candidate. It does not claim durable or distributed persistence, cryptographic event authenticity, consensus, external identity federation, provider correctness, or universal security.
 
-v2.3 stale-authority defense is under engineering and carries no PASS or seal until its own exact-candidate verification and evidence contract succeed.
+The v2.3 seal is narrow: it establishes execution-time rejection of stale or divergent revocation state for delegated requests. It does not claim durable or distributed persistence, cryptographic event authenticity, consensus, external identity federation, provider correctness, universal security, or external-system linearizability.
 
 Historical release tags remain immutable boundaries. Runtime evidence, capability evidence, and release authority remain separate.
 
