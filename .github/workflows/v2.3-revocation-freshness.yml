@@ -9,6 +9,8 @@ on:
 
 permissions:
   contents: read
+  id-token: write
+  attestations: write
 
 jobs:
   verify:
@@ -66,3 +68,9 @@ jobs:
             evidence-v2.3/manifest.txt
             evidence-v2.3/SHA256SUMS
           if-no-files-found: error
+
+      - name: Attest exact-candidate evidence
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: nexus-v2.3-revocation-freshness-evidence.tar.gz
