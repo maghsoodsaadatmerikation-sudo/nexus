@@ -156,11 +156,23 @@ A production release must preserve four boundaries:
 - release `v2.2.0`: PUBLISHED
 - no durable/distributed persistence, cryptographic authenticity, consensus, federation, provider-correctness, universal-security, production-mutation, paid-upgrade, or authority-expansion claim
 
+### T. v2.3 revocation freshness / stale-authority defense — IN ENGINEERING
+- delegated authorization bound to the observed revocation epoch
+- execution rechecks the current epoch before consuming delegated authority
+- newer revocation state rejects cached or replayed authorization fail-closed
+- older or unknown revocation state cannot execute a newer authorization
+- divergent revocation histories fail closed even when their epochs are equal
+- reauthorization is required after any epoch transition
+- no distributed-consensus, durable-storage, cryptographic-authenticity, or race-free external-system claim
+- not sealed until exact-candidate canonical verification and v2.3-specific evidence pass
+
 ## Current status
 
-NEXUS `v2.2.0` is the current sealed revocation-replay-integrity boundary. v2.0 remains an unsealed engineering milestone; neither v2.1 nor v2.2 retroactively seals it.
+NEXUS `v2.2.0` remains the current sealed revocation-replay-integrity boundary. v2.0 remains an unsealed engineering milestone; neither v2.1 nor v2.2 retroactively seals it.
 
 The v2.2 seal is narrow: it establishes reconstructible, structurally validated revocation replay for the exact candidate. It does not claim durable or distributed persistence, cryptographic event authenticity, consensus, external identity federation, provider correctness, or universal security.
+
+v2.3 stale-authority defense is under engineering and carries no PASS or seal until its own exact-candidate verification and evidence contract succeed.
 
 Historical release tags remain immutable boundaries. Runtime evidence, capability evidence, and release authority remain separate.
 
