@@ -34,7 +34,8 @@ pub use capability::{
 pub use decision::{DenialReason, PolicyDecision};
 pub use envelope::RequestEnvelope;
 pub use epistemic::{Alternative, Claim, ClaimOrigin, DecisionWorkspace, HumanJudgment, Uncertainty};
-pub use executor::{ExecutionReceipt, Executor};
+pub use executor::{DelegatedExecutionDenial, ExecutionReceipt, Executor};
+pub use authorized::DelegatedAuthorizedRequest;
 pub use policy::PolicyEngine;
 pub use workspace::{
     InMemoryWorkspaceRepository, ProvenanceId, WorkspaceEngine, WorkspaceEvent, WorkspaceEventKind,
