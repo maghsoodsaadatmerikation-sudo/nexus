@@ -1,5 +1,5 @@
 use crate::{
-    authorized::AuthorizedRequest,
+    authorized::{AuthorizedRequest, DelegatedAuthorizedRequest},
     authority::{leq, Authority},
     capability::{CapabilityAuditEvent, CapabilityAuditLog, CapabilityAuditOutcome, CapabilityDenial, CapabilityGrant, RevocationSet},
     decision::{DenialReason, PolicyDecision},
@@ -38,7 +38,7 @@ impl PolicyEngine {
         now: u64,
         revocations: &RevocationSet,
         audit: &mut CapabilityAuditLog,
-    ) -> Result<AuthorizedRequest, CapabilityDenial> {
+    ) -> Result<DelegatedAuthorizedRequest, CapabilityDenial> {
         let request_id = envelope.request_id.clone();
         let grant_id = grant.grant_id.clone();
         if envelope.payload.is_empty() {
@@ -53,8 +53,13 @@ impl PolicyEngine {
                 return Err(denial);
             }
         };
-        audit.record(CapabilityAuditEvent { request_id, grant_id, outcome: CapabilityAuditOutcome::Authorized });
-        Ok(AuthorizedRequest { envelope, effective_authority: effective })
+        audit.record(CapabilityAuditEvent { request_id, grant_id: grant_id.clone(), outcome: CapabilityAuditOutcome::Authorized });
+        Ok(DelegatedAuthorizedRequest {
+            request: AuthorizedRequest { envelope, effective_authority: effective },
+            grant_id,
+            revocation_epoch: revocations.epoch(),
+            revocation_snapshot: revocations.snapshot(),
+        })
     }
 }
 
