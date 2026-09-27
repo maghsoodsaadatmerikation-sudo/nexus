@@ -144,18 +144,23 @@ A production release must preserve four boundaries:
 - release `v2.1.0`: PUBLISHED
 - no cryptographic grant authenticity, durable/distributed revocation, federation, provider correctness, or universal-security claim
 
-### S. v2.2 revocation replay integrity — IN ENGINEERING
+### S. v2.2 revocation replay integrity — COMPLETE / SEALED
 - ordered provenance-bearing revocation events
 - fail-closed replay validation
 - effective revoked state reconstructed from event history rather than trusted as an independent snapshot field
 - no durable-storage or cryptographic-authenticity claim
-- not sealed until exact-candidate verification and v2.2 evidence pass
+- exact release candidate: `387efdf9d608d8e5ca5e706e9f6fa7480d49489c`
+- v2.2 revocation replay verification run `36343709684`: SUCCESS
+- canonical NEXUS Verification run `36343709655`: SUCCESS
+- release evidence SHA-256: `125cf27b5a17cffe1cccd0e956589d580e31ba51f90989f98e875bfaf8ef45fa`
+- release `v2.2.0`: PUBLISHED
+- no durable/distributed persistence, cryptographic authenticity, consensus, federation, provider-correctness, universal-security, production-mutation, paid-upgrade, or authority-expansion claim
 
 ## Current status
 
-NEXUS `v2.1.0` is the current sealed capability-enforcement boundary. v2.0 remains an unsealed engineering milestone; v2.1 does not retroactively seal it.
+NEXUS `v2.2.0` is the current sealed revocation-replay-integrity boundary. v2.0 remains an unsealed engineering milestone; neither v2.1 nor v2.2 retroactively seals it.
 
-v2.2 revocation replay integrity is under engineering and carries no PASS or seal until its own exact-candidate verification and evidence contract succeed.
+The v2.2 seal is narrow: it establishes reconstructible, structurally validated revocation replay for the exact candidate. It does not claim durable or distributed persistence, cryptographic event authenticity, consensus, external identity federation, provider correctness, or universal security.
 
 Historical release tags remain immutable boundaries. Runtime evidence, capability evidence, and release authority remain separate.
 
