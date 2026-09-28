@@ -29,6 +29,7 @@ The HTTP layer MUST NOT:
 ## Constitutional request contract
 
 `POST /v1/requests` accepts a tagged Core action. Its required companion field depends on the action variant.
+The request body is an exact schema: unknown fields are rejected with `422` before delegation. In particular, authority-like transport fields such as `capability`, `grant`, `revocation_epoch`, `authorized`, or `policy` are never silently discarded or interpreted by the Gateway.
 
 Reflect example:
 
@@ -43,6 +44,8 @@ Reflect example:
 ```
 
 A successfully delegated request returns `202 Accepted` and is represented as `pending` at the transport boundary. `GET /v1/requests/{id}` returns the transport-visible request status or `404` when unknown.
+
+Artifact 05 exposes no capability-minting, revocation, authorization, or policy-mutation route. Those operations cannot be introduced implicitly through request metadata.
 
 ## Decision Workspace contract
 

@@ -1,0 +1,78 @@
+name: NEXUS v2.4 Gateway Authority-Confusion Verification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Verify Gateway authority-confusion defense
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n ./scripts/v2.4-gateway-authority-confusion-verification.sh
+          bash ./scripts/v2.4-gateway-authority-confusion-verification.sh
+
+      - name: Build exact-candidate evidence
+        if: ${{ github.event_name != 'pull_request' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-v2.4/artifact-05/src evidence-v2.4/artifact-05/tests evidence-v2.4/docs evidence-v2.4/scripts
+          cp Cargo.lock artifact-05/Cargo.toml artifact-05/CONTRACT.md evidence-v2.4/artifact-05/
+          cp artifact-05/src/lib.rs evidence-v2.4/artifact-05/src/
+          cp artifact-05/tests/http_contract.rs evidence-v2.4/artifact-05/tests/
+          cp docs/V2.4-GATEWAY-AUTHORITY-CONFUSION.md evidence-v2.4/docs/
+          cp scripts/v2.4-gateway-authority-confusion-verification.sh evidence-v2.4/scripts/
+          cat > evidence-v2.4/manifest.txt <<EOF
+          schema=nexus.v2.4.gateway-authority-confusion.v1
+          status=PASS
+          candidate_sha=${GITHUB_SHA}
+          workflow_run_id=${GITHUB_RUN_ID}
+          authority_rule=A_out<=A_in
+          exact_request_schema=true
+          unknown_fields_rejected_before_delegate=true
+          authority_like_fields_rejected_before_delegate=true
+          authority_mutation_routes=false
+          async_202_contract_preserved=true
+          status_404_contract_preserved=true
+          cryptographic_authenticity_claim=false
+          production_mutation=false
+          authority_expansion=NONE
+          EOF
+          (cd evidence-v2.4 && find artifact-05 docs scripts -type f -print0 | sort -z | xargs -0 sha256sum; sha256sum manifest.txt) > evidence-v2.4/SHA256SUMS
+          tar -czf nexus-v2.4-gateway-authority-confusion-evidence.tar.gz evidence-v2.4
+
+      - name: Upload exact-candidate evidence
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-v2.4-gateway-authority-confusion-evidence
+          path: |
+            nexus-v2.4-gateway-authority-confusion-evidence.tar.gz
+            evidence-v2.4/manifest.txt
+            evidence-v2.4/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Attest exact-candidate evidence
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: nexus-v2.4-gateway-authority-confusion-evidence.tar.gz

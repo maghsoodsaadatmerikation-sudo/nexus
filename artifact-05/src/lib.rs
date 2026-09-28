@@ -39,13 +39,78 @@ impl From<WireAuthority> for Authority {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SubmitRequest {
     pub request_id: Option<String>,
     pub authority: WireAuthority,
-    #[serde(flatten)]
     pub action: Action,
     pub payload: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
+enum ExactSubmitRequest {
+    Reflect {
+        request_id: Option<String>,
+        authority: WireAuthority,
+        subject: String,
+        payload: String,
+    },
+    Present {
+        request_id: Option<String>,
+        authority: WireAuthority,
+        value: String,
+        payload: String,
+    },
+    Select {
+        request_id: Option<String>,
+        authority: WireAuthority,
+        option: String,
+        payload: String,
+    },
+}
+
+impl<'de> Deserialize<'de> for SubmitRequest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(match ExactSubmitRequest::deserialize(deserializer)? {
+            ExactSubmitRequest::Reflect {
+                request_id,
+                authority,
+                subject,
+                payload,
+            } => Self {
+                request_id,
+                authority,
+                action: Action::Reflect { subject },
+                payload,
+            },
+            ExactSubmitRequest::Present {
+                request_id,
+                authority,
+                value,
+                payload,
+            } => Self {
+                request_id,
+                authority,
+                action: Action::Present { value },
+                payload,
+            },
+            ExactSubmitRequest::Select {
+                request_id,
+                authority,
+                option,
+                payload,
+            } => Self {
+                request_id,
+                authority,
+                action: Action::Select { option },
+                payload,
+            },
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

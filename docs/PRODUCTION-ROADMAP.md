@@ -171,6 +171,13 @@ A production release must preserve four boundaries:
 - release evidence SHA-256: `6fcf7d3d2b2214c6fa301aa517346faa1efd49bab6407ad942bc2df8cfed0675`
 - release `v2.3.0`: PUBLISHED
 
+### U. v2.4 Gateway authority-confusion defense — ENGINEERING / UNVERIFIED
+- exact-schema constitutional request parsing
+- unknown and authority-like fields rejected before delegation
+- no capability, revocation, authorization, or policy-mutation transport route
+- existing `202` asynchronous submission and status/`404` contract preserved
+- no PASS or seal until exact-candidate verification, evidence, attestation, and release gate succeed
+
 ## Current status
 
 NEXUS `v2.3.0` is the current sealed revocation-freshness / stale-authority-defense boundary. v2.0 remains an unsealed engineering milestone; later releases do not retroactively seal it.
