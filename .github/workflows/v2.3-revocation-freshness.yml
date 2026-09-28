@@ -3,8 +3,6 @@ name: NEXUS v2.3 Revocation Freshness Verification
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
