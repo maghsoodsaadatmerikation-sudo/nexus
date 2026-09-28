@@ -3,8 +3,8 @@
 mod workspace_api;
 
 use axum::{
-    extract::{Path, State},
-    http::StatusCode,
+    extract::{FromRequest, Path, Request, State},
+    http::{header, HeaderMap, StatusCode},
     response::{Html, IntoResponse},
     routing::{get, post},
     Json, Router,
@@ -223,8 +223,15 @@ async fn web_workspace() -> Html<&'static str> {
 
 async fn submit<D: ConstitutionalDelegate>(
     State(state): State<AppState<D>>,
-    Json(input): Json<SubmitRequest>,
+    request: Request,
 ) -> impl IntoResponse {
+    if !transport_authorized(&state, request.headers()) {
+        return transport_unauthorized();
+    }
+    let Json(input) = match Json::<SubmitRequest>::from_request(request, &state).await {
+        Ok(input) => input,
+        Err(rejection) => return rejection.into_response(),
+    };
     let request_id = input
         .request_id
         .unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -263,8 +270,12 @@ async fn submit<D: ConstitutionalDelegate>(
 
 async fn status<D: ConstitutionalDelegate>(
     State(state): State<AppState<D>>,
+    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
+    if !transport_authorized(&state, &headers) {
+        return transport_unauthorized();
+    }
     match state
         .statuses
         .read()
@@ -288,6 +299,27 @@ async fn status<D: ConstitutionalDelegate>(
         )
             .into_response(),
     }
+}
+
+pub(crate) fn transport_authorized<D>(state: &AppState<D>, headers: &HeaderMap) -> bool {
+    let Some(expected) = state.auth_token.as_deref() else {
+        return true;
+    };
+    headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .is_some_and(|provided| provided.as_bytes() == expected.as_bytes())
+}
+
+fn transport_unauthorized() -> axum::response::Response {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(ErrorResponse {
+            error: "transport_authentication_required",
+        }),
+    )
+        .into_response()
 }
 
 #[cfg(test)]
