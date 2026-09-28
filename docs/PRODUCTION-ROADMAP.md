@@ -183,16 +183,22 @@ A production release must preserve four boundaries:
 - evidence attestation and extracted SHA-256 self-audit: VERIFIED / PASS
 - release `v2.4.0`: PUBLISHED
 
-### V. v2.5 unified transport authentication — ENGINEERING / UNVERIFIED
+### V. v2.5 unified transport authentication — COMPLETE / SEALED
 - authenticated production state covers both workspace and constitutional request routes
 - missing or incorrect bearer credentials fail before parse, delegation, or status lookup
 - transport admission remains separate from constitutional authorization
 - unauthenticated local/test behavior remains available only when no token is configured
-- no PASS or seal until exact-candidate verification, evidence, attestation, and release gate succeed
+- exact release candidate: `200ff827efed0a165548e9dbc2b6801d23d6ddfb`
+- v2.5 verification run `36385219907`: SUCCESS
+- canonical NEXUS Verification run `36385219924`: SUCCESS
+- release gate run `36385267448`: SUCCESS
+- exact-candidate evidence attestation and self-audit: VERIFIED / PASS
+- release evidence SHA-256: `c64546d8b96e99338ba9cc41a93e0f825b151e8627b436d321ade31b5a432c46`
+- release `v2.5.0`: PUBLISHED
 
 ## Current status
 
-NEXUS `v2.4.0` is the current sealed Gateway authority-confusion boundary. v2.0 remains an unsealed engineering milestone; later releases do not retroactively seal it.
+NEXUS `v2.5.0` is the current sealed unified transport-authentication boundary. v2.0 remains an unsealed engineering milestone; later releases do not retroactively seal it.
 
 The v2.2 seal is narrow: it establishes reconstructible, structurally validated revocation replay for the exact candidate. It does not claim durable or distributed persistence, cryptographic event authenticity, consensus, external identity federation, provider correctness, or universal security.
 
