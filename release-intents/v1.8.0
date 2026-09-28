@@ -1,0 +1,16 @@
+NEXUS v1.8.0 release intent
+
+This file requests evaluation of the exact commit containing it against the fail-closed v1.8 independent-rebuild release gate.
+
+Required boundary:
+- historical v1.7.0 remains unchanged;
+- the exact intent commit must pass NEXUS Verification;
+- two separate GitHub-hosted rebuild jobs must checkout that same exact SHA;
+- both rebuilds must use the repository Dockerfile with digest-pinned Rust base;
+- both must independently extract /usr/local/bin/nexus and produce exactly equal SHA-256 digests;
+- reconciled evidence must contain no secret value and must record Authority Expansion: NONE;
+- production must not be mutated by v1.8;
+- no Railway service, volume, deployment, or paid upgrade is authorized or required;
+- the release gate must independently validate the verification run and rebuild evidence before creating v1.8.0.
+
+No PASS or seal may be inferred from this intent file itself.

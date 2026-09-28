@@ -1,0 +1,105 @@
+name: NEXUS v1.6 Release Gate
+
+on:
+  workflow_run:
+    workflows: ["NEXUS Verification"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  seal-v1-6:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout verified candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Fail-closed release intent gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f release-intents/v1.6.0
+          test -f evidence/v1.6/railway-promotion-evidence.json
+          test -f docs/RELEASE-v1.6.0.md
+
+          commit_message="$(gh api "repos/${REPO}/commits/${SHA}" --jq '.commit.message')"
+          test "$commit_message" = "release(v1.6): request exact-candidate seal"
+
+          test "$(jq -r '.promotion_target.commit_sha' evidence/v1.6/railway-promotion-evidence.json)" = "dcf49302e8a8c4c935de3aad0585b19132bad2cd"
+          test "$(jq -r '.provider_source_binding.commit_sha' evidence/v1.6/railway-promotion-evidence.json)" = "dcf49302e8a8c4c935de3aad0585b19132bad2cd"
+          test "$(jq -r '.provider_source_binding.status' evidence/v1.6/railway-promotion-evidence.json)" = "OBSERVED_ACTIVE"
+          test "$(jq -r '.post_change_deployment.id' evidence/v1.6/railway-promotion-evidence.json)" = "bc72bf4d-7e0b-4f19-9a74-25ca2f76d917"
+          test "$(jq -r '.post_change_deployment.status' evidence/v1.6/railway-promotion-evidence.json)" = "SUCCESS"
+          test "$(jq -r '.durability.mount_path' evidence/v1.6/railway-promotion-evidence.json)" = "/data"
+          test "$(jq -r '.mutation_scope.paid_upgrade_authorized' evidence/v1.6/railway-promotion-evidence.json)" = "false"
+
+          if git ls-remote --exit-code --tags origin refs/tags/v1.6.0 >/dev/null 2>&1; then
+            echo "v1.6.0 already exists; refusing duplicate seal"
+            exit 1
+          fi
+
+          echo "Exact candidate: ${SHA}"
+          echo "NEXUS Verification run: ${RUN_ID}"
+          echo "Release intent gate: PASS"
+
+      - name: Create immutable historical release boundary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          evidence_sha="$(sha256sum evidence/v1.6/railway-promotion-evidence.json | awk '{print $1}')"
+
+          cat > /tmp/v1.6-release-notes.md <<EOF
+          # NEXUS v1.6.0 — Exact Promotion Execution Sealed
+
+          **STATUS: SEALED / VERIFIED AT THE STATED EXACT-PROMOTION BOUNDARY**
+
+          NEXUS v1.6.0 advances the v1.5 promotion-safety boundary while preserving:
+
+          \`A_out <= A_in\`
+
+          ## Exact release boundary
+
+          - Candidate commit: \`${SHA}\`
+          - NEXUS Verification run: \`${RUN_ID}\` — SUCCESS
+          - Promotion target: \`v1.4.0\` @ \`dcf49302e8a8c4c935de3aad0585b19132bad2cd\`
+          - Provider: Railway
+          - Service: \`nexus-stage-d\`
+          - Environment: \`production\`
+          - Active provider source pin: \`source.commitSha=dcf49302e8a8c4c935de3aad0585b19132bad2cd\`
+          - Post-change deployment: \`bc72bf4d-7e0b-4f19-9a74-25ca2f76d917\` — SUCCESS
+          - Durable boundary: \`/data\`
+          - Provider-built image digest: \`sha256:7c5741aafbd62520f5d5c734163820dfae59e9e05c3d0b131e96efc1359e6260\`
+          - Promotion evidence SHA-256: \`${evidence_sha}\`
+
+          ## Evidence discipline
+
+          Railway's deployment trigger/context metadata still records \`meta.commitHash=81f493b1fe3bc964bba51df905c2d448af13bdf4\` and \`branch=main\`. NEXUS preserves that observation and does not use it as proof of selected-source identity. The v1.6 exact-source claim is bounded to the active provider \`source.commitSha\`, the successful deployment created after that configuration was committed, and the preserved runtime/durable boundary.
+
+          No paid upgrade, new service, new volume, secret disclosure, or authority expansion was authorized for this promotion.
+
+          This release is an operational exact-source-binding and promotion-execution seal. It is not a formal proof of epistemic correctness, universal security, universal availability, or stronger provider provenance than the recorded evidence supports.
+          EOF
+
+          gh release create v1.6.0 \
+            --target "$SHA" \
+            --title "NEXUS v1.6.0 — Exact Promotion Execution Sealed" \
+            --notes-file /tmp/v1.6-release-notes.md

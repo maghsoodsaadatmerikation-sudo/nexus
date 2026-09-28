@@ -1,0 +1,13 @@
+error[E0603]: module `authorized` is private
+ --> tests/ui/cannot_forge_authorized.rs:5:46
+  |
+5 |     let _forged = nexus_constitutional_core::authorized::AuthorizedRequest {
+  |                                              ^^^^^^^^^^ private module
+  |
+note: the module `authorized` is defined here
+ --> src/lib.rs
+  |
+  | mod authorized;
+  | ^^^^^^^^^^^^^^
+
+error: aborting due to 1 previous error

@@ -1,0 +1,108 @@
+name: NEXUS v1.7 Runtime Identity
+
+on:
+  workflow_run:
+    workflows: ["NEXUS Verification"]
+    types: [completed]
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  verify-runtime-identity:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact verified commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Build and verify runtime source identity
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          VERIFY_RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          bash -n scripts/source-tree-digest.sh
+          expected="$(bash scripts/source-tree-digest.sh)"
+          [[ "$expected" =~ ^[0-9a-f]{64}$ ]]
+
+          image="nexus-v1-7-runtime:${SHA}"
+          container="nexus-v1-7-runtime-${RUN_ID}"
+          data_dir="${RUNNER_TEMP}/nexus-v1-7-runtime-${RUN_ID}"
+          response="${RUNNER_TEMP}/runtime-identity-${RUN_ID}.json"
+          mkdir -p "$data_dir"
+          chmod 0777 "$data_dir"
+
+          cleanup() {
+            docker rm -f "$container" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker build --pull=false -t "$image" .
+          docker run -d --name "$container" \
+            -p 127.0.0.1:19080:3000 \
+            -e NEXUS_API_TOKEN=v1-7-ci-token \
+            -v "$data_dir:/data" \
+            "$image" >/dev/null
+
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:19080/v1/runtime-identity > "$response"; then
+              break
+            fi
+            sleep 1
+          done
+
+          test -s "$response"
+          test "$(jq -r '.schema' "$response")" = "nexus.runtime-identity.v1"
+          test "$(jq -r '.authority' "$response")" = "non_authoritative_build_metadata"
+          runtime="$(jq -r '.source_tree_sha256' "$response")"
+          test "$runtime" = "$expected"
+
+          jq -n \
+            --arg status "PASS" \
+            --arg candidate_sha "$SHA" \
+            --arg verification_run_id "$VERIFY_RUN_ID" \
+            --arg expected_source_tree_sha256 "$expected" \
+            --arg runtime_source_tree_sha256 "$runtime" \
+            --arg schema "nexus.runtime-identity.v1" \
+            --arg authority "non_authoritative_build_metadata" \
+            '{
+              status: $status,
+              candidate_sha: $candidate_sha,
+              verification_run_id: $verification_run_id,
+              schema: $schema,
+              authority: $authority,
+              expected_source_tree_sha256: $expected_source_tree_sha256,
+              runtime_source_tree_sha256: $runtime_source_tree_sha256,
+              digest_match: true
+            }' > v1.7-runtime-identity-evidence.json
+
+          sha256sum v1.7-runtime-identity-evidence.json > v1.7-runtime-identity-evidence.sha256
+          echo "V1.7 RUNTIME IDENTITY: PASS"
+
+      - name: Attest runtime identity evidence
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: v1.7-runtime-identity-evidence.json
+
+      - name: Upload runtime identity evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: v1.7-runtime-identity-evidence
+          path: |
+            v1.7-runtime-identity-evidence.json
+            v1.7-runtime-identity-evidence.sha256
+            scripts/source-tree-digest.sh
+            Dockerfile
+          if-no-files-found: error

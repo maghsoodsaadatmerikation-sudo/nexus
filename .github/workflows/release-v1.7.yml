@@ -1,0 +1,125 @@
+name: NEXUS v1.7 Release Gate
+
+on:
+  workflow_run:
+    workflows: ["NEXUS Verification"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  seal-v1-7:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact verified candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Fail-closed v1.7 release intent gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f release-intents/v1.7.0
+          test -f evidence/v1.7/production-runtime-evidence.json
+          test -f docs/RELEASE-v1.7.0.md
+
+          commit_message="$(gh api "repos/${REPO}/commits/${SHA}" --jq '.commit.message')"
+          test "$commit_message" = "release(v1.7): request exact-candidate seal"
+
+          evidence="evidence/v1.7/production-runtime-evidence.json"
+          test "$(jq -r '.schema' "$evidence")" = "nexus.v1.7.production-runtime-evidence.v1"
+          test "$(jq -r '.status' "$evidence")" = "PASS"
+          test "$(jq -r '.runtime_target.commit_sha' "$evidence")" = "3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959"
+          test "$(jq -r '.runtime_target.source_tree_sha256' "$evidence")" = "d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7"
+          test "$(jq -r '.independent_ci.nexus_verification_run_id' "$evidence")" = "34884330885"
+          test "$(jq -r '.independent_ci.runtime_identity_run_id' "$evidence")" = "34884505985"
+          test "$(jq -r '.independent_ci.digest_match' "$evidence")" = "true"
+          test "$(jq -r '.provider.name' "$evidence")" = "Railway"
+          test "$(jq -r '.provider.service' "$evidence")" = "nexus-stage-d"
+          test "$(jq -r '.provider.environment' "$evidence")" = "production"
+          test "$(jq -r '.provider.source_binding.commit_sha' "$evidence")" = "3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959"
+          test "$(jq -r '.provider.source_binding.status' "$evidence")" = "OBSERVED_ACTIVE"
+          test "$(jq -r '.provider.deployment.id' "$evidence")" = "b0e78cf8-af51-4092-9bf6-99e1ac5cc13b"
+          test "$(jq -r '.provider.deployment.status' "$evidence")" = "SUCCESS"
+          test "$(jq -r '.provider.durability.mount_path' "$evidence")" = "/data"
+          test "$(jq -r '.public_runtime_observation.workflow_run_id' "$evidence")" = "34886934100"
+          test "$(jq -r '.public_runtime_observation.http_status' "$evidence")" = "200"
+          test "$(jq -r '.public_runtime_observation.schema' "$evidence")" = "nexus.runtime-identity.v1"
+          test "$(jq -r '.public_runtime_observation.authority' "$evidence")" = "non_authoritative_build_metadata"
+          test "$(jq -r '.public_runtime_observation.expected_source_tree_sha256' "$evidence")" = "d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7"
+          test "$(jq -r '.public_runtime_observation.observed_source_tree_sha256' "$evidence")" = "d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7"
+          test "$(jq -r '.public_runtime_observation.digest_match' "$evidence")" = "true"
+          test "$(jq -r '.mutation_scope.paid_upgrade_authorized' "$evidence")" = "false"
+          test "$(jq -r '.mutation_scope.existing_data_volume_preserved' "$evidence")" = "true"
+          test "$(jq -r '.mutation_scope.secret_value_disclosed' "$evidence")" = "false"
+          test "$(jq -r '.mutation_scope.authority_expansion' "$evidence")" = "false"
+
+          if git ls-remote --exit-code --tags origin refs/tags/v1.7.0 >/dev/null 2>&1; then
+            echo "v1.7.0 already exists; refusing duplicate seal"
+            exit 1
+          fi
+
+          echo "Exact release candidate: ${SHA}"
+          echo "NEXUS Verification run: ${RUN_ID}"
+          echo "v1.7 release intent gate: PASS"
+
+      - name: Create immutable v1.7 historical release boundary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence_sha="$(sha256sum evidence/v1.7/production-runtime-evidence.json | awk '{print $1}')"
+
+          cat > /tmp/v1.7-release-notes.md <<EOF
+          # NEXUS v1.7.0 — Runtime Provenance & Source-Tree Identity Sealed
+
+          **STATUS: SEALED / VERIFIED AT THE STATED RUNTIME-PROVENANCE BOUNDARY**
+
+          NEXUS v1.7.0 preserves:
+
+          \`A_out <= A_in\`
+
+          ## Exact release boundary
+
+          - Release candidate: \`${SHA}\`
+          - NEXUS Verification run: \`${RUN_ID}\` — SUCCESS
+          - Runtime target: \`3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959\`
+          - Railway deployment: \`b0e78cf8-af51-4092-9bf6-99e1ac5cc13b\` — SUCCESS
+          - Durable boundary: \`/data\`
+          - Canonical source-tree SHA-256: \`d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7\`
+          - Independent runtime-identity run: \`34884505985\` — SUCCESS
+          - Production reconciliation run: \`34886934100\` — SUCCESS
+          - Public runtime observation: HTTP \`200\`, schema \`nexus.runtime-identity.v1\`
+          - Authority marker: \`non_authoritative_build_metadata\`
+          - Production observed digest: exact match
+          - Production evidence SHA-256: \`${evidence_sha}\`
+
+          ## Claim boundary
+
+          The observed Railway production executable reported a source-tree identity exactly matching independently computed repository evidence for the recorded runtime target. This runtime metadata is explicitly non-authoritative and does not authorize requests, mutate policy, create HumanJudgment, or expand execution authority.
+
+          No paid resource upgrade, new production service, new production volume, secret disclosure, or authority expansion was authorized for this release.
+
+          This is an operational runtime-provenance seal. It is not a claim of bit-for-bit reproducible binaries across arbitrary builders, formal verification of Railway, universal security, universal availability, or formal proof of epistemic correctness.
+          EOF
+
+          gh release create v1.7.0 \
+            --target "$SHA" \
+            --title "NEXUS v1.7.0 — Runtime Provenance Sealed" \
+            --notes-file /tmp/v1.7-release-notes.md

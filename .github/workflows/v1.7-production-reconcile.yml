@@ -1,0 +1,92 @@
+name: NEXUS v1.7 Production Reconciliation
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  reconcile-production-runtime:
+    runs-on: ubuntu-24.04
+    env:
+      TARGET_SHA: 3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959
+      EXPECTED_SOURCE_TREE_SHA256: d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7
+      PRODUCTION_URL: https://nexus-stage-d-production.up.railway.app
+      RAILWAY_DEPLOYMENT_ID: b0e78cf8-af51-4092-9bf6-99e1ac5cc13b
+      DURABLE_MOUNT_PATH: /data
+    steps:
+      - name: Checkout exact runtime target
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Independently recompute target source-tree digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(bash scripts/source-tree-digest.sh)"
+          test "$actual" = "$EXPECTED_SOURCE_TREE_SHA256"
+          echo "Repository digest: $actual"
+
+      - name: Observe public production runtime identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="${RUNNER_TEMP}/production-runtime-identity.json"
+          code="$(curl --retry 5 --retry-all-errors --retry-delay 2 -sS -o "$response" -w '%{http_code}' "$PRODUCTION_URL/v1/runtime-identity")"
+          test "$code" = "200"
+          test "$(jq -r '.schema' "$response")" = "nexus.runtime-identity.v1"
+          test "$(jq -r '.authority' "$response")" = "non_authoritative_build_metadata"
+          observed="$(jq -r '.source_tree_sha256' "$response")"
+          test "$observed" = "$EXPECTED_SOURCE_TREE_SHA256"
+          jq -n \
+            --arg status "PASS" \
+            --arg target_sha "$TARGET_SHA" \
+            --arg provider "Railway" \
+            --arg deployment_id "$RAILWAY_DEPLOYMENT_ID" \
+            --arg durable_mount_path "$DURABLE_MOUNT_PATH" \
+            --arg production_url "$PRODUCTION_URL" \
+            --arg http_status "$code" \
+            --arg schema "nexus.runtime-identity.v1" \
+            --arg authority "non_authoritative_build_metadata" \
+            --arg expected_source_tree_sha256 "$EXPECTED_SOURCE_TREE_SHA256" \
+            --arg observed_runtime_source_tree_sha256 "$observed" \
+            '{
+              status: $status,
+              target_sha: $target_sha,
+              provider: $provider,
+              deployment_id: $deployment_id,
+              durable_mount_path: $durable_mount_path,
+              production_url: $production_url,
+              http_status: ($http_status | tonumber),
+              schema: $schema,
+              authority: $authority,
+              expected_source_tree_sha256: $expected_source_tree_sha256,
+              observed_runtime_source_tree_sha256: $observed_runtime_source_tree_sha256,
+              digest_match: true,
+              claim_boundary: "observed production runtime identity matches independently computed source-tree identity; metadata is non-authoritative"
+            }' | tee v1.7-production-runtime-evidence.json
+          sha256sum v1.7-production-runtime-evidence.json | tee v1.7-production-runtime-evidence.sha256
+          echo "V1.7 PRODUCTION RECONCILIATION: PASS"
+
+      - name: Attest production runtime evidence
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: v1.7-production-runtime-evidence.json
+
+      - name: Upload production runtime evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: v1.7-production-runtime-evidence
+          path: |
+            v1.7-production-runtime-evidence.json
+            v1.7-production-runtime-evidence.sha256
+            scripts/source-tree-digest.sh
+          if-no-files-found: error

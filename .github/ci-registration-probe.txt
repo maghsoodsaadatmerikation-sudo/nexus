@@ -1,0 +1,2 @@
+NEXUS CI registration probe.
+Purpose: trigger GitHub Actions via a native Git Data API ref update without changing verification logic.

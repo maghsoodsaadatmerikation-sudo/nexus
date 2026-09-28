@@ -1,0 +1,81 @@
+name: Publish NEXUS v1.2.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-v1.2.0.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Publish verified v1.2.0 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: v1.2.0
+          TARGET_SHA: fbe17b80206df5e63f7351cc97f1794eb8c88e17
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving it unchanged."
+            exit 0
+          fi
+
+          cat > release-notes.md <<'EOF'
+          # NEXUS v1.2.0 — Operational Resilience
+
+          **STATUS: SEALED / VERIFIED AT THE STATED OPERATIONAL BOUNDARY**
+
+          NEXUS v1.2.0 seals the operational-resilience gates built after the durable-host v1.1.0 release while preserving the constitutional invariant:
+
+          `A_out <= A_in`
+
+          ## Exact release boundary
+
+          - Candidate commit: `fbe17b80206df5e63f7351cc97f1794eb8c88e17`
+          - NEXUS Verification run: `34848797043`
+          - Verification conclusion: `SUCCESS`
+          - Verification bundle digest: `sha256:3bf37901f06074c6b42cbe322427c21e1f6be8da10cfd01a55e160d3993370ba`
+          - Artifact 05 bundle digest: `sha256:1e6ee2695c8c40a015b15de00c8a8310a75ddc57922eab6d813179e6cc0547ac`
+          - Render configuration artifact digest: `sha256:e3f280cc6d2e3d30826cc96f1f57f048064ae910b480f041e46321dab878c932`
+
+          ## v1.2 gates
+
+          - G1 Release-boundary integrity: PASS
+          - G2 Continuous verification: PASS
+          - G3 Durable-state resilience: PASS
+          - G4 Operational economy: PASS
+          - G5 Release-candidate gate: PASS
+
+          The exact candidate workflow completed successfully with all verification, lifecycle-gate tests, attestations, and evidence uploads successful.
+
+          ## Operational economy boundary
+
+          - No paid resource upgrade was requested or performed for v1.2.
+          - Auxiliary evidence services are configured as non-production helpers with restart policy `NEVER` and sleeping enabled.
+          - The connected Railway API does not permit a literal `numReplicas: 0` value through the available action, so this release does not claim provider-side zero replicas.
+          - The primary durable service and `/data` volume were preserved.
+
+          ## Evidence and authority boundary
+
+          Scheduled verification runs at 00:00, 08:00, and 16:00 UTC and may verify/attest evidence only. They do not authorize a release.
+
+          This seal is an operational verification boundary. It does not claim formal proof of epistemic correctness, universal availability, provider-wide billing guarantees, or expansion of machine authority. Human judgment and release authority remain human-owned.
+
+          The repository owner explicitly authorized progression through the final release boundary after the candidate gates were implemented; publication occurred only after the exact-candidate GitHub verification run was independently confirmed successful.
+          EOF
+
+          gh release create "$TAG" \
+            --repo "$REPO" \
+            --target "$TARGET_SHA" \
+            --title "NEXUS v1.2.0 — Operational Resilience Sealed" \
+            --notes-file release-notes.md
+
+          gh release view "$TAG" --repo "$REPO" --json tagName,targetCommitish,name,isDraft,isPrerelease,url

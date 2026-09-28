@@ -1,0 +1,114 @@
+name: Publish NEXUS v1.3.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-v1.3.0.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    env:
+      TAG: v1.3.0
+      TARGET_SHA: 458260fcadc95b53d5e33fa2fabf806519a8cccd
+      VERIFICATION_RUN: '34873937406'
+    steps:
+      - name: Checkout exact verified candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: 458260fcadc95b53d5e33fa2fabf806519a8cccd
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Rebuild v1.3 candidate manifest fail-closed
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          bash -n scripts/v1.3-production-hardening.sh
+          bash scripts/v1.3-production-hardening.sh
+          bash -n scripts/v1.3-release-candidate.sh
+          bash scripts/v1.3-release-candidate.sh "$TARGET_SHA" "$VERIFICATION_RUN" v1.3-release-candidate-manifest.txt
+          grep -Fx "Candidate Commit: $TARGET_SHA" v1.3-release-candidate-manifest.txt
+          grep -Fx "Verification Run ID: $VERIFICATION_RUN" v1.3-release-candidate-manifest.txt
+          grep -Fx 'Authority Expansion: NONE' v1.3-release-candidate-manifest.txt
+
+      - name: Independently confirm exact-candidate verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          run_sha="$(gh api "repos/${REPO}/actions/runs/${VERIFICATION_RUN}" --jq '.head_sha')"
+          run_status="$(gh api "repos/${REPO}/actions/runs/${VERIFICATION_RUN}" --jq '.status')"
+          run_conclusion="$(gh api "repos/${REPO}/actions/runs/${VERIFICATION_RUN}" --jq '.conclusion')"
+          test "$run_sha" = "$TARGET_SHA"
+          test "$run_status" = 'completed'
+          test "$run_conclusion" = 'success'
+          printf 'Exact candidate verification: SUCCESS\n'
+
+      - name: Publish verified v1.3.0 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving it unchanged."
+            exit 0
+          fi
+
+          cat > release-notes.md <<'EOF'
+          # NEXUS v1.3.0 — Authority-Preserving Production Hardening
+
+          **STATUS: SEALED / VERIFIED AT THE STATED OPERATIONAL BOUNDARY**
+
+          NEXUS v1.3.0 hardens the production verification boundary after v1.2.0 while preserving:
+
+          `A_out <= A_in`
+
+          ## Exact release boundary
+
+          - Candidate commit: `458260fcadc95b53d5e33fa2fabf806519a8cccd`
+          - NEXUS Verification run: `34873937406`
+          - Verification conclusion: `SUCCESS`
+          - Verification bundle digest: `sha256:d324c4c7ca0754e45c639b41cd3870e07c7b41712d1f7a532ffeeeaf47fedfab`
+          - Artifact 05 bundle digest: `sha256:ca4fd0f730c1fe248ad41a38f5d2a6523ead6ef9450611e2f10caac31b7e3e51`
+          - Render configuration artifact digest: `sha256:e97553dbb15da13d90ddb0723ea6d2418e9edfe7cbb0f3d3fd3701e5ee1b509c`
+
+          ## v1.3 gates
+
+          - G1 Historical seal integrity: PASS
+          - G2 Gateway authority non-expansion: PASS
+          - G3 Secret and evidence hygiene: PASS
+          - G4 Provenance and dependency integrity: PASS
+          - G5 Failure transparency: PASS
+          - G6 Operational economy: PASS
+          - G7 Exact-candidate release gate: PASS
+
+          The exact candidate workflow completed successfully. Contract tests, locked dependency checks, digest-pinned verification, lifecycle gates, evidence attestations, and evidence uploads all completed within the existing verification boundary.
+
+          ## Authority boundary
+
+          Scheduled verification may observe, verify, attest, and report. It cannot create releases, repair production data, mutate authorization state, or expand epistemic authority.
+
+          No paid resource upgrade was authorized or required for this release. The durable `/data` boundary remains preserved. Auxiliary verification helpers remain outside the production authority path.
+
+          This seal is an operational verification boundary. It does not claim formal proof of epistemic correctness, universal security, universal availability, or provider-wide billing guarantees.
+
+          The repository owner explicitly authorized progression through the final release boundary; publication occurred only after the exact-candidate verification run was independently confirmed successful.
+          EOF
+
+          gh release create "$TAG" \
+            --repo "$REPO" \
+            --target "$TARGET_SHA" \
+            --title "NEXUS v1.3.0 — Production Hardening Sealed" \
+            --notes-file release-notes.md
+
+          gh release view "$TAG" --repo "$REPO" --json tagName,targetCommitish,name,isDraft,isPrerelease,url

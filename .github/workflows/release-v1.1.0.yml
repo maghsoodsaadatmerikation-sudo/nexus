@@ -1,0 +1,81 @@
+name: Publish NEXUS v1.1.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-v1.1.0.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Publish verified v1.1.0 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: v1.1.0
+          TARGET_SHA: 480f8771c47e41d4d19b22ed4360bd32c4d2f70a
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving it unchanged."
+            exit 0
+          fi
+
+          cat > release-notes.md <<'EOF'
+          # NEXUS v1.1.0 — Durable Host Evidence & Release Readiness
+
+          **STATUS: SEALED / VERIFIED AT THE STATED OPERATIONAL BOUNDARY**
+
+          NEXUS v1.1.0 records completion of the durable-host lifecycle evidence required by the v1.1 release gate while preserving the constitutional invariant:
+
+          `A_out <= A_in`
+
+          ## Verified release boundary
+
+          - Exact deployed commit: `480f8771c47e41d4d19b22ed4360bd32c4d2f70a`
+          - NEXUS Verification run ID: `34824938788`
+          - Verification conclusion: `SUCCESS`
+          - Workspace snapshot SHA-256: `71271177cadc1dd67afdf0ddbc913c89c54b326df66bdb2f1dd803da94107d7b`
+          - Stage D evidence-harness SHA-256: `bd4aea44cd972a7f02523115dcecd1abd956f70beb7a71d1880d3da896940325`
+          - Stage E readiness-gate SHA-256: `f3d1f97e5ab637b84e29c532b98a06de43e9e2fd94a0d3c8a8fedf1622b3321d`
+
+          ## Stage D durable-host lifecycle
+
+          - HTTPS/auth preflight: PASS
+          - Capture: PASS
+          - Real service replacement event: RECORDED
+          - Post-replacement survival: PASS
+          - Destructive backing-state removal: RECORDED
+          - Authenticated absence observation (`404 workspace_not_found`): PASS
+          - Restore verification: PASS
+
+          ## Stage E / release gate
+
+          - v1.1 release-readiness gate: PASS
+          - Exact-commit GitHub verification: independently checked and successful
+          - Constitutional-core evidence attestation/upload: SUCCESS
+          - Artifact 05 evidence attestation/upload: SUCCESS
+          - Token recorded in evidence: NO
+          - Authority expansion: NONE
+
+          ## Evidence boundary
+
+          This release seals an **operational verification boundary**. It does not claim formal proof of epistemic correctness, and it does not expand machine authority beyond explicitly authorized inputs. Durable-host evidence establishes observed persistence/recovery behavior for the tested deployment and lifecycle sequence only.
+
+          Human release authorization was explicitly given after the release-candidate manifest reached `READY FOR HUMAN RELEASE DECISION` and the referenced GitHub verification run was independently checked.
+          EOF
+
+          gh release create "$TAG" \
+            --repo "$REPO" \
+            --target "$TARGET_SHA" \
+            --title "NEXUS v1.1.0 — Durable Host Verification Sealed" \
+            --notes-file release-notes.md
+
+          gh release view "$TAG" --repo "$REPO" --json tagName,targetCommitish,name,isDraft,isPrerelease,url

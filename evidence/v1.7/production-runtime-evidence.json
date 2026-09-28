@@ -1,0 +1,52 @@
+{
+  "schema": "nexus.v1.7.production-runtime-evidence.v1",
+  "status": "PASS",
+  "runtime_target": {
+    "commit_sha": "3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959",
+    "source_tree_sha256": "d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7"
+  },
+  "independent_ci": {
+    "nexus_verification_run_id": "34884330885",
+    "runtime_identity_run_id": "34884505985",
+    "runtime_identity_artifact_sha256": "25252d95ed8e44cd877d50f482c3aae0f0c60afedeffa31ce610569ffac9a7aa",
+    "digest_match": true
+  },
+  "provider": {
+    "name": "Railway",
+    "project": "NEXUS Stage D",
+    "service": "nexus-stage-d",
+    "environment": "production",
+    "source_binding": {
+      "commit_sha": "3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959",
+      "status": "OBSERVED_ACTIVE"
+    },
+    "deployment": {
+      "id": "b0e78cf8-af51-4092-9bf6-99e1ac5cc13b",
+      "status": "SUCCESS"
+    },
+    "durability": {
+      "mount_path": "/data",
+      "volume_id": "cc47a350-6c7e-4487-89d9-c4b390f94884"
+    }
+  },
+  "public_runtime_observation": {
+    "workflow_run_id": "34886934100",
+    "artifact_sha256": "9a339d5a8040a70dc65d9f749bd96bc0095dfc5c84227523943055904a1b7e05",
+    "url": "https://nexus-stage-d-production.up.railway.app/v1/runtime-identity",
+    "http_status": 200,
+    "schema": "nexus.runtime-identity.v1",
+    "authority": "non_authoritative_build_metadata",
+    "expected_source_tree_sha256": "d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7",
+    "observed_source_tree_sha256": "d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7",
+    "digest_match": true
+  },
+  "mutation_scope": {
+    "paid_upgrade_authorized": false,
+    "new_service_created": false,
+    "new_volume_created": false,
+    "existing_data_volume_preserved": true,
+    "secret_value_disclosed": false,
+    "authority_expansion": false
+  },
+  "claim_boundary": "The observed Railway production executable reports a source-tree identity exactly matching independently computed repository evidence for the recorded runtime target. This metadata is non-authoritative and is not a claim of bit-for-bit reproducible binaries, formal provider verification, universal security, universal availability, or formal epistemic proof."
+}

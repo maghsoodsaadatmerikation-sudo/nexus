@@ -1,0 +1,15 @@
+NEXUS v2.2.0 release intent
+
+Boundary: revocation replay integrity
+Invariant: A_child <= A_parent <= A_in
+
+Require exact-candidate canonical NEXUS Verification and NEXUS v2.2 Revocation Replay Verification to succeed before sealing.
+
+Recovery note: v2.2 verification is deliberately boundary-scoped; canonical NEXUS Verification independently owns full repository/toolchain verification and is rebound by the release gate.
+
+Candidate renewal: the constitutional type-boundary integration test is aligned with the current RequestEnvelope and ExecutionReceipt API. The release gate now waits fail-closed for canonical verification of the same SHA and self-audits all bundle members after extracting the exact v2.2 evidence archive.
+
+No real verification -> no PASS -> no seal.
+Production mutation: false
+Paid upgrade required: false
+Authority expansion: NONE

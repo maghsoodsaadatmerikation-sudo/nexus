@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: nexus-durable-stage-d
+    runtime: docker
+    plan: 0.5c-512mb
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    autoDeployTrigger: checksPass
+    healthCheckPath: /
+    numInstances: 1
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: NEXUS_API_TOKEN
+        sync: false
+      - key: NEXUS_DATA_DIR
+        value: /data
+      - key: NEXUS_BIND_ADDR
+        value: 0.0.0.0:3000
+      - key: PORT
+        value: "3000"
+    disk:
+      name: nexus-data
+      mountPath: /data
+      sizeGB: 1

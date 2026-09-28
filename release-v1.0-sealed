@@ -1,0 +1,31 @@
+NEXUS v1.0 RELEASE SEAL
+=======================
+
+Status: SEALED FROM REAL PASS
+Sealed source revision: ee04bb05e8a07e9f5148d8ed85b6caf0aee27ac7
+Verification workflow: NEXUS Verification
+Verification run: 33540467578
+Verification run number: 233
+Verification conclusion: SUCCESS
+
+Core verification bundle artifact: 9813389380
+Core verification bundle digest: sha256:cf538cc274ae0ee43ebd569d419dd072cc5ac0f1d770d0d4158205b7969814a7
+Artifact 05 verification bundle artifact: 9813405175
+Artifact 05 verification bundle digest: sha256:a42210861837483bb02d3b1fc1e09578ad12533656748474076a61cda2266952
+
+Verified gates:
+- preflight static verification matrix: PASS
+- pinned constitutional core verification: PASS
+- manifest self-audit: PASS
+- core evidence bundle and attestation: PASS
+- Artifact 05 Gate 0: PASS
+- Artifact 05 Gate 1: PASS
+- Artifact 05 Gate 2: PASS
+- Artifact 05 Gate 3 evidence integrity: PASS
+- Artifact 05 evidence bundle and attestation: PASS
+
+Constitutional release statement:
+This seal records evidence; it does not create epistemic authority. Machine analysis remains non-authoritative, human judgment requires explicit human authorship, and execution remains behind constitutional authorization.
+
+Seal rule: no real verification -> no PASS -> no seal.
+This seal was created only after the referenced real SUCCESS run completed.

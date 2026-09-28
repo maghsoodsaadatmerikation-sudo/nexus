@@ -1,0 +1,120 @@
+name: NEXUS v2.1 Seal Race Recovery
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/recover-v2.1-seal.yml"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  recover-seal:
+    runs-on: ubuntu-24.04
+    env:
+      CANDIDATE_SHA: 4bed8ea9ec70bfeb0424c917edb71efb3fd6a3a8
+      V21_RUN: '35263378016'
+      VERIFY_RUN: '35263377971'
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout immutable v2.1 candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Establish exact historical release intent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test -f release-intents/v2.1.0
+          message="$(gh api "repos/${REPO}/commits/${CANDIDATE_SHA}" --jq '.commit.message')"
+          test "$message" = 'release(v2.1): request capability-enforcement seal'
+          if gh api "repos/${REPO}/releases/tags/v2.1.0" >/dev/null 2>&1; then
+            echo 'v2.1.0 already exists; recovery refuses duplicate release'; exit 1
+          fi
+
+      - name: Require both exact-candidate verification runs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/${REPO}/actions/runs/${V21_RUN}" --jq '.name')" = 'NEXUS v2.1 Enforcement Verification'
+          test "$(gh api "repos/${REPO}/actions/runs/${V21_RUN}" --jq '.head_sha')" = "$CANDIDATE_SHA"
+          test "$(gh api "repos/${REPO}/actions/runs/${V21_RUN}" --jq '.status')" = completed
+          test "$(gh api "repos/${REPO}/actions/runs/${V21_RUN}" --jq '.conclusion')" = success
+          test "$(gh api "repos/${REPO}/actions/runs/${VERIFY_RUN}" --jq '.name')" = 'NEXUS Verification'
+          test "$(gh api "repos/${REPO}/actions/runs/${VERIFY_RUN}" --jq '.event')" = push
+          test "$(gh api "repos/${REPO}/actions/runs/${VERIFY_RUN}" --jq '.head_sha')" = "$CANDIDATE_SHA"
+          test "$(gh api "repos/${REPO}/actions/runs/${VERIFY_RUN}" --jq '.status')" = completed
+          test "$(gh api "repos/${REPO}/actions/runs/${VERIFY_RUN}" --jq '.conclusion')" = success
+
+      - name: Re-bind immutable v2.1 enforcement evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-evidence
+          gh run download "$V21_RUN" --repo "$REPO" -n nexus-v2.1-enforcement-evidence -D release-evidence
+          M='release-evidence/evidence-v2.1/manifest.txt'
+          A='release-evidence/nexus-v2.1-enforcement-evidence.tar.gz'
+          test -f "$M"; test -f "$A"
+          grep -Fx 'schema=nexus.v2.1.enforcement-verification.v1' "$M"
+          grep -Fx 'status=PASS' "$M"
+          grep -Fx "candidate_sha=${CANDIDATE_SHA}" "$M"
+          grep -Fx "workflow_run_id=${V21_RUN}" "$M"
+          grep -Fx 'authority_rule=A_child<=A_parent<=A_in' "$M"
+          grep -Fx 'authorized_request_boundary=true' "$M"
+          grep -Fx 'validity_window_fail_closed=true' "$M"
+          grep -Fx 'audit_authority=non_authoritative' "$M"
+          grep -Fx 'production_mutation=false' "$M"
+          grep -Fx 'authority_expansion=NONE' "$M"
+          evidence_sha="$(sha256sum "$A" | awk '{print $1}')"
+          printf '%s\n' \
+            'schema=nexus.v2.1.release-evidence.v1' 'status=PASS' \
+            "candidate_sha=${CANDIDATE_SHA}" "v2.1_run_id=${V21_RUN}" "nexus_verification_run_id=${VERIFY_RUN}" \
+            "enforcement_evidence_sha256=${evidence_sha}" 'authority_rule=A_child<=A_parent<=A_in' \
+            'production_mutation=false' 'paid_upgrade_required=false' 'authority_expansion=NONE' > v2.1-release-evidence.txt
+          sha256sum v2.1-release-evidence.txt > v2.1-release-evidence.sha256
+
+      - name: Create v2.1.0 seal
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence_sha="$(sha256sum v2.1-release-evidence.txt | awk '{print $1}')"
+          cat > /tmp/notes.md <<EOF
+          # NEXUS v2.1.0 — Capability Enforcement Boundary Sealed
+
+          **STATUS: SEALED / VERIFIED AT THE STATED ENFORCEMENT BOUNDARY**
+
+          \`A_child <= A_parent <= A_in\`
+
+          - Exact release candidate: \`${CANDIDATE_SHA}\`
+          - NEXUS v2.1 Enforcement Verification run: \`${V21_RUN}\` — SUCCESS
+          - Canonical NEXUS Verification run: \`${VERIFY_RUN}\` — SUCCESS
+          - Capability validation before AuthorizedRequest construction: VERIFIED
+          - Invalid validity windows fail closed: VERIFIED
+          - Capability audit observations: append-only through the public API and NON-AUTHORITATIVE
+          - Production mutation: NO
+          - Paid upgrade required: NO
+          - Authority expansion: NONE
+          - Release evidence SHA-256: \`${evidence_sha}\`
+
+          Recovery note: the original release gate ran before canonical verification completed and failed closed. This one-shot recovery re-validates the immutable candidate, both exact-candidate successful runs, and the original enforcement evidence before creating the seal. It does not retroactively seal v2.0.
+
+          This seal is deliberately narrow. It does not claim cryptographic grant authenticity, durable/distributed revocation persistence, external identity federation, universal security, provider correctness, or authority beyond the parent/input boundary.
+          EOF
+          gh release create v2.1.0 --repo "$REPO" --target "$CANDIDATE_SHA" --title 'NEXUS v2.1.0 — Capability Enforcement Boundary Sealed' --notes-file /tmp/notes.md
+
+      - name: Assert immutable seal boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/${REPO}/releases/tags/v2.1.0" --jq '.draft')" = false
+          test "$(gh api "repos/${REPO}/releases/tags/v2.1.0" --jq '.prerelease')" = false
+          test "$(gh api "repos/${REPO}/releases/tags/v2.1.0" --jq '.target_commitish')" = "$CANDIDATE_SHA"
+          tag_sha="$(gh api "repos/${REPO}/git/ref/tags/v2.1.0" --jq '.object.sha')"
+          test "$tag_sha" = "$CANDIDATE_SHA"
+          echo 'v2.1.0 exact-candidate seal assertion PASS'

@@ -1,0 +1,21 @@
+NEXUS v2.3.0 release intent
+
+Boundary: revocation freshness / stale-authority defense
+Invariants:
+- A_child <= A_parent <= A_in
+- revocation observed => stale authorization cannot restore authority
+- evidence != authority
+
+Require all of the following on the exact candidate:
+- canonical NEXUS Verification: SUCCESS
+- NEXUS v2.3 Revocation Freshness Verification: SUCCESS
+- exact-candidate evidence attestation: VERIFIED
+- extracted evidence-member SHA-256 self-audit: PASS
+- newer, older, and equal-epoch divergent revocation states: REJECTED FAIL-CLOSED
+
+No real verification -> no PASS -> no seal.
+Production mutation: false
+Paid upgrade required: false
+Authority expansion: NONE
+
+Deliberate non-claims: durable or distributed revocation persistence, cryptographic event authenticity, consensus, external identity federation, provider correctness, universal security, and external-system linearizability.
