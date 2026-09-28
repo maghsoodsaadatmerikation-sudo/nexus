@@ -274,6 +274,56 @@ async fn unknown_request_status_is_404() {
 }
 
 #[tokio::test]
+async fn authenticated_request_routes_reject_before_parse_lookup_or_delegation() {
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::authenticated(delegate.clone(), "secret"));
+
+    for authorization in [None, Some("Bearer wrong")] {
+        let mut builder = Request::builder()
+            .method("POST")
+            .uri("/v1/requests")
+            .header("content-type", "application/json");
+        if let Some(value) = authorization {
+            builder = builder.header("authorization", value);
+        }
+        let request = builder.body(Body::from("{not-json")).unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert!(delegate.requests.lock().unwrap().is_empty());
+    }
+
+    let status_request = Request::builder()
+        .method("GET")
+        .uri("/v1/requests/secret-or-missing")
+        .body(Body::empty())
+        .unwrap();
+    let status_response = app.clone().oneshot(status_request).await.unwrap();
+    assert_eq!(status_response.status(), StatusCode::UNAUTHORIZED);
+
+    let valid = Request::builder()
+        .method("POST")
+        .uri("/v1/requests")
+        .header("content-type", "application/json")
+        .header("authorization", "Bearer secret")
+        .body(Body::from(
+            serde_json::json!({
+                "request_id": "authenticated-05",
+                "authority": "user",
+                "action": "present",
+                "value": "opaque",
+                "payload": "opaque"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    assert_eq!(
+        app.oneshot(valid).await.unwrap().status(),
+        StatusCode::ACCEPTED
+    );
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn workspace_lifecycle_is_delegated_and_auditable() {
     let delegate = RecordingDelegate::default();
     let app = router(AppState::new(delegate));

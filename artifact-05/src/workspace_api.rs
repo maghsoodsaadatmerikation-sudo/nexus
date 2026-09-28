@@ -1,7 +1,7 @@
 use crate::{AppState, ConstitutionalDelegate, ErrorResponse};
 use axum::{
     extract::{Path, State},
-    http::{header, HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     Json,
 };
@@ -300,14 +300,7 @@ where
 }
 
 fn workspace_authorized<D>(state: &AppState<D>, headers: &HeaderMap) -> bool {
-    let Some(expected) = state.auth_token.as_deref() else {
-        return true;
-    };
-    headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "))
-        .is_some_and(|provided| provided.as_bytes() == expected.as_bytes())
+    crate::transport_authorized(state, headers)
 }
 
 fn unauthorized() -> axum::response::Response {

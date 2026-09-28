@@ -47,6 +47,8 @@ A successfully delegated request returns `202 Accepted` and is represented as `p
 
 Artifact 05 exposes no capability-minting, revocation, authorization, or policy-mutation route. Those operations cannot be introduced implicitly through request metadata.
 
+When NEXUS_API_TOKEN configures authenticated production state, both constitutional request routes require the exact Bearer credential. Missing or incorrect credentials return 401 before JSON parsing, delegate invocation, or status lookup. This transport authentication does not authorize a constitutional action; Core authorization remains a separate downstream boundary. When authentication is not configured, the existing local/test contract remains available.
+
 ## Decision Workspace contract
 
 The workspace API exposes typed read/write operations while persistence and audit semantics remain in the Epistemic Engine behind `WorkspaceDelegate`.

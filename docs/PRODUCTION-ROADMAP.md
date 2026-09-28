@@ -171,16 +171,28 @@ A production release must preserve four boundaries:
 - release evidence SHA-256: `6fcf7d3d2b2214c6fa301aa517346faa1efd49bab6407ad942bc2df8cfed0675`
 - release `v2.3.0`: PUBLISHED
 
-### U. v2.4 Gateway authority-confusion defense — ENGINEERING / UNVERIFIED
+### U. v2.4 Gateway authority-confusion defense — COMPLETE / SEALED
 - exact-schema constitutional request parsing
 - unknown and authority-like fields rejected before delegation
 - no capability, revocation, authorization, or policy-mutation transport route
 - existing `202` asynchronous submission and status/`404` contract preserved
+- exact release candidate: `0ba1a8efe21f3da68cc44cf5f6988cb59055fd3f`
+- v2.4 Gateway verification run `36382808938`: SUCCESS
+- canonical NEXUS Verification run `36382808948`: SUCCESS
+- release gate run `36382857043`: SUCCESS
+- evidence attestation and extracted SHA-256 self-audit: VERIFIED / PASS
+- release `v2.4.0`: PUBLISHED
+
+### V. v2.5 unified transport authentication — ENGINEERING / UNVERIFIED
+- authenticated production state covers both workspace and constitutional request routes
+- missing or incorrect bearer credentials fail before parse, delegation, or status lookup
+- transport admission remains separate from constitutional authorization
+- unauthenticated local/test behavior remains available only when no token is configured
 - no PASS or seal until exact-candidate verification, evidence, attestation, and release gate succeed
 
 ## Current status
 
-NEXUS `v2.3.0` is the current sealed revocation-freshness / stale-authority-defense boundary. v2.0 remains an unsealed engineering milestone; later releases do not retroactively seal it.
+NEXUS `v2.4.0` is the current sealed Gateway authority-confusion boundary. v2.0 remains an unsealed engineering milestone; later releases do not retroactively seal it.
 
 The v2.2 seal is narrow: it establishes reconstructible, structurally validated revocation replay for the exact candidate. It does not claim durable or distributed persistence, cryptographic event authenticity, consensus, external identity federation, provider correctness, or universal security.
 
