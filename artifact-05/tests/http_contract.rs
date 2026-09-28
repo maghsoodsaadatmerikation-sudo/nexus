@@ -182,7 +182,11 @@ async fn unknown_and_authority_like_fields_fail_closed_before_delegation() {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY, "{field}");
+        assert_eq!(
+            response.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{field}"
+        );
         assert!(delegate.requests.lock().unwrap().is_empty(), "{field}");
     }
 }
