@@ -1,0 +1,135 @@
+name: NEXUS v2.5 Release Gate
+
+on:
+  workflow_run:
+    workflows: ["NEXUS v2.5 Unified Transport Authentication Verification"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+  attestations: read
+
+jobs:
+  seal-v2-5:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Require explicit exact-candidate release intent
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          test -f release-intents/v2.5.0
+          message="$(gh api "repos/${REPO}/commits/${SHA}" --jq '.commit.message')"
+          test "$message" = 'release(v2.5): request unified-transport-authentication seal'
+          if git ls-remote --exit-code --tags origin refs/tags/v2.5.0 >/dev/null 2>&1; then
+            echo 'v2.5.0 already exists; refusing duplicate seal'; exit 1
+          fi
+
+      - name: Require canonical exact-candidate verification
+        id: canonical
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          V25_RUN: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/${REPO}/actions/runs/${V25_RUN}" --jq '.head_sha')" = "$SHA"
+          test "$(gh api "repos/${REPO}/actions/runs/${V25_RUN}" --jq '.conclusion')" = success
+          verify_run=''; status=''; conclusion=''
+          for attempt in $(seq 1 60); do
+            verification="$(gh api "repos/${REPO}/actions/runs?head_sha=${SHA}&event=push&per_page=100" --jq '[.workflow_runs[] | select(.name == "NEXUS Verification")][0] // {}')"
+            verify_run="$(jq -r '.id // empty' <<<"$verification")"
+            status="$(jq -r '.status // empty' <<<"$verification")"
+            conclusion="$(jq -r '.conclusion // empty' <<<"$verification")"
+            if [ "$status" = completed ]; then test "$conclusion" = success; break; fi
+            echo "Waiting for canonical verification attempt ${attempt}/60"
+            sleep 10
+          done
+          test -n "$verify_run"; test "$status" = completed; test "$conclusion" = success
+          test "$(gh api "repos/${REPO}/actions/runs/${verify_run}" --jq '.head_sha')" = "$SHA"
+          echo "verify_run=${verify_run}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate attestation and bind v2.5 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          V25_RUN: ${{ github.event.workflow_run.id }}
+          VERIFY_RUN: ${{ steps.canonical.outputs.verify_run }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-evidence
+          gh run download "$V25_RUN" --repo "$REPO" -n nexus-v2.5-transport-authentication-evidence -D release-evidence
+          M='release-evidence/evidence-v2.5/manifest.txt'
+          A='release-evidence/nexus-v2.5-transport-authentication-evidence.tar.gz'
+          test -f "$M"; test -f "$A"
+          gh attestation verify "$A" --repo "$REPO"
+          grep -Fx 'schema=nexus.v2.5.unified-transport-authentication.v1' "$M"
+          grep -Fx 'status=PASS' "$M"
+          grep -Fx "candidate_sha=${SHA}" "$M"
+          grep -Fx "workflow_run_id=${V25_RUN}" "$M"
+          grep -Fx 'authority_rule=A_out<=A_in' "$M"
+          grep -Fx 'request_submission_authenticated_when_configured=true' "$M"
+          grep -Fx 'request_status_authenticated_when_configured=true' "$M"
+          grep -Fx 'authentication_precedes_body_parse=true' "$M"
+          grep -Fx 'authentication_precedes_delegation=true' "$M"
+          grep -Fx 'authentication_precedes_status_lookup=true' "$M"
+          grep -Fx 'local_unconfigured_contract_preserved=true' "$M"
+          grep -Fx 'constitutional_authority_from_transport=false' "$M"
+          grep -Fx 'production_mutation=false' "$M"
+          grep -Fx 'authority_expansion=NONE' "$M"
+          mkdir -p release-evidence/unpacked
+          tar -xzf "$A" -C release-evidence/unpacked
+          (cd release-evidence/unpacked/evidence-v2.5 && sha256sum -c SHA256SUMS)
+          evidence_sha="$(sha256sum "$A" | awk '{print $1}')"
+          printf '%s\n' 'schema=nexus.v2.5.release-evidence.v1' 'status=PASS' +            "candidate_sha=${SHA}" "v2.5_run_id=${V25_RUN}" "nexus_verification_run_id=${VERIFY_RUN}" +            "transport_authentication_evidence_sha256=${evidence_sha}" 'authority_rule=A_out<=A_in' +            'attestation_verified=true' 'production_mutation=false' 'authority_expansion=NONE' > v2.5-release-evidence.txt
+
+      - name: Create v2.5 transport-authentication seal
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          V25_RUN: ${{ github.event.workflow_run.id }}
+          VERIFY_RUN: ${{ steps.canonical.outputs.verify_run }}
+        run: |
+          set -euo pipefail
+          evidence_sha="$(sha256sum v2.5-release-evidence.txt | awk '{print $1}')"
+          {
+            echo '# NEXUS v2.5.0 — Unified Transport Authentication Sealed'
+            echo
+            echo '**STATUS: SEALED / VERIFIED AT THE STATED TRANSPORT BOUNDARY**'
+            echo
+            echo "- Exact release candidate: ${SHA}"
+            echo "- NEXUS v2.5 verification run: ${V25_RUN} — SUCCESS"
+            echo "- Canonical NEXUS Verification run: ${VERIFY_RUN} — SUCCESS"
+            echo '- Exact-candidate evidence attestation: VERIFIED'
+            echo '- Missing/wrong bearer: REJECTED BEFORE PARSE, DELEGATION, OR LOOKUP'
+            echo '- Constitutional authority from transport: NONE'
+            echo '- Production mutation: NO'
+            echo "- Release evidence SHA-256: ${evidence_sha}"
+            echo
+            echo 'This seal does not claim credential rotation, external identity federation, rate limiting, distributed session state, durable persistence, consensus, universal security, or external-system linearizability.'
+          } > /tmp/notes.md
+          gh release create v2.5.0 --target "$SHA" --title 'NEXUS v2.5.0 — Unified Transport Authentication Sealed' --notes-file /tmp/notes.md
+
+      - name: Assert seal exists on exact candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/${REPO}/releases/tags/v2.5.0" --jq '.draft')" = false
+          test "$(gh api "repos/${REPO}/releases/tags/v2.5.0" --jq '.prerelease')" = false
+          test "$(gh api "repos/${REPO}/releases/tags/v2.5.0" --jq '.target_commitish')" = "$SHA"
