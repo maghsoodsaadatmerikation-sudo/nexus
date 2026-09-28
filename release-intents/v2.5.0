@@ -1,0 +1,18 @@
+NEXUS v2.5.0 release intent
+
+Boundary: unified transport authentication
+Invariants:
+- A_out <= A_in
+- transport authentication != constitutional authorization
+- evidence != authority
+
+Require on the exact candidate:
+- canonical NEXUS Verification: SUCCESS
+- NEXUS v2.5 verification: SUCCESS
+- exact-candidate evidence attestation: VERIFIED
+- extracted evidence-member SHA-256 self-audit: PASS
+- authentication precedes parse, delegation, and status lookup
+
+No real verification -> no PASS -> no seal.
+Production mutation: false
+Authority expansion: NONE
