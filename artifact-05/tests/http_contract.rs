@@ -152,6 +152,60 @@ async fn post_requests_is_async_202_and_delegates_opaque_payload() {
 }
 
 #[tokio::test]
+async fn unknown_and_authority_like_fields_fail_closed_before_delegation() {
+    for field in [
+        "capability",
+        "grant",
+        "revocation_epoch",
+        "authorized",
+        "policy",
+        "unexpected",
+    ] {
+        let delegate = RecordingDelegate::default();
+        let app = router(AppState::new(delegate.clone()));
+        let mut body = serde_json::json!({
+            "request_id": "ambiguous-05",
+            "authority": "user",
+            "action": "present",
+            "value": "opaque-value",
+            "payload": "opaque-payload"
+        });
+        body.as_object_mut()
+            .unwrap()
+            .insert(field.to_string(), serde_json::json!({"claimed": true}));
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/requests")
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY, "{field}");
+        assert!(delegate.requests.lock().unwrap().is_empty(), "{field}");
+    }
+}
+
+#[tokio::test]
+async fn gateway_exposes_no_capability_or_policy_mutation_routes() {
+    for route in ["/v1/capabilities", "/v1/revocations", "/v1/policy"] {
+        let delegate = RecordingDelegate::default();
+        let app = router(AppState::new(delegate.clone()));
+        let request = Request::builder()
+            .method("POST")
+            .uri(route)
+            .header("content-type", "application/json")
+            .body(Body::from("{}"))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{route}");
+        assert!(delegate.requests.lock().unwrap().is_empty(), "{route}");
+    }
+}
+
+#[tokio::test]
 async fn accepted_request_is_reported_as_pending() {
     let delegate = RecordingDelegate::default();
     let app = router(AppState::new(delegate));
