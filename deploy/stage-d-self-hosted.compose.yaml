@@ -1,0 +1,20 @@
+# Run from the repository root:
+# NEXUS_API_TOKEN=... docker compose -f deploy/stage-d-self-hosted.compose.yaml up -d --build
+# Tailscale Funnel runs on the host, proxying https://<device>.<tailnet>.ts.net to localhost:3000.
+services:
+  nexus:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      NEXUS_API_TOKEN: ${NEXUS_API_TOKEN:?Set a private NEXUS_API_TOKEN in the operator environment}
+      NEXUS_DATA_DIR: /data
+      NEXUS_BIND_ADDR: 0.0.0.0:3000
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - nexus_stage_d_data:/data
+    restart: unless-stopped
+
+volumes:
+  nexus_stage_d_data:
