@@ -1,0 +1,43 @@
+{
+  "schema": "nexus.stage-d-independent-review.v1",
+  "reviewed_at_utc": "2026-10-06T23:57:00Z",
+  "reviewer": "OpenAI Codex — independent API and byte-level cross-check",
+  "subject": {
+    "repository": "maghsoodsaadatmerikation-sudo/nexus",
+    "base_commit": "588dc7672146031425b16b34956876d644244ace",
+    "evidence_pack_blob_sha": "046803044a280664e72908f1d049fc437ee3566b",
+    "verification_run_id": "37414184703"
+  },
+  "result": "PASS",
+  "checks": {
+    "exact_commit_binding": "PASS",
+    "workflow_completed_successfully": "PASS",
+    "verification_artifacts_unexpired_and_bound_to_exact_commit": "PASS",
+    "required_evidence_files_14_of_14": "PASS",
+    "evidence_pack_files_total": 16,
+    "snapshot_sha256_recomputed": "affb1c17da81af3df82aeaa237919a47b2734b85f6fae262bf1511d5c9ab65ce",
+    "recorded_snapshot_sha256_matches": "PASS",
+    "pre_replacement_equals_post_replacement": "PASS",
+    "pre_replacement_equals_post_restore": "PASS",
+    "destructive_absence_exact_response": "PASS — HTTP evidence body is {\"error\":\"workspace_not_found\"}",
+    "https_managed_domain": "PASS",
+    "application_port_not_directly_exposed": "PASS — Railway config has one HTTPS service domain targeting internal port 3000 and no TCP proxy",
+    "persistent_volume_at_data": "PASS",
+    "single_replica_configuration": "PASS",
+    "token_hygiene_scan": "PASS",
+    "authority_expansion": "NONE",
+    "release_action_performed": "NO"
+  },
+  "constitutional_scope": {
+    "a_out_le_a_in": "preserved",
+    "evidence_is_authority": false,
+    "authorized_request_boundary": "unchanged",
+    "epistemic_claim": "operational persistence and recovery only"
+  },
+  "release_context": {
+    "historical_v1_1_seal_already_exists": true,
+    "historical_v1_1_release_record": "docs/RELEASE-v1.1.0.md",
+    "new_seal_created": false,
+    "reason": "This review adds current operational corroboration for commit 588dc767; it does not replace or recreate the historical v1.1.0 seal."
+  }
+}
