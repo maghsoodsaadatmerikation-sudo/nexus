@@ -31,6 +31,9 @@ jobs:
           RUNNER_OS: ${{ runner.os }}
         run: bash scripts/readonly-verification.sh
 
+      - name: Verify transport authentication behavior
+        run: bash scripts/v2.5-transport-authentication-verification.sh
+
       - name: Verify workflow authority boundary
         run: python3 scripts/verify-workflow-authority.py
 
