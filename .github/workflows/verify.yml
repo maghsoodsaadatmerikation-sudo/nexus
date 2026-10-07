@@ -107,6 +107,29 @@ jobs:
       - name: Verify current Seal documented truth
         run: python3 scripts/verify-current-seal-docs.py
 
+      - name: Run Artifact 06 Synthetic Reality Lab
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          bash scripts/artifact-06-bootstrap.sh "${RUNNER_TEMP}/artifact-06-output"
+
+      - name: Attest Artifact 06 synthetic evidence
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: ${{ runner.temp }}/artifact-06-output/artifact-06-evidence.tar.gz
+
+      - name: Upload Artifact 06 synthetic evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: artifact-06-synthetic-reality-lab
+          path: |
+            ${{ runner.temp }}/artifact-06-output/artifact-06-evidence.tar.gz
+            ${{ runner.temp }}/artifact-06-output/manifest.json
+            ${{ runner.temp }}/artifact-06-output/core-tests.log
+            ${{ runner.temp }}/artifact-06-output/gateway-tests.log
+            ${{ runner.temp }}/artifact-06-output/scenarios.json
+          if-no-files-found: error
+
       - name: Verify durable-host deployment configuration
         env:
           GITHUB_SHA: ${{ github.sha }}

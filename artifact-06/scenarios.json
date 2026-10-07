@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "artifact": "Artifact 06 — Synthetic Reality Lab",
+  "claims": {
+    "authority": "NONE",
+    "epistemic": "VERIFICATION_ONLY",
+    "production_mutation": "NONE"
+  },
+  "invariant": "A_out <= A_in",
+  "canonical_controls": [
+    {"id":"CT-001","test":"ct_001_authority_reflexive","property":"authority ordering is reflexive"},
+    {"id":"CT-002","test":"ct_002_authority_can_decrease","property":"authority may decrease"},
+    {"id":"CT-003","test":"ct_003_authority_cannot_increase","property":"authority cannot increase"},
+    {"id":"CT-004","test":"ct_004_none_cannot_be_amplified","property":"absence of authority cannot be amplified"},
+    {"id":"CT-005","test":"ct_005_envelope_fields_preserved","property":"request envelope fields remain intact"},
+    {"id":"CT-006","test":"ct_006_policy_is_deterministic","property":"policy evaluation is deterministic"},
+    {"id":"CT-007","test":"ct_007_empty_payload_denied","property":"empty payload fails closed"},
+    {"id":"CT-008","test":"ct_008_user_request_allowed","property":"valid user request reaches authorization"},
+    {"id":"CT-009","test":"ct_009_system_request_reduces_authority","property":"effective authority is reduced"},
+    {"id":"CT-010","test":"ct_010_none_request_denied","property":"authority none is denied"},
+    {"id":"CT-011","test":"ct_011_request_id_preserved","property":"authorization preserves request identity"},
+    {"id":"CT-012","test":"ct_012_executor_accepts_authorized","property":"executor accepts only AuthorizedRequest"},
+    {"id":"CT-013","test":"ct_013_executor_preserves_effective_authority","property":"execution preserves reduced authority"},
+    {"id":"CT-014","test":"ct_014_action_is_opaque_data","property":"action remains typed opaque data"},
+    {"id":"CT-015","test":"ct_015_decision_allowed_flag","property":"allow decision is explicit"},
+    {"id":"CT-016","test":"ct_016_decision_denied_flag","property":"deny decision is explicit"},
+    {"id":"CT-017","test":"ct_017_audit_records","property":"audit event is recorded"},
+    {"id":"CT-018","test":"ct_018_erasure_consumes_envelope","property":"erasure consumes the untrusted envelope"},
+    {"id":"CT-019","test":"ct_019_authorized_envelope_is_read_only","property":"AuthorizedRequest exposes read-only envelope access"},
+    {"id":"CT-020","test":"ct_020_no_unsafe_code_contract","property":"unsafe code remains forbidden by the crate contract"}
+  ],
+  "transport_probes": [
+    {"test":"post_requests_is_async_202_and_delegates_opaque_payload","expectation":"valid POST returns 202 and delegates opaque data"},
+    {"test":"accepted_request_is_reported_as_pending","expectation":"accepted id is retrievable as pending"},
+    {"test":"unknown_request_status_is_404","expectation":"unknown id returns 404"},
+    {"test":"unknown_and_authority_like_fields_fail_closed_before_delegation","expectation":"authority-like metadata is rejected before delegation"},
+    {"test":"gateway_exposes_no_capability_or_policy_mutation_routes","expectation":"transport exposes no authority mutation route"},
+    {"test":"authenticated_request_routes_reject_before_parse_lookup_or_delegation","expectation":"missing or wrong credentials fail before parse, lookup, or delegation"},
+    {"test":"malformed_workspace_claim_is_422_before_delegate","expectation":"malformed typed input fails before delegation"},
+    {"test":"workspace_lifecycle_is_delegated_and_auditable","expectation":"machine evidence does not synthesize human judgment"}
+  ],
+  "non_claims": [
+    "clinical validity",
+    "legal authority",
+    "organizational approval",
+    "replay protection",
+    "rate limiting",
+    "payload size enforcement",
+    "public deployment readiness",
+    "Seal readiness"
+  ]
+}

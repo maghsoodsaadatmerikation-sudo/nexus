@@ -92,6 +92,7 @@ Continuous verification runs on source changes and at 00:00, 08:00, and 16:00 UT
 ```text
 src/                                      Constitutional core + epistemic engine + adapters
 artifact-05/                              HTTP gateway and product contract tests
+artifact-06/                              Synthetic Reality Lab contract and CT-001..020 map
 web/                                      Browser workspace client
 docs/DEPLOYMENT.md                        Deployment contract
 docs/RELEASE-v1.1.0.md                    Sealed durable-host release record
