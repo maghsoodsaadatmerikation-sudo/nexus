@@ -23,6 +23,7 @@ It preserves the earlier constitutional, runtime, capability-enforcement, revoca
 ### v2.5 release boundary
 
 - Exact release candidate: `200ff827efed0a165548e9dbc2b6801d23d6ddfb`
+- Invariant: `A_out <= A_in`
 - NEXUS v2.5 Unified Transport Authentication Verification run `36385219907`: SUCCESS
 - Canonical NEXUS Verification run `36385219924`: SUCCESS
 - Release Gate run `36385267448`: SUCCESS
