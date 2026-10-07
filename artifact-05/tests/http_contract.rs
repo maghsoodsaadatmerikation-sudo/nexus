@@ -4,23 +4,30 @@ use axum::{
 };
 use nexus_artifact_05_gateway::{
     router, AppState, ConstitutionalDelegate, DelegateError, RequestStatus, Submission,
-    WorkspaceDelegate, WorkspaceDelegateError,
+    SafetyConfig, WorkspaceDelegate, WorkspaceDelegateError,
 };
 use nexus_constitutional_core::{
     Alternative, AnalysisBatch, Claim, HumanJudgment, InMemoryWorkspaceRepository, ProvenanceId,
     RequestEnvelope, WorkspaceEngine, WorkspaceRepository, WorkspaceSnapshot,
 };
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tower::ServiceExt;
 
 #[derive(Clone, Default)]
 struct RecordingDelegate {
     requests: Arc<Mutex<Vec<RequestEnvelope>>>,
     workspaces: Arc<Mutex<InMemoryWorkspaceRepository>>,
+    fail_requests: bool,
 }
 
 impl ConstitutionalDelegate for RecordingDelegate {
     fn submit(&self, envelope: RequestEnvelope) -> Result<Submission, DelegateError> {
+        if self.fail_requests {
+            return Err(DelegateError);
+        }
         let request_id = envelope.request_id.clone();
         self.requests.lock().unwrap().push(envelope);
         Ok(Submission { request_id })
@@ -444,4 +451,165 @@ async fn malformed_workspace_claim_is_422_before_delegate() {
         .unwrap();
     let response = app.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+fn safety(max_body: usize, rate: u64, tracked: usize) -> SafetyConfig {
+    SafetyConfig::new(max_body, rate, Duration::from_secs(60), tracked)
+}
+
+fn submit_request(id: &str, token: Option<&str>, padding: &str) -> Request<Body> {
+    let mut builder = Request::builder()
+        .method("POST")
+        .uri("/v1/requests")
+        .header("content-type", "application/json");
+    if let Some(token) = token {
+        builder = builder.header("authorization", format!("Bearer {token}"));
+    }
+    builder
+        .body(Body::from(
+            serde_json::json!({
+                "request_id": id,
+                "authority": "user",
+                "action": "present",
+                "value": "opaque",
+                "payload": padding
+            })
+            .to_string(),
+        ))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn artifact_07_replay_is_rejected_before_second_delegation() {
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret").with_safety(safety(4096, 10, 10)),
+    );
+
+    assert_eq!(
+        app.clone()
+            .oneshot(submit_request("replay-07", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::ACCEPTED
+    );
+    assert_eq!(
+        app.oneshot(submit_request("replay-07", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn artifact_07_payload_cap_rejects_before_parse_and_delegation() {
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret").with_safety(safety(64, 10, 10)),
+    );
+    let response = app
+        .oneshot(submit_request(
+            "large-07",
+            Some("secret"),
+            &"x".repeat(256),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert!(delegate.requests.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn artifact_07_rate_limit_fails_closed_before_second_delegation() {
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret").with_safety(safety(4096, 1, 10)),
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(submit_request("rate-a-07", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::ACCEPTED
+    );
+    assert_eq!(
+        app.oneshot(submit_request("rate-b-07", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn artifact_07_tracked_request_budget_fails_closed() {
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret").with_safety(safety(4096, 10, 1)),
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(submit_request("budget-a-07", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::ACCEPTED
+    );
+    assert_eq!(
+        app.oneshot(submit_request("budget-b-07", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn artifact_07_authentication_precedes_safety_budget_consumption() {
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret").with_safety(safety(64, 1, 1)),
+    );
+    let unauthenticated = app
+        .clone()
+        .oneshot(submit_request("hidden-07", None, &"x".repeat(256)))
+        .await
+        .unwrap();
+    assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+
+    let authenticated = app
+        .oneshot(submit_request("valid-07", Some("secret"), "x"))
+        .await
+        .unwrap();
+    assert_eq!(authenticated.status(), StatusCode::ACCEPTED);
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn artifact_07_delegate_failure_releases_replay_and_capacity_reservation() {
+    let delegate = RecordingDelegate {
+        fail_requests: true,
+        ..RecordingDelegate::default()
+    };
+    let app = router(
+        AppState::authenticated(delegate, "secret").with_safety(safety(4096, 10, 1)),
+    );
+    for _ in 0..2 {
+        let response = app
+            .clone()
+            .oneshot(submit_request(
+                "retry-after-failure-07",
+                Some("secret"),
+                "opaque",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    }
 }

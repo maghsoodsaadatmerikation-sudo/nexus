@@ -52,6 +52,12 @@ jobs:
         run: |
           bash scripts/artifact-06-bootstrap.sh "${RUNNER_TEMP}/artifact-06-output"
 
+      - name: Run Artifact 07 Public Exposure Safety
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          bash scripts/artifact-07-bootstrap.sh "${RUNNER_TEMP}/artifact-07-output"
+
       - name: Verify durable-host Blueprint without provider authority
         env:
           GITHUB_SHA: ${{ github.sha }}

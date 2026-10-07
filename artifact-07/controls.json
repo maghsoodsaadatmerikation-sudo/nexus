@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "artifact": "Artifact 07 — Public Exposure Safety Boundary",
+  "status": "IMPLEMENTED_UNSEALED",
+  "invariant": "A_out <= A_in",
+  "claims": {
+    "authority": "NONE",
+    "epistemic": "VERIFICATION_ONLY",
+    "production_mutation": "NONE"
+  },
+  "ordering": [
+    "transport_authentication",
+    "bounded_body_read",
+    "rate_budget",
+    "exact_shape_parse",
+    "replay_reservation",
+    "tracked_request_budget",
+    "constitutional_delegation"
+  ],
+  "controls": [
+    {"id":"A07-01","test":"artifact_07_replay_is_rejected_before_second_delegation","property":"a successful request id cannot be delegated twice within one process lifetime"},
+    {"id":"A07-02","test":"artifact_07_payload_cap_rejects_before_parse_and_delegation","property":"an oversized body is rejected before parsing and delegation"},
+    {"id":"A07-03","test":"artifact_07_rate_limit_fails_closed_before_second_delegation","property":"the configured process-local fixed-window rate budget fails closed"},
+    {"id":"A07-04","test":"artifact_07_tracked_request_budget_fails_closed","property":"the configured tracked-request capacity fails closed"},
+    {"id":"A07-05","test":"artifact_07_authentication_precedes_safety_budget_consumption","property":"unauthenticated traffic cannot consume authenticated request budgets"},
+    {"id":"A07-06","test":"artifact_07_delegate_failure_releases_replay_and_capacity_reservation","property":"failed delegation does not permanently consume replay or capacity reservations"}
+  ],
+  "non_claims": [
+    "distributed rate limiting",
+    "cross-instance replay defense",
+    "durable replay state",
+    "identity-specific fairness",
+    "denial-of-service immunity",
+    "clinical validity",
+    "legal authority",
+    "organizational approval",
+    "production deployment",
+    "Seal readiness"
+  ]
+}

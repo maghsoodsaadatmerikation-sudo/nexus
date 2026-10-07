@@ -49,6 +49,8 @@ Artifact 05 exposes no capability-minting, revocation, authorization, or policy-
 
 When NEXUS_API_TOKEN configures authenticated production state, both constitutional request routes require the exact Bearer credential. Missing or incorrect credentials return 401 before JSON parsing, delegate invocation, or status lookup. This transport authentication does not authorize a constitutional action; Core authorization remains a separate downstream boundary. When authentication is not configured, the existing local/test contract remains available.
 
+Artifact 07 adds process-local safety controls to constitutional request submission after transport authentication and before delegation: bounded body reads, a fixed-window request-rate budget, replay rejection for successful request identifiers, and a tracked-request capacity budget. All limits fail closed. Delegate failure releases the replay reservation and capacity slot. These controls govern admission and resource use only; they do not create authority, construct `AuthorizedRequest`, or change Core policy. Distributed enforcement, cross-instance replay defense, durable replay state, identity-specific fairness, and denial-of-service immunity are not claimed.
+
 ## Decision Workspace contract
 
 The workspace API exposes typed read/write operations while persistence and audit semantics remain in the Epistemic Engine behind `WorkspaceDelegate`.

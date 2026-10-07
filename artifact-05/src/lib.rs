@@ -3,7 +3,8 @@
 mod workspace_api;
 
 use axum::{
-    extract::{FromRequest, Path, Request, State},
+    body::to_bytes,
+    extract::{Path, Request, State},
     http::{header, HeaderMap, StatusCode},
     response::{Html, IntoResponse},
     routing::{get, post},
@@ -12,8 +13,9 @@ use axum::{
 use nexus_constitutional_core::{Action, Authority, RequestEnvelope};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex, RwLock},
+    time::{Duration, Instant},
 };
 use uuid::Uuid;
 
@@ -142,10 +144,70 @@ pub trait ConstitutionalDelegate: Send + Sync + 'static {
 #[derive(Debug, Clone, Copy)]
 pub struct DelegateError;
 
+#[derive(Debug, Clone, Copy)]
+pub struct SafetyConfig {
+    pub max_body_bytes: usize,
+    pub max_requests_per_window: u64,
+    pub rate_window: Duration,
+    pub max_tracked_requests: usize,
+}
+
+impl SafetyConfig {
+    pub fn new(
+        max_body_bytes: usize,
+        max_requests_per_window: u64,
+        rate_window: Duration,
+        max_tracked_requests: usize,
+    ) -> Self {
+        assert!(max_body_bytes > 0, "max_body_bytes must be positive");
+        assert!(
+            max_requests_per_window > 0,
+            "max_requests_per_window must be positive"
+        );
+        assert!(!rate_window.is_zero(), "rate_window must be positive");
+        assert!(
+            max_tracked_requests > 0,
+            "max_tracked_requests must be positive"
+        );
+        Self {
+            max_body_bytes,
+            max_requests_per_window,
+            rate_window,
+            max_tracked_requests,
+        }
+    }
+}
+
+impl Default for SafetyConfig {
+    fn default() -> Self {
+        Self::new(64 * 1024, 120, Duration::from_secs(60), 10_000)
+    }
+}
+
+struct SafetyState {
+    window_started: Instant,
+    requests_in_window: u64,
+    request_ids: HashSet<String>,
+    tracked_requests: usize,
+}
+
+impl Default for SafetyState {
+    fn default() -> Self {
+        Self {
+            window_started: Instant::now(),
+            requests_in_window: 0,
+            request_ids: HashSet::new(),
+            tracked_requests: 0,
+        }
+    }
+}
+
 pub struct AppState<D> {
     pub delegate: Arc<D>,
     pub statuses: Arc<RwLock<HashMap<String, RequestStatus>>>,
     pub auth_token: Option<Arc<str>>,
+    safety_config: SafetyConfig,
+    safety_state: Arc<Mutex<SafetyState>>,
 }
 
 impl<D> Clone for AppState<D> {
@@ -154,6 +216,8 @@ impl<D> Clone for AppState<D> {
             delegate: Arc::clone(&self.delegate),
             statuses: Arc::clone(&self.statuses),
             auth_token: self.auth_token.clone(),
+            safety_config: self.safety_config,
+            safety_state: Arc::clone(&self.safety_state),
         }
     }
 }
@@ -164,6 +228,8 @@ impl<D: ConstitutionalDelegate> AppState<D> {
             delegate: Arc::new(delegate),
             statuses: Arc::new(RwLock::new(HashMap::new())),
             auth_token: None,
+            safety_config: SafetyConfig::default(),
+            safety_state: Arc::new(Mutex::new(SafetyState::default())),
         }
     }
 
@@ -177,7 +243,15 @@ impl<D: ConstitutionalDelegate> AppState<D> {
             delegate: Arc::new(delegate),
             statuses: Arc::new(RwLock::new(HashMap::new())),
             auth_token: Some(Arc::<str>::from(token)),
+            safety_config: SafetyConfig::default(),
+            safety_state: Arc::new(Mutex::new(SafetyState::default())),
         }
+    }
+
+    pub fn with_safety(mut self, config: SafetyConfig) -> Self {
+        self.safety_config = config;
+        self.safety_state = Arc::new(Mutex::new(SafetyState::default()));
+        self
     }
 }
 
@@ -228,15 +302,28 @@ async fn submit<D: ConstitutionalDelegate>(
     if !transport_authorized(&state, request.headers()) {
         return transport_unauthorized();
     }
-    let Json(input) = match Json::<SubmitRequest>::from_request(request, &state).await {
+    let (_, body) = request.into_parts();
+    let body = match to_bytes(body, state.safety_config.max_body_bytes).await {
+        Ok(body) => body,
+        Err(_) => return safety_error(StatusCode::PAYLOAD_TOO_LARGE, "payload_too_large"),
+    };
+    if !consume_rate_budget(&state) {
+        return safety_error(StatusCode::TOO_MANY_REQUESTS, "rate_limit_exceeded");
+    }
+    let input = match serde_json::from_slice::<SubmitRequest>(&body) {
         Ok(input) => input,
-        Err(rejection) => return rejection.into_response(),
+        Err(_) => {
+            return safety_error(StatusCode::UNPROCESSABLE_ENTITY, "invalid_request_shape")
+        }
     };
     let request_id = input
         .request_id
         .unwrap_or_else(|| Uuid::new_v4().to_string());
+    if let Err(error) = reserve_request(&state, &request_id) {
+        return error;
+    }
     let envelope = RequestEnvelope::new(
-        request_id,
+        request_id.clone(),
         input.authority.into(),
         input.action,
         input.payload,
@@ -258,14 +345,60 @@ async fn submit<D: ConstitutionalDelegate>(
             )
                 .into_response()
         }
-        Err(_) => (
-            StatusCode::BAD_GATEWAY,
-            Json(ErrorResponse {
-                error: "constitutional_delegate_unavailable",
-            }),
-        )
-            .into_response(),
+        Err(_) => {
+            release_request(&state, &request_id);
+            safety_error(
+                StatusCode::BAD_GATEWAY,
+                "constitutional_delegate_unavailable",
+            )
+        }
     }
+}
+
+fn consume_rate_budget<D>(state: &AppState<D>) -> bool {
+    let mut safety = state.safety_state.lock().expect("safety lock poisoned");
+    if safety.window_started.elapsed() >= state.safety_config.rate_window {
+        safety.window_started = Instant::now();
+        safety.requests_in_window = 0;
+    }
+    if safety.requests_in_window >= state.safety_config.max_requests_per_window {
+        return false;
+    }
+    safety.requests_in_window += 1;
+    true
+}
+
+fn reserve_request<D>(
+    state: &AppState<D>,
+    request_id: &str,
+) -> Result<(), axum::response::Response> {
+    let mut safety = state.safety_state.lock().expect("safety lock poisoned");
+    if safety.request_ids.contains(request_id) {
+        return Err(safety_error(
+            StatusCode::CONFLICT,
+            "request_id_replayed",
+        ));
+    }
+    if safety.tracked_requests >= state.safety_config.max_tracked_requests {
+        return Err(safety_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "request_budget_exhausted",
+        ));
+    }
+    safety.request_ids.insert(request_id.to_owned());
+    safety.tracked_requests += 1;
+    Ok(())
+}
+
+fn release_request<D>(state: &AppState<D>, request_id: &str) {
+    let mut safety = state.safety_state.lock().expect("safety lock poisoned");
+    if safety.request_ids.remove(request_id) {
+        safety.tracked_requests = safety.tracked_requests.saturating_sub(1);
+    }
+}
+
+fn safety_error(status: StatusCode, error: &'static str) -> axum::response::Response {
+    (status, Json(ErrorResponse { error })).into_response()
 }
 
 async fn status<D: ConstitutionalDelegate>(

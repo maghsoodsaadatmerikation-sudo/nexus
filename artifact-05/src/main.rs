@@ -1,14 +1,14 @@
 use axum::{routing::get, Json};
 use nexus_artifact_05_gateway::{
-    router, AppState, ConstitutionalDelegate, DelegateError, Submission, WorkspaceDelegate,
-    WorkspaceDelegateError,
+    router, AppState, ConstitutionalDelegate, DelegateError, SafetyConfig, Submission,
+    WorkspaceDelegate, WorkspaceDelegateError,
 };
 use nexus_constitutional_core::{
     Alternative, AnalysisBatch, Claim, FileWorkspaceRepository, HumanJudgment, PolicyEngine,
     ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceSnapshot,
 };
 use serde::Serialize;
-use std::{net::SocketAddr, path::PathBuf, sync::Mutex};
+use std::{net::SocketAddr, path::PathBuf, sync::Mutex, time::Duration};
 
 #[derive(Debug, Serialize)]
 struct RuntimeIdentity {
@@ -193,13 +193,25 @@ async fn main() {
     let bind_addr =
         std::env::var("NEXUS_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".to_owned());
     let addr: SocketAddr = bind_addr.parse().expect("valid NEXUS_BIND_ADDR");
+    let max_body_bytes = positive_env_usize("NEXUS_MAX_BODY_BYTES", 64 * 1024);
+    let max_requests_per_window = positive_env_u64("NEXUS_RATE_LIMIT_REQUESTS", 120);
+    let rate_window_seconds = positive_env_u64("NEXUS_RATE_LIMIT_WINDOW_SECONDS", 60);
+    let max_tracked_requests = positive_env_usize("NEXUS_MAX_TRACKED_REQUESTS", 10_000);
     eprintln!(
         "NEXUS_OP event=startup bind_addr={} data_dir={} auth=configured",
         addr,
         data_root.display()
     );
-    let app = router(AppState::authenticated(CoreDelegate::new(data_root), token))
-        .route("/v1/runtime-identity", get(runtime_identity));
+    let safety = SafetyConfig::new(
+        max_body_bytes,
+        max_requests_per_window,
+        Duration::from_secs(rate_window_seconds),
+        max_tracked_requests,
+    );
+    let app = router(
+        AppState::authenticated(CoreDelegate::new(data_root), token).with_safety(safety),
+    )
+    .route("/v1/runtime-identity", get(runtime_identity));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("bind gateway");
@@ -207,4 +219,22 @@ async fn main() {
         eprintln!("NEXUS_OP event=server_exit error={error}");
         std::process::exit(1);
     }
+}
+
+fn positive_env_usize(name: &str, default: usize) -> usize {
+    std::env::var(name)
+        .map(|value| value.parse::<usize>().expect("positive integer safety limit"))
+        .unwrap_or(default)
+        .checked_sub(1)
+        .map(|value| value + 1)
+        .expect("safety limit must be positive")
+}
+
+fn positive_env_u64(name: &str, default: u64) -> u64 {
+    std::env::var(name)
+        .map(|value| value.parse::<u64>().expect("positive integer safety limit"))
+        .unwrap_or(default)
+        .checked_sub(1)
+        .map(|value| value + 1)
+        .expect("safety limit must be positive")
 }
