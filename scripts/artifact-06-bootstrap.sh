@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
-  echo 'ARTIFACT 06 BOOTSTRAP: repository must be clean so evidence names an exact source state' >&2
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo 'ARTIFACT 06 BOOTSTRAP: tracked sources must match the exact commit' >&2
   exit 1
 fi
 
