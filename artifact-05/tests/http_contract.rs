@@ -3,8 +3,8 @@ use axum::{
     http::{Request, StatusCode},
 };
 use nexus_artifact_05_gateway::{
-    router, AppState, ConstitutionalDelegate, DelegateError, RequestStatus, Submission,
-    SafetyConfig, WorkspaceDelegate, WorkspaceDelegateError,
+    router, AppState, ConstitutionalDelegate, DelegateError, RequestStatus, SafetyConfig,
+    Submission, WorkspaceDelegate, WorkspaceDelegateError,
 };
 use nexus_constitutional_core::{
     Alternative, AnalysisBatch, Claim, HumanJudgment, InMemoryWorkspaceRepository, ProvenanceId,
@@ -507,15 +507,10 @@ async fn artifact_07_replay_is_rejected_before_second_delegation() {
 #[tokio::test]
 async fn artifact_07_payload_cap_rejects_before_parse_and_delegation() {
     let delegate = RecordingDelegate::default();
-    let app = router(
-        AppState::authenticated(delegate.clone(), "secret").with_safety(safety(64, 10, 10)),
-    );
+    let app =
+        router(AppState::authenticated(delegate.clone(), "secret").with_safety(safety(64, 10, 10)));
     let response = app
-        .oneshot(submit_request(
-            "large-07",
-            Some("secret"),
-            &"x".repeat(256),
-        ))
+        .oneshot(submit_request("large-07", Some("secret"), &"x".repeat(256)))
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
@@ -573,9 +568,8 @@ async fn artifact_07_tracked_request_budget_fails_closed() {
 #[tokio::test]
 async fn artifact_07_authentication_precedes_safety_budget_consumption() {
     let delegate = RecordingDelegate::default();
-    let app = router(
-        AppState::authenticated(delegate.clone(), "secret").with_safety(safety(64, 1, 1)),
-    );
+    let app =
+        router(AppState::authenticated(delegate.clone(), "secret").with_safety(safety(64, 1, 1)));
     let unauthenticated = app
         .clone()
         .oneshot(submit_request("hidden-07", None, &"x".repeat(256)))
@@ -597,9 +591,7 @@ async fn artifact_07_delegate_failure_releases_replay_and_capacity_reservation()
         fail_requests: true,
         ..RecordingDelegate::default()
     };
-    let app = router(
-        AppState::authenticated(delegate, "secret").with_safety(safety(4096, 10, 1)),
-    );
+    let app = router(AppState::authenticated(delegate, "secret").with_safety(safety(4096, 10, 1)));
     for _ in 0..2 {
         let response = app
             .clone()
