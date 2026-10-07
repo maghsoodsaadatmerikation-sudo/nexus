@@ -43,6 +43,9 @@ jobs:
       - name: Verify committed Railway Stage D evidence
         run: python3 scripts/verify-stage-d-railway-evidence.py
 
+      - name: Verify current Seal documented truth
+        run: python3 scripts/verify-current-seal-docs.py
+
       - name: Verify durable-host Blueprint without provider authority
         env:
           GITHUB_SHA: ${{ github.sha }}
