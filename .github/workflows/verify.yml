@@ -101,6 +101,9 @@ jobs:
           bash -n scripts/test-stage-d-readiness.sh
           bash scripts/test-stage-d-readiness.sh
 
+      - name: Verify committed Railway Stage D evidence
+        run: python3 scripts/verify-stage-d-railway-evidence.py
+
       - name: Verify durable-host deployment configuration
         env:
           GITHUB_SHA: ${{ github.sha }}
@@ -165,6 +168,9 @@ jobs:
             scripts/v1.1-release-readiness.sh
             scripts/v1.1-release-candidate.sh
             scripts/test-stage-d-readiness.sh
+            scripts/verify-stage-d-railway-evidence.py
+            evidence/stage-d-588dc767-20261006/evidence-pack.json
+            evidence/stage-d-588dc767-20261006/independent-review.json
             scripts/readonly-verification.sh
             scripts/v1.2-boundary-integrity.sh
             scripts/v1.2-continuous-verification.sh
