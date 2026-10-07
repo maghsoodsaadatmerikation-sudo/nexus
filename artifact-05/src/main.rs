@@ -208,10 +208,9 @@ async fn main() {
         Duration::from_secs(rate_window_seconds),
         max_tracked_requests,
     );
-    let app = router(
-        AppState::authenticated(CoreDelegate::new(data_root), token).with_safety(safety),
-    )
-    .route("/v1/runtime-identity", get(runtime_identity));
+    let app =
+        router(AppState::authenticated(CoreDelegate::new(data_root), token).with_safety(safety))
+            .route("/v1/runtime-identity", get(runtime_identity));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("bind gateway");
@@ -223,7 +222,11 @@ async fn main() {
 
 fn positive_env_usize(name: &str, default: usize) -> usize {
     std::env::var(name)
-        .map(|value| value.parse::<usize>().expect("positive integer safety limit"))
+        .map(|value| {
+            value
+                .parse::<usize>()
+                .expect("positive integer safety limit")
+        })
         .unwrap_or(default)
         .checked_sub(1)
         .map(|value| value + 1)
