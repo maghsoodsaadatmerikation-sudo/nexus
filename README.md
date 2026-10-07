@@ -14,26 +14,27 @@ The system separates human authority, evidence, machine analysis, execution auth
 A_out <= A_in
 ```
 
-## Current sealed release — v2.3.0
+## Current sealed release — v2.5.0
 
-`v2.3.0` is the current sealed **revocation freshness / stale-authority defense** boundary.
+`v2.5.0` is the current sealed **unified transport-authentication** boundary.
 
-It preserves the earlier constitutional, runtime, capability-enforcement, and revocation-replay boundaries while preventing cached delegated authorization from surviving a revocation-state transition.
+It preserves the earlier constitutional, runtime, capability-enforcement, revocation, and gateway authority-confusion boundaries while requiring configured bearer authentication before request parsing, constitutional delegation, or request-status lookup.
 
-### v2.3 release boundary
+### v2.5 release boundary
 
-- Exact release candidate: `9da19fbc49ffed5752888d7ab41068266a59f918`
-- NEXUS v2.3 Revocation Freshness Verification run `36345103234`: SUCCESS
-- Canonical NEXUS Verification run `36345103184`: SUCCESS
-- Release Gate run `36345130192`: SUCCESS
+- Exact release candidate: `200ff827efed0a165548e9dbc2b6801d23d6ddfb`
+- NEXUS v2.5 Unified Transport Authentication Verification run `36385219907`: SUCCESS
+- Canonical NEXUS Verification run `36385219924`: SUCCESS
+- Release Gate run `36385267448`: SUCCESS
 - Exact-candidate evidence attestation: VERIFIED
-- Newer and older revocation epochs: REJECTED FAIL-CLOSED
-- Equal-epoch divergent histories: REJECTED FAIL-CLOSED
-- Reauthorization after epoch transition: REQUIRED
-- Release evidence SHA-256: `6fcf7d3d2b2214c6fa301aa517346faa1efd49bab6407ad942bc2df8cfed0675`
-- No paid upgrade, new production service, new production volume, secret disclosure, or authority expansion was required or authorized.
+- Missing and incorrect credentials: REJECTED FAIL-CLOSED
+- Authenticated `POST /v1/requests`: asynchronous `202 Accepted`
+- Authenticated `GET /v1/requests/{id}`: status/`404` semantics preserved
+- Release evidence SHA-256: `c64546d8b96e99338ba9cc41a93e0f825b151e8627b436d321ade31b5a432c46`
+- Production mutation: NONE
+- Authority expansion: NONE
 
-The v2.3 seal is a **revocation freshness boundary**. It does not claim durable or distributed persistence, cryptographic event authenticity, consensus, external identity federation, provider correctness, universal security, or external-system linearizability.
+The v2.5 seal is a **transport-authentication boundary**. It does not claim credential rotation, external identity federation, rate limiting, distributed session state, durable persistence, consensus, universal security, or external-system linearizability. Authentication permits access to a transport boundary; it does not create constitutional authority.
 
 Historical release tags remain immutable earlier boundaries. In particular, v2.0 remains an unsealed engineering milestone; later releases do not retroactively seal it.
 
@@ -115,6 +116,8 @@ evidence/v1.7/production-runtime-evidence.json
 
 ## Releases
 
+- NEXUS v2.5.0 — Unified Transport Authentication Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v2.5.0
+- NEXUS v2.4.0 — Gateway Authority-Confusion Defense Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v2.4.0
 - NEXUS v2.3.0 — Revocation Freshness / Stale-Authority Defense Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v2.3.0
 - NEXUS v2.2.0 — Revocation Replay Integrity Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v2.2.0
 - NEXUS v2.1.0 — Capability Enforcement Boundary Sealed: https://github.com/maghsoodsaadatmerikation-sudo/nexus/releases/tag/v2.1.0
