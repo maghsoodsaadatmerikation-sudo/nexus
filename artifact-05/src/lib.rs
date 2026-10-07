@@ -312,9 +312,7 @@ async fn submit<D: ConstitutionalDelegate>(
     }
     let input = match serde_json::from_slice::<SubmitRequest>(&body) {
         Ok(input) => input,
-        Err(_) => {
-            return safety_error(StatusCode::UNPROCESSABLE_ENTITY, "invalid_request_shape")
-        }
+        Err(_) => return safety_error(StatusCode::UNPROCESSABLE_ENTITY, "invalid_request_shape"),
     };
     let request_id = input
         .request_id
@@ -374,10 +372,7 @@ fn reserve_request<D>(
 ) -> Result<(), axum::response::Response> {
     let mut safety = state.safety_state.lock().expect("safety lock poisoned");
     if safety.request_ids.contains(request_id) {
-        return Err(safety_error(
-            StatusCode::CONFLICT,
-            "request_id_replayed",
-        ));
+        return Err(safety_error(StatusCode::CONFLICT, "request_id_replayed"));
     }
     if safety.tracked_requests >= state.safety_config.max_tracked_requests {
         return Err(safety_error(
