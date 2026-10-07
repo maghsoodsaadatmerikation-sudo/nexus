@@ -605,3 +605,81 @@ async fn artifact_07_delegate_failure_releases_replay_and_capacity_reservation()
         assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
     }
 }
+
+async fn concurrent_admissions(app: axum::Router, same_id: bool) -> Vec<StatusCode> {
+    let barrier = Arc::new(tokio::sync::Barrier::new(32));
+    let mut tasks = Vec::new();
+    for index in 0..32 {
+        let app = app.clone();
+        let barrier = barrier.clone();
+        tasks.push(tokio::spawn(async move {
+            let id = if same_id { "contended".to_string() } else { format!("contended-{index}") };
+            barrier.wait().await;
+            app.oneshot(submit_request(&id, Some("secret"), "opaque"))
+                .await.unwrap().status()
+        }));
+    }
+    let mut statuses = Vec::new();
+    for task in tasks {
+        statuses.push(task.await.unwrap());
+    }
+    statuses
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn adversarial_concurrent_replay_delegates_once() {
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::authenticated(delegate.clone(), "secret")
+        .with_safety(safety(4096, 100, 100)));
+    let statuses = concurrent_admissions(app, true).await;
+    assert_eq!(statuses.iter().filter(|&&s| s == StatusCode::ACCEPTED).count(), 1);
+    assert_eq!(statuses.iter().filter(|&&s| s == StatusCode::CONFLICT).count(), 31);
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn adversarial_concurrent_rate_budget_is_shared() {
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::authenticated(delegate.clone(), "secret")
+        .with_safety(safety(4096, 4, 100)));
+    let statuses = concurrent_admissions(app, false).await;
+    assert_eq!(statuses.iter().filter(|&&s| s == StatusCode::ACCEPTED).count(), 4);
+    assert_eq!(statuses.iter().filter(|&&s| s == StatusCode::TOO_MANY_REQUESTS).count(), 28);
+    assert_eq!(delegate.requests.lock().unwrap().len(), 4);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn adversarial_concurrent_capacity_is_shared() {
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::authenticated(delegate.clone(), "secret")
+        .with_safety(safety(4096, 100, 3)));
+    let statuses = concurrent_admissions(app, false).await;
+    assert_eq!(statuses.iter().filter(|&&s| s == StatusCode::ACCEPTED).count(), 3);
+    assert_eq!(statuses.iter().filter(|&&s| s == StatusCode::SERVICE_UNAVAILABLE).count(), 29);
+    assert_eq!(delegate.requests.lock().unwrap().len(), 3);
+}
+
+#[tokio::test]
+async fn adversarial_authentication_does_not_poll_body() {
+    use http_body_util::BodyExt;
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::authenticated(delegate.clone(), "secret"));
+    let body = http_body_util::Full::new(axum::body::Bytes::from_static(b"untrusted"))
+        .map_frame(|_| panic!("unauthorized body was polled"));
+    let request = Request::builder().method("POST").uri("/v1/requests")
+        .body(Body::new(body)).unwrap();
+    assert_eq!(app.oneshot(request).await.unwrap().status(), StatusCode::UNAUTHORIZED);
+    assert!(delegate.requests.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn adversarial_fresh_state_has_no_durable_replay_guarantee() {
+    let delegate = RecordingDelegate::default();
+    // This is a counterexample to persistence, not an exactly-once claim.
+    for _ in 0..2 {
+        let app = router(AppState::authenticated(delegate.clone(), "secret"));
+        assert_eq!(app.oneshot(submit_request("fresh-state", Some("secret"), "opaque"))
+            .await.unwrap().status(), StatusCode::ACCEPTED);
+    }
+    assert_eq!(delegate.requests.lock().unwrap().len(), 2);
+}
