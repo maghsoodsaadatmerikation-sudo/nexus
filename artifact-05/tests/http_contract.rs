@@ -568,8 +568,9 @@ async fn artifact_07_tracked_request_budget_fails_closed() {
 #[tokio::test]
 async fn artifact_07_authentication_precedes_safety_budget_consumption() {
     let delegate = RecordingDelegate::default();
-    let app =
-        router(AppState::authenticated(delegate.clone(), "secret").with_safety(safety(64, 1, 1)));
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret").with_safety(safety(4096, 1, 1)),
+    );
     let unauthenticated = app
         .clone()
         .oneshot(submit_request("hidden-07", None, &"x".repeat(256)))
