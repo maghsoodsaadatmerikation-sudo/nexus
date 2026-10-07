@@ -95,6 +95,9 @@ jobs:
           RUNNER_OS: ${{ runner.os }}
         run: bash scripts/readonly-verification.sh
 
+      - name: Verify transport authentication behavior
+        run: bash scripts/v2.5-transport-authentication-verification.sh
+
       - name: Test lifecycle-bound Stage D release gates
         run: |
           set -euo pipefail
