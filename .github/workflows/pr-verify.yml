@@ -46,6 +46,12 @@ jobs:
       - name: Verify current Seal documented truth
         run: python3 scripts/verify-current-seal-docs.py
 
+      - name: Run Artifact 06 Synthetic Reality Lab
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          bash scripts/artifact-06-bootstrap.sh "${RUNNER_TEMP}/artifact-06-output"
+
       - name: Verify durable-host Blueprint without provider authority
         env:
           GITHUB_SHA: ${{ github.sha }}
