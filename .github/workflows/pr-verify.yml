@@ -31,6 +31,12 @@ jobs:
           RUNNER_OS: ${{ runner.os }}
         run: bash scripts/readonly-verification.sh
 
+      - name: Verify durable-state resilience contract
+        run: |
+          bash -n scripts/v1.2-durable-state-resilience.sh
+          bash scripts/v1.2-durable-state-resilience.sh
+          python3 scripts/test-durable-state-contract.py
+
       - name: Verify transport authentication behavior
         run: bash scripts/v2.5-transport-authentication-verification.sh
 

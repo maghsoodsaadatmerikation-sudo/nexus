@@ -74,6 +74,7 @@ jobs:
           set -euo pipefail
           bash -n scripts/v1.2-durable-state-resilience.sh
           bash scripts/v1.2-durable-state-resilience.sh
+          python3 scripts/test-durable-state-contract.py
 
       - name: Verify v1.2 operational-economy contract
         run: |
