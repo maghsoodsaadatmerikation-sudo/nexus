@@ -202,7 +202,11 @@ NEXUS_API_TOKEN=ci-smoke-token \
 NEXUS_WORKSPACE_ID=ci-smoke \
   bash scripts/workspace-backup.sh "$backup"
 cleanup
-find "$smoke_data" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+# The request directory belongs to the unprivileged runtime UID. Delete only
+# this isolated CI witness mount using a disposable cleanup container.
+docker run --rm --user 0 --entrypoint sh \
+  -v "$smoke_data:/data" nexus-ci-smoke \
+  -c 'find /data -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
 start_container
 assert_redacted_startup
 NEXUS_BASE_URL="http://127.0.0.1:${port}" \
