@@ -31,8 +31,15 @@ fi
 # CI restore validation must be isolated from user data and prove JSON-equivalent recovery.
 grep -F 'smoke_data="$RUNNER_TEMP/nexus-smoke-data-${GITHUB_RUN_ID}"' scripts/readonly-verification.sh >/dev/null \
   || fail 'dedicated temporary witness storage missing'
-grep -F 'find "$smoke_data" -mindepth 1 -maxdepth 1 -exec rm -rf {} +' scripts/readonly-verification.sh >/dev/null \
-  || fail 'isolated destructive witness exercise missing'
+python3 - <<'PYCLEANUP' || fail 'isolated destructive witness exercise missing'
+from pathlib import Path
+expected = "\n".join([
+    'docker run --rm --user 0 --entrypoint sh \\',
+    '  -v "$smoke_data:/data" nexus-ci-smoke \\',
+    "  -c 'find /data -mindepth 1 -maxdepth 1 -exec rm -rf {} +'",
+])
+assert expected in Path('scripts/readonly-verification.sh').read_text()
+PYCLEANUP
 grep -F 'bash scripts/workspace-backup.sh "$backup"' scripts/readonly-verification.sh >/dev/null \
   || fail 'witness backup exercise missing'
 grep -F 'bash scripts/workspace-restore.sh "$backup"' scripts/readonly-verification.sh >/dev/null \
