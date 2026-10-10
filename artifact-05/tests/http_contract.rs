@@ -892,3 +892,35 @@ async fn durable_concurrent_admission_delegates_once() {
     assert_eq!(delegate.requests.lock().unwrap().len(), 1);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[tokio::test]
+async fn durable_authentication_and_id_bounds_precede_store_writes() {
+    let root = durable_root();
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret")
+            .with_request_store(&root)
+            .unwrap(),
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(submit_request("unauthorized", None, "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    for id in [String::new(), "x".repeat(101)] {
+        assert_eq!(
+            app.clone()
+                .oneshot(submit_request(&id, Some("secret"), "opaque"))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+    assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+    assert!(delegate.requests.lock().unwrap().is_empty());
+    std::fs::remove_dir_all(root).unwrap();
+}

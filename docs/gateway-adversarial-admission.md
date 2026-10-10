@@ -2,7 +2,7 @@
 
 The HTTP contract suite challenges 32 synchronized tasks on cloned routers using four Tokio workers. It requires exactly one delegation for a repeated ID (31 conflicts), four admissions for a rate budget of four (28 throttles), and three admissions for capacity three (29 unavailable responses). Every assertion checks delegation counts as well as HTTP status.
 
-A panic-on-poll body demonstrates that unauthorized POST requests are rejected before body polling. A separate fresh-state counterexample deliberately accepts the same ID twice across independent AppState instances: replay protection is process-local, not durable or distributed. Passing this test documents a limitation; it does not certify restart safety or exactly-once execution.
+A panic-on-poll body demonstrates that unauthorized POST requests are rejected before body polling. A separate fresh-state counterexample deliberately accepts the same ID twice across independent, explicitly ephemeral AppState instances (`new` without `with_request_store`): their replay protection is process-local, not durable or distributed. The executable now configures the separate [durable admission store](gateway-durable-requests.md); this counterexample remains a guard against confusing ephemeral library state with that configuration. Passing this test documents a limitation; it does not certify restart safety or exactly-once execution.
 
 Run: `cargo test --locked --manifest-path artifact-05/Cargo.toml --test http_contract adversarial_ -- --nocapture`. Five named tests must execute and pass; a zero-test result is not evidence.
 
