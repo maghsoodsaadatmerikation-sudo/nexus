@@ -178,6 +178,20 @@ test "$(curl -sS -o /dev/null -w '%{http_code}' \
 test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$base_url/v1/requests" \
   -H 'content-type: application/json' --data '{not-json')" = 401
 echo 'ARTIFACT 05 LIVE HTTP FLOW PASS'
+# SIGKILL-style container removal, same mounted request ledger on restart.
+cleanup
+start_container
+assert_redacted_startup
+code="$(curl -sS -o "$http_body" -w '%{http_code}' -H 'authorization: Bearer ci-smoke-token' "$base_url/v1/requests/$request_id")"
+test "$code" = 200
+python3 - "$http_body" "$request_id" <<'PYCHECK'
+import json, sys
+assert json.load(open(sys.argv[1])) == {"request_id": sys.argv[2], "status": "pending"}
+PYCHECK
+code="$(curl -sS -o "$http_body" -w '%{http_code}' -X POST "$base_url/v1/requests" -H 'content-type: application/json' -H 'authorization: Bearer ci-smoke-token' --data "{\"request_id\":\"${request_id}\",\"authority\":\"user\",\"action\":\"present\",\"value\":\"ci-smoke\",\"payload\":\"opaque\"}")"
+test "$code" = 409
+echo 'ARTIFACT 05 DURABLE REQUEST RESTART PASS'
+
 curl -fsS -X POST "http://127.0.0.1:${port}/v1/workspaces" \
   -H 'content-type: application/json' \
   -H 'authorization: Bearer ci-smoke-token' \

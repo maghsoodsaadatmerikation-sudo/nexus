@@ -208,9 +208,13 @@ async fn main() {
         Duration::from_secs(rate_window_seconds),
         max_tracked_requests,
     );
-    let app =
-        router(AppState::authenticated(CoreDelegate::new(data_root), token).with_safety(safety))
-            .route("/v1/runtime-identity", get(runtime_identity));
+    let app = router(
+        AppState::authenticated(CoreDelegate::new(data_root.clone()), token)
+            .with_safety(safety)
+            .with_request_store(data_root.join("requests"))
+            .expect("open durable request store"),
+    )
+    .route("/v1/runtime-identity", get(runtime_identity));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("bind gateway");

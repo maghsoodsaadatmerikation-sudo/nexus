@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod request_store;
 mod workspace_api;
 
 use axum::{
@@ -125,6 +126,7 @@ pub struct AcceptedResponse {
 #[serde(rename_all = "lowercase")]
 pub enum RequestStatus {
     Pending,
+    Indeterminate,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -206,6 +208,7 @@ pub struct AppState<D> {
     pub delegate: Arc<D>,
     pub statuses: Arc<RwLock<HashMap<String, RequestStatus>>>,
     pub auth_token: Option<Arc<str>>,
+    request_store: Option<Arc<request_store::RequestStore>>,
     safety_config: SafetyConfig,
     safety_state: Arc<Mutex<SafetyState>>,
 }
@@ -216,6 +219,7 @@ impl<D> Clone for AppState<D> {
             delegate: Arc::clone(&self.delegate),
             statuses: Arc::clone(&self.statuses),
             auth_token: self.auth_token.clone(),
+            request_store: self.request_store.clone(),
             safety_config: self.safety_config,
             safety_state: Arc::clone(&self.safety_state),
         }
@@ -228,6 +232,7 @@ impl<D: ConstitutionalDelegate> AppState<D> {
             delegate: Arc::new(delegate),
             statuses: Arc::new(RwLock::new(HashMap::new())),
             auth_token: None,
+            request_store: None,
             safety_config: SafetyConfig::default(),
             safety_state: Arc::new(Mutex::new(SafetyState::default())),
         }
@@ -243,14 +248,43 @@ impl<D: ConstitutionalDelegate> AppState<D> {
             delegate: Arc::new(delegate),
             statuses: Arc::new(RwLock::new(HashMap::new())),
             auth_token: Some(Arc::<str>::from(token)),
+            request_store: None,
             safety_config: SafetyConfig::default(),
             safety_state: Arc::new(Mutex::new(SafetyState::default())),
         }
     }
 
+    /// Reopen durable markers before serving. Use one gateway process per directory.
+    pub fn with_request_store(
+        mut self,
+        root: impl AsRef<std::path::Path>,
+    ) -> std::io::Result<Self> {
+        if Arc::strong_count(&self.safety_state) != 1
+            || !self
+                .safety_state
+                .lock()
+                .expect("safety lock poisoned")
+                .request_ids
+                .is_empty()
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "configure store before admission",
+            ));
+        }
+        let (store, statuses) = request_store::RequestStore::open(root.as_ref())?;
+        self.safety_state = Arc::new(Mutex::new(SafetyState {
+            request_ids: statuses.keys().cloned().collect(),
+            tracked_requests: statuses.len(),
+            ..SafetyState::default()
+        }));
+        self.statuses = Arc::new(RwLock::new(statuses));
+        self.request_store = Some(Arc::new(store));
+        Ok(self)
+    }
+
     pub fn with_safety(mut self, config: SafetyConfig) -> Self {
         self.safety_config = config;
-        self.safety_state = Arc::new(Mutex::new(SafetyState::default()));
         self
     }
 }
@@ -329,6 +363,17 @@ async fn submit<D: ConstitutionalDelegate>(
 
     match state.delegate.submit(envelope) {
         Ok(submission) => {
+            if submission.request_id != request_id {
+                return safety_error(StatusCode::BAD_GATEWAY, "delegate_request_id_mismatch");
+            }
+            if let Some(store) = &state.request_store {
+                if store.pending(&request_id).is_err() {
+                    return safety_error(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "request_store_unavailable",
+                    );
+                }
+            }
             state
                 .statuses
                 .write()
@@ -344,7 +389,9 @@ async fn submit<D: ConstitutionalDelegate>(
                 .into_response()
         }
         Err(_) => {
-            release_request(&state, &request_id);
+            if state.request_store.is_none() {
+                release_request(&state, &request_id);
+            }
             safety_error(
                 StatusCode::BAD_GATEWAY,
                 "constitutional_delegate_unavailable",
@@ -371,6 +418,12 @@ fn reserve_request<D>(
     request_id: &str,
 ) -> Result<(), axum::response::Response> {
     let mut safety = state.safety_state.lock().expect("safety lock poisoned");
+    if state.request_store.is_some() && (request_id.is_empty() || request_id.len() > 100) {
+        return Err(safety_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_request_id",
+        ));
+    }
     if safety.request_ids.contains(request_id) {
         return Err(safety_error(StatusCode::CONFLICT, "request_id_replayed"));
     }
@@ -382,6 +435,20 @@ fn reserve_request<D>(
     }
     safety.request_ids.insert(request_id.to_owned());
     safety.tracked_requests += 1;
+    if let Some(store) = &state.request_store {
+        state
+            .statuses
+            .write()
+            .expect("status lock poisoned")
+            .insert(request_id.to_owned(), RequestStatus::Indeterminate);
+        if let Err(error) = store.reserve(request_id) {
+            return Err(if error.kind() == std::io::ErrorKind::AlreadyExists {
+                safety_error(StatusCode::CONFLICT, "request_id_replayed")
+            } else {
+                safety_error(StatusCode::SERVICE_UNAVAILABLE, "request_store_unavailable")
+            });
+        }
+    }
     Ok(())
 }
 
@@ -667,5 +734,29 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    #[tokio::test]
+    async fn durable_delegate_mismatched_id_is_not_accepted() {
+        struct Mismatched;
+        impl ConstitutionalDelegate for Mismatched {
+            fn submit(&self, _: RequestEnvelope) -> Result<Submission, DelegateError> {
+                Ok(Submission {
+                    request_id: "wrong".into(),
+                })
+            }
+        }
+        let root = std::env::temp_dir().join(format!("nexus-mismatch-{}", Uuid::new_v4()));
+        let state = AppState::new(Mismatched).with_request_store(&root).unwrap();
+        let body = r#"{"request_id":"expected","authority":"user","action":"reflect","subject":"opaque","payload":"opaque"}"#;
+        let response = submit(State(state.clone()), request(body))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        assert_eq!(
+            state.statuses.read().unwrap()["expected"],
+            RequestStatus::Indeterminate
+        );
+        assert!(!state.statuses.read().unwrap().contains_key("wrong"));
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
