@@ -739,3 +739,188 @@ async fn adversarial_fresh_state_has_no_durable_replay_guarantee() {
     }
     assert_eq!(delegate.requests.lock().unwrap().len(), 2);
 }
+
+fn durable_root() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("nexus-requests-{}", uuid::Uuid::new_v4()))
+}
+
+#[tokio::test]
+async fn durable_acceptance_survives_reopen_and_blocks_replay() {
+    let root = durable_root();
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret")
+            .with_request_store(&root)
+            .unwrap(),
+    );
+    assert_eq!(
+        app.oneshot(submit_request("durable", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::ACCEPTED
+    );
+    let state = AppState::authenticated(delegate.clone(), "secret")
+        .with_request_store(&root)
+        .unwrap();
+    assert_eq!(
+        state.statuses.read().unwrap()["durable"],
+        RequestStatus::Pending
+    );
+    let app = router(state.with_safety(SafetyConfig::new(1024, 100, Duration::from_secs(60), 1)));
+    assert_eq!(
+        app.clone()
+            .oneshot(submit_request("durable", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        app.oneshot(submit_request("new", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn durable_delegate_failure_is_indeterminate_and_not_retried() {
+    let root = durable_root();
+    let failing = RecordingDelegate {
+        fail_requests: true,
+        ..Default::default()
+    };
+    let app = router(
+        AppState::authenticated(failing, "secret")
+            .with_request_store(&root)
+            .unwrap(),
+    );
+    assert_eq!(
+        app.oneshot(submit_request("uncertain", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_GATEWAY
+    );
+    let delegate = RecordingDelegate::default();
+    let state = AppState::authenticated(delegate.clone(), "secret")
+        .with_request_store(&root)
+        .unwrap();
+    assert_eq!(
+        state.statuses.read().unwrap()["uncertain"],
+        RequestStatus::Indeterminate
+    );
+    assert_eq!(
+        router(state)
+            .oneshot(submit_request("uncertain", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    assert!(delegate.requests.lock().unwrap().is_empty());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn durable_marker_handles_torn_write_and_rejects_corruption() {
+    let root = durable_root();
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(root.join("6372617368"), b"pend").unwrap(); // crash
+    let state = AppState::new(RecordingDelegate::default())
+        .with_request_store(&root)
+        .unwrap();
+    assert_eq!(
+        state.statuses.read().unwrap()["crash"],
+        RequestStatus::Indeterminate
+    );
+    std::fs::write(root.join("6372617368"), b"garbage").unwrap();
+    assert!(AppState::new(RecordingDelegate::default())
+        .with_request_store(&root)
+        .is_err());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn durable_store_io_failure_never_delegates() {
+    let root = durable_root();
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret")
+            .with_request_store(&root)
+            .unwrap(),
+    );
+    std::fs::remove_dir(&root).unwrap();
+    assert_eq!(
+        app.oneshot(submit_request("no-store", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert!(delegate.requests.lock().unwrap().is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn durable_concurrent_admission_delegates_once() {
+    let root = durable_root();
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret")
+            .with_request_store(&root)
+            .unwrap(),
+    );
+    let statuses = concurrent_admissions(app, true).await;
+    assert_eq!(
+        statuses
+            .iter()
+            .filter(|s| **s == StatusCode::ACCEPTED)
+            .count(),
+        1
+    );
+    assert_eq!(
+        statuses
+            .iter()
+            .filter(|s| **s == StatusCode::CONFLICT)
+            .count(),
+        31
+    );
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn durable_authentication_and_id_bounds_precede_store_writes() {
+    let root = durable_root();
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret")
+            .with_request_store(&root)
+            .unwrap(),
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(submit_request("unauthorized", None, "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    for id in [String::new(), "x".repeat(101)] {
+        assert_eq!(
+            app.clone()
+                .oneshot(submit_request(&id, Some("secret"), "opaque"))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+    assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+    assert!(delegate.requests.lock().unwrap().is_empty());
+    std::fs::remove_dir_all(root).unwrap();
+}
