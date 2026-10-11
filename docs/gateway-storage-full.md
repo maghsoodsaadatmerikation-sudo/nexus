@@ -7,10 +7,15 @@ only the container created by this invocation. Bootstrap grants no such evidence
 
 The witness accepts a prior request (202 with ID, GET pending), fills the volume,
 and verifies authenticated admission returns 503 `request_store_unavailable`.
-On tmpfs an empty reservation inode can still be created: delegation may occur,
-then the pending write fails. The resulting empty marker and GET indeterminate
-are checked. Retrying returns 409. This proves no false 202, not no delegation,
-not rollback, and not exactly-once external side effects.
+The reservation now writes and syncs the non-accepted prefix `p` before
+calling the delegate. On full tmpfs an empty inode can still be created, but
+writing this prefix fails first. The empty marker and GET indeterminate are
+checked; retry returns 409. A separate RecordingDelegate test on a verified
+8 MiB tmpfs proves zero delegate calls for this reservation-write ENOSPC,
+then exactly one fresh admission after repair. This does not guarantee that
+later I/O or fsync failures cannot occur after delegation, nor provide rollback
+or exactly-once external side effects. Legacy empty and prefix markers remain
+compatible and indeterminate on reopen.
 
 Removing only the filler allows a fresh request to return 202/pending. The failed
 ID remains blocked. Restarting the gateway child process on the SAME mount

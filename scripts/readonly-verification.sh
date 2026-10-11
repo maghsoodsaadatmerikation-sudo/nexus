@@ -98,6 +98,15 @@ docker run --rm \
   sh -euxc 'cargo test --locked; cargo test --doc --locked'
 echo 'GATE 2 PASS'
 
+# Explicit ignored test runs only on a kernel-bounded private tmpfs.
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  --tmpfs /tmp/nexus-test-enospc:rw,size=8m,mode=0777 \
+  -v "$GITHUB_WORKSPACE:/workspace" \
+  -w /workspace/artifact-05 \
+  "$RUST_IMAGE" \
+  sh -euxc 'cargo test --locked --test http_contract enospc_reservation_fails_before_delegation -- --ignored --exact --nocapture'
+
 # Deployment smoke, persistence and recovery checks on an isolated local mount.
 smoke_data="$RUNNER_TEMP/nexus-smoke-data-${GITHUB_RUN_ID}"
 backup="$RUNNER_TEMP/ci-smoke-backup-${GITHUB_RUN_ID}.json"
@@ -329,6 +338,7 @@ Recovery Quarantine: PASS
 Gateway Readiness: PASS
 Storage Failure Recovery: PASS
 Storage Full Recovery: PASS
+ENOSPC Before Delegation: PASS
 Full Data Snapshot Script SHA-256: ${data_snapshot_script_sha}
 Synthetic Full Data Archive SHA-256: ${full_data_archive_sha}
 Full Data Consistency: OFFLINE-CALLER-ASSERTED

@@ -108,6 +108,10 @@ assert Path('docs/gateway-storage-full.md').is_file()
 h = Path('scripts/readonly-verification.sh').read_text()
 assert 'python3 scripts/verify-storage-full.py nexus-ci-smoke "$GITHUB_RUN_ID"' in h
 assert 'Storage Full Recovery: PASS' in h
+assert '--tmpfs /tmp/nexus-test-enospc:rw,size=8m,mode=0777' in h
+assert 'enospc_reservation_fails_before_delegation -- --ignored --exact --nocapture' in h
+assert 'ENOSPC Before Delegation: PASS' in h
+
 CHECK_FULL
 
 printf '%s\n' 'V1.2 G3 DURABLE-STATE RESILIENCE: PASS'
