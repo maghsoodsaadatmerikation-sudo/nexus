@@ -14,6 +14,7 @@ def main():
     parser.add_argument("request_id")
     parser.add_argument("workspace_snapshot", type=Path)
     parser.add_argument("--repeat", action="store_true")
+    parser.add_argument("--quarantined", action="store_true")
     args = parser.parse_args()
     token = os.environ["NEXUS_API_TOKEN"]
 
@@ -43,8 +44,19 @@ def main():
     for request_id, status in [(args.request_id, "pending"), ("ci-uncertain", "indeterminate")]:
         assert call("GET", "/v1/requests/" + request_id) == (
             200, {"request_id": request_id, "status": status})
-        assert submit(request_id)[0] == 409
+        assert submit(request_id)[0] == (503 if args.quarantined else 409)
         assert call("GET", "/v1/requests/" + request_id, authenticated=False)[0] == 401
+    if args.quarantined:
+        for path in ["/v1/requests", "/v1/workspaces", "/v1/workspaces/import",
+                     "/v1/workspaces/ci-smoke/claims", "/v1/workspaces/ci-smoke/alternatives",
+                     "/v1/workspaces/ci-smoke/analysis", "/v1/workspaces/ci-smoke/judgment"]:
+            assert call("POST", path, {"invalid": True}) == (
+                503, {"error": "recovery_acknowledgment_required"})
+            assert call("POST", path, {"invalid": True}, authenticated=False)[0] == 401
+        assert submit(args.request_id + "-after-restore")[0] == 503
+        assert call("GET", "/v1/requests/" + args.request_id + "-after-restore")[0] == 404
+        print("FULL DATA RECOVERY QUARANTINE: PASS")
+        return
     new_id = args.request_id + "-after-restore"
     assert submit(new_id)[0] == (409 if args.repeat else 202)
     assert call("GET", "/v1/requests/" + new_id) == (

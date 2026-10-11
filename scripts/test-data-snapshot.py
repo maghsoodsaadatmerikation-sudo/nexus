@@ -49,11 +49,12 @@ class SnapshotTests(unittest.TestCase):
 
     def test_complete_round_trip_preserves_pending_and_uncertain_bytes(self):
         self.capture()
-        self.assertEqual(snapshot.restore(self.archive, self.target), 3)
+        self.assertEqual(snapshot.restore(self.archive, self.target), 4)
         original = {p.relative_to(self.source): p.read_bytes()
                     for p in self.source.rglob("*") if p.is_file()}
         restored = {p.relative_to(self.target): p.read_bytes()
                     for p in self.target.rglob("*") if p.is_file()}
+        self.assertEqual(restored.pop(Path(snapshot.RECOVERY_MARKER)), snapshot.RECOVERY_BYTES)
         self.assertEqual(original, restored)
         self.assertEqual(stat.S_IMODE(self.archive.stat().st_mode), 0o600)
         self.assertEqual(stat.S_IMODE(self.target.stat().st_mode), 0o700)
@@ -66,6 +67,57 @@ class SnapshotTests(unittest.TestCase):
         later.write_bytes(b"pending\n")
         snapshot.restore(self.archive, self.target)
         self.assertFalse((self.target / "requests" / later.name).exists())
+
+    def test_quarantine_survives_a_second_backup_and_restore(self):
+        self.capture()
+        snapshot.restore(self.archive, self.target)
+        second_archive = self.root / "second.json"
+        second_target = self.root / "second-data"
+        snapshot.backup(self.target, second_archive)
+        snapshot.restore(second_archive, second_target)
+        self.assertEqual((second_target / snapshot.RECOVERY_MARKER).read_bytes(), snapshot.RECOVERY_BYTES)
+
+    def test_resume_requires_offline_and_explicit_risk_acknowledgment(self):
+        self.capture()
+        snapshot.restore(self.archive, self.target)
+        marker = self.target / snapshot.RECOVERY_MARKER
+        command = [sys.executable, str(SCRIPT), "resume", str(self.target)]
+        for flags in [[], ["--offline"], ["--acknowledge-replay-risk"]]:
+            result = subprocess.run(command + flags, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue(marker.exists())
+        result = subprocess.run(command + ["--offline", "--acknowledge-replay-risk"],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(marker.exists())
+        self.assertTrue((self.target / "requests" / b"accepted".hex()).exists())
+
+    def test_resume_rejects_missing_invalid_and_symlink_markers(self):
+        self.capture()
+        snapshot.restore(self.archive, self.target)
+        marker = self.target / snapshot.RECOVERY_MARKER
+        marker.write_bytes(b"untrusted")
+        with self.assertRaises(ValueError):
+            snapshot.resume(self.target)
+        self.assertEqual(marker.read_bytes(), b"untrusted")
+        marker.unlink()
+        with self.assertRaises(OSError):
+            snapshot.resume(self.target)
+        witness = self.root / "private"
+        witness.write_bytes(snapshot.RECOVERY_BYTES)
+        marker.symlink_to(witness)
+        with self.assertRaises(OSError):
+            snapshot.resume(self.target)
+        self.assertTrue(marker.is_symlink())
+        self.assertEqual(witness.read_bytes(), snapshot.RECOVERY_BYTES)
+
+    def test_corrupt_quarantine_record_leaves_destination_absent(self):
+        document = self.capture()
+        data = b"acknowledged"
+        document["files"].append({"path": snapshot.RECOVERY_MARKER, "size": len(data),
+                                 "sha256": hashlib.sha256(data).hexdigest(),
+                                 "data": base64.b64encode(data).decode()})
+        self.corrupted_restore(document)
 
     def test_corrupt_checksum_leaves_destination_absent(self):
         document = self.capture()

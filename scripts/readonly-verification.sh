@@ -242,11 +242,29 @@ docker run --rm --user 0 --entrypoint sh \
   -v "$smoke_data:/data" nexus-ci-smoke \
   -c ': > /data/requests/63692d756e6365727461696e'
 python3 scripts/data-snapshot.py backup "$smoke_data" "$volume_snapshot" --offline
+# Prove the recovery-point gap: admit an ID after capture, then lose that volume.
+start_container
+code="$(curl -sS -o "$http_body" -w '%{http_code}' -X POST "$base_url/v1/requests" \
+  -H 'content-type: application/json' -H 'authorization: Bearer ci-smoke-token' \
+  --data "{\"request_id\":\"${volume_request_id}-after-restore\",\"authority\":\"user\",\"action\":\"present\",\"value\":\"synthetic-gap\",\"payload\":\"opaque\"}")"
+test "$code" = 202
+cleanup
+echo 'RECOVERY POINT GAP WITNESS: PASS'
 docker run --rm --user 0 --entrypoint sh \
   -v "$smoke_data:/data" nexus-ci-smoke \
   -c 'find /data -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
 sudo python3 scripts/data-snapshot.py restore "$volume_snapshot" "$volume_restore" --offline --owner 10001:10001
 smoke_data="$volume_restore"
+start_container
+assert_redacted_startup
+NEXUS_API_TOKEN=ci-smoke-token python3 scripts/verify-data-recovery-http.py "$base_url" "$volume_request_id" "$restored" --quarantined
+cleanup
+start_container
+assert_redacted_startup
+NEXUS_API_TOKEN=ci-smoke-token python3 scripts/verify-data-recovery-http.py "$base_url" "$volume_request_id" "$restored" --quarantined
+cleanup
+# Explicit synthetic acknowledgment is separate from verification evidence.
+sudo python3 scripts/data-snapshot.py resume "$volume_restore" --offline --acknowledge-replay-risk
 start_container
 assert_redacted_startup
 NEXUS_API_TOKEN=ci-smoke-token python3 scripts/verify-data-recovery-http.py "$base_url" "$volume_request_id" "$restored"
@@ -291,6 +309,7 @@ Backup Recovery: PASS
 Operational Observability: PASS
 Deployment Smoke: PASS
 Full Data Recovery: PASS
+Recovery Quarantine: PASS
 Full Data Snapshot Script SHA-256: ${data_snapshot_script_sha}
 Synthetic Full Data Archive SHA-256: ${full_data_archive_sha}
 Full Data Consistency: OFFLINE-CALLER-ASSERTED
@@ -324,6 +343,7 @@ grep -Fx 'Backup Recovery: PASS' artifact-05-verification-manifest.txt
 grep -Fx 'Operational Observability: PASS' artifact-05-verification-manifest.txt
 grep -Fx 'Deployment Smoke: PASS' artifact-05-verification-manifest.txt
 grep -Fx 'Full Data Recovery: PASS' artifact-05-verification-manifest.txt
+grep -Fx 'Recovery Quarantine: PASS' artifact-05-verification-manifest.txt
 grep -Fx 'V1.1 Release Readiness Fail-Closed: PASS' artifact-05-verification-manifest.txt
 grep -Fx 'V1.1 Release Candidate Fail-Closed: PASS' artifact-05-verification-manifest.txt
 

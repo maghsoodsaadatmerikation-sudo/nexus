@@ -6,8 +6,9 @@ mod workspace_api;
 use axum::{
     body::to_bytes,
     extract::{Path, Request, State},
-    http::{header, HeaderMap, StatusCode},
-    response::{Html, IntoResponse},
+    http::{header, HeaderMap, Method, StatusCode},
+    middleware::{self, Next},
+    response::{Html, IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -209,6 +210,7 @@ pub struct AppState<D> {
     pub statuses: Arc<RwLock<HashMap<String, RequestStatus>>>,
     pub auth_token: Option<Arc<str>>,
     request_store: Option<Arc<request_store::RequestStore>>,
+    recovery_required: bool,
     safety_config: SafetyConfig,
     safety_state: Arc<Mutex<SafetyState>>,
 }
@@ -220,6 +222,7 @@ impl<D> Clone for AppState<D> {
             statuses: Arc::clone(&self.statuses),
             auth_token: self.auth_token.clone(),
             request_store: self.request_store.clone(),
+            recovery_required: self.recovery_required,
             safety_config: self.safety_config,
             safety_state: Arc::clone(&self.safety_state),
         }
@@ -233,6 +236,7 @@ impl<D: ConstitutionalDelegate> AppState<D> {
             statuses: Arc::new(RwLock::new(HashMap::new())),
             auth_token: None,
             request_store: None,
+            recovery_required: false,
             safety_config: SafetyConfig::default(),
             safety_state: Arc::new(Mutex::new(SafetyState::default())),
         }
@@ -249,6 +253,7 @@ impl<D: ConstitutionalDelegate> AppState<D> {
             statuses: Arc::new(RwLock::new(HashMap::new())),
             auth_token: Some(Arc::<str>::from(token)),
             request_store: None,
+            recovery_required: false,
             safety_config: SafetyConfig::default(),
             safety_state: Arc::new(Mutex::new(SafetyState::default())),
         }
@@ -280,6 +285,21 @@ impl<D: ConstitutionalDelegate> AppState<D> {
         }));
         self.statuses = Arc::new(RwLock::new(statuses));
         self.request_store = Some(Arc::new(store));
+        Ok(self)
+    }
+
+    /// Latch restore quarantine before listening. Removing the marker requires restart.
+    /// Any marker object (including a dangling symlink) blocks all mutating routes.
+    pub fn with_recovery_gate(
+        mut self,
+        data_root: impl AsRef<std::path::Path>,
+    ) -> std::io::Result<Self> {
+        self.recovery_required =
+            match std::fs::symlink_metadata(data_root.as_ref().join(".nexus-recovery-required")) {
+                Ok(_) => true,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+                Err(error) => return Err(error),
+            };
         Ok(self)
     }
 
@@ -322,7 +342,33 @@ where
             "/v1/workspaces/{id}/judgment",
             post(workspace_api::record_human_judgment::<D>),
         )
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            recovery_boundary::<D>,
+        ))
         .with_state(state)
+}
+
+async fn recovery_boundary<D: ConstitutionalDelegate>(
+    State(state): State<AppState<D>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if state.recovery_required
+        && !matches!(
+            *request.method(),
+            Method::GET | Method::HEAD | Method::OPTIONS
+        )
+    {
+        if !transport_authorized(&state, request.headers()) {
+            return transport_unauthorized();
+        }
+        return safety_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "recovery_acknowledgment_required",
+        );
+    }
+    next.run(request).await
 }
 
 async fn web_workspace() -> Html<&'static str> {

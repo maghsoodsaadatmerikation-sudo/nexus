@@ -211,6 +211,8 @@ async fn main() {
     let app = router(
         AppState::authenticated(CoreDelegate::new(data_root.clone()), token)
             .with_safety(safety)
+            .with_recovery_gate(&data_root)
+            .expect("inspect recovery quarantine")
             .with_request_store(data_root.join("requests"))
             .expect("open durable request store"),
     )
