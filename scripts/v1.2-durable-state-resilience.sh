@@ -79,6 +79,22 @@ grep -F '("/readyz", 503 if args.quarantined else 200,' scripts/verify-data-reco
 grep -F 'Gateway Readiness: PASS' scripts/readonly-verification.sh >/dev/null \
   || fail 'gateway readiness evidence field missing'
 
+# Missing-ledger drill must stay inside the already bounded synthetic mount.
+python3 - <<'CHECK_STORAGE' || fail 'storage failure witness missing or unbounded'
+from pathlib import Path
+s = Path('scripts/readonly-verification.sh').read_text()
+for operation in [
+    'test -d /data/requests && test ! -e /data/requests.offline && mv /data/requests /data/requests.offline',
+    'test ! -e /data/requests && mv /data/requests.offline /data/requests',
+]:
+    assert '-v "$smoke_data:/data" nexus-ci-smoke \\\n  -c \'%s\'' % operation in s
+for phase in ['unavailable', 'repaired', 'restarted']:
+    assert 'python3 scripts/verify-storage-failure-http.py "$base_url" "$volume_request_id" ' + phase in s
+assert 'Storage Failure Recovery: PASS' in s
+assert Path('scripts/verify-storage-failure-http.py').is_file()
+assert Path('docs/gateway-storage-failure.md').is_file()
+CHECK_STORAGE
+
 printf '%s\n' 'V1.2 G3 DURABLE-STATE RESILIENCE: PASS'
 printf '%s\n' 'Persistence boundary: /data'
 printf '%s\n' 'Destructive validation scope: dedicated CI witness only'
