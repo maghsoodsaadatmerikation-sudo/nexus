@@ -69,6 +69,13 @@ Verification / Evidence / Attestation
 
 The gateway may parse, validate shape, create envelopes, delegate, and serialize responses. It does not independently authorize, deny, interpret evidence meaning, execute constitutional actions, or mutate policy.
 
+## Current single-host pilot
+
+Later engineering commits add durable request admission, full-data recovery,
+write quarantine, liveness/readiness and bounded storage-failure defenses. They
+require their own exact-commit verification; the historical v2.5.0 Seal does not
+cover them. See [single-host completion and operator entrypoint](docs/SINGLE-HOST-COMPLETION.md).
+
 ## Run the gateway locally
 
 ```sh

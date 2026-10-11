@@ -7,6 +7,8 @@ import tempfile
 
 root = Path(__file__).resolve().parent.parent
 files = [
+    "scripts/verify-single-host.py", "docs/SINGLE-HOST-COMPLETION.md",
+    "deploy/oci/docker-compose.yml",
     "scripts/verify-storage-full.py", "docs/gateway-storage-full.md",
     "scripts/verify-storage-failure-http.py", "docs/gateway-storage-failure.md",
     "Dockerfile", "docs/DEPLOYMENT.md", "scripts/workspace-backup.sh",
@@ -35,6 +37,9 @@ with tempfile.TemporaryDirectory(prefix="nexus-contract-") as tmp:
     ]
     mutations = [("scripts/readonly-verification.sh", old, new) for old, new in mutations]
     mutations.extend([
+        ("scripts/readonly-verification.sh", 'python3 scripts/verify-single-host.py nexus-ci-smoke "$GITHUB_RUN_ID"', 'true # omitted acceptance'),
+        ("scripts/verify-single-host.py", "'--force-recreate'", "'--no-recreate'"),
+        ("scripts/verify-single-host.py", "project = 'nexus-acceptance-' + args.witness_id", "project = 'production-' + args.witness_id"),
         ("scripts/readonly-verification.sh", "enospc_reservation_fails_before_delegation -- --ignored --exact --nocapture", "enospc_reservation_fails_before_delegation -- --exact"),
         ("scripts/readonly-verification.sh", "--tmpfs /tmp/nexus-test-enospc:rw,size=8m,mode=0777", "--tmpfs /tmp/nexus-test-enospc:rw,size=8g,mode=0777"),
         ("scripts/verify-storage-full.py", "size=8m", "size=8g"),
@@ -65,4 +70,4 @@ with tempfile.TemporaryDirectory(prefix="nexus-contract-") as tmp:
         else:
             assert result.returncode != 0, "unsafe cleanup passed"
             assert "BLOCKED" in result.stderr
-print("DURABLE WITNESS CLEANUP CONTRACT: PASS (valid + 17 rejected mutations)")
+print("DURABLE WITNESS CLEANUP CONTRACT: PASS (valid + 20 rejected mutations)")

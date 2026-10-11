@@ -298,6 +298,7 @@ assert_redacted_startup
 NEXUS_API_TOKEN=ci-smoke-token python3 scripts/verify-storage-failure-http.py "$base_url" "$volume_request_id" restarted
 echo 'STORAGE FAILURE RECOVERY PASS'
 NEXUS_API_TOKEN=ci-smoke-token python3 scripts/verify-storage-full.py nexus-ci-smoke "$GITHUB_RUN_ID"
+NEXUS_API_TOKEN=ci-smoke-token python3 scripts/verify-single-host.py nexus-ci-smoke "$GITHUB_RUN_ID"
 
 
 # Artifact 05 evidence manifest and local bundle.
@@ -339,6 +340,7 @@ Gateway Readiness: PASS
 Storage Failure Recovery: PASS
 Storage Full Recovery: PASS
 ENOSPC Before Delegation: PASS
+Single Host Acceptance: PASS
 Full Data Snapshot Script SHA-256: ${data_snapshot_script_sha}
 Synthetic Full Data Archive SHA-256: ${full_data_archive_sha}
 Full Data Consistency: OFFLINE-CALLER-ASSERTED
@@ -416,6 +418,11 @@ tar -czf artifact-05-verification-bundle.tar.gz \
   scripts/verify-data-recovery-http.py \
   scripts/verify-storage-failure-http.py \
   scripts/verify-storage-full.py \
+  scripts/verify-single-host.py \
+  deploy/stage-d-self-hosted.compose.yaml \
+  deploy/oci/docker-compose.yml \
+  docs/SINGLE-HOST-COMPLETION.md \
+  evidence/single-host/provider-observation-2026-10-11.json \
   docs/gateway-storage-full.md \
   docs/gateway-storage-failure.md \
   docs/full-data-recovery.md \
