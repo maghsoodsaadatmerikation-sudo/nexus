@@ -11,6 +11,7 @@ files = [
     "scripts/workspace-restore.sh", "scripts/readonly-verification.sh",
     "scripts/v1.2-durable-state-resilience.sh",
     "scripts/data-snapshot.py", "docs/full-data-recovery.md", "artifact-05/src/main.rs",
+    "artifact-05/src/lib.rs", "scripts/verify-data-recovery-http.py", "docs/gateway-health.md",
 ]
 with tempfile.TemporaryDirectory(prefix="nexus-contract-") as tmp:
     fixture = Path(tmp)
@@ -30,10 +31,22 @@ with tempfile.TemporaryDirectory(prefix="nexus-contract-") as tmp:
         ('--offline --acknowledge-replay-risk', '--offline'),
         ('"$restored" --quarantined', '"$restored"'),
     ]
-    for old, new in mutations:
+    mutations = [("scripts/readonly-verification.sh", old, new) for old, new in mutations]
+    mutations.extend([
+        ("Dockerfile", "GET /livez HTTP/1.1", "GET / HTTP/1.1"),
+        ("scripts/verify-data-recovery-http.py", '("/readyz", 503 if args.quarantined else 200,',
+         '("/readyz", 200 if args.quarantined else 200,'),
+        ("artifact-05/src/lib.rs", '.route("/readyz", get(readiness::<D>))',
+         '.route("/obsolete-readyz", get(readiness::<D>))'),
+    ])
+    originals = {name: (fixture / name).read_text() for name in files}
+    for name, old, new in mutations:
+        for filename, text in originals.items():
+            (fixture / filename).write_text(text)
+        original = originals[name]
         if old is not None:
             assert old in original
-        harness.write_text(original if old is None else original.replace(old, new))
+        (fixture / name).write_text(original if old is None else original.replace(old, new))
         result = subprocess.run(
             ["bash", str(fixture / "scripts/v1.2-durable-state-resilience.sh")],
             capture_output=True, text=True, check=False,
@@ -43,4 +56,4 @@ with tempfile.TemporaryDirectory(prefix="nexus-contract-") as tmp:
         else:
             assert result.returncode != 0, "unsafe cleanup passed"
             assert "BLOCKED" in result.stderr
-print("DURABLE WITNESS CLEANUP CONTRACT: PASS (valid + 7 rejected mutations)")
+print("DURABLE WITNESS CLEANUP CONTRACT: PASS (valid + 10 rejected mutations)")

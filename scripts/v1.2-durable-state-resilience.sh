@@ -9,7 +9,7 @@ fail() {
   exit 1
 }
 
-for f in Dockerfile scripts/workspace-backup.sh scripts/workspace-restore.sh scripts/readonly-verification.sh docs/DEPLOYMENT.md scripts/data-snapshot.py docs/full-data-recovery.md artifact-05/src/main.rs; do
+for f in Dockerfile scripts/workspace-backup.sh scripts/workspace-restore.sh scripts/readonly-verification.sh docs/DEPLOYMENT.md scripts/data-snapshot.py docs/full-data-recovery.md artifact-05/src/main.rs artifact-05/src/lib.rs scripts/verify-data-recovery-http.py docs/gateway-health.md; do
   [[ -f "$f" ]] || fail "missing $f"
 done
 
@@ -69,6 +69,15 @@ assert Path('scripts/readonly-verification.sh').read_text().count(check) == 2
 PYQUARANTINE
 grep -F 'sudo python3 scripts/data-snapshot.py resume "$volume_restore" --offline --acknowledge-replay-risk' scripts/readonly-verification.sh >/dev/null \
   || fail 'explicit offline replay-risk acknowledgment missing'
+
+grep -F '.route("/readyz", get(readiness::<D>))' artifact-05/src/lib.rs >/dev/null \
+  || fail 'gateway readiness route missing'
+grep -F 'GET /livez HTTP/1.1' Dockerfile >/dev/null \
+  || fail 'container liveness probe missing'
+grep -F '("/readyz", 503 if args.quarantined else 200,' scripts/verify-data-recovery-http.py >/dev/null \
+  || fail 'quarantine readiness HTTP witness missing'
+grep -F 'Gateway Readiness: PASS' scripts/readonly-verification.sh >/dev/null \
+  || fail 'gateway readiness evidence field missing'
 
 printf '%s\n' 'V1.2 G3 DURABLE-STATE RESILIENCE: PASS'
 printf '%s\n' 'Persistence boundary: /data'

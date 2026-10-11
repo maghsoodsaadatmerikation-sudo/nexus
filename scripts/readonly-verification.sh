@@ -310,6 +310,7 @@ Operational Observability: PASS
 Deployment Smoke: PASS
 Full Data Recovery: PASS
 Recovery Quarantine: PASS
+Gateway Readiness: PASS
 Full Data Snapshot Script SHA-256: ${data_snapshot_script_sha}
 Synthetic Full Data Archive SHA-256: ${full_data_archive_sha}
 Full Data Consistency: OFFLINE-CALLER-ASSERTED
@@ -344,6 +345,7 @@ grep -Fx 'Operational Observability: PASS' artifact-05-verification-manifest.txt
 grep -Fx 'Deployment Smoke: PASS' artifact-05-verification-manifest.txt
 grep -Fx 'Full Data Recovery: PASS' artifact-05-verification-manifest.txt
 grep -Fx 'Recovery Quarantine: PASS' artifact-05-verification-manifest.txt
+grep -Fx 'Gateway Readiness: PASS' artifact-05-verification-manifest.txt
 grep -Fx 'V1.1 Release Readiness Fail-Closed: PASS' artifact-05-verification-manifest.txt
 grep -Fx 'V1.1 Release Candidate Fail-Closed: PASS' artifact-05-verification-manifest.txt
 
@@ -385,6 +387,7 @@ tar -czf artifact-05-verification-bundle.tar.gz \
   scripts/test-data-snapshot.py \
   scripts/verify-data-recovery-http.py \
   docs/full-data-recovery.md \
+  docs/gateway-health.md \
   docs/DEPLOYMENT.md \
   docs/OBSERVABILITY.md \
   docs/STAGE-D-EVIDENCE.md \

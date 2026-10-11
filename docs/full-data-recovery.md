@@ -74,7 +74,9 @@ previously resumed volume always reinstates quarantine. OS access remains truste
 a privileged actor can delete files or run an older binary. Raw filesystem copies
 and the legacy one-workspace API import do not acquire this new restore protection.
 Liveness/UI GET can remain healthy during quarantine; write availability is
-explicitly signaled by 503, not inferred from the root page returning 200.
+explicitly signaled by 503, not inferred from the root page returning 200. Public
+`/readyz` also returns 503 until resumption and restart, while `/livez` remains 200;
+see [the probe contract](gateway-health.md).
 
 This interlock prevents accidental admission from restored state. Acknowledging
 risk does not repair lost IDs, prove a zero-loss recovery point, or confer core

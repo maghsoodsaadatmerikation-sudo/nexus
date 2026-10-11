@@ -315,6 +315,8 @@ where
 {
     Router::new()
         .route("/", get(web_workspace))
+        .route("/livez", get(liveness))
+        .route("/readyz", get(readiness::<D>))
         .route("/v1/requests", post(submit::<D>))
         .route("/v1/requests/{id}", get(status::<D>))
         .route("/v1/workspaces", post(workspace_api::create_workspace::<D>))
@@ -369,6 +371,27 @@ async fn recovery_boundary<D: ConstitutionalDelegate>(
         );
     }
     next.run(request).await
+}
+
+fn health_response(code: StatusCode, status: &'static str) -> Response {
+    (
+        code,
+        [(header::CACHE_CONTROL, "no-store")],
+        Json(serde_json::json!({"status": status})),
+    )
+        .into_response()
+}
+
+async fn liveness() -> Response {
+    health_response(StatusCode::OK, "alive")
+}
+
+async fn readiness<D: ConstitutionalDelegate>(State(state): State<AppState<D>>) -> Response {
+    if state.recovery_required {
+        health_response(StatusCode::SERVICE_UNAVAILABLE, "quarantined")
+    } else {
+        health_response(StatusCode::OK, "ready")
+    }
 }
 
 async fn web_workspace() -> Html<&'static str> {

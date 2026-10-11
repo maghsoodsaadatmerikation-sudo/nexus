@@ -1064,6 +1064,19 @@ async fn recovery_quarantine_requires_restart_after_marker_removal() {
     std::fs::remove_file(marker).unwrap();
     for app in [paused, restarted_paused] {
         assert_eq!(
+            app.clone()
+                .oneshot(
+                    Request::builder()
+                        .uri("/readyz")
+                        .body(Body::empty())
+                        .unwrap()
+                )
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        assert_eq!(
             app.oneshot(submit_request("later", Some("secret"), "opaque"))
                 .await
                 .unwrap()
@@ -1072,6 +1085,19 @@ async fn recovery_quarantine_requires_restart_after_marker_removal() {
         );
     }
     assert!(delegate.requests.lock().unwrap().is_empty());
+    assert_eq!(
+        router(state())
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap()
+            )
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
     assert_eq!(
         router(state())
             .oneshot(submit_request("later", Some("secret"), "opaque"))
@@ -1106,5 +1132,108 @@ async fn recovery_gate_fails_closed_for_dangling_symlink_and_metadata_errors() {
     assert!(AppState::new(RecordingDelegate::default())
         .with_recovery_gate(root.join("not-a-directory"))
         .is_err());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn health_probes_report_gate_without_authentication_or_budget_mutation() {
+    for quarantined in [false, true] {
+        let root = durable_root();
+        std::fs::create_dir(&root).unwrap();
+        if quarantined {
+            std::fs::write(root.join(".nexus-recovery-required"), b"").unwrap();
+        }
+        let delegate = RecordingDelegate::default();
+        let app = router(
+            AppState::authenticated(delegate.clone(), "private-token")
+                .with_recovery_gate(&root)
+                .unwrap()
+                .with_request_store(root.join("requests"))
+                .unwrap()
+                .with_safety(SafetyConfig::new(1024, 1, Duration::from_secs(60), 1)),
+        );
+        for _ in 0..4 {
+            for (path, code, status) in [
+                ("/livez", StatusCode::OK, "alive"),
+                (
+                    "/readyz",
+                    if quarantined {
+                        StatusCode::SERVICE_UNAVAILABLE
+                    } else {
+                        StatusCode::OK
+                    },
+                    if quarantined { "quarantined" } else { "ready" },
+                ),
+            ] {
+                let response = app
+                    .clone()
+                    .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), code);
+                assert_eq!(response.headers()["cache-control"], "no-store");
+                let bytes = axum::body::to_bytes(response.into_body(), 1024)
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+                    serde_json::json!({"status": status})
+                );
+            }
+        }
+        assert!(delegate.requests.lock().unwrap().is_empty());
+        assert_eq!(std::fs::read_dir(root.join("requests")).unwrap().count(), 0);
+        assert_eq!(
+            app.oneshot(submit_request(
+                "after-probes",
+                Some("private-token"),
+                "opaque"
+            ))
+            .await
+            .unwrap()
+            .status(),
+            if quarantined {
+                StatusCode::SERVICE_UNAVAILABLE
+            } else {
+                StatusCode::ACCEPTED
+            }
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[tokio::test]
+async fn health_head_preserves_gate_status_and_cache_policy() {
+    let root = durable_root();
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(root.join(".nexus-recovery-required"), b"").unwrap();
+    let app = router(
+        AppState::authenticated(RecordingDelegate::default(), "private-token")
+            .with_recovery_gate(&root)
+            .unwrap(),
+    );
+    for (path, code) in [
+        ("/livez", StatusCode::OK),
+        ("/readyz", StatusCode::SERVICE_UNAVAILABLE),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("HEAD")
+                    .uri(path)
+                    .header("authorization", "Bearer wrong-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), code);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        assert!(axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap()
+            .is_empty());
+    }
     std::fs::remove_dir_all(root).unwrap();
 }
