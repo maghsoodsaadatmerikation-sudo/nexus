@@ -9,7 +9,7 @@ fail() {
   exit 1
 }
 
-for f in Dockerfile scripts/workspace-backup.sh scripts/workspace-restore.sh scripts/readonly-verification.sh docs/DEPLOYMENT.md scripts/data-snapshot.py docs/full-data-recovery.md; do
+for f in Dockerfile scripts/workspace-backup.sh scripts/workspace-restore.sh scripts/readonly-verification.sh docs/DEPLOYMENT.md scripts/data-snapshot.py docs/full-data-recovery.md artifact-05/src/main.rs; do
   [[ -f "$f" ]] || fail "missing $f"
 done
 
@@ -59,6 +59,16 @@ grep -F 'scripts/verify-data-recovery-http.py "$base_url" "$volume_request_id" "
   || fail 'full-data HTTP restart validation missing'
 grep -F "echo 'FULL DATA VOLUME RECOVERY PASS'" scripts/readonly-verification.sh >/dev/null \
   || fail 'full-data recovery result missing'
+
+grep -F '.with_recovery_gate(&data_root)' artifact-05/src/main.rs >/dev/null \
+  || fail 'runtime recovery quarantine missing'
+python3 - <<'PYQUARANTINE' || fail 'persistent recovery quarantine witness missing'
+from pathlib import Path
+check = 'scripts/verify-data-recovery-http.py "$base_url" "$volume_request_id" "$restored" --quarantined'
+assert Path('scripts/readonly-verification.sh').read_text().count(check) == 2
+PYQUARANTINE
+grep -F 'sudo python3 scripts/data-snapshot.py resume "$volume_restore" --offline --acknowledge-replay-risk' scripts/readonly-verification.sh >/dev/null \
+  || fail 'explicit offline replay-risk acknowledgment missing'
 
 printf '%s\n' 'V1.2 G3 DURABLE-STATE RESILIENCE: PASS'
 printf '%s\n' 'Persistence boundary: /data'

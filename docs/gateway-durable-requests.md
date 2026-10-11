@@ -31,7 +31,10 @@ loss or removal of this directory removes replay protection. Workspace JSON
 export/restore does **not** back up request markers and must not be presented as
 full gateway recovery. Use the [offline full-data snapshot](full-data-recovery.md) to preserve captured
 workspace and ledger state together. IDs admitted after that snapshot are not
-preserved; restoring an older snapshot can permit their admission again.
+preserved; restoring an older snapshot can permit their admission again after
+explicit replay-risk acknowledgment. Full-data restore now quarantines all writes
+until the offline `resume` command and a gateway restart; GET inspection remains
+available. Verification evidence does not clear that gate.
 Multi-process capacity/rate coordination, durable executor outcomes and retry
 resolution remain outside this change. No automatic re-execution is safe here.
 

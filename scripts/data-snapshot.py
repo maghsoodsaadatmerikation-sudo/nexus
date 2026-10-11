@@ -18,6 +18,8 @@ import tempfile
 SCHEMA = "nexus.data-snapshot.v1"
 MAX_BYTES = 64 * 1024 * 1024
 MAX_FILES = 20_000
+RECOVERY_MARKER = ".nexus-recovery-required"
+RECOVERY_BYTES = b"snapshot-restored; replay-risk-not-acknowledged\n"
 
 
 class SnapshotError(ValueError):
@@ -39,7 +41,9 @@ def unique_object(pairs):
 
 def validate_file(name, data):
     require(isinstance(name, str), "invalid path")
-    if re.fullmatch(r"requests/[0-9a-f]{2,200}", name):
+    if name == RECOVERY_MARKER:
+        require(data == RECOVERY_BYTES, "invalid recovery quarantine marker")
+    elif re.fullmatch(r"requests/[0-9a-f]{2,200}", name):
         encoded = name.split("/")[1]
         require(len(encoded) % 2 == 0, "invalid request ID encoding")
         bytes.fromhex(encoded).decode("utf-8")
@@ -163,6 +167,9 @@ def restore(archive, target, owner=None):
     stage = Path(tempfile.mkdtemp(prefix=".nexus-restore-", dir=target.parent))
     try:
         (stage / "requests").mkdir(mode=0o700)
+        # Every restore is quarantined, even if the captured volume was resumed.
+        records = [(name, data) for name, data in records if name != RECOVERY_MARKER]
+        records.append((RECOVERY_MARKER, RECOVERY_BYTES))
         for name, data in records:
             path = stage / name
             with path.open("xb") as handle:
@@ -187,6 +194,15 @@ def restore(archive, target, owner=None):
     return len(records)
 
 
+def resume(data_root):
+    require(not data_root.is_symlink() and data_root.is_dir(), "data must be a real directory")
+    data_root = data_root.resolve()
+    marker = data_root / RECOVERY_MARKER
+    validate_file(RECOVERY_MARKER, read_regular(marker, len(RECOVERY_BYTES)))
+    marker.unlink()
+    sync_directory(data_root)
+
+
 def parse_owner(value):
     require(re.fullmatch(r"[0-9]+:[0-9]+", value), "owner must be numeric UID:GID")
     return tuple(map(int, value.split(":")))
@@ -194,15 +210,25 @@ def parse_owner(value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=["backup", "restore"])
+    parser.add_argument("operation", choices=["backup", "restore", "resume"])
     parser.add_argument("source", type=Path)
-    parser.add_argument("destination", type=Path)
+    parser.add_argument("destination", type=Path, nargs="?")
     parser.add_argument("--offline", action="store_true", help="assert all data writers are stopped")
     parser.add_argument("--owner", help="restore ownership as numeric UID:GID; requires appropriate privilege")
+    parser.add_argument("--acknowledge-replay-risk", action="store_true",
+                        help="explicitly accept loss of replay protection for post-snapshot IDs")
     args = parser.parse_args()
     try:
         require(args.offline, "stop all writers and explicitly pass --offline")
         require(args.operation == "restore" or args.owner is None, "owner applies only to restore")
+        if args.operation == "resume":
+            require(args.destination is None, "resume takes only the data directory")
+            require(args.acknowledge_replay_risk, "explicitly pass --acknowledge-replay-risk")
+            resume(args.source)
+            print("NEXUS DATA SNAPSHOT RESUME: PASS (replay-risk acknowledged; authority=none)")
+            return 0
+        require(args.destination is not None, "snapshot destination is required")
+        require(not args.acknowledge_replay_risk, "replay-risk acknowledgment applies only to resume")
         if args.operation == "backup":
             count = backup(args.source, args.destination)
         else:

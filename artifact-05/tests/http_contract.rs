@@ -924,3 +924,187 @@ async fn durable_authentication_and_id_bounds_precede_store_writes() {
     assert!(delegate.requests.lock().unwrap().is_empty());
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[tokio::test]
+async fn recovery_quarantine_blocks_every_mutation_before_parsing_or_delegation() {
+    let root = durable_root();
+    std::fs::create_dir_all(root.join("requests")).unwrap();
+    std::fs::write(
+        root.join(".nexus-recovery-required"),
+        b"snapshot-restored\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("requests/6361707475726564"), b"pending\n").unwrap();
+    let delegate = RecordingDelegate::default();
+    delegate
+        .create_workspace(
+            "restored".into(),
+            "read only".into(),
+            ProvenanceId::new("ci"),
+        )
+        .unwrap();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret")
+            .with_recovery_gate(&root)
+            .unwrap()
+            .with_request_store(root.join("requests"))
+            .unwrap(),
+    );
+    for path in [
+        "/v1/requests",
+        "/v1/workspaces",
+        "/v1/workspaces/import",
+        "/v1/workspaces/restored/claims",
+        "/v1/workspaces/restored/alternatives",
+        "/v1/workspaces/restored/analysis",
+        "/v1/workspaces/restored/judgment",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(path)
+                    .header("authorization", "Bearer secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{invalid-json"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE, "{path}");
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()["error"],
+            "recovery_acknowledgment_required"
+        );
+    }
+    for path in ["/v1/requests/captured", "/v1/workspaces/restored", "/"] {
+        assert_eq!(
+            app.clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(path)
+                        .header("authorization", "Bearer secret")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::OK
+        );
+    }
+    assert_eq!(
+        app.oneshot(submit_request(
+            "missing-after-snapshot",
+            Some("secret"),
+            "opaque"
+        ))
+        .await
+        .unwrap()
+        .status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert!(delegate.requests.lock().unwrap().is_empty());
+    assert_eq!(std::fs::read_dir(root.join("requests")).unwrap().count(), 1);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn recovery_quarantine_preserves_authentication_before_body_parsing() {
+    let root = durable_root();
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(root.join(".nexus-recovery-required"), b"").unwrap();
+    let app = router(
+        AppState::authenticated(RecordingDelegate::default(), "secret")
+            .with_recovery_gate(&root)
+            .unwrap(),
+    );
+    for path in [
+        "/v1/requests",
+        "/v1/workspaces",
+        "/v1/workspaces/restored/claims",
+    ] {
+        assert_eq!(
+            app.clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(path)
+                        .header("content-type", "application/json")
+                        .body(Body::from("{invalid"))
+                        .unwrap()
+                )
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn recovery_quarantine_requires_restart_after_marker_removal() {
+    let root = durable_root();
+    std::fs::create_dir(&root).unwrap();
+    let marker = root.join(".nexus-recovery-required");
+    std::fs::write(&marker, b"").unwrap();
+    let delegate = RecordingDelegate::default();
+    let state = || {
+        AppState::authenticated(delegate.clone(), "secret")
+            .with_recovery_gate(&root)
+            .unwrap()
+    };
+    let paused = router(state());
+    let restarted_paused = router(state());
+    std::fs::remove_file(marker).unwrap();
+    for app in [paused, restarted_paused] {
+        assert_eq!(
+            app.oneshot(submit_request("later", Some("secret"), "opaque"))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+    }
+    assert!(delegate.requests.lock().unwrap().is_empty());
+    assert_eq!(
+        router(state())
+            .oneshot(submit_request("later", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::ACCEPTED
+    );
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn recovery_gate_fails_closed_for_dangling_symlink_and_metadata_errors() {
+    let root = durable_root();
+    std::fs::create_dir(&root).unwrap();
+    std::os::unix::fs::symlink(root.join("absent"), root.join(".nexus-recovery-required")).unwrap();
+    let app = router(
+        AppState::new(RecordingDelegate::default())
+            .with_recovery_gate(&root)
+            .unwrap(),
+    );
+    assert_eq!(
+        app.oneshot(submit_request("later", None, "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    std::fs::write(root.join("not-a-directory"), b"").unwrap();
+    assert!(AppState::new(RecordingDelegate::default())
+        .with_recovery_gate(root.join("not-a-directory"))
+        .is_err());
+    std::fs::remove_dir_all(root).unwrap();
+}
