@@ -1,0 +1,220 @@
+#!/usr/bin/env python3
+"""Offline, bounded snapshots of the complete supported NEXUS data layout.
+
+Caller must stop all writers and keep them stopped until this command completes.
+Checksums detect corruption; they do not authenticate the snapshot or grant authority.
+"""
+import argparse
+import base64
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import stat
+import tempfile
+
+SCHEMA = "nexus.data-snapshot.v1"
+MAX_BYTES = 64 * 1024 * 1024
+MAX_FILES = 20_000
+
+
+class SnapshotError(ValueError):
+    pass
+
+
+def require(condition, message):
+    if not condition:
+        raise SnapshotError(message)
+
+
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        require(key not in result, "duplicate JSON key")
+        result[key] = value
+    return result
+
+
+def validate_file(name, data):
+    require(isinstance(name, str), "invalid path")
+    if re.fullmatch(r"requests/[0-9a-f]{2,200}", name):
+        encoded = name.split("/")[1]
+        require(len(encoded) % 2 == 0, "invalid request ID encoding")
+        bytes.fromhex(encoded).decode("utf-8")
+        require(b"pending\n".startswith(data), "invalid request marker")
+    else:
+        require(re.fullmatch(r"(?:[0-9a-f]{2})*\.json", name), "unsupported data path")
+        workspace_id = bytes.fromhex(name[:-5]).decode("utf-8")
+        snapshot = json.loads(data, object_pairs_hook=unique_object)
+        require(isinstance(snapshot, dict) and type(snapshot.get("schema_version")) is int and snapshot["schema_version"] == 1,
+                "unsupported workspace schema")
+        require(isinstance(snapshot.get("workspace"), dict) and
+                snapshot["workspace"].get("id") == workspace_id, "workspace ID mismatch")
+        # The constitutional core still revalidates audit history when loaded.
+
+
+def sync_directory(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def read_regular(path, limit):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        before = os.fstat(fd)
+        require(stat.S_ISREG(before.st_mode), "only regular files are supported")
+        require(before.st_size <= limit, "snapshot size limit exceeded")
+        with os.fdopen(fd, "rb", closefd=False) as handle:
+            data = handle.read(limit + 1)
+        after = os.fstat(fd)
+        require(len(data) <= limit, "snapshot size limit exceeded")
+        require((before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) ==
+                (after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns),
+                "data changed during snapshot")
+        return data
+    finally:
+        os.close(fd)
+
+
+def backup(source, output):
+    require(not source.is_symlink() and source.is_dir(), "source must be a real directory")
+    source = source.resolve()
+    output = output.absolute()
+    require(not output.resolve().is_relative_to(source), "backup must be outside the data directory")
+    require(output.parent.is_dir(), "backup parent directory must exist")
+    require(not output.exists() and not output.is_symlink(), "backup output already exists")
+    request_dir = source / "requests"
+    require(request_dir.is_dir() and not request_dir.is_symlink(), "request ledger is required")
+    candidates = []
+    for entry in source.iterdir():
+        if entry.name == "requests":
+            candidates.extend(entry.iterdir())
+        else:
+            candidates.append(entry)
+    require(len(candidates) <= MAX_FILES, "snapshot file limit exceeded")
+    records = []
+    total = 0
+    for path in sorted(candidates):
+        data = read_regular(path, MAX_BYTES - total)
+        total += len(data)
+        name = path.relative_to(source).as_posix()
+        validate_file(name, data)
+        records.append({"path": name, "size": len(data),
+                        "sha256": hashlib.sha256(data).hexdigest(),
+                        "data": base64.b64encode(data).decode("ascii")})
+    document = {"schema": SCHEMA, "authority": "none",
+                "consistency": "offline-caller-asserted", "files": records}
+    encoded = json.dumps(document, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+    require(len(encoded) <= MAX_BYTES, "snapshot size limit exceeded")
+    fd, temporary = tempfile.mkstemp(prefix=".nexus-snapshot-", dir=output.parent)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        # Atomic publication without overwriting an existing artifact.
+        os.link(temporary, output, follow_symlinks=False)
+        sync_directory(output.parent)
+    finally:
+        os.unlink(temporary)
+    return len(records)
+
+
+def validated_records(archive):
+    raw = read_regular(archive, MAX_BYTES)
+    document = json.loads(raw, object_pairs_hook=unique_object)
+    require(isinstance(document, dict) and set(document) ==
+            {"schema", "authority", "consistency", "files"}, "invalid snapshot envelope")
+    require(document["schema"] == SCHEMA and document["authority"] == "none" and
+            document["consistency"] == "offline-caller-asserted", "unsupported snapshot contract")
+    records = document["files"]
+    require(isinstance(records, list) and len(records) <= MAX_FILES, "snapshot file limit exceeded")
+    decoded = []
+    seen = set()
+    total = 0
+    for record in records:
+        require(isinstance(record, dict) and set(record) == {"path", "size", "sha256", "data"},
+                "invalid file record")
+        name = record["path"]
+        require(isinstance(name, str) and name not in seen, "duplicate or invalid path")
+        seen.add(name)
+        require(isinstance(record["data"], str), "invalid encoded data")
+        data = base64.b64decode(record["data"], validate=True)
+        total += len(data)
+        require(total <= MAX_BYTES, "snapshot size limit exceeded")
+        require(type(record["size"]) is int and record["size"] == len(data), "size mismatch")
+        require(record["sha256"] == hashlib.sha256(data).hexdigest(), "checksum mismatch")
+        validate_file(name, data)
+        decoded.append((name, data))
+    return decoded
+
+
+def restore(archive, target, owner=None):
+    # Validate every record before creating any destination state.
+    records = validated_records(archive)
+    target = target.absolute()
+    require(target.parent.is_dir(), "restore parent directory must exist")
+    require(not target.exists() and not target.is_symlink(), "restore target must not exist")
+    stage = Path(tempfile.mkdtemp(prefix=".nexus-restore-", dir=target.parent))
+    try:
+        (stage / "requests").mkdir(mode=0o700)
+        for name, data in records:
+            path = stage / name
+            with path.open("xb") as handle:
+                os.chmod(path, 0o600)
+                if owner is not None:
+                    os.chown(path, *owner)
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+        if owner is not None:
+            os.chown(stage / "requests", *owner)
+            os.chown(stage, *owner)
+        sync_directory(stage / "requests")
+        sync_directory(stage)
+        require(not target.exists() and not target.is_symlink(), "restore target appeared during restore")
+        # Offline exclusive maintenance is required; all state is published together.
+        os.rename(stage, target)
+        sync_directory(target.parent)
+    finally:
+        if stage.exists():
+            shutil.rmtree(stage)
+    return len(records)
+
+
+def parse_owner(value):
+    require(re.fullmatch(r"[0-9]+:[0-9]+", value), "owner must be numeric UID:GID")
+    return tuple(map(int, value.split(":")))
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("operation", choices=["backup", "restore"])
+    parser.add_argument("source", type=Path)
+    parser.add_argument("destination", type=Path)
+    parser.add_argument("--offline", action="store_true", help="assert all data writers are stopped")
+    parser.add_argument("--owner", help="restore ownership as numeric UID:GID; requires appropriate privilege")
+    args = parser.parse_args()
+    try:
+        require(args.offline, "stop all writers and explicitly pass --offline")
+        require(args.operation == "restore" or args.owner is None, "owner applies only to restore")
+        if args.operation == "backup":
+            count = backup(args.source, args.destination)
+        else:
+            count = restore(args.source, args.destination, parse_owner(args.owner) if args.owner else None)
+        print(f"NEXUS DATA SNAPSHOT {args.operation.upper()}: PASS ({count} files; authority=none)")
+    except (ValueError, OSError, UnicodeError, TypeError) as error:
+        # Do not echo archive content, environment variables or private paths.
+        reason = str(error) if isinstance(error, SnapshotError) else type(error).__name__
+        print(f"NEXUS DATA SNAPSHOT: BLOCKED ({reason})", file=__import__("sys").stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
