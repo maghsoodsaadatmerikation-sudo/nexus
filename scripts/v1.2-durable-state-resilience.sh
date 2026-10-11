@@ -114,6 +114,21 @@ assert 'ENOSPC Before Delegation: PASS' in h
 
 CHECK_FULL
 
+python3 - <<'CHECK_PILOT' || fail 'single-host acceptance contract missing'
+from pathlib import Path
+h = Path('scripts/readonly-verification.sh').read_text()
+s = Path('scripts/verify-single-host.py').read_text()
+assert 'python3 scripts/verify-single-host.py nexus-ci-smoke "$GITHUB_RUN_ID"' in h
+assert 'Single Host Acceptance: PASS' in h
+assert "project = 'nexus-acceptance-' + args.witness_id" in s
+assert "TemporaryDirectory(prefix=project + '-')" in s
+assert "assert not compose('ps', '-aq').stdout.strip()" in s
+assert "'--force-recreate'" in s
+assert "snapshot['workspace']['judgment'] is None" in s
+assert Path('docs/SINGLE-HOST-COMPLETION.md').is_file()
+assert 'healthcheck:' not in Path('deploy/oci/docker-compose.yml').read_text()
+CHECK_PILOT
+
 printf '%s\n' 'V1.2 G3 DURABLE-STATE RESILIENCE: PASS'
 printf '%s\n' 'Persistence boundary: /data'
 printf '%s\n' 'Destructive validation scope: dedicated CI witness only'
