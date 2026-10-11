@@ -71,10 +71,14 @@ impl RequestStore {
     }
 
     pub(crate) fn reserve(&self, id: &str) -> io::Result<()> {
-        let file = OpenOptions::new()
+        let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(self.path(id))?;
+        // Allocate and sync a non-accepted prefix before crossing the delegate
+        // boundary. An empty inode alone does not detect byte-capacity ENOSPC.
+        // Legacy empty markers and a torn prefix still recover indeterminate.
+        file.write_all(b"p")?;
         file.sync_all()?;
         File::open(&self.root)?.sync_all()
     }

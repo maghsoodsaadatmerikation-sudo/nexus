@@ -42,3 +42,9 @@ Evidence is not authority. Gateway markers never construct `AuthorizedRequest`;
 only the core authorizes execution. `A_out ≤ A_in`, CT-001..020, Bootstrap/Verify
 separation and both pinned Cargo.lock files remain required. This change does
 not constitute a new Seal, attestation or deployment claim.
+
+Reservation byte-capacity check: the gateway writes and syncs `p` before
+delegation. This non-accepted prefix recovers as indeterminate and is compatible
+with legacy empty/torn markers. It catches the bounded tmpfs ENOSPC witness
+before delegation; subsequent writes/fsync can still fail after delegation.
+See [bounded ENOSPC evidence](gateway-storage-full.md).

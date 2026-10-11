@@ -1277,3 +1277,89 @@ async fn health_head_preserves_gate_status_and_cache_policy() {
     }
     std::fs::remove_dir_all(root).unwrap();
 }
+
+// Requires a private 8 MiB tmpfs supplied by canonical Verify, never a host path.
+#[tokio::test]
+#[ignore = "requires bounded Docker tmpfs witness"]
+async fn enospc_reservation_fails_before_delegation() {
+    use std::io::Write;
+    let mount = std::path::Path::new("/tmp/nexus-test-enospc");
+    let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap();
+    assert!(
+        mountinfo.lines().any(|line| {
+            let (before, after) = line.split_once(" - ").unwrap();
+            before.split_whitespace().nth(4) == Some("/tmp/nexus-test-enospc")
+                && after.split_whitespace().next() == Some("tmpfs")
+                && after
+                    .split_whitespace()
+                    .nth(2)
+                    .unwrap()
+                    .split(',')
+                    .any(|opt| opt == "size=8192k")
+        }),
+        "requires exactly 8 MiB private tmpfs"
+    );
+    let root = mount.join(format!("requests-{}", uuid::Uuid::new_v4()));
+    let filler = mount.join(format!("fill-{}", uuid::Uuid::new_v4()));
+    let delegate = RecordingDelegate::default();
+    let state = AppState::authenticated(delegate.clone(), "secret")
+        .with_request_store(&root)
+        .unwrap();
+    let app = router(state.clone());
+    let mut file = std::fs::File::create(&filler).unwrap();
+    let mut full = false;
+    for _ in 0..4096 {
+        if let Err(error) = file.write_all(&[0; 4096]) {
+            assert_eq!(error.raw_os_error(), Some(28));
+            full = true;
+            break;
+        }
+    }
+    assert!(full, "bounded filler did not reach ENOSPC");
+    assert_eq!(
+        app.clone()
+            .oneshot(submit_request("full", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert!(delegate.requests.lock().unwrap().is_empty());
+    assert_eq!(
+        state.statuses.read().unwrap()["full"],
+        RequestStatus::Indeterminate
+    );
+    assert_eq!(std::fs::metadata(root.join("66756c6c")).unwrap().len(), 0);
+    drop(file);
+    std::fs::remove_file(filler).unwrap();
+    assert_eq!(
+        app.clone()
+            .oneshot(submit_request("full", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    assert!(delegate.requests.lock().unwrap().is_empty());
+    assert_eq!(
+        app.oneshot(submit_request("after-full", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::ACCEPTED
+    );
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+    let recovered = AppState::authenticated(delegate, "secret")
+        .with_request_store(&root)
+        .unwrap();
+    assert_eq!(
+        recovered.statuses.read().unwrap()["full"],
+        RequestStatus::Indeterminate
+    );
+    assert_eq!(
+        recovered.statuses.read().unwrap()["after-full"],
+        RequestStatus::Pending
+    );
+    std::fs::remove_dir_all(root).unwrap();
+    println!("ENOSPC BEFORE DELEGATION: PASS");
+}

@@ -82,7 +82,7 @@ def main():
         assert code == 503 and body['error'] == 'request_store_unavailable'
         status(failed, 'indeterminate')
         assert submit(failed)[0] == 409
-        # tmpfs allows an empty inode when byte capacity is full: pending write fails.
+        # tmpfs allows an empty inode, but writing the reservation prefix now fails.
         marker = '/data/requests/' + failed.encode().hex()
         assert docker('exec', name, 'stat', '-c', '%s', marker).stdout.strip() == '0'
         status(prior, 'pending')
