@@ -849,20 +849,60 @@ async fn durable_marker_handles_torn_write_and_rejects_corruption() {
 async fn durable_store_io_failure_never_delegates() {
     let root = durable_root();
     let delegate = RecordingDelegate::default();
-    let app = router(
-        AppState::authenticated(delegate.clone(), "secret")
-            .with_request_store(&root)
-            .unwrap(),
-    );
+    let state = AppState::authenticated(delegate.clone(), "secret")
+        .with_request_store(&root)
+        .unwrap();
+    let app = router(state.clone());
     std::fs::remove_dir(&root).unwrap();
     assert_eq!(
-        app.oneshot(submit_request("no-store", Some("secret"), "opaque"))
+        app.clone()
+            .oneshot(submit_request("no-store", Some("secret"), "opaque"))
             .await
             .unwrap()
             .status(),
         StatusCode::SERVICE_UNAVAILABLE
     );
     assert!(delegate.requests.lock().unwrap().is_empty());
+    assert_eq!(
+        state.statuses.read().unwrap()["no-store"],
+        RequestStatus::Indeterminate
+    );
+    std::fs::create_dir(&root).unwrap();
+    assert_eq!(
+        app.clone()
+            .oneshot(submit_request("no-store", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    assert!(delegate.requests.lock().unwrap().is_empty());
+    assert_eq!(
+        app.oneshot(submit_request("repaired", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::ACCEPTED
+    );
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+    let reopened = AppState::authenticated(delegate.clone(), "secret")
+        .with_request_store(&root)
+        .unwrap();
+    assert!(!reopened.statuses.read().unwrap().contains_key("no-store"));
+    assert_eq!(
+        reopened.statuses.read().unwrap()["repaired"],
+        RequestStatus::Pending
+    );
+    assert_eq!(
+        router(reopened)
+            .oneshot(submit_request("no-store", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::ACCEPTED
+    );
+    assert_eq!(delegate.requests.lock().unwrap().len(), 2);
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

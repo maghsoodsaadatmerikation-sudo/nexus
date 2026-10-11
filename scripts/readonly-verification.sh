@@ -274,6 +274,21 @@ assert_redacted_startup
 NEXUS_API_TOKEN=ci-smoke-token python3 scripts/verify-data-recovery-http.py "$base_url" "$volume_request_id" "$restored" --repeat
 echo 'FULL DATA VOLUME RECOVERY PASS'
 
+# Live storage outage on this isolated synthetic volume only. No production data.
+docker run --rm --user 0 --entrypoint sh \
+  -v "$smoke_data:/data" nexus-ci-smoke \
+  -c 'test -d /data/requests && test ! -e /data/requests.offline && mv /data/requests /data/requests.offline'
+NEXUS_API_TOKEN=ci-smoke-token python3 scripts/verify-storage-failure-http.py "$base_url" "$volume_request_id" unavailable
+docker run --rm --user 0 --entrypoint sh \
+  -v "$smoke_data:/data" nexus-ci-smoke \
+  -c 'test ! -e /data/requests && mv /data/requests.offline /data/requests'
+NEXUS_API_TOKEN=ci-smoke-token python3 scripts/verify-storage-failure-http.py "$base_url" "$volume_request_id" repaired
+cleanup
+start_container
+assert_redacted_startup
+NEXUS_API_TOKEN=ci-smoke-token python3 scripts/verify-storage-failure-http.py "$base_url" "$volume_request_id" restarted
+echo 'STORAGE FAILURE RECOVERY PASS'
+
 
 # Artifact 05 evidence manifest and local bundle.
 lock_sha="$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')"
@@ -311,6 +326,7 @@ Deployment Smoke: PASS
 Full Data Recovery: PASS
 Recovery Quarantine: PASS
 Gateway Readiness: PASS
+Storage Failure Recovery: PASS
 Full Data Snapshot Script SHA-256: ${data_snapshot_script_sha}
 Synthetic Full Data Archive SHA-256: ${full_data_archive_sha}
 Full Data Consistency: OFFLINE-CALLER-ASSERTED
@@ -386,6 +402,8 @@ tar -czf artifact-05-verification-bundle.tar.gz \
   scripts/data-snapshot.py \
   scripts/test-data-snapshot.py \
   scripts/verify-data-recovery-http.py \
+  scripts/verify-storage-failure-http.py \
+  docs/gateway-storage-failure.md \
   docs/full-data-recovery.md \
   docs/gateway-health.md \
   docs/DEPLOYMENT.md \
