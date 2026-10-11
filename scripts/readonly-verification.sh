@@ -30,6 +30,7 @@ esac
 
 # Static and fail-closed release checks.
 python3 scripts/verify_test_matrix.py
+python3 scripts/test-data-snapshot.py
 bash -n scripts/workspace-backup.sh
 bash -n scripts/workspace-restore.sh
 bash -n scripts/stage-d-evidence.sh
@@ -226,6 +227,36 @@ echo 'BACKUP RECOVERY PASS'
 echo 'OPERATIONAL OBSERVABILITY PASS'
 echo 'DEPLOYMENT SMOKE PASS'
 
+# Complete data recovery is separate from one-workspace JSON import. All writers
+# are stopped before snapshotting; only isolated synthetic CI data is destroyed.
+volume_request_id="ci-volume-${GITHUB_RUN_ID}"
+volume_snapshot="$RUNNER_TEMP/nexus-full-data-${GITHUB_RUN_ID}.json"
+volume_restore="$RUNNER_TEMP/nexus-full-data-restored-${GITHUB_RUN_ID}"
+code="$(curl -sS -o "$http_body" -w '%{http_code}' -X POST "$base_url/v1/requests" \
+  -H 'content-type: application/json' -H 'authorization: Bearer ci-smoke-token' \
+  --data "{\"request_id\":\"${volume_request_id}\",\"authority\":\"user\",\"action\":\"present\",\"value\":\"synthetic-recovery\",\"payload\":\"opaque\"}")"
+test "$code" = 202
+cleanup
+# This empty marker is a synthetic interrupted reservation, created offline.
+docker run --rm --user 0 --entrypoint sh \
+  -v "$smoke_data:/data" nexus-ci-smoke \
+  -c ': > /data/requests/63692d756e6365727461696e'
+python3 scripts/data-snapshot.py backup "$smoke_data" "$volume_snapshot" --offline
+docker run --rm --user 0 --entrypoint sh \
+  -v "$smoke_data:/data" nexus-ci-smoke \
+  -c 'find /data -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+sudo python3 scripts/data-snapshot.py restore "$volume_snapshot" "$volume_restore" --offline --owner 10001:10001
+smoke_data="$volume_restore"
+start_container
+assert_redacted_startup
+NEXUS_API_TOKEN=ci-smoke-token python3 scripts/verify-data-recovery-http.py "$base_url" "$volume_request_id" "$restored"
+cleanup
+start_container
+assert_redacted_startup
+NEXUS_API_TOKEN=ci-smoke-token python3 scripts/verify-data-recovery-http.py "$base_url" "$volume_request_id" "$restored" --repeat
+echo 'FULL DATA VOLUME RECOVERY PASS'
+
+
 # Artifact 05 evidence manifest and local bundle.
 lock_sha="$(sha256sum artifact-05/Cargo.lock | awk '{print $1}')"
 toml_sha="$(sha256sum artifact-05/Cargo.toml | awk '{print $1}')"
@@ -241,6 +272,8 @@ readonly_script_sha="$(sha256sum scripts/readonly-verification.sh | awk '{print 
 stage_d_doc_sha="$(sha256sum docs/STAGE-D-EVIDENCE.md | awk '{print $1}')"
 readiness_doc_sha="$(sha256sum docs/RELEASE-READINESS-v1.1.md | awk '{print $1}')"
 candidate_doc_sha="$(sha256sum docs/RELEASE-CANDIDATE-v1.1.md | awk '{print $1}')"
+data_snapshot_script_sha="$(sha256sum scripts/data-snapshot.py | awk '{print $1}')"
+full_data_archive_sha="$(sha256sum "$volume_snapshot" | awk '{print $1}')"
 observability_sha="$(sha256sum docs/OBSERVABILITY.md | awk '{print $1}')"
 
 cat > artifact-05-verification-manifest.txt <<EOF
@@ -257,6 +290,11 @@ Deployment Health: PASS
 Backup Recovery: PASS
 Operational Observability: PASS
 Deployment Smoke: PASS
+Full Data Recovery: PASS
+Full Data Snapshot Script SHA-256: ${data_snapshot_script_sha}
+Synthetic Full Data Archive SHA-256: ${full_data_archive_sha}
+Full Data Consistency: OFFLINE-CALLER-ASSERTED
+Full Data Recovery Point: CAPTURED-IDS-ONLY
 V1.1 Release Readiness Fail-Closed: PASS
 V1.1 Release Candidate Fail-Closed: PASS
 Artifact 05 Cargo.lock SHA-256: ${lock_sha}
@@ -285,6 +323,7 @@ grep -Fx 'Deployment Health: PASS' artifact-05-verification-manifest.txt
 grep -Fx 'Backup Recovery: PASS' artifact-05-verification-manifest.txt
 grep -Fx 'Operational Observability: PASS' artifact-05-verification-manifest.txt
 grep -Fx 'Deployment Smoke: PASS' artifact-05-verification-manifest.txt
+grep -Fx 'Full Data Recovery: PASS' artifact-05-verification-manifest.txt
 grep -Fx 'V1.1 Release Readiness Fail-Closed: PASS' artifact-05-verification-manifest.txt
 grep -Fx 'V1.1 Release Candidate Fail-Closed: PASS' artifact-05-verification-manifest.txt
 
@@ -304,6 +343,7 @@ test "$(sha256sum docs/STAGE-D-EVIDENCE.md | awk '{print $1}')" = "$stage_d_doc_
 test "$(sha256sum docs/RELEASE-READINESS-v1.1.md | awk '{print $1}')" = "$readiness_doc_sha"
 test "$(sha256sum docs/RELEASE-CANDIDATE-v1.1.md | awk '{print $1}')" = "$candidate_doc_sha"
 test "$(sha256sum docs/OBSERVABILITY.md | awk '{print $1}')" = "$observability_sha"
+test "$(sha256sum scripts/data-snapshot.py | awk '{print $1}')" = "$data_snapshot_script_sha"
 echo 'GATE 3 PASS'
 
 tar -czf artifact-05-verification-bundle.tar.gz \
@@ -321,6 +361,10 @@ tar -czf artifact-05-verification-bundle.tar.gz \
   scripts/v1.1-release-readiness.sh \
   scripts/v1.1-release-candidate.sh \
   scripts/readonly-verification.sh \
+  scripts/data-snapshot.py \
+  scripts/test-data-snapshot.py \
+  scripts/verify-data-recovery-http.py \
+  docs/full-data-recovery.md \
   docs/DEPLOYMENT.md \
   docs/OBSERVABILITY.md \
   docs/STAGE-D-EVIDENCE.md \

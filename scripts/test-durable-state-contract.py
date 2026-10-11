@@ -10,6 +10,7 @@ files = [
     "Dockerfile", "docs/DEPLOYMENT.md", "scripts/workspace-backup.sh",
     "scripts/workspace-restore.sh", "scripts/readonly-verification.sh",
     "scripts/v1.2-durable-state-resilience.sh",
+    "scripts/data-snapshot.py", "docs/full-data-recovery.md",
 ]
 with tempfile.TemporaryDirectory(prefix="nexus-contract-") as tmp:
     fixture = Path(tmp)
@@ -24,6 +25,8 @@ with tempfile.TemporaryDirectory(prefix="nexus-contract-") as tmp:
         ('-v "$smoke_data:/data" nexus-ci-smoke', '-v "/production:/data" nexus-ci-smoke'),
         ('find /data -mindepth 1 -maxdepth 1', 'find /other -mindepth 1 -maxdepth 1'),
         ('find /data -mindepth 1 -maxdepth 1', 'find /data -maxdepth 1'),
+        ('volume_restore="$RUNNER_TEMP/nexus-full-data-restored-${GITHUB_RUN_ID}"', 'volume_restore="/production"'),
+        ('"$volume_restore" --offline --owner', '"$volume_restore" --owner'),
     ]
     for old, new in mutations:
         if old is not None:
@@ -37,5 +40,5 @@ with tempfile.TemporaryDirectory(prefix="nexus-contract-") as tmp:
             assert result.returncode == 0, result.stderr
         else:
             assert result.returncode != 0, "unsafe cleanup passed"
-            assert "isolated destructive witness exercise missing" in result.stderr
-print("DURABLE WITNESS CLEANUP CONTRACT: PASS (valid + 3 rejected mutations)")
+            assert "BLOCKED" in result.stderr
+print("DURABLE WITNESS CLEANUP CONTRACT: PASS (valid + 5 rejected mutations)")

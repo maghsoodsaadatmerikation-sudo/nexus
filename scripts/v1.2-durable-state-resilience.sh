@@ -9,7 +9,7 @@ fail() {
   exit 1
 }
 
-for f in Dockerfile scripts/workspace-backup.sh scripts/workspace-restore.sh scripts/readonly-verification.sh docs/DEPLOYMENT.md; do
+for f in Dockerfile scripts/workspace-backup.sh scripts/workspace-restore.sh scripts/readonly-verification.sh docs/DEPLOYMENT.md scripts/data-snapshot.py docs/full-data-recovery.md; do
   [[ -f "$f" ]] || fail "missing $f"
 done
 
@@ -48,6 +48,17 @@ grep -F "assert json.load(open(sys.argv[1])) == json.load(open(sys.argv[2]))" sc
   || fail 'JSON-equivalent restore assertion missing'
 grep -F "grep -F 'ci-smoke-token'" scripts/readonly-verification.sh >/dev/null \
   || fail 'secret-leak assertion missing'
+
+grep -F 'volume_restore="$RUNNER_TEMP/nexus-full-data-restored-${GITHUB_RUN_ID}"' scripts/readonly-verification.sh >/dev/null \
+  || fail 'isolated full-data restore target missing'
+grep -F 'python3 scripts/data-snapshot.py backup "$smoke_data" "$volume_snapshot" --offline' scripts/readonly-verification.sh >/dev/null \
+  || fail 'offline full-data backup exercise missing'
+grep -F 'sudo python3 scripts/data-snapshot.py restore "$volume_snapshot" "$volume_restore" --offline --owner 10001:10001' scripts/readonly-verification.sh >/dev/null \
+  || fail 'offline runtime-owned restore exercise missing'
+grep -F 'scripts/verify-data-recovery-http.py "$base_url" "$volume_request_id" "$restored" --repeat' scripts/readonly-verification.sh >/dev/null \
+  || fail 'full-data HTTP restart validation missing'
+grep -F "echo 'FULL DATA VOLUME RECOVERY PASS'" scripts/readonly-verification.sh >/dev/null \
+  || fail 'full-data recovery result missing'
 
 printf '%s\n' 'V1.2 G3 DURABLE-STATE RESILIENCE: PASS'
 printf '%s\n' 'Persistence boundary: /data'

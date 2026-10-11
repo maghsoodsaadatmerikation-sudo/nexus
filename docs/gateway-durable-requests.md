@@ -29,7 +29,9 @@ on the same mount, verifies GET and rejects repeated POST with 409.
 Self-critique: synchronous filesystem writes block the request worker; filesystem
 loss or removal of this directory removes replay protection. Workspace JSON
 export/restore does **not** back up request markers and must not be presented as
-full gateway recovery. Preserve the complete data volume for this guarantee.
+full gateway recovery. Use the [offline full-data snapshot](full-data-recovery.md) to preserve captured
+workspace and ledger state together. IDs admitted after that snapshot are not
+preserved; restoring an older snapshot can permit their admission again.
 Multi-process capacity/rate coordination, durable executor outcomes and retry
 resolution remain outside this change. No automatic re-execution is safe here.
 
