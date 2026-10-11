@@ -1363,3 +1363,57 @@ async fn enospc_reservation_fails_before_delegation() {
     std::fs::remove_dir_all(root).unwrap();
     println!("ENOSPC BEFORE DELEGATION: PASS");
 }
+
+#[tokio::test]
+async fn workspace_transport_rejects_before_polling_or_delegation() {
+    use http_body_util::BodyExt;
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::authenticated(delegate.clone(), "secret"));
+    for path in [
+        "/v1/workspaces",
+        "/v1/workspaces/import",
+        "/v1/workspaces/missing/claims",
+        "/v1/workspaces/missing/alternatives",
+        "/v1/workspaces/missing/analysis",
+        "/v1/workspaces/missing/judgment",
+    ] {
+        for token in [None, Some("wrong")] {
+            let body = http_body_util::Full::new(axum::body::Bytes::from_static(b"{not-json"))
+                .map_frame(|_| panic!("unauthorized workspace body was polled"));
+            let mut request = Request::builder()
+                .method("POST")
+                .uri(path)
+                .header("content-type", "application/json");
+            if let Some(token) = token {
+                request = request.header("authorization", format!("Bearer {token}"));
+            }
+            assert_eq!(
+                app.clone()
+                    .oneshot(request.body(Body::new(body)).unwrap())
+                    .await
+                    .unwrap()
+                    .status(),
+                StatusCode::UNAUTHORIZED
+            );
+        }
+    }
+    assert!(delegate
+        .workspaces
+        .lock()
+        .unwrap()
+        .load("missing")
+        .is_none());
+    assert!(delegate.requests.lock().unwrap().is_empty());
+    assert_eq!(
+        app.oneshot(
+            Request::builder()
+                .uri("/v1/workspaces/missing")
+                .body(Body::empty())
+                .unwrap()
+        )
+        .await
+        .unwrap()
+        .status(),
+        StatusCode::UNAUTHORIZED
+    );
+}

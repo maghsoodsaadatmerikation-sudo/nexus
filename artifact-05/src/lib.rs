@@ -356,6 +356,14 @@ async fn recovery_boundary<D: ConstitutionalDelegate>(
     request: Request,
     next: Next,
 ) -> Response {
+    // Authenticate workspace transport before Axum extracts or polls its body.
+    // Handler checks remain as defense in depth; this grants no core authority.
+    let path = request.uri().path();
+    if (path == "/v1/workspaces" || path.starts_with("/v1/workspaces/"))
+        && !transport_authorized(&state, request.headers())
+    {
+        return transport_unauthorized();
+    }
     if state.recovery_required
         && !matches!(
             *request.method(),

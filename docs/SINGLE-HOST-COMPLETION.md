@@ -13,7 +13,7 @@ attestation does not grant release intent, Seal or production-promotion authorit
 | Gate | Required evidence |
 | --- | --- |
 | Constitutional and transport boundaries | Exact-commit core self-audit, CT map, Gateway and authentication contracts |
-| Installable single host | Both committed Compose paths resolve the repository Dockerfile, reject absent token, bind only loopback and mount writable /data |
+| Installable single host | Workspace requests reject missing/wrong credentials before body extraction; both committed Compose paths resolve the repository Dockerfile, reject absent token, bind only loopback and mount writable /data |
 | Usable epistemic flow | Real authenticated workspace creation, source-bearing evidence, alternatives and machine analysis; judgment remains null until an explicit human action |
 | Request admission | POST returns 202 with ID; GET pending; replay returns 409 |
 | Replacement continuity | Compose force-recreates the container and retains identical workspace snapshot and request marker |
