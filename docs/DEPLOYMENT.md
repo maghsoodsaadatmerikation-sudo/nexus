@@ -45,6 +45,15 @@ Open `http://127.0.0.1:3000/` for the browser client. Workspace API requests mus
 Authorization: Bearer <NEXUS_API_TOKEN>
 ```
 
+## Liveness and readiness
+
+The current gateway exposes public `/livez` (200 while responding) and `/readyz`
+(503 during recovery quarantine, otherwise 200). Both return minimal JSON with
+`Cache-Control: no-store`. Use readiness separately for admission monitoring;
+root-page 200 and container liveness do not imply writes are available. Readiness
+reports the recovery gate only, not filesystem writability or core authorization.
+See [the exact probe contract](gateway-health.md).
+
 ## Production requirements
 
 A hosting platform is acceptable only if it can provide all of the following:

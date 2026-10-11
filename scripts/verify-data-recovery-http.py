@@ -39,6 +39,23 @@ def main():
             "value": "synthetic-recovery", "payload": "opaque",
         })
 
+    # Public, non-cached probes must distinguish liveness from write quarantine.
+    for path, code, status in [
+        ("/livez", 200, "alive"),
+        ("/readyz", 503 if args.quarantined else 200,
+         "quarantined" if args.quarantined else "ready"),
+    ]:
+        request = urllib.request.Request(args.base_url.rstrip("/") + path)
+        try:
+            response = urllib.request.urlopen(request, timeout=10)
+        except urllib.error.HTTPError as error:
+            response = error
+        with response:
+            assert response.status == code
+            assert response.headers["Cache-Control"] == "no-store"
+            assert json.load(response) == {"status": status}
+    print("GATEWAY READINESS: " + ("QUARANTINED" if args.quarantined else "READY") + " PASS")
+
     expected_workspace = json.loads(args.workspace_snapshot.read_text())
     assert call("GET", "/v1/workspaces/ci-smoke") == (200, expected_workspace)
     for request_id, status in [(args.request_id, "pending"), ("ci-uncertain", "indeterminate")]:
