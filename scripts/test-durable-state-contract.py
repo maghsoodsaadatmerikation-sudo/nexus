@@ -7,6 +7,7 @@ import tempfile
 
 root = Path(__file__).resolve().parent.parent
 files = [
+    "scripts/verify-storage-full.py", "docs/gateway-storage-full.md",
     "scripts/verify-storage-failure-http.py", "docs/gateway-storage-failure.md",
     "Dockerfile", "docs/DEPLOYMENT.md", "scripts/workspace-backup.sh",
     "scripts/workspace-restore.sh", "scripts/readonly-verification.sh",
@@ -34,6 +35,9 @@ with tempfile.TemporaryDirectory(prefix="nexus-contract-") as tmp:
     ]
     mutations = [("scripts/readonly-verification.sh", old, new) for old, new in mutations]
     mutations.extend([
+        ("scripts/verify-storage-full.py", "size=8m", "size=8g"),
+        ("scripts/verify-storage-full.py", "'--tmpfs'", "'--volume'"),
+        ("scripts/readonly-verification.sh", 'python3 scripts/verify-storage-full.py nexus-ci-smoke "$GITHUB_RUN_ID"', 'true # omitted ENOSPC drill'),
         ("scripts/readonly-verification.sh", "mv /data/requests /data/requests.offline", "mv /production/requests /data/requests.offline"),
         ("scripts/readonly-verification.sh", '"$volume_request_id" restarted', '"$volume_request_id" unavailable'),
         ("Dockerfile", "GET /livez HTTP/1.1", "GET / HTTP/1.1"),
@@ -59,4 +63,4 @@ with tempfile.TemporaryDirectory(prefix="nexus-contract-") as tmp:
         else:
             assert result.returncode != 0, "unsafe cleanup passed"
             assert "BLOCKED" in result.stderr
-print("DURABLE WITNESS CLEANUP CONTRACT: PASS (valid + 12 rejected mutations)")
+print("DURABLE WITNESS CLEANUP CONTRACT: PASS (valid + 15 rejected mutations)")

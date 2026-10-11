@@ -95,6 +95,21 @@ assert Path('scripts/verify-storage-failure-http.py').is_file()
 assert Path('docs/gateway-storage-failure.md').is_file()
 CHECK_STORAGE
 
+python3 - <<'CHECK_FULL' || fail 'ENOSPC witness missing or unbounded'
+from pathlib import Path
+s = Path('scripts/verify-storage-full.py').read_text()
+assert "'/data:rw,size=8m,uid=10001,gid=10001,mode=0700'" in s
+assert "'--tmpfs'" in s and "'-p', '127.0.0.1::3000'" in s
+assert not any(option in s for option in ["'--mount'", "'--volume'", "'-v'", "'--privileged'"])
+assert "'No space left on device' in filled.stderr" in s
+assert "'kill', '-TERM', old_pid" in s
+assert 'status(failed, \'indeterminate\')' in s
+assert Path('docs/gateway-storage-full.md').is_file()
+h = Path('scripts/readonly-verification.sh').read_text()
+assert 'python3 scripts/verify-storage-full.py nexus-ci-smoke "$GITHUB_RUN_ID"' in h
+assert 'Storage Full Recovery: PASS' in h
+CHECK_FULL
+
 printf '%s\n' 'V1.2 G3 DURABLE-STATE RESILIENCE: PASS'
 printf '%s\n' 'Persistence boundary: /data'
 printf '%s\n' 'Destructive validation scope: dedicated CI witness only'

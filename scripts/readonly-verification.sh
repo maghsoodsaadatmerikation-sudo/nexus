@@ -288,6 +288,7 @@ start_container
 assert_redacted_startup
 NEXUS_API_TOKEN=ci-smoke-token python3 scripts/verify-storage-failure-http.py "$base_url" "$volume_request_id" restarted
 echo 'STORAGE FAILURE RECOVERY PASS'
+NEXUS_API_TOKEN=ci-smoke-token python3 scripts/verify-storage-full.py nexus-ci-smoke "$GITHUB_RUN_ID"
 
 
 # Artifact 05 evidence manifest and local bundle.
@@ -327,6 +328,7 @@ Full Data Recovery: PASS
 Recovery Quarantine: PASS
 Gateway Readiness: PASS
 Storage Failure Recovery: PASS
+Storage Full Recovery: PASS
 Full Data Snapshot Script SHA-256: ${data_snapshot_script_sha}
 Synthetic Full Data Archive SHA-256: ${full_data_archive_sha}
 Full Data Consistency: OFFLINE-CALLER-ASSERTED
@@ -403,6 +405,8 @@ tar -czf artifact-05-verification-bundle.tar.gz \
   scripts/test-data-snapshot.py \
   scripts/verify-data-recovery-http.py \
   scripts/verify-storage-failure-http.py \
+  scripts/verify-storage-full.py \
+  docs/gateway-storage-full.md \
   docs/gateway-storage-failure.md \
   docs/full-data-recovery.md \
   docs/gateway-health.md \
