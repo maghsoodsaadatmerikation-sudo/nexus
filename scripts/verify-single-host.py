@@ -77,6 +77,10 @@ def main():
                     except urllib.error.HTTPError as error:
                         response = error
                     with response:
+                        # Workspace authentication may return a bodyless/plain 401.
+                        # Success and all other errors still require valid JSON.
+                        if response.status == 401:
+                            return 401, None
                         return response.status, json.load(response)
 
                 def ready():
