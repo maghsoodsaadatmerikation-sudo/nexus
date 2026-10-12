@@ -1,0 +1,21 @@
+name: Pilot public observation tests
+on:
+  pull_request:
+    paths:
+      - 'scripts/observe-pilot-runtime.py'
+      - 'scripts/test-observe-pilot-runtime.py'
+      - '.github/workflows/pilot-public-observation-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/observe-pilot-runtime.py'
+      - 'scripts/test-observe-pilot-runtime.py'
+      - '.github/workflows/pilot-public-observation-tests.yml'
+permissions:
+  contents: read
+jobs:
+  observer-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - run: python3 scripts/test-observe-pilot-runtime.py

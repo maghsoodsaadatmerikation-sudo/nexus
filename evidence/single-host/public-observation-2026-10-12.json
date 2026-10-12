@@ -1,0 +1,44 @@
+{
+  "authenticated_acceptance": "NOT_PERFORMED",
+  "authority": "none",
+  "blockers": [
+    "candidate_not_observed",
+    "livez_not_200",
+    "readyz_not_200",
+    "unauthenticated_get_not_401:/v1/workspaces",
+    "unauthenticated_get_not_401:/v1/requests/nexus-public-observation"
+  ],
+  "candidate_digest_match": false,
+  "claim_boundary": "Public GET observations only; matching self-reported metadata is not binary attestation, POST acceptance, backup proof, Verify PASS, Seal or release authority.",
+  "expected_source_tree_sha256": "f76621934ff1d3329a03a6395289ea27c413c1d784282e9675c75569da227bbb",
+  "full_data_backup": "NOT_INSPECTED",
+  "observations": {
+    "/livez": {
+      "http_status": 404,
+      "method": "GET"
+    },
+    "/readyz": {
+      "http_status": 404,
+      "method": "GET"
+    },
+    "/v1/requests/nexus-public-observation": {
+      "http_status": 404,
+      "method": "GET"
+    },
+    "/v1/runtime-identity": {
+      "http_status": 200,
+      "method": "GET"
+    },
+    "/v1/workspaces": {
+      "http_status": 405,
+      "method": "GET"
+    }
+  },
+  "observed_at_utc": "2026-10-12T02:10:51.731774+00:00",
+  "observed_source_tree_sha256": "d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7",
+  "origin": "https://nexus-stage-d-production.up.railway.app",
+  "production_mutation": false,
+  "promotion_ready": false,
+  "public_checks": "BLOCKED",
+  "schema": "nexus.pilot.public-observation.v1"
+}
