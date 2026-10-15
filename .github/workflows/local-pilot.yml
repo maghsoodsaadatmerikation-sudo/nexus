@@ -1,0 +1,74 @@
+name: NEXUS Local Pilot
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/local-pilot.yml'
+      - 'scripts/verify-local-pilot.py'
+      - 'scripts/data-snapshot.py'
+      - 'src/**'
+      - 'artifact-05/**'
+      - 'Cargo.*'
+      - 'Dockerfile'
+      - 'web/**'
+      - 'scripts/source-tree-digest.sh'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/local-pilot.yml'
+      - 'scripts/verify-local-pilot.py'
+      - 'scripts/data-snapshot.py'
+      - 'src/**'
+      - 'artifact-05/**'
+      - 'Cargo.*'
+      - 'Dockerfile'
+      - 'web/**'
+      - 'scripts/source-tree-digest.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-pilot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      RUST_IMAGE: rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Build static Linux executable with pinned dependencies
+        run: |
+          set -euo pipefail
+          mkdir -p local-pilot
+          docker run --rm -v "$PWD:/workspace" -w /workspace "$RUST_IMAGE" bash -euc '
+            rustup target add x86_64-unknown-linux-musl
+            export RUSTFLAGS="-C linker=$(rustc --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-lld"
+            export NEXUS_SOURCE_TREE_SHA256=$(bash scripts/source-tree-digest.sh)
+            cargo build --manifest-path artifact-05/Cargo.toml --release --locked --target x86_64-unknown-linux-musl
+            cp artifact-05/target/x86_64-unknown-linux-musl/release/nexus-artifact-05-gateway local-pilot/nexus
+          '
+          git diff --exit-code -- Cargo.lock artifact-05/Cargo.lock
+          cp scripts/data-snapshot.py scripts/verify-local-pilot.py local-pilot/
+          cp docs/LOCAL-PILOT.md local-pilot/README.md
+          printf 'commit=%s\nrun_id=%s\nsource_tree_sha256=%s\nscope=synthetic-local-pilot-only\nauthority=none\nseal=unsealed\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$(bash scripts/source-tree-digest.sh)" > local-pilot/build.txt
+      - name: Verify real HTTP persistence and quarantined recovery
+        run: python3 scripts/verify-local-pilot.py local-pilot/nexus > local-pilot/acceptance.json
+      - name: Package verified local pilot
+        run: |
+          set -euo pipefail
+          tar -czf nexus-local-pilot-linux-x86_64.tar.gz -C local-pilot .
+          sha256sum nexus-local-pilot-linux-x86_64.tar.gz > nexus-local-pilot-linux-x86_64.tar.gz.sha256
+      - name: Upload development executable and evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-local-pilot-linux-x86_64
+          path: |
+            nexus-local-pilot-linux-x86_64.tar.gz
+            nexus-local-pilot-linux-x86_64.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 30
