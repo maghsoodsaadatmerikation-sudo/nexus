@@ -16,11 +16,12 @@ import urllib.error
 import urllib.request
 
 
-def private_directory(path):
-    try:
-        path.mkdir(mode=0o700, parents=True)
-    except FileExistsError:
-        pass
+def private_directory(path, create=True):
+    if create:
+        try:
+            path.mkdir(mode=0o700, parents=True)
+        except FileExistsError:
+            pass
     info = path.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
         raise ValueError('state and data directories must be owner-only real directories')
@@ -65,7 +66,19 @@ def main():
     parser.add_argument('--state-dir', type=Path,
         default=Path.home() / '.local' / 'share' / 'nexus-local-pilot')
     parser.add_argument('--port', type=int, default=3000)
+    operation = parser.add_mutually_exclusive_group()
+    operation.add_argument('--backup', type=Path, metavar='ARCHIVE',
+        help='capture complete data while holding the operator lock; never overwrite')
+    operation.add_argument('--restore', type=Path, metavar='ARCHIVE',
+        help='restore into absent state/data with recovery quarantine')
+    parser.add_argument('--offline', action='store_true',
+        help='assert all writers, including raw binary invocations, are stopped')
     args = parser.parse_args()
+    maintenance = args.backup is not None or args.restore is not None
+    if maintenance and not args.offline:
+        parser.error('backup/restore requires --offline after stopping every writer')
+    if args.offline and not maintenance:
+        parser.error('--offline applies only to --backup or --restore')
     if not 1024 <= args.port <= 65535:
         parser.error('port must be between 1024 and 65535')
     process = None
@@ -79,9 +92,8 @@ def main():
             process.terminate()
 
     try:
-        binary = args.binary.resolve(strict=True)
         state = args.state_dir.absolute()
-        private_directory(state)
+        private_directory(state, create=args.backup is None)
         lock_fd = os.open(state / 'operator.lock',
             os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
         check_private_file(lock_fd)
@@ -89,6 +101,20 @@ def main():
             fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise ValueError('this pilot state is already in use') from None
+        if maintenance:
+            data = state / 'data'
+            if args.backup is not None:
+                private_directory(data, create=False)
+                command = ['backup', str(data), str(args.backup)]
+            else:
+                command = ['restore', str(args.restore), str(data)]
+            # The existing bounded tool validates all records, refuses overwrite,
+            # and quarantines every restore. It captures no operator token/lock.
+            result = subprocess.run([sys.executable,
+                str(Path(__file__).resolve().with_name('data-snapshot.py')),
+                *command, '--offline'], pass_fds=(lock_fd,))
+            return result.returncode
+        binary = args.binary.resolve(strict=True)
         token_path = state / 'api-token'
         token = stored_token(token_path)
         data = state / 'data'
