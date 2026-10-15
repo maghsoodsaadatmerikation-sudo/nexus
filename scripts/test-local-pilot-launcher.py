@@ -30,7 +30,7 @@ def main():
         root = Path(tmp)
         state = root / 'state'
         children = []
-        gateway_pids = []
+        gateway_handles = []
 
         def command(directory):
             with socket.socket() as listener:
@@ -48,7 +48,7 @@ def main():
             assert line, 'launcher exited without startup confirmation'
             info = json.loads(line)
             assert info['state'] == expected and info['url'].startswith('http://127.0.0.1:')
-            gateway_pids.append(info['gateway_pid'])
+            gateway_handles.append(os.pidfd_open(info['gateway_pid']))
             token = (directory / 'api-token').read_text().strip()
             assert token not in line
             assert stat.S_IMODE(directory.stat().st_mode) == 0o700
@@ -88,7 +88,7 @@ def main():
             process.wait(timeout=5)
             denied = subprocess.run(command(state), capture_output=True, text=True, timeout=5)
             assert denied.returncode != 0 and 'already in use' in denied.stderr
-            os.kill(gateway_pids[-1], signal.SIGTERM)
+            signal.pidfd_send_signal(gateway_handles[-1], signal.SIGTERM)
             # Wait until the orphan is no longer holding the lock, bounded.
             import fcntl
             import time
@@ -114,6 +114,7 @@ def main():
             # Insecure existing state and token symlinks must fail without replacement.
             insecure = root / 'insecure'
             insecure.mkdir(mode=0o755)
+            insecure.chmod(0o755)
             rejected = subprocess.run(command(insecure), capture_output=True, text=True, timeout=5)
             assert rejected.returncode != 0 and not (insecure / 'api-token').exists()
             linked = root / 'linked'
@@ -128,11 +129,13 @@ def main():
                 if child.poll() is None:
                     child.terminate()
                     child.communicate(timeout=10)
-            for pid in gateway_pids:
+            for handle in gateway_handles:
                 try:
-                    os.kill(pid, signal.SIGTERM)
+                    signal.pidfd_send_signal(handle, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
+                finally:
+                    os.close(handle)
     print(json.dumps({'status': 'PASS', 'scope': 'synthetic-local-launcher-only',
         'private_persistent_token': True, 'duplicate_launcher_rejected': True,
         'orphan_child_preserves_lock': True, 'restart_preserves_request': True,
