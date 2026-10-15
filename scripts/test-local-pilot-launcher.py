@@ -39,6 +39,10 @@ def main():
             return [sys.executable, str(script), '--binary', str(binary),
                     '--state-dir', str(directory), '--port', str(port)]
 
+        def maintenance(directory, *arguments):
+            return subprocess.run([sys.executable, str(script), '--state-dir', str(directory),
+                *map(str, arguments)], capture_output=True, text=True, timeout=10)
+
         def start(directory, expected):
             process = subprocess.Popen(command(directory), stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE, text=True)
@@ -77,6 +81,10 @@ def main():
             body = {'request_id': 'launcher-test', 'authority': 'user', 'action': 'present',
                     'value': 'synthetic', 'payload': 'opaque'}
             assert call(base, token, 'POST', body) == 202
+            archive = root / 'snapshot.json'
+            blocked = maintenance(state, '--backup', archive, '--offline')
+            assert blocked.returncode != 0 and 'already in use' in blocked.stderr
+            assert not archive.exists()
             denied = subprocess.run(command(state), capture_output=True, text=True, timeout=5)
             assert denied.returncode != 0 and 'already in use' in denied.stderr
             stop(process, token)
@@ -88,6 +96,8 @@ def main():
             process.wait(timeout=5)
             denied = subprocess.run(command(state), capture_output=True, text=True, timeout=5)
             assert denied.returncode != 0 and 'already in use' in denied.stderr
+            assert maintenance(state, '--backup', archive, '--offline').returncode != 0
+            assert not archive.exists()
             signal.pidfd_send_signal(gateway_handles[-1], signal.SIGTERM)
             # Wait until the orphan is no longer holding the lock, bounded.
             import fcntl
@@ -102,12 +112,35 @@ def main():
                     except BlockingIOError:
                         assert time.monotonic() < deadline
                         time.sleep(.05)
-            archive = root / 'snapshot.json'
-            snapshot.backup(state / 'data', archive)
+            missing = root / 'missing'
+            assert maintenance(missing, '--backup', archive, '--offline').returncode != 0
+            assert not missing.exists() and not archive.exists()
+            assert maintenance(state, '--backup', archive).returncode != 0
+            assert not archive.exists()
+            captured = maintenance(state, '--backup', archive, '--offline')
+            assert captured.returncode == 0, captured.stderr
+            saved = archive.read_bytes()
+            assert token.encode() not in saved
+            document = json.loads(saved)
+            assert all(record['path'] not in ('api-token', 'operator.lock')
+                       for record in document['files'])
+            assert any(record['path'].startswith('requests/') for record in document['files'])
+            assert maintenance(state, '--backup', archive, '--offline').returncode != 0
+            assert archive.read_bytes() == saved
             restored = root / 'recovered'
-            restored.mkdir(mode=0o700)
-            snapshot.restore(archive, restored / 'data')
+            assert maintenance(restored, '--restore', archive).returncode != 0
+            assert not restored.exists()
+            recovered = maintenance(restored, '--restore', archive, '--offline')
+            assert recovered.returncode == 0, recovered.stderr
+            assert not (restored / 'api-token').exists()
+            assert maintenance(restored, '--restore', archive, '--offline').returncode != 0
+            assert (state / 'api-token').read_text().strip() == token
             process, base, restored_token = start(restored, 'recovery-quarantined')
+            request = urllib.request.Request(base + '/v1/requests/launcher-test',
+                headers={'authorization': 'Bearer ' + restored_token})
+            with opener.open(request, timeout=3) as response:
+                assert response.status == 200
+                assert json.load(response) == {'request_id': 'launcher-test', 'status': 'pending'}
             assert call(base, restored_token, 'POST', body) == 503
             stop(process, restored_token)
             assert (restored / 'data' / snapshot.RECOVERY_MARKER).exists()
@@ -140,6 +173,9 @@ def main():
         'private_persistent_token': True, 'duplicate_launcher_rejected': True,
         'orphan_child_preserves_lock': True, 'restart_preserves_request': True,
         'quarantine_not_resumed': True, 'insecure_state_and_symlink_rejected': True,
+        'maintenance_rejects_live_and_orphan_writers': True,
+        'backup_excludes_credentials_and_keeps_request_ledger': True,
+        'maintenance_requires_offline_and_refuses_overwrite': True,
         'production_data_recovered': False, 'authority': 'none'}, sort_keys=True))
 
 
