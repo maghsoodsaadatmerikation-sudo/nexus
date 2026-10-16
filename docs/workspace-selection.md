@@ -59,8 +59,13 @@ The browser build comes from the hosted runner image and is recorded rather than
 claimed to be pinned. Both Cargo.lock files and the Rust toolchain remain as-is.
 
 The driver rejects missing reports, failed assertions, wrong layout classes and
-process failures; browser exit code zero alone is not a PASS. This is real DOM
-and computed-layout evidence with synthetic in-page transport, not real-server
+process failures; browser exit code zero alone is not a PASS.
+
+The private target endpoint may lag its port-file publication: connection and
+observation timeouts are retried only within a bounded startup deadline. Page
+actions, assertions and failed reports are never retried or waived.
+
+This is real DOM and computed-layout evidence with synthetic in-page transport, not real-server
 authentication, physical Android testing, a pixel-perfect visual review, or
 production readiness. Passing it creates no authority and does not clear restore
 quarantine or publish a Seal.
