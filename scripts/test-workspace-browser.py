@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Real Chromium DOM/layout witness. Synthetic in-page transport, never a live API."""
 import json
-import re
 import shutil
 import subprocess
 import tempfile
-from html import unescape
 from pathlib import Path
 
 BOOTSTRAP = r'''
@@ -84,8 +82,8 @@ window.addEventListener('load', async () => {
     node('importFile').files = transfer.files;
     node('importFile').dispatchEvent(new Event('change', {bubbles: true}));
     // File.text() is a real browser read; allow bounded task turns for completion.
-    for (let n = 0; n < 100 && node('loadWorkspaceButton').disabled; n++) await tick();
-    assert(node('workspaceId').value === 'F', 'file import did not adopt returned context');
+    for (let n = 0; n < 100 && node('loadWorkspaceButton').disabled; n++) await new Promise(r => setTimeout(r, 20));
+    assert(node('workspaceId').value === 'F', 'file import did not adopt returned context: ' + node('status').textContent);
     assert(drafts.every(id => node(id).value === ''), 'import preserved wrong-context drafts');
     assert(node('importFile').value === '', 'file input was not reset');
     checks.push('real-file-input-import');
@@ -130,20 +128,13 @@ def main():
         page = root / 'witness.html'
         page.write_text(html)
         for name, dimensions in [('narrow', '500,1000'), ('wide', '1280,1000')]:
-            command = [browser, '--headless', '--no-sandbox', '--disable-dev-shm-usage',
-                       '--disable-background-networking', '--disable-extensions',
-                       '--no-first-run', '--no-default-browser-check', '--hide-scrollbars',
-                       '--force-device-scale-factor=1', '--window-size=' + dimensions,
-                       '--user-data-dir=' + str(root / name), '--dump-dom',
-                       '--virtual-time-budget=10000', page.as_uri()]
-            result = subprocess.run(command, capture_output=True, text=True, timeout=45)
+            runner = Path(__file__).with_name('workspace-browser-runner.mjs')
+            result = subprocess.run(['node', str(runner), browser, page.as_uri(),
+                                     str(root / name), dimensions], capture_output=True,
+                                    text=True, timeout=45)
             if result.returncode:
-                raise RuntimeError('real browser process failed')
-            match = re.search(r'<pre id="nexus-browser-result" hidden="">(.*?)</pre>',
-                              result.stdout, re.S)
-            if not match:
-                raise RuntimeError('browser produced no completed witness report')
-            report = json.loads(unescape(match.group(1)))
+                raise RuntimeError('real browser process failed: ' + result.stderr[-2000:])
+            report = json.loads(result.stdout)
             if report.get('status') != 'PASS' or len(report.get('checks', [])) != 6:
                 raise RuntimeError('browser witness failed: ' + json.dumps(report, sort_keys=True))
             if (name == 'narrow') != (report['width'] <= 760):

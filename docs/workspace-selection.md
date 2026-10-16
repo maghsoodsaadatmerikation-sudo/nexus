@@ -41,8 +41,11 @@ prove browser rendering or real server behavior.
 ## Executed browser witness
 
 `python3 scripts/test-workspace-browser.py` requires an installed Chrome/Chromium
-and fails closed when it is absent. Canonical Verify runs it on the hosted Linux
-runner. It adds synthetic transport and assertions only to a disposable copy of
+and Node 22 or later, and fails closed when either is absent. Canonical Verify runs it on the hosted Linux
+runner. A local DevTools connection observes only the newly started private
+browser process and waits for a completed report using real elapsed time,
+including asynchronous File reads; virtual-time dumps are not used.
+It adds synthetic transport and assertions only to a disposable copy of
 the committed HTML, uses private temporary browser profiles, and leaves the
 application source unchanged. No operator token, real workspace, external API,
 production endpoint or user backup is involved.
