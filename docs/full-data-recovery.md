@@ -45,6 +45,30 @@ hashes. Environment configuration and bearer tokens are not captured by the tool
 workspace content itself can contain sensitive data. CI never uploads the raw
 synthetic data archive as release evidence.
 
+## Inspect before restoring
+
+Inspect an existing snapshot without restoring data or changing quarantine:
+
+```bash
+python3 scripts/data-snapshot.py inspect /secure/nexus-data.json
+```
+
+This command validates the same bounded archive contract as restore, then emits
+one JSON summary with file/workspace counts, decoded byte count, captured
+quarantine presence, and pending/indeterminate request counts. Empty and torn
+request markers remain indeterminate. IDs, paths, per-file hashes and workspace
+contents are omitted; aggregate counts can still be sensitive. Invalid archives
+return nonzero with no success JSON. No destination, ownership change, offline
+assertion or replay-risk acknowledgment is accepted for inspection.
+
+`STRUCTURALLY_VALID` is not verification PASS: inspection does not revalidate core
+audit history, authenticate the archive, establish its age/completeness relative
+to the current volume, prove execution completion, or grant authority or Seal
+readiness. The report explicitly leaves the recovery point unknown. A reported
+absence of captured quarantine does not authorize writes; every restore still
+adds quarantine. Use a stable private archive copy; inspection reads no live
+volume and does not stop writers or prove an offline capture.
+
 ## Restore quarantine and explicit resumption
 
 Every restore writes `.nexus-recovery-required` before publishing the directory.
