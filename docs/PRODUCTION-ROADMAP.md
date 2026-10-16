@@ -196,6 +196,14 @@ A production release must preserve four boundaries:
 - release evidence SHA-256: `c64546d8b96e99338ba9cc41a93e0f825b151e8627b436d321ade31b5a432c46`
 - release `v2.5.0`: PUBLISHED
 
+### W. Request continuity under bounded storage failure — ENGINEERING CANDIDATE
+
+An independent read-only workflow executes the existing process-crash witness
+and the ignored bounded ENOSPC test with a pinned Rust image. Its unsigned
+evidence includes both lockfiles and actual test logs; see
+[V2.6-BOUNDED-STORAGE-FAILURE.md](V2.6-BOUNDED-STORAGE-FAILURE.md).
+This milestone grants no release intent or Seal authority.
+
 ## Current status
 
 NEXUS `v2.5.0` is the current sealed unified transport-authentication boundary. v2.0 remains an unsealed engineering milestone; later releases do not retroactively seal it.

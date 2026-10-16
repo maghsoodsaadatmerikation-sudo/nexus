@@ -1,0 +1,63 @@
+name: NEXUS v2.6 Request Continuity Verification
+
+on:
+  push:
+    branches: [main, release/v2.6-request-continuity]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Execute crash and bounded ENOSPC witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/v2.6-request-continuity-verification.sh | tee "$RUNNER_TEMP/nexus-continuity.log"
+          git diff --exit-code -- Cargo.lock artifact-05/Cargo.lock
+
+      - name: Package unsigned engineering evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-v2.6/artifact-05/src evidence-v2.6/docs evidence-v2.6/scripts
+          cp Cargo.toml Cargo.lock evidence-v2.6/
+          cp artifact-05/Cargo.toml artifact-05/Cargo.lock evidence-v2.6/artifact-05/
+          cp artifact-05/src/request_store.rs evidence-v2.6/artifact-05/src/
+          cp docs/V2.6-BOUNDED-STORAGE-FAILURE.md evidence-v2.6/docs/
+          cp scripts/v2.6-request-continuity-verification.sh evidence-v2.6/scripts/
+          cp "$RUNNER_TEMP/nexus-continuity.log" evidence-v2.6/witness.log
+          cat > evidence-v2.6/manifest.txt <<EOF
+          schema=nexus.request-continuity-engineering.v1
+          candidate_sha=${GITHUB_SHA}
+          workflow_run_id=${GITHUB_RUN_ID}
+          rust_image=rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
+          process_crash_witness=PASS
+          bounded_enospc_witness=PASS
+          scope=synthetic-single-host-process-and-storage-witnesses
+          power_loss_proven=false
+          production_recovered=false
+          authority=none
+          seal=unsealed
+          EOF
+          (cd evidence-v2.6 && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum) > evidence-v2.6/SHA256SUMS
+          tar -czf nexus-v2.6-request-continuity-evidence.tar.gz evidence-v2.6
+
+      - name: Upload unsigned engineering evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-v2.6-request-continuity-evidence
+          path: nexus-v2.6-request-continuity-evidence.tar.gz
+          if-no-files-found: error
+          retention-days: 30
