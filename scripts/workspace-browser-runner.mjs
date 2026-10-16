@@ -56,9 +56,18 @@ try {
     } catch {return null}
   }, 10000);
   const target = await waitFor(async () => {
-    const response = await fetch(`http://127.0.0.1:${port}/json/list`, {signal: AbortSignal.timeout(2000)});
-    return (await response.json()).find(item => item.type === 'page' && item.url === page);
-  }, 10000);
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/json/list`, {signal: AbortSignal.timeout(2000)});
+      if (!response.ok) throw new Error('private browser target endpoint rejected observation');
+      return (await response.json()).find(item => item.type === 'page' && item.url === page);
+    } catch (error) {
+      // DevToolsActivePort can appear before its HTTP target endpoint responds.
+      // Retry only transient observation failures within the startup deadline.
+      // Never retry page actions or turn a missing/failed report into a PASS.
+      if (error.name === 'TimeoutError' || error instanceof TypeError) return null;
+      throw error;
+    }
+  }, 15000);
   const address = new URL(target.webSocketDebuggerUrl);
   if (address.hostname !== '127.0.0.1' || address.port !== port)
     throw new Error('unexpected private browser debugger address');
