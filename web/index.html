@@ -11,7 +11,7 @@
 <h1>NEXUS</h1><p class="meta">Human judgment infrastructure. Machine analysis remains non-authoritative.</p>
 <div class="grid">
 <section class="card full"><div class="row">
-<div><label>API token</label><input id="token" type="password" autocomplete="off" placeholder="NEXUS_API_TOKEN"></div>
+<div><label>API token</label><input oninput="invalidateRequestLookup()" id="token" type="password" autocomplete="off" placeholder="NEXUS_API_TOKEN"></div>
 <div><label>Workspace ID to load or create</label><input oninput="workspaceSelectionChanged()" id="workspaceId" placeholder="Generated automatically"></div>
 <div><label>Provenance ID</label><input id="provenance" value="human:owner"></div>
 </div><div class="row" style="margin-top:9px"><button class="secondary" id="loadWorkspaceButton" onclick="loadWorkspace()">Load</button><button class="secondary" id="importWorkspaceButton" onclick="document.getElementById('importFile').click()">Restore verified backup</button><input id="importFile" type="file" accept="application/json" hidden onchange="importWorkspace(this.files[0])"><span id="connection" class="meta">No workspace loaded.</span></div></section>
@@ -21,13 +21,43 @@
 <section class="card full"><label>Human judgment</label><div class="warning">Only this explicit human action can populate judgment. Machine analysis cannot do so.</div><div class="row" style="margin-top:8px"><textarea id="decision" placeholder="Your decision"></textarea><textarea id="rationale" placeholder="Your rationale"></textarea></div><button id="recordJudgmentButton" onclick="recordJudgment()">Record human judgment</button><div id="judgmentView" class="empty">No human judgment recorded.</div></section>
 <section class="card full"><label>Audit / provenance replay</label><div id="history" class="history empty">No events yet.</div></section>
 <section class="card full"><label>Backup / recovery</label><div class="backup"><b>Ephemeral-host safeguard</b><div class="meta" style="margin-top:4px">Download a complete workspace snapshot after meaningful changes. The restore path sends the file through the authenticated server import boundary, where it is revalidated before acceptance. Keep backups somewhere independent of this host.</div><div class="row" style="margin-top:9px"><button class="secondary" id="backupWorkspaceButton" onclick="backupWorkspace()">Download verified backup</button><button class="secondary" id="importWorkspaceAgainButton" onclick="document.getElementById('importFile').click()">Restore backup</button><span id="backupStatus" class="meta">No backup created in this browser session.</span></div></div></section>
+<section class="card full" aria-labelledby="requestLookupHeading">
+<h2 id="requestLookupHeading">Check a request</h2>
+<p class="meta">Checking retained status never submits or sends the request again. Acceptance is not proof of completed execution.</p>
+<label for="requestLookupId">Exact request ID</label><input id="requestLookupId" maxlength="100" autocomplete="off" oninput="invalidateRequestLookup()" placeholder="ID returned when the request was accepted">
+<button id="requestLookupButton" type="button" style="margin-top:9px" onclick="inspectRequest()">Check retained status</button>
+<p id="requestLookupResult" class="meta" role="status" aria-live="polite">No request checked.</p>
+</section>
 <section class="card full"><div class="row"><span id="status">Ready.</span></div></section>
 </div></main>
 <script>
+let requestLookupVersion=0,requestLookupBusy=false;
 let snapshot=null,workspaceBusy=false,selectionVersion=0,activeVersion=null;const $=id=>document.getElementById(id);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const provenance=()=>$('provenance').value.trim()||'human:owner';const currentId=()=>$('workspaceId').value.trim();const lines=s=>s.split('\n').map(x=>x.trim()).filter(Boolean);
 function setStatus(t,e=false){$('status').textContent=t;$('status').className=e?'error':'ok'}
 function setBackupStatus(t,e=false){$('backupStatus').textContent=t;$('backupStatus').className=e?'error':'ok'}
+function setRequestLookup(message,warning=false){$('requestLookupResult').textContent=message;$('requestLookupResult').className=warning?'warning':'meta'}
+function invalidateRequestLookup(){requestLookupVersion++;setRequestLookup('Request ID or token changed. Check again to read retained status.')}
+async function inspectRequest(){
+  if(requestLookupBusy)return;
+  const id=$('requestLookupId').value;
+  if(!id||new TextEncoder().encode(id).length>100){setRequestLookup('Enter a request ID of 1–100 UTF-8 bytes.',true);return}
+  const generation=++requestLookupVersion,token=$('token').value,controller=new AbortController();
+  const current=()=>generation===requestLookupVersion&&$('requestLookupId').value===id&&$('token').value===token;
+  requestLookupBusy=true;$('requestLookupButton').disabled=true;setRequestLookup('Checking retained status…');
+  const timeout=setTimeout(()=>controller.abort(),10000);
+  try{
+    const headers={};if(token)headers.authorization=`Bearer ${token}`;
+    const response=await fetch(`/v1/requests/${encodeURIComponent(id)}`,{method:'GET',headers,cache:'no-store',signal:controller.signal});
+    let result=null;try{result=await response.json()}catch{}
+    if(!current()){if(generation===requestLookupVersion)setRequestLookup('Request ID or token changed. Check again to read retained status.');return}
+    if(response.status===404){setRequestLookup('No retained record found. This does not establish whether execution occurred.',true);return}
+    if(!response.ok){setRequestLookup(response.status===401?'Authentication required. Check the API token.':`Status unavailable (HTTP ${response.status}). Outcome remains unknown.`,true);return}
+    if(result?.request_id!==id||!['pending','indeterminate'].includes(result?.status)){setRequestLookup('Invalid status response. Outcome remains unknown.',true);return}
+    setRequestLookup(result.status==='pending'?'Acceptance recorded (pending). Completion is not established.':'Outcome unknown (indeterminate). Do not blindly resubmit; inspect independent evidence.',true);
+  }catch(error){if(current())setRequestLookup(error.name==='AbortError'?'Status lookup timed out. Outcome remains unknown.':'Unable to read retained status. Outcome remains unknown.',true)}
+  finally{clearTimeout(timeout);requestLookupBusy=false;$('requestLookupButton').disabled=false}
+}
 function workspaceSelectionChanged(){selectionVersion++;syncWorkspaceSelection()}
 function ensureSelectionUnchanged(){if(activeVersion!==selectionVersion)throw new Error('Workspace selection changed during this operation. It may have taken effect; load the selected workspace before continuing. Do not blindly retry.')}
 async function workspaceAction(action){

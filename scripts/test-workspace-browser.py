@@ -18,9 +18,16 @@ window.nexusBrowserWitness = (() => {
     calls.push({path, method: options.method || 'GET', body: options.body});
     let value;
     if (deferred) {const next = deferred; deferred = null; value = await next;}
+    else if (path.startsWith('/v1/requests/')) {
+      const id = decodeURIComponent(path.slice('/v1/requests/'.length));
+      if (id === 'missing' || id === 'unauthorized') value = {httpResponse: {
+        ok: false, status: id === 'missing' ? 404 : 401,
+        json: async () => ({error: 'synthetic-status-error'})}};
+      else value = {request_id: id, status: id === 'uncertain' ? 'indeterminate' : 'pending'};
+    }
     else if (path === '/v1/workspaces/import') value = JSON.parse(options.body);
     else value = snapshot(decodeURIComponent(path.split('/')[3]));
-    return {ok: true, json: async () => value};
+    return value?.httpResponse ?? {ok: true, status: 200, json: async () => value};
   };
   return {calls, snapshot, defer() {let resolve; deferred = new Promise(r => {resolve = r}); return resolve;}};
 })();
@@ -92,6 +99,29 @@ window.addEventListener('load', async () => {
     assert(!node('claims').querySelector('img') && !window.untrustedMarkupRan, 'evidence became executable markup');
     checks.push('evidence-rendered-as-text');
 
+    const statusStart = lab.calls.length;
+    const requestId = id => {node('requestLookupId').value = id; node('requestLookupId').dispatchEvent(new Event('input', {bubbles: true}));};
+    for (const [id, expected] of [
+      ['retained', 'Acceptance recorded (pending). Completion is not established.'],
+      ['uncertain', 'Outcome unknown (indeterminate).'],
+      ['missing', 'No retained record found. This does not establish whether execution occurred.'],
+      ['unauthorized', 'Authentication required.'],
+    ]) {
+      requestId(id); node('requestLookupButton').click(); await tick();
+      assert(node('requestLookupResult').textContent.includes(expected), 'incorrect retained-status meaning for ' + id);
+    }
+    assert(node('requestLookupResult').getAttribute('aria-live') === 'polite', 'lookup feedback is not announced');
+    checks.push('request-status-semantics');
+
+    const lateStatus = lab.defer(); requestId('old-status'); node('requestLookupButton').click();
+    const lookupsSent = lab.calls.length;
+    requestId('changed-status'); node('requestLookupButton').click();
+    lateStatus({request_id: 'old-status', status: 'pending'}); await tick();
+    assert(node('requestLookupResult').textContent.includes('changed. Check again'), 'late request status replaced the new selection');
+    assert(lab.calls.length === lookupsSent, 'lookup retried automatically or duplicated');
+    assert(lab.calls.slice(statusStart).every(call => call.method === 'GET' && call.path.startsWith('/v1/requests/')), 'lookup sent a mutation');
+    checks.push('request-status-stale-read');
+
     const first = node('claims').closest('section').getBoundingClientRect();
     const second = node('alts').closest('section').getBoundingClientRect();
     const narrow = window.innerWidth <= 760;
@@ -135,7 +165,7 @@ def main():
             if result.returncode:
                 raise RuntimeError('real browser process failed: ' + result.stderr[-2000:])
             report = json.loads(result.stdout)
-            if report.get('status') != 'PASS' or len(report.get('checks', [])) != 6:
+            if report.get('status') != 'PASS' or len(report.get('checks', [])) != 8:
                 raise RuntimeError('browser witness failed: ' + json.dumps(report, sort_keys=True))
             if (name == 'narrow') != (report['width'] <= 760):
                 raise RuntimeError('browser did not exercise the requested layout class')
