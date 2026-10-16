@@ -1312,16 +1312,64 @@ async fn private_api_success_and_errors_are_never_storable() {
     for (method, path, authenticated, body, expected) in [
         ("GET", "/v1/requests/cache-check", true, "", StatusCode::OK),
         ("HEAD", "/v1/requests/cache-check", true, "", StatusCode::OK),
-        ("GET", "/v1/requests/cache-check", false, "", StatusCode::UNAUTHORIZED),
-        ("GET", "/v1/requests/missing", true, "", StatusCode::NOT_FOUND),
-        ("POST", "/v1/requests", true, "{invalid", StatusCode::UNPROCESSABLE_ENTITY),
-        ("PUT", "/v1/requests", true, "", StatusCode::METHOD_NOT_ALLOWED),
+        (
+            "GET",
+            "/v1/requests/cache-check",
+            false,
+            "",
+            StatusCode::UNAUTHORIZED,
+        ),
+        (
+            "GET",
+            "/v1/requests/missing",
+            true,
+            "",
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            "POST",
+            "/v1/requests",
+            true,
+            "{invalid",
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+        (
+            "PUT",
+            "/v1/requests",
+            true,
+            "",
+            StatusCode::METHOD_NOT_ALLOWED,
+        ),
         ("GET", "/v1/workspaces/private", true, "", StatusCode::OK),
         ("HEAD", "/v1/workspaces/private", true, "", StatusCode::OK),
-        ("GET", "/v1/workspaces/private", false, "", StatusCode::UNAUTHORIZED),
-        ("GET", "/v1/workspaces/missing", true, "", StatusCode::NOT_FOUND),
-        ("POST", "/v1/workspaces", true, "{invalid", StatusCode::BAD_REQUEST),
-        ("PUT", "/v1/workspaces/private", true, "", StatusCode::METHOD_NOT_ALLOWED),
+        (
+            "GET",
+            "/v1/workspaces/private",
+            false,
+            "",
+            StatusCode::UNAUTHORIZED,
+        ),
+        (
+            "GET",
+            "/v1/workspaces/missing",
+            true,
+            "",
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            "POST",
+            "/v1/workspaces",
+            true,
+            "{invalid",
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            "PUT",
+            "/v1/workspaces/private",
+            true,
+            "",
+            StatusCode::METHOD_NOT_ALLOWED,
+        ),
     ] {
         let mut request = Request::builder()
             .method(method)
@@ -1336,7 +1384,11 @@ async fn private_api_success_and_errors_are_never_storable() {
             .await
             .unwrap();
         assert_eq!(response.status(), expected, "{method} {path}");
-        assert_eq!(response.headers()["cache-control"], "no-store", "{method} {path}");
+        assert_eq!(
+            response.headers()["cache-control"],
+            "no-store",
+            "{method} {path}"
+        );
         let bytes = axum::body::to_bytes(response.into_body(), 64 * 1024)
             .await
             .unwrap();
@@ -1365,7 +1417,11 @@ async fn private_api_cache_policy_preserves_auth_and_quarantine_before_body_poll
             .with_request_store(root.join("requests"))
             .unwrap(),
     );
-    for path in ["/v1/requests", "/v1/workspaces", "/v1/workspaces/private/claims"] {
+    for path in [
+        "/v1/requests",
+        "/v1/workspaces",
+        "/v1/workspaces/private/claims",
+    ] {
         for authenticated in [false, true] {
             let body = http_body_util::Full::new(axum::body::Bytes::from_static(b"{invalid"))
                 .map_frame(|_| panic!("blocked private API body was polled"));
