@@ -196,13 +196,19 @@ A production release must preserve four boundaries:
 - release evidence SHA-256: `c64546d8b96e99338ba9cc41a93e0f825b151e8627b436d321ade31b5a432c46`
 - release `v2.5.0`: PUBLISHED
 
+### W. v2.6 bounded storage failure & request continuity — CANDIDATE
+- reserve-before-delegate with fsync of marker prefix
+- crash / torn-write recovers as Indeterminate, never Accepted
+- ENOSPC and storage failure fail closed before constitutional delegation
+- exact candidate and independent verification still required before seal
+- no distributed persistence, consensus, or cryptographic marker authenticity claim
+- does not rewrite the v2.5 transport-authentication boundary
+
 ## Current status
 
-NEXUS `v2.5.0` is the current sealed unified transport-authentication boundary. v2.0 remains an unsealed engineering milestone; later releases do not retroactively seal it.
+NEXUS `v2.5.0` is the current sealed unified transport-authentication boundary. v2.6 is a candidate boundary for single-host request continuity under bounded storage failure; it is not sealed until exact-commit verification and evidence succeed.
 
-The v2.2 seal is narrow: it establishes reconstructible, structurally validated revocation replay for the exact candidate. It does not claim durable or distributed persistence, cryptographic event authenticity, consensus, external identity federation, provider correctness, or universal security.
-
-The v2.3 seal is narrow: it establishes execution-time rejection of stale or divergent revocation state for delegated requests. It does not claim durable or distributed persistence, cryptographic event authenticity, consensus, external identity federation, provider correctness, universal security, or external-system linearizability.
+v2.0 remains an unsealed engineering milestone; later releases do not retroactively seal it.
 
 Historical release tags remain immutable boundaries. Runtime evidence, capability evidence, and release authority remain separate.
 

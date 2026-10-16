@@ -1,0 +1,76 @@
+name: NEXUS v2.6 Request Continuity Verification
+
+on:
+  push:
+    branches: [main, release/v2.6-request-continuity]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify bounded storage failure & request continuity
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./scripts/v2.6-request-continuity-verification.sh
+          bash ./scripts/v2.6-request-continuity-verification.sh
+
+      - name: Build exact-candidate evidence
+        if: ${{ github.event_name != 'pull_request' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-v2.6/artifact-05/src evidence-v2.6/docs evidence-v2.6/scripts
+          cp Cargo.lock artifact-05/Cargo.toml evidence-v2.6/artifact-05/
+          cp artifact-05/src/request_store.rs evidence-v2.6/artifact-05/src/
+          cp docs/V2.6-BOUNDED-STORAGE-FAILURE.md evidence-v2.6/docs/
+          cp scripts/v2.6-request-continuity-verification.sh evidence-v2.6/scripts/
+          cat > evidence-v2.6/manifest.txt <<EOF
+          schema=nexus.v2.6.bounded-storage-failure-request-continuity.v1
+          status=PASS
+          candidate_sha=${GITHUB_SHA}
+          workflow_run_id=${GITHUB_RUN_ID}
+          authority_rule=A_out<=A_in
+          reserve_before_delegate=true
+          torn_write_recovers_indeterminate=true
+          crash_recovers_indeterminate=true
+          storage_failure_fails_closed_before_delegation=true
+          constitutional_authority_from_storage=false
+          production_mutation=false
+          authority_expansion=NONE
+          EOF
+          (cd evidence-v2.6 && find artifact-05 docs scripts -type f -print0 | sort -z | xargs -0 sha256sum; sha256sum manifest.txt) > evidence-v2.6/SHA256SUMS
+          tar -czf nexus-v2.6-request-continuity-evidence.tar.gz evidence-v2.6
+
+      - name: Upload exact-candidate evidence
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-v2.6-request-continuity-evidence
+          path: |
+            nexus-v2.6-request-continuity-evidence.tar.gz
+            evidence-v2.6/manifest.txt
+            evidence-v2.6/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Attest exact-candidate evidence
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: nexus-v2.6-request-continuity-evidence.tar.gz
