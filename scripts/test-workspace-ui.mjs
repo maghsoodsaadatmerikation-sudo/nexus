@@ -33,10 +33,10 @@ function app() {
     fetch: async (path, options) => {
       calls.push({path, options});
       const value = await transport(path, options);
-      return {ok: true, json: async () => value};
+      return value?.httpResponse ?? {ok: true, status: 200, json: async () => value};
     },
     Blob, URL: {createObjectURL: () => 'blob:synthetic', revokeObjectURL() {}},
-    setTimeout: callback => callback(), console,
+    setTimeout, clearTimeout, AbortController, TextEncoder, console,
   });
   vm.runInContext(code, context, {timeout: 1000});
   return {element, calls, downloads,
@@ -145,4 +145,85 @@ test('successful create/import switches context and export remains explicitly us
   await a.run('backupWorkspace()');
   assert.equal(a.downloads.length, 1);
   assert.match(a.downloads[0], /^nexus-backup-C-/);
+});
+
+test('request lookup uses only GET and distinguishes pending from indeterminate', async () => {
+  const a = app(); a.element('requestLookupId').value = 'retained-id';
+  for (const status of ['pending', 'indeterminate']) {
+    a.transport(async () => ({request_id: 'retained-id', status}));
+    await a.run('inspectRequest()');
+    const message = a.element('requestLookupResult').textContent;
+    assert.match(message, status === 'pending' ? /Acceptance recorded.*Completion is not established/ : /Outcome unknown.*Do not blindly resubmit/);
+  }
+  assert(a.calls.every(c => c.options.method === 'GET' && c.options.cache === 'no-store'));
+  assert.equal(a.run('snapshot'), null);
+  assert.equal(a.downloads.length, 0);
+});
+
+test('request lookup rejects errors, mismatched IDs and invented completion states without echoing payloads', async () => {
+  const a = app(); a.element('requestLookupId').value = 'expected';
+  const cases = [
+    [{httpResponse: {ok: false, status: 401, json: async () => ({error: 'private-server-text'})}}, /Authentication required/],
+    [{httpResponse: {ok: false, status: 404, json: async () => ({error: 'private-server-text'})}}, /No retained record.*does not establish whether execution occurred/],
+    [{httpResponse: {ok: false, status: 503, json: async () => ({error: 'private-server-text'})}}, /Status unavailable.*Outcome remains unknown/],
+    [{request_id: 'different', status: 'pending'}, /Invalid status response.*Outcome remains unknown/],
+    [{request_id: 'expected', status: 'completed'}, /Invalid status response.*Outcome remains unknown/],
+    [{httpResponse: {ok: true, status: 200, json: async () => {throw new SyntaxError('private-server-text')}}}, /Invalid status response/],
+  ];
+  for (const [response, message] of cases) {
+    a.transport(async () => response); await a.run('inspectRequest()');
+    assert.match(a.element('requestLookupResult').textContent, message);
+    assert.doesNotMatch(a.element('requestLookupResult').textContent, /private-server-text/);
+  }
+  a.transport(async () => {throw new Error('private-server-text')});
+  await a.run('inspectRequest()');
+  assert.match(a.element('requestLookupResult').textContent, /Unable to read.*Outcome remains unknown/);
+  assert(a.calls.every(c => c.options.method === 'GET'));
+});
+
+test('request lookup keeps IDs opaque and applies the durable UTF-8 byte bound before transport', async () => {
+  const a = app();
+  for (const id of ['', 'é'.repeat(51), 'x'.repeat(101)]) {
+    a.element('requestLookupId').value = id; await a.run('inspectRequest()');
+    assert.match(a.element('requestLookupResult').textContent, /1–100 UTF-8 bytes/);
+  }
+  assert.equal(a.calls.length, 0);
+  const exact = ' space/é ';
+  a.element('requestLookupId').value = exact;
+  a.transport(async () => ({request_id: exact, status: 'pending'}));
+  await a.run('inspectRequest()');
+  assert.equal(a.calls[0].path, '/v1/requests/' + encodeURIComponent(exact));
+  assert.match(a.element('requestLookupResult').textContent, /Acceptance recorded/);
+});
+
+test('request ID or token changes invalidate late lookups and duplicate clicks never submit', async () => {
+  for (const change of ['id', 'token', 'programmatic-token']) {
+    const a = app(); const pending = deferred();
+    a.element('requestLookupId').value = 'old'; a.transport(() => pending.promise);
+    const first = a.run('inspectRequest()');
+    assert.equal(a.element('requestLookupButton').disabled, true);
+    await a.run('inspectRequest()'); assert.equal(a.calls.length, 1);
+    if (change === 'id') a.element('requestLookupId').value = 'new';
+    else a.element('token').value = 'new-token';
+    if (change !== 'programmatic-token') a.run('invalidateRequestLookup()');
+    pending.resolve({request_id: 'old', status: 'pending'}); await first;
+    assert.match(a.element('requestLookupResult').textContent, /changed.*Check again/);
+    assert.doesNotMatch(a.element('requestLookupResult').textContent, /Acceptance recorded/);
+    assert.equal(a.element('requestLookupButton').disabled, false);
+    assert.equal(a.calls.length, 1);
+  }
+});
+
+test('request lookup aborts a timed-out read without retrying and releases its button', async () => {
+  const a = app(); a.element('requestLookupId').value = 'slow';
+  a.run('globalThis.setTimeout = callback => { globalThis.expireLookup = callback; return 1 }; globalThis.clearTimeout = () => {}');
+  a.transport(async (path, options) => new Promise((resolve, reject) => {
+    options.signal.addEventListener('abort', () => {
+      const error = new Error('synthetic timeout'); error.name = 'AbortError'; reject(error);
+    });
+  }));
+  const lookup = a.run('inspectRequest()'); a.run('expireLookup()'); await lookup;
+  assert.match(a.element('requestLookupResult').textContent, /timed out.*Outcome remains unknown/);
+  assert.equal(a.calls.length, 1);
+  assert.equal(a.element('requestLookupButton').disabled, false);
 });
