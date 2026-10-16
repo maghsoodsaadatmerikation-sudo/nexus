@@ -46,6 +46,8 @@ def main():
             except urllib.error.HTTPError as error:
                 response = error
             with response:
+                if path == '/v1/requests' or path.startswith('/v1/requests/') or path == '/v1/workspaces' or path.startswith('/v1/workspaces/'):
+                    assert response.headers.get('cache-control') == 'no-store', 'private API cache policy missing'
                 raw = response.read(1024 * 1024)
                 return response.status, json.loads(raw) if raw and response.status != 401 else None
 
@@ -117,6 +119,7 @@ def main():
         'duplicate_409': True, 'restored_reads_preserved': True,
         'restored_writes_503': True, 'quarantine_survives_restart': True,
         'unauthenticated_workspace_401': True, 'production_data_recovered': False,
+        'private_api_no_store': True,
         'authority': 'none', 'seal_readiness': False}, sort_keys=True))
 
 
