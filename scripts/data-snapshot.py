@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Offline, bounded snapshots of the complete supported NEXUS data layout.
 
-Caller must stop all writers and keep them stopped until this command completes.
+Backup, restore and resume require all writers to stay stopped until completion.
+Inspect reads only an existing archive and does not assert live-volume consistency.
 Checksums detect corruption; they do not authenticate the snapshot or grant authority.
 """
 import argparse
@@ -158,6 +159,27 @@ def validated_records(archive):
     return decoded
 
 
+def inspect_snapshot(archive):
+    """Report aggregate structure only; never disclose IDs or workspace content."""
+    records = validated_records(archive)
+    requests = [data for name, data in records if name.startswith("requests/")]
+    pending = sum(data == b"pending\n" for data in requests)
+    return {
+        "schema": "nexus.snapshot-inspection.v1",
+        "status": "STRUCTURALLY_VALID",
+        "scope": "snapshot_structure_only",
+        "file_count": len(records),
+        "decoded_bytes": sum(len(data) for _, data in records),
+        "workspace_count": sum(name.endswith(".json") for name, _ in records),
+        "requests": {"pending": pending, "indeterminate": len(requests) - pending},
+        "captured_quarantine": any(name == RECOVERY_MARKER for name, _ in records),
+        "recovery_point": "unknown",
+        "core_audit": "not_checked",
+        "authenticity": "not_verified",
+        "authority": "none",
+    }
+
+
 def restore(archive, target, owner=None):
     # Validate every record before creating any destination state.
     records = validated_records(archive)
@@ -210,7 +232,7 @@ def parse_owner(value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=["backup", "restore", "resume"])
+    parser.add_argument("operation", choices=["backup", "restore", "resume", "inspect"])
     parser.add_argument("source", type=Path)
     parser.add_argument("destination", type=Path, nargs="?")
     parser.add_argument("--offline", action="store_true", help="assert all data writers are stopped")
@@ -219,6 +241,14 @@ def main():
                         help="explicitly accept loss of replay protection for post-snapshot IDs")
     args = parser.parse_args()
     try:
+        if args.operation == "inspect":
+            require(args.destination is None, "inspect takes only the archive")
+            require(args.owner is None, "owner applies only to restore")
+            require(not args.offline, "offline applies only to backup, restore or resume")
+            require(not args.acknowledge_replay_risk,
+                    "replay-risk acknowledgment applies only to resume")
+            print(json.dumps(inspect_snapshot(args.source), sort_keys=True))
+            return 0
         require(args.offline, "stop all writers and explicitly pass --offline")
         require(args.operation == "restore" or args.owner is None, "owner applies only to restore")
         if args.operation == "resume":
