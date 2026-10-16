@@ -69,6 +69,35 @@ absence of captured quarantine does not authorize writes; every restore still
 adds quarantine. Use a stable private archive copy; inspection reads no live
 volume and does not stop writers or prove an offline capture.
 
+## Compare a candidate against a reference
+
+```bash
+python3 scripts/data-snapshot.py compare /secure/reference.json /secure/candidate.json
+```
+
+Both archives are fully structurally validated with the existing per-archive
+64 MiB / 20,000-file bounds before any success JSON is emitted. The report gives
+aggregate directional request/workspace differences, shared byte changes, shared
+pending/indeterminate differences, and captured quarantine presence. No IDs,
+paths, per-file hashes or workspace content are printed. Counts can still be
+sensitive. Neither archive is modified; this command accepts no ownership,
+offline or replay-risk acknowledgment options and never restores or resumes data.
+
+`reference_ids_missing_from_candidate` counts IDs known to the reference but
+absent from the proposed candidate. For requests, those missing IDs would not be
+protected against duplicate admission by that candidate after explicit resumption.
+Include indeterminate IDs in this assessment. Shared pending-to-indeterminate or
+indeterminate-to-pending differences are reported, never automatically reconciled.
+Workspace byte changes do not establish which history is legitimate or newer.
+
+Reference and candidate are operator-selected roles, not inferred chronology or
+trusted provenance. Zero differences, or an identical pair, do not establish a
+current/full backup, absence of all replay risk, equivalent core history, completed
+execution, authenticity, authority, verification PASS or Seal readiness. Requests
+missing from both archives remain invisible; the recovery point stays unknown.
+Compare stable private copies and interpret the report alongside independent
+knowledge of their origin. Every actual restore still reinstates quarantine.
+
 ## Restore quarantine and explicit resumption
 
 Every restore writes `.nexus-recovery-required` before publishing the directory.

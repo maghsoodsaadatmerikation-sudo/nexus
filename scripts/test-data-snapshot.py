@@ -287,6 +287,104 @@ class SnapshotTests(unittest.TestCase):
                 self.assertFalse(self.target.exists())
                 self.assertEqual(self.archive.read_bytes(), before)
 
+    def test_comparison_reports_directional_replay_gap_and_marker_state_changes(self):
+        extra = self.source / "requests" / b"private-reference-only".hex()
+        extra.write_bytes(b"pending\n")
+        self.capture()
+        extra.unlink()
+        (self.source / "requests" / b"accepted".hex()).unlink()
+        (self.source / "requests" / b"uncertain".hex()).write_bytes(b"pending\n")
+        (self.source / "requests" / b"private-candidate-only".hex()).write_bytes(b"pending\n")
+        (self.source / "77.json").write_text(json.dumps({
+            "schema_version": 1, "workspace": {"id": "w"}, "events": ["private-payload"]}))
+        (self.source / snapshot.RECOVERY_MARKER).write_bytes(snapshot.RECOVERY_BYTES)
+        candidate = self.root / "candidate.json"
+        snapshot.backup(self.source, candidate)
+        report = snapshot.compare_snapshots(self.archive, candidate)
+        self.assertEqual(report["requests"], {
+            "reference_count": 3, "candidate_count": 2,
+            "reference_ids_missing_from_candidate": 2,
+            "candidate_ids_missing_from_reference": 1, "shared_count": 1,
+            "shared_marker_bytes_changed": 1, "shared_pending_to_indeterminate": 0,
+            "shared_indeterminate_to_pending": 1})
+        self.assertEqual(report["workspaces"]["shared_bytes_changed"], 1)
+        self.assertEqual(report["captured_quarantine"], {"reference": False, "candidate": True})
+        reverse = snapshot.compare_snapshots(candidate, self.archive)
+        self.assertEqual(reverse["requests"]["reference_ids_missing_from_candidate"], 1)
+        self.assertEqual(reverse["requests"]["candidate_ids_missing_from_reference"], 2)
+        self.assertEqual(reverse["requests"]["shared_pending_to_indeterminate"], 1)
+        self.assertEqual(reverse["requests"]["shared_indeterminate_to_pending"], 0)
+
+    def test_comparison_counts_workspace_loss_and_byte_changes_without_semantic_claims(self):
+        self.capture()
+        (self.source / "77.json").unlink()
+        (self.source / "78.json").write_text(json.dumps({
+            "schema_version": 1, "workspace": {"id": "x"}, "events": []}))
+        candidate = self.root / "candidate.json"
+        snapshot.backup(self.source, candidate)
+        report = snapshot.compare_snapshots(self.archive, candidate)
+        self.assertEqual(report["workspaces"], {
+            "reference_count": 1, "candidate_count": 1,
+            "reference_ids_missing_from_candidate": 1,
+            "candidate_ids_missing_from_reference": 1, "shared_bytes_changed": 0})
+
+    def test_identical_comparison_does_not_claim_current_complete_or_authorized_recovery(self):
+        self.capture()
+        report = snapshot.compare_snapshots(self.archive, self.archive)
+        self.assertEqual(report["status"], "STRUCTURALLY_VALID_COMPARISON")
+        self.assertEqual(report["scope"], "two_snapshot_structure_only")
+        self.assertEqual(report["requests"]["reference_ids_missing_from_candidate"], 0)
+        self.assertEqual(report["requests"]["shared_marker_bytes_changed"], 0)
+        self.assertEqual(report["chronology"], "not_inferred")
+        self.assertEqual(report["recovery_point"], "unknown")
+        self.assertEqual(report["core_audit"], "not_checked")
+        self.assertEqual(report["authenticity"], "not_verified")
+        self.assertEqual(report["authority"], "none")
+        self.assertNotIn("PASS", json.dumps(report))
+
+    def test_comparison_cli_preserves_archives_and_omits_ids_paths_and_private_content(self):
+        private_id = "private-comparison-id"
+        (self.source / (private_id.encode().hex() + ".json")).write_text(json.dumps({
+            "schema_version": 1, "workspace": {"id": private_id}, "events": ["private-comparison-content"]}))
+        self.capture()
+        candidate = self.root / "candidate.json"
+        snapshot.backup(self.source, candidate)
+        before = {p.relative_to(self.root): (p.read_bytes(), stat.S_IMODE(p.stat().st_mode))
+                  for p in self.root.rglob("*") if p.is_file()}
+        result = subprocess.run([sys.executable, str(SCRIPT), "compare", str(self.archive),
+            str(candidate)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["authority"], "none")
+        for value in [private_id, private_id.encode().hex(), "private-comparison-content",
+                      "accepted", "uncertain", str(self.root)]:
+            self.assertNotIn(value, result.stdout + result.stderr)
+        after = {p.relative_to(self.root): (p.read_bytes(), stat.S_IMODE(p.stat().st_mode))
+                 for p in self.root.rglob("*") if p.is_file()}
+        self.assertEqual(before, after)
+        self.assertFalse(self.target.exists())
+
+    def test_comparison_validates_both_inputs_and_rejects_mutation_arguments(self):
+        self.capture()
+        candidate = self.root / "candidate.json"
+        candidate.write_bytes(self.archive.read_bytes())
+        corrupt = self.root / "corrupt.json"
+        document = json.loads(self.archive.read_text())
+        document["files"][0]["sha256"] = "0" * 64
+        corrupt.write_text(json.dumps(document))
+        before = {p: p.read_bytes() for p in (self.archive, candidate, corrupt)}
+        inputs = [[corrupt, candidate], [self.archive, corrupt], [self.archive],
+                  [self.archive, candidate, "--offline"],
+                  [self.archive, candidate, "--owner", "10001:10001"],
+                  [self.archive, candidate, "--acknowledge-replay-risk"]]
+        for arguments in inputs:
+            with self.subTest(arguments=arguments):
+                result = subprocess.run([sys.executable, str(SCRIPT), "compare",
+                    *map(str, arguments)], capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
+                self.assertFalse(self.target.exists())
+                self.assertEqual(before, {p: p.read_bytes() for p in before})
+
     def test_offline_flag_is_required_and_environment_is_not_captured(self):
         environment = dict(os.environ, NEXUS_API_TOKEN="snapshot-test-secret")
         command = [sys.executable, str(SCRIPT), "backup", str(self.source), str(self.archive)]
