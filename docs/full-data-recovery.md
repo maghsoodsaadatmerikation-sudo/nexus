@@ -5,7 +5,10 @@ Status: DEVELOPMENT / UNSEALED
 The workspace API export covers one workspace only. `scripts/data-snapshot.py`
 captures all supported workspace files and the durable request ledger together.
 It requires Python 3 and a local filesystem with file/directory fsync and hard
-links. No extra dependency or change to either pinned Cargo.lock is required.
+links. Restore additionally requires Linux, a libc exposing `renameat2`, and a
+filesystem supporting `RENAME_NOREPLACE`. Unsupported restore platforms fail
+closed without falling back to an overwriting rename. No extra dependency or
+change to either pinned Cargo.lock is required.
 
 ## Contract
 
@@ -26,10 +29,22 @@ sudo python3 scripts/data-snapshot.py restore /secure/nexus-data.json /recovery/
 The backup must reside outside the source directory. Its parent must exist.
 Restore stages validated files in the destination's existing parent, syncs them,
 and publishes the directory only after validation. The target must be absent;
-it does not merge into, erase, or overwrite an existing target under exclusive
-maintenance. Backups likewise refuse existing output. Files use mode 0600 and
+publication uses atomic `RENAME_NOREPLACE`, so even a destination created after
+the final absence check (including an empty directory or dangling symlink) is
+preserved and blocks restore. It does not merge into, erase, or overwrite an
+existing target. Backups likewise refuse existing output. Files use mode 0600 and
 restored directories 0700. Ownership defaults to the caller unless `--owner`
 is supplied. Use a destination readable by the gateway's runtime identity.
+
+The destination parent must remain trusted and stable throughout maintenance;
+this protects the final target name, not against a privileged actor replacing
+ancestor directories or editing data. A pre-publication error removes only the
+private staging directory and leaves the target absent (or preserves a racing
+destination). If the parent-directory fsync fails after atomic publication,
+restore returns failure but keeps the published, quarantined data: crash
+durability is uncertain. Do not delete that directory or retry into it blindly;
+inspect it offline. A retry rejects the existing target. No failure path resumes
+traffic or creates core authorization.
 
 The versioned JSON envelope records paths, byte sizes, SHA-256 digests and base64
 contents. It accepts only current hex-named workspace JSON and request marker

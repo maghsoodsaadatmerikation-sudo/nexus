@@ -7,6 +7,8 @@ Checksums detect corruption; they do not authenticate the snapshot or grant auth
 """
 import argparse
 import base64
+import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -14,6 +16,7 @@ from pathlib import Path
 import re
 import shutil
 import stat
+import sys
 import tempfile
 
 SCHEMA = "nexus.data-snapshot.v1"
@@ -225,6 +228,27 @@ def compare_snapshots(reference_archive, candidate_archive):
     }
 
 
+def publish_directory_no_replace(stage, target):
+    """Publish atomically on supported Linux filesystems; never fall back to rename."""
+    require(sys.platform == "linux", "atomic no-replace restore requires Linux")
+    try:
+        renameat2 = ctypes.CDLL(None, use_errno=True).renameat2
+    except (AttributeError, OSError):
+        raise SnapshotError("atomic no-replace restore is unavailable") from None
+    renameat2.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int,
+                          ctypes.c_char_p, ctypes.c_uint]
+    renameat2.restype = ctypes.c_int
+    # AT_FDCWD=-100; RENAME_NOREPLACE=1. The kernel checks target absence and
+    # publishes in one operation, including when an empty directory races us.
+    if renameat2(-100, os.fsencode(stage), -100, os.fsencode(target), 1) != 0:
+        error = ctypes.get_errno()
+        if error == errno.EEXIST:
+            raise SnapshotError("restore target appeared during restore")
+        if error in (errno.ENOSYS, errno.EINVAL, errno.EOPNOTSUPP):
+            raise SnapshotError("atomic no-replace restore is unsupported")
+        raise OSError(error, os.strerror(error))
+
+
 def restore(archive, target, owner=None):
     # Validate every record before creating any destination state.
     records = validated_records(archive)
@@ -252,8 +276,8 @@ def restore(archive, target, owner=None):
         sync_directory(stage / "requests")
         sync_directory(stage)
         require(not target.exists() and not target.is_symlink(), "restore target appeared during restore")
-        # Offline exclusive maintenance is required; all state is published together.
-        os.rename(stage, target)
+        # Offline exclusive maintenance and a trusted parent remain required.
+        publish_directory_no_replace(stage, target)
         sync_directory(target.parent)
     finally:
         if stage.exists():

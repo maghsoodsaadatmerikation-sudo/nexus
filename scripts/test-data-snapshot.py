@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Corruption, extraction boundaries, preservation and recovery-window tests."""
 import base64
+import errno
 import hashlib
 import importlib.util
 import json
@@ -182,6 +183,99 @@ class SnapshotTests(unittest.TestCase):
         (self.source / "requests").rmdir()
         with self.assertRaises(ValueError):
             snapshot.backup(self.source, self.archive)
+
+    def test_last_moment_restore_collision_preserves_every_destination_kind(self):
+        self.capture()
+        archive_before = self.archive.read_bytes()
+        publish = snapshot.publish_directory_no_replace
+        for kind in ["empty-directory", "directory", "file", "symlink", "dangling-symlink"]:
+            with self.subTest(kind=kind):
+                target = self.root / kind
+                outside = self.root / (kind + "-outside")
+                outside.write_bytes(b"private-preserved-data")
+
+                def race(stage, destination):
+                    if kind in ("empty-directory", "directory"):
+                        destination.mkdir()
+                        if kind == "directory":
+                            (destination / "keep").write_bytes(b"keep")
+                    elif kind == "file":
+                        destination.write_bytes(b"keep")
+                    else:
+                        destination.symlink_to(outside if kind == "symlink" else self.root / "absent")
+                    before = destination.lstat()
+                    try:
+                        publish(stage, destination)
+                    finally:
+                        self.assertEqual(destination.lstat().st_ino, before.st_ino)
+
+                with patch.object(snapshot, "publish_directory_no_replace", side_effect=race):
+                    with self.assertRaises(snapshot.SnapshotError):
+                        snapshot.restore(self.archive, target)
+                self.assertEqual(outside.read_bytes(), b"private-preserved-data")
+                if kind == "file":
+                    self.assertEqual(target.read_bytes(), b"keep")
+                elif kind == "directory":
+                    self.assertEqual((target / "keep").read_bytes(), b"keep")
+                elif kind == "empty-directory":
+                    self.assertEqual(list(target.iterdir()), [])
+                else:
+                    self.assertTrue(target.is_symlink())
+                self.assertFalse(list(self.root.glob(".nexus-restore-*")))
+                self.assertEqual(self.archive.read_bytes(), archive_before)
+
+    def test_restore_blocks_without_no_replace_platform_or_libc_support(self):
+        self.capture()
+        for context in [patch.object(snapshot.sys, "platform", "unsupported"),
+                        patch.object(snapshot.ctypes, "CDLL", return_value=object())]:
+            with context, patch.object(snapshot.os, "rename") as unsafe_fallback:
+                with self.assertRaises(snapshot.SnapshotError):
+                    snapshot.restore(self.archive, self.target)
+                unsafe_fallback.assert_not_called()
+            self.assertFalse(self.target.exists())
+            self.assertFalse(list(self.root.glob(".nexus-restore-*")))
+
+    def test_restore_kernel_publication_errors_never_fall_back_or_leave_staging(self):
+        self.capture()
+        for error in [errno.ENOSYS, errno.EINVAL, errno.EOPNOTSUPP, errno.EACCES, errno.ENOSPC]:
+            with self.subTest(error=error):
+                with patch.object(snapshot.ctypes, "CDLL") as library, \
+                     patch.object(snapshot.ctypes, "get_errno", return_value=error), \
+                     patch.object(snapshot.os, "rename") as unsafe_fallback:
+                    library.return_value.renameat2.return_value = -1
+                    with self.assertRaises((snapshot.SnapshotError, OSError)):
+                        snapshot.restore(self.archive, self.target)
+                    unsafe_fallback.assert_not_called()
+                self.assertFalse(self.target.exists())
+                self.assertFalse(list(self.root.glob(".nexus-restore-*")))
+
+    def test_sync_failure_before_publication_leaves_target_absent(self):
+        self.capture()
+        with patch.object(snapshot, "sync_directory", side_effect=OSError(errno.EIO, "injected")), \
+             patch.object(snapshot, "publish_directory_no_replace") as publish:
+            with self.assertRaises(OSError):
+                snapshot.restore(self.archive, self.target)
+            publish.assert_not_called()
+        self.assertFalse(self.target.exists())
+        self.assertFalse(list(self.root.glob(".nexus-restore-*")))
+
+    def test_sync_failure_after_publication_keeps_quarantined_data_and_blocks_retry(self):
+        self.capture()
+        real_sync = snapshot.sync_directory
+
+        def fail_parent(path):
+            if path == self.target.parent:
+                raise OSError(errno.EIO, "injected parent sync failure")
+            real_sync(path)
+
+        with patch.object(snapshot, "sync_directory", side_effect=fail_parent):
+            with self.assertRaises(OSError):
+                snapshot.restore(self.archive, self.target)
+        self.assertEqual((self.target / snapshot.RECOVERY_MARKER).read_bytes(), snapshot.RECOVERY_BYTES)
+        self.assertEqual((self.target / "77.json").read_bytes(), (self.source / "77.json").read_bytes())
+        self.assertFalse(list(self.root.glob(".nexus-restore-*")))
+        with self.assertRaises(snapshot.SnapshotError):
+            snapshot.restore(self.archive, self.target)
 
     def test_symlink_file_and_archive_and_target_are_rejected(self):
         link = self.source / "11.json"
