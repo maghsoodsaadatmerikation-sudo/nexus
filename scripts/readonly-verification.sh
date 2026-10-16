@@ -31,6 +31,7 @@ esac
 # Static and fail-closed release checks.
 python3 scripts/verify_test_matrix.py
 python3 scripts/test-data-snapshot.py
+node scripts/test-workspace-ui.mjs
 bash -n scripts/workspace-backup.sh
 bash -n scripts/workspace-restore.sh
 bash -n scripts/stage-d-evidence.sh
