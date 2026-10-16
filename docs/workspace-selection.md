@@ -37,3 +37,30 @@ late loads, duplicate clicks, in-flight writes and selection changes during file
 reading. Canonical read-only Verify invokes the suite; it neither accesses a
 user's workspace nor uploads private backups. This harness does not by itself
 prove browser rendering or real server behavior.
+
+## Executed browser witness
+
+`python3 scripts/test-workspace-browser.py` requires an installed Chrome/Chromium
+and Node 22 or later, and fails closed when either is absent. Canonical Verify runs it on the hosted Linux
+runner. A local DevTools connection observes only the newly started private
+browser process and waits for a completed report using real elapsed time,
+including asynchronous File reads; virtual-time dumps are not used.
+It adds synthetic transport and assertions only to a disposable copy of
+the committed HTML, uses private temporary browser profiles, and leaves the
+application source unchanged. No operator token, real workspace, external API,
+production endpoint or user backup is involved.
+
+The real browser exercises disabled controls, explicit judgment targeting,
+late-load rejection, duplicate clicks, uncertain sent writes, File input import,
+and escaped evidence rendering. Six completed checks are required at each of
+two layout classes: a narrow stacked layout and a wide two-column layout. Actual
+viewport width, browser version and bounded witness scope are logged in JSON.
+The browser build comes from the hosted runner image and is recorded rather than
+claimed to be pinned. Both Cargo.lock files and the Rust toolchain remain as-is.
+
+The driver rejects missing reports, failed assertions, wrong layout classes and
+process failures; browser exit code zero alone is not a PASS. This is real DOM
+and computed-layout evidence with synthetic in-page transport, not real-server
+authentication, physical Android testing, a pixel-perfect visual review, or
+production readiness. Passing it creates no authority and does not clear restore
+quarantine or publish a Seal.
