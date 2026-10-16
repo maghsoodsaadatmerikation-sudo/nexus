@@ -10,6 +10,22 @@ A hex-encoded request ID (1–100 UTF-8 bytes) names a marker, never a payload o
 an authority grant. `create_new`, file sync and directory sync precede delegation.
 Successful delegation with the same ID writes and syncs `pending\n` before 202.
 GET returns the existing `request_id` and `pending` status after reopening.
+Request and workspace API responses carry `Cache-Control: no-store`, including
+success, authentication failures, invalid bodies, duplicate conflicts, missing
+records, unsupported methods, and restore-quarantine failures. The outer cache
+middleware runs without inspecting bodies or changing rate/capacity budgets;
+authentication and quarantine still reject before body polling. GET/HEAD remain
+read-only and HEAD keeps an empty body. The policy applies to the request and
+workspace route families, not a general statement about all public routes.
+
+This instructs compliant clients/proxies not to store these responses; it does
+not erase previously cached copies, encrypt transport, defeat a malicious
+client/proxy, or guarantee the underlying state is current. An indeterminate
+record remains indeterminate, and `pending` still does not mean completed work.
+HTTP contract tests cover both successful and rejected responses. The real
+loopback executable witness also checks the header on private API calls across
+restart and quarantined restore.
+
 An empty or partially written marker recovers as `indeterminate`: execution may
 or may not have happened. Delegate errors also retain the reservation. Repeated
 IDs return 409 without execution. Storage failures return 503. Invalid markers

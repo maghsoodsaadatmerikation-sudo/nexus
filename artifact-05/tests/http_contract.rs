@@ -1278,6 +1278,182 @@ async fn health_head_preserves_gate_status_and_cache_policy() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+#[tokio::test]
+async fn private_api_success_and_errors_are_never_storable() {
+    let root = durable_root();
+    let delegate = RecordingDelegate::default();
+    delegate
+        .create_workspace(
+            "private".into(),
+            "private workspace content".into(),
+            ProvenanceId::new("ci"),
+        )
+        .unwrap();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret")
+            .with_request_store(&root)
+            .unwrap(),
+    );
+    let accepted = app
+        .clone()
+        .oneshot(submit_request("cache-check", Some("secret"), "opaque"))
+        .await
+        .unwrap();
+    assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+    assert_eq!(accepted.headers()["cache-control"], "no-store");
+    let duplicate = app
+        .clone()
+        .oneshot(submit_request("cache-check", Some("secret"), "opaque"))
+        .await
+        .unwrap();
+    assert_eq!(duplicate.status(), StatusCode::CONFLICT);
+    assert_eq!(duplicate.headers()["cache-control"], "no-store");
+
+    for (method, path, authenticated, body, expected) in [
+        ("GET", "/v1/requests/cache-check", true, "", StatusCode::OK),
+        ("HEAD", "/v1/requests/cache-check", true, "", StatusCode::OK),
+        (
+            "GET",
+            "/v1/requests/cache-check",
+            false,
+            "",
+            StatusCode::UNAUTHORIZED,
+        ),
+        (
+            "GET",
+            "/v1/requests/missing",
+            true,
+            "",
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            "POST",
+            "/v1/requests",
+            true,
+            "{invalid",
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+        (
+            "PUT",
+            "/v1/requests",
+            true,
+            "",
+            StatusCode::METHOD_NOT_ALLOWED,
+        ),
+        ("GET", "/v1/workspaces/private", true, "", StatusCode::OK),
+        ("HEAD", "/v1/workspaces/private", true, "", StatusCode::OK),
+        (
+            "GET",
+            "/v1/workspaces/private",
+            false,
+            "",
+            StatusCode::UNAUTHORIZED,
+        ),
+        (
+            "GET",
+            "/v1/workspaces/missing",
+            true,
+            "",
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            "POST",
+            "/v1/workspaces",
+            true,
+            "{invalid",
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            "PUT",
+            "/v1/workspaces/private",
+            true,
+            "",
+            StatusCode::METHOD_NOT_ALLOWED,
+        ),
+    ] {
+        let mut request = Request::builder()
+            .method(method)
+            .uri(path)
+            .header("content-type", "application/json");
+        if authenticated {
+            request = request.header("authorization", "Bearer secret");
+        }
+        let response = app
+            .clone()
+            .oneshot(request.body(Body::from(body)).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected, "{method} {path}");
+        assert_eq!(
+            response.headers()["cache-control"],
+            "no-store",
+            "{method} {path}"
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        if method == "HEAD" {
+            assert!(bytes.is_empty());
+        } else if path == "/v1/workspaces/private" && expected == StatusCode::OK {
+            assert!(String::from_utf8_lossy(&bytes).contains("private workspace content"));
+        }
+    }
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+    assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn private_api_cache_policy_preserves_auth_and_quarantine_before_body_polling() {
+    use http_body_util::BodyExt;
+    let root = durable_root();
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(root.join(".nexus-recovery-required"), b"").unwrap();
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret")
+            .with_recovery_gate(&root)
+            .unwrap()
+            .with_request_store(root.join("requests"))
+            .unwrap(),
+    );
+    for path in [
+        "/v1/requests",
+        "/v1/workspaces",
+        "/v1/workspaces/private/claims",
+    ] {
+        for authenticated in [false, true] {
+            let body = http_body_util::Full::new(axum::body::Bytes::from_static(b"{invalid"))
+                .map_frame(|_| panic!("blocked private API body was polled"));
+            let mut request = Request::builder()
+                .method("POST")
+                .uri(path)
+                .header("content-type", "application/json");
+            if authenticated {
+                request = request.header("authorization", "Bearer secret");
+            }
+            let response = app
+                .clone()
+                .oneshot(request.body(Body::new(body)).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                if authenticated {
+                    StatusCode::SERVICE_UNAVAILABLE
+                } else {
+                    StatusCode::UNAUTHORIZED
+                }
+            );
+            assert_eq!(response.headers()["cache-control"], "no-store");
+        }
+    }
+    assert!(delegate.requests.lock().unwrap().is_empty());
+    assert_eq!(std::fs::read_dir(root.join("requests")).unwrap().count(), 0);
+    assert!(root.join(".nexus-recovery-required").exists());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 // Requires a private 8 MiB tmpfs supplied by canonical Verify, never a host path.
 #[tokio::test]
 #[ignore = "requires bounded Docker tmpfs witness"]

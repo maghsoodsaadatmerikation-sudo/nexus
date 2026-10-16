@@ -348,7 +348,26 @@ where
             state.clone(),
             recovery_boundary::<D>,
         ))
+        .layer(middleware::from_fn(private_api_cache_boundary))
         .with_state(state)
+}
+
+async fn private_api_cache_boundary(request: Request, next: Next) -> Response {
+    let path = request.uri().path();
+    let private_api = path == "/v1/requests"
+        || path.starts_with("/v1/requests/")
+        || path == "/v1/workspaces"
+        || path.starts_with("/v1/workspaces/");
+    // Wrap authentication, quarantine, extractors and handlers without reading
+    // the body or changing admission. Neither success nor errors are cacheable.
+    let mut response = next.run(request).await;
+    if private_api {
+        response.headers_mut().insert(
+            header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("no-store"),
+        );
+    }
+    response
 }
 
 async fn recovery_boundary<D: ConstitutionalDelegate>(
