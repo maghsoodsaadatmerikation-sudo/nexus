@@ -218,6 +218,75 @@ class SnapshotTests(unittest.TestCase):
             snapshot.restore(self.archive, self.target)
         self.assertFalse(self.target.exists())
 
+    def test_inspection_reports_aggregates_without_private_content_or_writes(self):
+        private_id = "private-inspection-workspace"
+        (self.source / (private_id.encode().hex() + ".json")).write_text(json.dumps({
+            "schema_version": 1, "workspace": {"id": private_id},
+            "events": ["private-inspection-payload"]}))
+        self.capture()
+        before = {p.relative_to(self.root): (p.read_bytes(), stat.S_IMODE(p.stat().st_mode))
+                  for p in self.root.rglob("*") if p.is_file()}
+        result = subprocess.run([sys.executable, str(SCRIPT), "inspect", str(self.archive)],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["status"], "STRUCTURALLY_VALID")
+        self.assertEqual(report["scope"], "snapshot_structure_only")
+        self.assertEqual(report["file_count"], 4)
+        self.assertEqual(report["workspace_count"], 2)
+        self.assertEqual(report["requests"], {"pending": 1, "indeterminate": 1})
+        self.assertFalse(report["captured_quarantine"])
+        self.assertEqual(report["recovery_point"], "unknown")
+        self.assertEqual(report["core_audit"], "not_checked")
+        self.assertEqual(report["authenticity"], "not_verified")
+        self.assertEqual(report["authority"], "none")
+        for value in [private_id, "private-inspection-payload", "accepted", "uncertain",
+                      str(self.root), private_id.encode().hex()]:
+            self.assertNotIn(value, result.stdout + result.stderr)
+        self.assertNotIn("PASS", result.stdout)
+        after = {p.relative_to(self.root): (p.read_bytes(), stat.S_IMODE(p.stat().st_mode))
+                 for p in self.root.rglob("*") if p.is_file()}
+        self.assertEqual(before, after)
+        self.assertFalse(self.target.exists())
+
+    def test_inspection_keeps_all_torn_markers_indeterminate_and_reports_quarantine(self):
+        for length in range(1, len(b"pending\n")):
+            (self.source / "requests" / f"torn-{length}".encode().hex()).write_bytes(
+                b"pending\n"[:length])
+        (self.source / snapshot.RECOVERY_MARKER).write_bytes(snapshot.RECOVERY_BYTES)
+        self.capture()
+        report = snapshot.inspect_snapshot(self.archive)
+        self.assertEqual(report["requests"], {"pending": 1, "indeterminate": 8})
+        self.assertTrue(report["captured_quarantine"])
+        self.assertEqual((self.source / snapshot.RECOVERY_MARKER).read_bytes(),
+                         snapshot.RECOVERY_BYTES)
+
+    def test_inspection_rejects_corruption_without_success_report(self):
+        document = self.capture()
+        document["files"][0]["sha256"] = "0" * 64
+        self.archive.write_text(json.dumps(document))
+        before = self.archive.read_bytes()
+        result = subprocess.run([sys.executable, str(SCRIPT), "inspect", str(self.archive)],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("checksum mismatch", result.stderr)
+        self.assertEqual(self.archive.read_bytes(), before)
+        self.assertFalse(self.target.exists())
+
+    def test_inspection_rejects_mutation_arguments(self):
+        self.capture()
+        before = self.archive.read_bytes()
+        for flags in [[str(self.target)], ["--owner", "10001:10001"], ["--offline"],
+                      ["--acknowledge-replay-risk"]]:
+            with self.subTest(flags=flags):
+                result = subprocess.run([sys.executable, str(SCRIPT), "inspect",
+                    str(self.archive), *flags], capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
+                self.assertFalse(self.target.exists())
+                self.assertEqual(self.archive.read_bytes(), before)
+
     def test_offline_flag_is_required_and_environment_is_not_captured(self):
         environment = dict(os.environ, NEXUS_API_TOKEN="snapshot-test-secret")
         command = [sys.executable, str(SCRIPT), "backup", str(self.source), str(self.archive)]
