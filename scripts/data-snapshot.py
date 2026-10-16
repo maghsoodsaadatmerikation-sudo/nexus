@@ -2,7 +2,7 @@
 """Offline, bounded snapshots of the complete supported NEXUS data layout.
 
 Backup, restore and resume require all writers to stay stopped until completion.
-Inspect reads only an existing archive and does not assert live-volume consistency.
+Inspect/compare read existing archives and do not assert live-volume consistency.
 Checksums detect corruption; they do not authenticate the snapshot or grant authority.
 """
 import argparse
@@ -180,6 +180,51 @@ def inspect_snapshot(archive):
     }
 
 
+def compare_snapshots(reference_archive, candidate_archive):
+    """Compare a proposed restore candidate with a reference, without ordering them."""
+    reference = dict(validated_records(reference_archive))
+    candidate = dict(validated_records(candidate_archive))
+    reference_requests = {name for name in reference if name.startswith("requests/")}
+    candidate_requests = {name for name in candidate if name.startswith("requests/")}
+    shared_requests = reference_requests & candidate_requests
+    reference_workspaces = {name for name in reference if name.endswith(".json")}
+    candidate_workspaces = {name for name in candidate if name.endswith(".json")}
+    shared_workspaces = reference_workspaces & candidate_workspaces
+    return {
+        "schema": "nexus.snapshot-comparison.v1",
+        "status": "STRUCTURALLY_VALID_COMPARISON",
+        "scope": "two_snapshot_structure_only",
+        "requests": {
+            "reference_count": len(reference_requests),
+            "candidate_count": len(candidate_requests),
+            "reference_ids_missing_from_candidate": len(reference_requests - candidate_requests),
+            "candidate_ids_missing_from_reference": len(candidate_requests - reference_requests),
+            "shared_count": len(shared_requests),
+            "shared_marker_bytes_changed": sum(reference[name] != candidate[name]
+                                               for name in shared_requests),
+            "shared_pending_to_indeterminate": sum(reference[name] == b"pending\n" and
+                candidate[name] != b"pending\n" for name in shared_requests),
+            "shared_indeterminate_to_pending": sum(reference[name] != b"pending\n" and
+                candidate[name] == b"pending\n" for name in shared_requests),
+        },
+        "workspaces": {
+            "reference_count": len(reference_workspaces),
+            "candidate_count": len(candidate_workspaces),
+            "reference_ids_missing_from_candidate": len(reference_workspaces - candidate_workspaces),
+            "candidate_ids_missing_from_reference": len(candidate_workspaces - reference_workspaces),
+            "shared_bytes_changed": sum(reference[name] != candidate[name]
+                                         for name in shared_workspaces),
+        },
+        "captured_quarantine": {"reference": RECOVERY_MARKER in reference,
+                                "candidate": RECOVERY_MARKER in candidate},
+        "chronology": "not_inferred",
+        "recovery_point": "unknown",
+        "core_audit": "not_checked",
+        "authenticity": "not_verified",
+        "authority": "none",
+    }
+
+
 def restore(archive, target, owner=None):
     # Validate every record before creating any destination state.
     records = validated_records(archive)
@@ -232,22 +277,28 @@ def parse_owner(value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=["backup", "restore", "resume", "inspect"])
+    parser.add_argument("operation", choices=["backup", "restore", "resume", "inspect", "compare"])
     parser.add_argument("source", type=Path)
-    parser.add_argument("destination", type=Path, nargs="?")
+    parser.add_argument("destination", type=Path, nargs="?",
+                        help="backup/restore destination, or candidate archive for compare")
     parser.add_argument("--offline", action="store_true", help="assert all data writers are stopped")
     parser.add_argument("--owner", help="restore ownership as numeric UID:GID; requires appropriate privilege")
     parser.add_argument("--acknowledge-replay-risk", action="store_true",
                         help="explicitly accept loss of replay protection for post-snapshot IDs")
     args = parser.parse_args()
     try:
-        if args.operation == "inspect":
-            require(args.destination is None, "inspect takes only the archive")
+        if args.operation in ("inspect", "compare"):
             require(args.owner is None, "owner applies only to restore")
             require(not args.offline, "offline applies only to backup, restore or resume")
             require(not args.acknowledge_replay_risk,
                     "replay-risk acknowledgment applies only to resume")
-            print(json.dumps(inspect_snapshot(args.source), sort_keys=True))
+            if args.operation == "inspect":
+                require(args.destination is None, "inspect takes only the archive")
+                report = inspect_snapshot(args.source)
+            else:
+                require(args.destination is not None, "compare requires reference and candidate archives")
+                report = compare_snapshots(args.source, args.destination)
+            print(json.dumps(report, sort_keys=True))
             return 0
         require(args.offline, "stop all writers and explicitly pass --offline")
         require(args.operation == "restore" or args.owner is None, "owner applies only to restore")
