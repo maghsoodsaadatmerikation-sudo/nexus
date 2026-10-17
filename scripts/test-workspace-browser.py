@@ -18,6 +18,7 @@ window.nexusBrowserWitness = (() => {
     calls.push({path, method: options.method || 'GET', body: options.body});
     let value;
     if (deferred) {const next = deferred; deferred = null; value = await next;}
+    else if (path === '/readyz') value = {httpResponse: {status: 503, json: async () => ({status: 'quarantined'})}};
     else if (path.startsWith('/v1/requests/')) {
       const id = decodeURIComponent(path.slice('/v1/requests/'.length));
       if (id === 'missing' || id === 'unauthorized') value = {httpResponse: {
@@ -99,6 +100,11 @@ window.addEventListener('load', async () => {
     assert(!node('claims').querySelector('img') && !window.untrustedMarkupRan, 'evidence became executable markup');
     checks.push('evidence-rendered-as-text');
 
+    node('readinessButton').click(); await tick();
+    assert(node('readinessResult').textContent.includes('Writes are blocked'), 'quarantine observation missing');
+    assert(node('readinessResult').getAttribute('aria-live') === 'polite', 'readiness feedback not announced');
+    assert(lab.calls.at(-1).path === '/readyz' && lab.calls.at(-1).method === 'GET', 'readiness sent a mutation');
+    checks.push('readiness-quarantine-observation');
     const statusStart = lab.calls.length;
     const requestId = id => {node('requestLookupId').value = id; node('requestLookupId').dispatchEvent(new Event('input', {bubbles: true}));};
     for (const [id, expected] of [
@@ -165,7 +171,7 @@ def main():
             if result.returncode:
                 raise RuntimeError('real browser process failed: ' + result.stderr[-2000:])
             report = json.loads(result.stdout)
-            if report.get('status') != 'PASS' or len(report.get('checks', [])) != 8:
+            if report.get('status') != 'PASS' or len(report.get('checks', [])) != 9:
                 raise RuntimeError('browser witness failed: ' + json.dumps(report, sort_keys=True))
             if (name == 'narrow') != (report['width'] <= 760):
                 raise RuntimeError('browser did not exercise the requested layout class')

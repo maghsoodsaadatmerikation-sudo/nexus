@@ -10,6 +10,12 @@
 <body><main class="wrap">
 <h1>NEXUS</h1><p class="meta">Human judgment infrastructure. Machine analysis remains non-authoritative.</p>
 <div class="grid">
+<section class="card full" aria-labelledby="readinessHeading">
+<h2 id="readinessHeading">Service readiness</h2>
+<p class="meta">Opening this page does not establish write availability. A readiness observation grants no permission and may become stale.</p>
+<button id="readinessButton" type="button" onclick="inspectReadiness()">Check service readiness</button>
+<p id="readinessResult" class="meta" role="status" aria-live="polite">Service readiness has not been checked.</p>
+</section>
 <section class="card full"><div class="row">
 <div><label>API token</label><input oninput="invalidateRequestLookup()" id="token" type="password" autocomplete="off" placeholder="NEXUS_API_TOKEN"></div>
 <div><label>Workspace ID to load or create</label><input oninput="workspaceSelectionChanged()" id="workspaceId" placeholder="Generated automatically"></div>
@@ -28,9 +34,25 @@
 <button id="requestLookupButton" type="button" style="margin-top:9px" onclick="inspectRequest()">Check retained status</button>
 <p id="requestLookupResult" class="meta" role="status" aria-live="polite">No request checked.</p>
 </section>
-<section class="card full"><div class="row"><span id="status">Ready.</span></div></section>
+<section class="card full"><div class="row"><span id="status">No workspace operation performed.</span></div></section>
 </div></main>
 <script>
+let readinessBusy=false;
+async function inspectReadiness(){
+  if(readinessBusy)return;
+  readinessBusy=true;$('readinessButton').disabled=true;
+  const output=$('readinessResult'),controller=new AbortController();
+  output.textContent='Checking service readiness…';
+  const timeout=setTimeout(()=>controller.abort(),10000);
+  try{
+    const response=await fetch('/readyz',{method:'GET',cache:'no-store',credentials:'omit',signal:controller.signal});
+    let result=null;try{result=await response.json()}catch{}
+    if(response.status===200&&result?.status==='ready')output.textContent='Service reported ready at this check. Authentication and authorization still apply; availability may change.';
+    else if(response.status===503&&result?.status==='quarantined')output.textContent='Service reported quarantined at this check. Writes are blocked; authenticated reads may remain available. This check does not resume work or clear quarantine.';
+    else output.textContent='Readiness unknown: unexpected response. Opening this page does not establish write availability.';
+  }catch(error){output.textContent=error.name==='AbortError'?'Readiness check timed out. Write availability remains unknown.':'Unable to check readiness. Write availability remains unknown.'}
+  finally{clearTimeout(timeout);readinessBusy=false;$('readinessButton').disabled=false}
+}
 let requestLookupVersion=0,requestLookupBusy=false;
 let snapshot=null,workspaceBusy=false,selectionVersion=0,activeVersion=null;const $=id=>document.getElementById(id);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const provenance=()=>$('provenance').value.trim()||'human:owner';const currentId=()=>$('workspaceId').value.trim();const lines=s=>s.split('\n').map(x=>x.trim()).filter(Boolean);
