@@ -105,6 +105,18 @@ window.addEventListener('load', async () => {
     assert(node('readinessResult').getAttribute('aria-live') === 'polite', 'readiness feedback not announced');
     assert(lab.calls.at(-1).path === '/readyz' && lab.calls.at(-1).method === 'GET', 'readiness sent a mutation');
     checks.push('readiness-quarantine-observation');
+    await load('auth-context'); fill();
+    const oldAuthResponse=lab.defer(); node('loadWorkspaceButton').click();
+    const beforeAuthChange=lab.calls.length;
+    node('token').value='replacement-token'; node('token').dispatchEvent(new Event('input',{bubbles:true}));
+    assert(drafts.every(id=>node(id).value==='') && node('claims').innerHTML==='', 'token change retained workspace content');
+    oldAuthResponse(lab.snapshot('auth-context')); await tick();
+    assert(edits.every(id=>node(id).disabled), 'late token response enabled editing');
+    assert(node('status').textContent.includes('Do not blindly retry'), 'uncertain operation warning missing');
+    assert(lab.calls.length===beforeAuthChange, 'token change retried an operation');
+    await load('auth-context');
+    assert(!node('recordJudgmentButton').disabled, 'new authenticated load did not restore editing');
+    checks.push('authentication-context-boundary');
     const statusStart = lab.calls.length;
     const requestId = id => {node('requestLookupId').value = id; node('requestLookupId').dispatchEvent(new Event('input', {bubbles: true}));};
     for (const [id, expected] of [
@@ -171,7 +183,7 @@ def main():
             if result.returncode:
                 raise RuntimeError('real browser process failed: ' + result.stderr[-2000:])
             report = json.loads(result.stdout)
-            if report.get('status') != 'PASS' or len(report.get('checks', [])) != 9:
+            if report.get('status') != 'PASS' or len(report.get('checks', [])) != 10:
                 raise RuntimeError('browser witness failed: ' + json.dumps(report, sort_keys=True))
             if (name == 'narrow') != (report['width'] <= 760):
                 raise RuntimeError('browser did not exercise the requested layout class')

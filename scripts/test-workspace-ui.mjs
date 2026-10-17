@@ -252,3 +252,47 @@ test('readiness is single-flight, never retries, and releases after malformed JS
   const slow=a.run('inspectReadiness()');a.run('expireReady()');await slow;
   assert.match(a.element('readinessResult').textContent,/timed out/);assert.equal(a.calls.length,2);assert.equal(a.element('readinessButton').disabled,false);
 });
+
+
+test('token input clears loaded data and drafts and requires a new authenticated load', async () => {
+  const a=app();await a.load('A');a.fill();
+  a.element('token').value='replacement';a.run('authenticationChanged()');
+  assert.equal(a.run('snapshot'),null);
+  for(const id of [...draftIds,'question'])assert.equal(a.element(id).value,'');
+  for(const id of ['claims','alts','judgmentView','history'])assert.equal(a.element(id).innerHTML,'');
+  for(const id of editIds)assert.equal(a.element(id).disabled,true);
+  await a.run('recordJudgment()');await a.run('backupWorkspace()');assert.equal(a.calls.length,1);assert.equal(a.downloads.length,0);
+  await a.load('A');assert.equal(a.calls.at(-1).options.headers.authorization,'Bearer replacement');
+  assert.equal(a.element('recordJudgmentButton').disabled,false);
+});
+
+test('late load, write and export responses cannot cross an authentication change', async () => {
+  for(const action of ['loadWorkspace()','addClaim()','backupWorkspace()'])for(const input of [true,false]){
+    const a=app();await a.load('A');a.fill();const pending=deferred();a.transport(()=>pending.promise);
+    const task=a.run(action);assert.equal(a.calls.length,2);
+    a.element('token').value='replacement';if(input)a.run('authenticationChanged()');
+    pending.resolve(fixture('A'));await task;
+    assert.equal(a.run('snapshot'),null);assert.equal(a.downloads.length,0);assert.equal(a.calls.length,2);
+    assert.match(a.element('status').textContent,/changed.*may have taken effect.*Do not blindly retry/i);
+    assert.equal(a.element('recordJudgmentButton').disabled,true);
+  }
+});
+
+test('programmatic token changes block loaded edits and token switch-back invalidates pending reads', async () => {
+  const a=app();await a.load('A');a.fill();a.element('token').value='other';
+  await a.run('recordJudgment()');await a.run('backupWorkspace()');assert.equal(a.calls.length,1);
+  a.element('token').value='synthetic-token';const pending=deferred();a.transport(()=>pending.promise);
+  const task=a.run('loadWorkspace()');
+  a.element('token').value='other';a.run('authenticationChanged()');
+  a.element('token').value='synthetic-token';a.run('authenticationChanged()');
+  pending.resolve(fixture('A'));await task;assert.equal(a.run('snapshot'),null);assert.equal(a.calls.length,2);
+});
+
+test('token change while reading an import file stops the write before transport', async () => {
+  const a=app();await a.load('A');
+  a.run('globalThis.pendingFile={text:()=>new Promise(resolve=>{globalThis.finishFile=resolve})}');
+  const task=a.run('importWorkspace(pendingFile)');
+  a.element('token').value='replacement';a.run('authenticationChanged()');
+  a.run('finishFile('+JSON.stringify(JSON.stringify(fixture('B')))+')');await task;
+  assert.equal(a.calls.length,1);assert.equal(a.run('snapshot'),null);
+});

@@ -17,7 +17,7 @@
 <p id="readinessResult" class="meta" role="status" aria-live="polite">Service readiness has not been checked.</p>
 </section>
 <section class="card full"><div class="row">
-<div><label>API token</label><input oninput="invalidateRequestLookup()" id="token" type="password" autocomplete="off" placeholder="NEXUS_API_TOKEN"></div>
+<div><label>API token</label><input oninput="authenticationChanged()" id="token" type="password" autocomplete="off" placeholder="NEXUS_API_TOKEN"></div>
 <div><label>Workspace ID to load or create</label><input oninput="workspaceSelectionChanged()" id="workspaceId" placeholder="Generated automatically"></div>
 <div><label>Provenance ID</label><input id="provenance" value="human:owner"></div>
 </div><div class="row" style="margin-top:9px"><button class="secondary" id="loadWorkspaceButton" onclick="loadWorkspace()">Load</button><button class="secondary" id="importWorkspaceButton" onclick="document.getElementById('importFile').click()">Restore verified backup</button><input id="importFile" type="file" accept="application/json" hidden onchange="importWorkspace(this.files[0])"><span id="connection" class="meta">No workspace loaded.</span></div></section>
@@ -54,7 +54,7 @@ async function inspectReadiness(){
   finally{clearTimeout(timeout);readinessBusy=false;$('readinessButton').disabled=false}
 }
 let requestLookupVersion=0,requestLookupBusy=false;
-let snapshot=null,workspaceBusy=false,selectionVersion=0,activeVersion=null;const $=id=>document.getElementById(id);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let snapshot=null,workspaceBusy=false,selectionVersion=0,activeVersion=null,activeToken=null,snapshotToken=null;const $=id=>document.getElementById(id);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const provenance=()=>$('provenance').value.trim()||'human:owner';const currentId=()=>$('workspaceId').value.trim();const lines=s=>s.split('\n').map(x=>x.trim()).filter(Boolean);
 function setStatus(t,e=false){$('status').textContent=t;$('status').className=e?'error':'ok'}
 function setBackupStatus(t,e=false){$('backupStatus').textContent=t;$('backupStatus').className=e?'error':'ok'}
@@ -80,12 +80,20 @@ async function inspectRequest(){
   }catch(error){if(current())setRequestLookup(error.name==='AbortError'?'Status lookup timed out. Outcome remains unknown.':'Unable to read retained status. Outcome remains unknown.',true)}
   finally{clearTimeout(timeout);requestLookupBusy=false;$('requestLookupButton').disabled=false}
 }
+function clearWorkspaceContext(){
+  snapshot=null;snapshotToken=null;
+  for(const id of ['question','claimText','claimSource','altLabel','altConsequences','decision','rationale'])$(id).value='';
+  for(const id of ['claims','alts','judgmentView','history'])$(id).innerHTML='';
+  setBackupStatus('Authentication changed. Load the workspace again before downloading.');
+  syncWorkspaceSelection();
+}
+function authenticationChanged(){selectionVersion++;invalidateRequestLookup();clearWorkspaceContext();setStatus('Authentication changed. Load the workspace again. A sent operation may have taken effect; do not blindly retry.',true)}
 function workspaceSelectionChanged(){selectionVersion++;syncWorkspaceSelection()}
-function ensureSelectionUnchanged(){if(activeVersion!==selectionVersion)throw new Error('Workspace selection changed during this operation. It may have taken effect; load the selected workspace before continuing. Do not blindly retry.')}
+function ensureSelectionUnchanged(){if(activeToken!==$('token').value){clearWorkspaceContext();throw new Error('Authentication changed during this operation. It may have taken effect; load the workspace again. Do not blindly retry.')}if(activeVersion!==selectionVersion)throw new Error('Workspace selection changed during this operation. It may have taken effect; load the selected workspace before continuing. Do not blindly retry.')}
 async function workspaceAction(action){
   if(workspaceBusy)return setStatus('Wait for the current workspace operation to finish.',true);
-  workspaceBusy=true;activeVersion=selectionVersion;syncWorkspaceSelection();
-  try{return await action()}finally{workspaceBusy=false;activeVersion=null;syncWorkspaceSelection()}
+  workspaceBusy=true;activeVersion=selectionVersion;activeToken=$('token').value;syncWorkspaceSelection();
+  try{return await action()}finally{workspaceBusy=false;activeVersion=null;activeToken=null;syncWorkspaceSelection()}
 }
 async function api(path,options={}){ensureSelectionUnchanged();const token=$('token').value;const headers={'content-type':'application/json',...(options.headers||{})};if(token)headers.authorization=`Bearer ${token}`;const r=await fetch(path,{...options,headers});let b=null;try{b=await r.json()}catch{}ensureSelectionUnchanged();if(!r.ok)throw new Error(b?.error||`HTTP ${r.status}`);return b}
 async function createWorkspace(){return workspaceAction(async()=>{const question=$('question').value.trim();if(!question)return setStatus('Enter a question.',true);try{const body={question,provenance_id:provenance()};if(currentId())body.workspace_id=currentId();const fresh=await api('/v1/workspaces',{method:'POST',body:JSON.stringify(body)});adoptSnapshot(fresh);setStatus('Workspace created. Download a backup if this host is ephemeral.')}catch(e){setStatus(e.message,true)}})}
@@ -95,20 +103,20 @@ async function addClaim(){return workspaceAction(async()=>{if(!requireLoadedWork
 async function addAlternative(){return workspaceAction(async()=>{if(!requireLoadedWorkspace())return;const label=$('altLabel').value.trim();if(!currentId()||!label)return setStatus('Workspace and option required.',true);try{const fresh=await api(`/v1/workspaces/${encodeURIComponent(currentId())}/alternatives`,{method:'POST',body:JSON.stringify({label,consequences:lines($('altConsequences').value),provenance_id:provenance()})});adoptSnapshot(fresh);setStatus('Alternative recorded. Consider downloading a fresh backup.')}catch(e){setStatus(e.message,true)}})}
 async function recordJudgment(){return workspaceAction(async()=>{if(!requireLoadedWorkspace())return;const decision=$('decision').value.trim();if(!currentId()||!decision)return setStatus('Workspace and human decision required.',true);try{const fresh=await api(`/v1/workspaces/${encodeURIComponent(currentId())}/judgment`,{method:'POST',body:JSON.stringify({decision,rationale:$('rationale').value.trim(),provenance_id:provenance()})});adoptSnapshot(fresh);setStatus('Human judgment transition recorded. Download a fresh backup.')}catch(e){setStatus(e.message,true)}})}
 function syncWorkspaceSelection(){
-  const loaded=Boolean(snapshot&&currentId()===snapshot.workspace.id);
+  const loaded=Boolean(snapshot&&snapshotToken===$('token').value&&currentId()===snapshot.workspace.id);
   for(const id of ['addClaimButton','addAlternativeButton','recordJudgmentButton','backupWorkspaceButton'])$(id).disabled=!loaded||workspaceBusy;
   for(const id of ['loadWorkspaceButton','createWorkspaceButton','importWorkspaceButton','importWorkspaceAgainButton'])$(id).disabled=workspaceBusy;
   $('connection').textContent=snapshot?(loaded?`Loaded: schema v${snapshot.schema_version} · ${snapshot.workspace.id}`:`Loaded: ${snapshot.workspace.id}. Load the selected ID before editing or downloading.`):'No workspace loaded.';
 }
 function requireLoadedWorkspace(){
-  if(snapshot&&currentId()===snapshot.workspace.id)return true;
+  if(snapshot&&snapshotToken===$('token').value&&currentId()===snapshot.workspace.id)return true;
   setStatus('Load the selected workspace before editing or downloading.',true);syncWorkspaceSelection();return false;
 }
 function adoptSnapshot(fresh){
   if(snapshot?.workspace.id!==fresh.workspace.id){
     for(const id of ['claimText','claimSource','altLabel','altConsequences','decision','rationale'])$(id).value='';
   }
-  snapshot=fresh;$('workspaceId').value=fresh.workspace.id;$('question').value=fresh.workspace.question;render();
+  snapshot=fresh;snapshotToken=$('token').value;$('workspaceId').value=fresh.workspace.id;$('question').value=fresh.workspace.question;render();
 }
 function eventName(k){if(typeof k==='string')return k;const n=Object.keys(k)[0]||'Event';return n.replace(/([a-z])([A-Z])/g,'$1 $2')}
 function render(){if(!snapshot)return;const w=snapshot.workspace;syncWorkspaceSelection();$('claims').innerHTML=w.claims.length?w.claims.map(c=>`<div class="item"><b>${esc(c.text)}</b><div class="meta">origin: ${esc(JSON.stringify(c.origin))} · uncertainty: ${esc(c.uncertainty)}</div></div>`).join(''):'No claims yet.';$('alts').innerHTML=w.alternatives.length?w.alternatives.map(a=>`<div class="item"><b>${esc(a.label)}</b><div class="meta">${a.consequences.map(esc).join(' · ')}</div></div>`).join(''):'No alternatives yet.';$('judgmentView').innerHTML=w.judgment?`<div class="item"><b>${esc(w.judgment.decision)}</b><div>${esc(w.judgment.rationale)}</div></div>`:'No human judgment recorded.';$('history').innerHTML=snapshot.events.map(e=>`<div class="item"><b>#${e.sequence} ${esc(eventName(e.kind))}</b><div class="meta">provenance: ${esc(e.provenance_id?.[0]??e.provenance_id)}</div></div>`).join('')}
