@@ -30,7 +30,7 @@ evidence != authority, CT-001..020 and Bootstrap/Verify separation remain intact
 both Cargo.lock files remain pinned. A browser success message is not Seal or
 production readiness and request acceptance is not proof of execution completion.
 
-Run `node scripts/test-workspace-ui.mjs` with Node 20 or later. Twelve tests execute
+Run `node scripts/test-workspace-ui.mjs` with Node 20 or later. Eighteen tests execute
 the actual inline application code with a synthetic DOM and deferred transport.
 They cover mismatched selection, cleared/preserved drafts, create/import/export,
 late loads, duplicate clicks, in-flight writes and selection changes during file
@@ -53,7 +53,7 @@ production endpoint or user backup is involved.
 
 The real browser exercises disabled controls, explicit judgment targeting,
 late-load rejection, duplicate clicks, uncertain sent writes, File input import,
-escaped evidence rendering, and read-only request-status semantics with late-response rejection. Eight completed checks are required at each of
+escaped evidence rendering, and read-only request-status semantics with late-response rejection. Ten completed checks are required at each of
 two layout classes: a narrow stacked layout and a wide two-column layout. Actual
 viewport width, browser version and bounded witness scope are logged in JSON.
 The browser build comes from the hosted runner image and is recorded rather than
