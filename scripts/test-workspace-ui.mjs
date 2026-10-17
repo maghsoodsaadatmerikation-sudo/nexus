@@ -227,3 +227,28 @@ test('request lookup aborts a timed-out read without retrying and releases its b
   assert.equal(a.calls.length, 1);
   assert.equal(a.element('requestLookupButton').disabled, false);
 });
+
+
+test('readiness requires the exact HTTP/status pair and sends no credentials or mutations', async () => {
+  const a = app();
+  for (const [http, status, expected] of [[200,'ready',/reported ready/],[503,'quarantined',/Writes are blocked/],[200,'quarantined',/unknown/],[503,'ready',/unknown/],[500,'private-server-text',/unknown/]]) {
+    a.transport(async () => ({httpResponse:{status:http,json:async()=>({status})}}));
+    await a.run('inspectReadiness()');
+    assert.match(a.element('readinessResult').textContent,expected);
+    assert.doesNotMatch(a.element('readinessResult').textContent,/private-server-text/);
+    assert.equal(a.element('readinessButton').disabled,false);
+  }
+  for(const c of a.calls){assert.equal(c.path,'/readyz');assert.equal(c.options.method,'GET');assert.equal(c.options.cache,'no-store');assert.equal(c.options.credentials,'omit');assert.equal(c.options.headers,undefined)}
+  assert.equal(a.run('snapshot'),null);
+});
+
+test('readiness is single-flight, never retries, and releases after malformed JSON or abort', async () => {
+  const a=app(), pending=deferred();a.transport(()=>pending.promise);
+  const first=a.run('inspectReadiness()');await a.run('inspectReadiness()');assert.equal(a.calls.length,1);
+  pending.resolve({httpResponse:{status:200,json:async()=>{throw new Error('private')}}});await first;
+  assert.match(a.element('readinessResult').textContent,/unknown/);
+  a.run('globalThis.setTimeout = callback => {globalThis.expireReady=callback;return 1};globalThis.clearTimeout=()=>{}');
+  a.transport(async (path,options)=>new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>{const e=new Error();e.name='AbortError';reject(e)})));
+  const slow=a.run('inspectReadiness()');a.run('expireReady()');await slow;
+  assert.match(a.element('readinessResult').textContent,/timed out/);assert.equal(a.calls.length,2);assert.equal(a.element('readinessButton').disabled,false);
+});
