@@ -16,6 +16,8 @@ const child = spawn(browser, ['--headless', '--no-sandbox', '--disable-dev-shm-u
   '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0',
   '--user-data-dir=' + profile, '--window-size=' + dimensions, page],
   {stdio: ['ignore', 'ignore', 'pipe']});
+const started = Date.now();
+let stage = 'launch';
 let launchError;
 child.on('error', error => {launchError = error});
 const exited = new Promise(resolve => child.once('exit', resolve));
@@ -49,12 +51,14 @@ async function waitFor(action, milliseconds) {
   throw new Error('real browser witness timed out');
 }
 try {
+  stage = 'devtools-port';
   const port = await waitFor(async () => {
     try {
       const value = (await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0];
       return /^\d+$/.test(value) ? value : null;
     } catch {return null}
   }, 10000);
+  stage = 'page-target';
   const target = await waitFor(async () => {
     try {
       const response = await fetch(`http://127.0.0.1:${port}/json/list`, {signal: AbortSignal.timeout(2000)});
@@ -68,9 +72,11 @@ try {
       throw error;
     }
   }, 15000);
+  stage = 'debugger-address';
   const address = new URL(target.webSocketDebuggerUrl);
   if (address.hostname !== '127.0.0.1' || address.port !== port)
     throw new Error('unexpected private browser debugger address');
+  stage = 'debugger-connect';
   socket = new WebSocket(address);
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('private browser connection timed out')), 5000);
@@ -89,6 +95,7 @@ try {
     for (const request of pending.values()) request.reject(new Error('private browser connection closed'));
     pending.clear();
   });
+  stage = 'completed-report';
   const report = await waitFor(async () => {
     const response = await rpc('Runtime.evaluate', {
       expression: "document.getElementById('nexus-browser-result')?.textContent || ''",
@@ -98,6 +105,13 @@ try {
     return response.result.value || null;
   }, 15000);
   process.stdout.write(report + '\n');
+} catch (error) {
+  // Fixed labels and process state only: never dump page content, URLs, stderr,
+  // profile paths or exception messages into diagnostic evidence.
+  process.stderr.write(JSON.stringify({event: 'browser-witness-failure', stage,
+    elapsed_ms: Date.now() - started, process_exited: child.exitCode !== null || child.signalCode !== null,
+    launch_failed: Boolean(launchError), authority: 'none', production_verified: false}) + '\n');
+  throw error;
 } finally {
   if (socket?.readyState === WebSocket.OPEN) {
     await Promise.race([rpc('Browser.close').catch(() => {}), delay(1000)]);
