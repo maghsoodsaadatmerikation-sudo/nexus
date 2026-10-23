@@ -330,3 +330,40 @@ test('server-generated create IDs remain allowed and explicit IDs must match exa
   a.transport(async()=>fixture('explicit/é'));await a.run('createWorkspace()');
   assert.equal(a.run('snapshot.workspace.id'),'explicit/é');
 });
+
+test('workspace transport timeouts release controls, preserve state and never retry any operation', async () => {
+  for(const action of ['loadWorkspace()','createWorkspace()','addClaim()','addAlternative()','recordJudgment()','backupWorkspace()','importWorkspace({text:async()=>JSON.stringify(snapshot)})']){
+    const a=app();await a.load('A');a.fill();
+    a.run('globalThis.setTimeout=callback=>{globalThis.expireWorkspace=callback;return 7};globalThis.clearTimeout=()=>{}');
+    a.transport(async(path,options)=>new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>{const e=new Error('synthetic');e.name='AbortError';reject(e)})));
+    const pending=a.run(action);await new Promise(setImmediate);a.run('expireWorkspace()');await pending;
+    assert.match(a.element('status').textContent,/timed out.*Outcome remains unknown.*may have taken effect.*Do not blindly retry/);
+    assert.equal(a.run('workspaceBusy'),false);assert.equal(a.element('loadWorkspaceButton').disabled,false);
+    assert.equal(a.calls.length,2);assert.equal(a.downloads.length,0);
+    assert.equal(a.run('snapshot.workspace.id'),'A');assert.equal(a.element('decision').value,'Draft decision');
+    a.transport(async()=>fixture('A'));await a.run('loadWorkspace()');assert.equal(a.calls.length,3);
+  }
+});
+
+test('timeout while consuming a response body cannot adopt or export a snapshot', async () => {
+  for(const action of ['loadWorkspace()','backupWorkspace()']){
+    const a=app();await a.load('A');
+    a.run('globalThis.setTimeout=callback=>{globalThis.expireWorkspace=callback;return 7};globalThis.clearTimeout=()=>{}');
+    a.transport(async(path,options)=>({httpResponse:{ok:true,status:200,json:()=>new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>{const e=new Error();e.name='AbortError';reject(e)}))}}));
+    const pending=a.run(action);await new Promise(setImmediate);a.run('expireWorkspace()');await pending;
+    assert.match(a.element('status').textContent,/timed out.*Outcome remains unknown/);
+    assert.equal(a.downloads.length,0);assert.equal(a.run('workspaceBusy'),false);assert.equal(a.calls.length,2);
+  }
+});
+
+test('workspace requests bypass caches and clear their timer on success and HTTP failure', async () => {
+  const a=app();
+  a.run('globalThis.nextTimer=0;globalThis.cleared=[];globalThis.setTimeout=()=>++nextTimer;globalThis.clearTimeout=id=>cleared.push(id)');
+  await a.load('A');
+  a.transport(async()=>({httpResponse:{ok:false,status:503,json:async()=>({error:'unavailable'})}}));
+  await a.run('loadWorkspace()');
+  assert.equal(a.calls.length,2);
+  for(const call of a.calls){assert.equal(call.options.cache,'no-store');assert.equal(call.options.signal.aborted,false)}
+  assert.equal(a.run('JSON.stringify(cleared)'),'[1,2]');
+  assert.equal(a.run('workspaceBusy'),false);
+});

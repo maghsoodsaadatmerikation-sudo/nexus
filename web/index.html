@@ -95,7 +95,25 @@ async function workspaceAction(action){
   workspaceBusy=true;activeVersion=selectionVersion;activeToken=$('token').value;syncWorkspaceSelection();
   try{return await action()}finally{workspaceBusy=false;activeVersion=null;activeToken=null;syncWorkspaceSelection()}
 }
-async function api(path,options={},expectedId=currentId()){ensureSelectionUnchanged();const token=$('token').value;const headers={'content-type':'application/json',...(options.headers||{})};if(token)headers.authorization=`Bearer ${token}`;const r=await fetch(path,{...options,headers});let b=null;try{b=await r.json()}catch{}ensureSelectionUnchanged();if(!r.ok)throw new Error(b?.error||`HTTP ${r.status}`);if(expectedId&&b?.workspace?.id!==expectedId)throw new Error('Server returned an unexpected workspace. A sent operation may have taken effect. Load the intended workspace; do not blindly retry.');return b}
+async function api(path,options={},expectedId=currentId()){
+  ensureSelectionUnchanged();
+  const token=$('token').value,controller=new AbortController();
+  const headers={'content-type':'application/json',...(options.headers||{})};if(token)headers.authorization=`Bearer ${token}`;
+  const timeout=setTimeout(()=>controller.abort(),10000);
+  try{
+    const r=await fetch(path,{...options,headers,cache:'no-store',signal:controller.signal});
+    let b=null;try{b=await r.json()}catch{}
+    ensureSelectionUnchanged();
+    if(controller.signal.aborted)throw new Error('workspace timeout');
+    if(!r.ok)throw new Error(b?.error||`HTTP ${r.status}`);
+    if(expectedId&&b?.workspace?.id!==expectedId)throw new Error('Server returned an unexpected workspace. A sent operation may have taken effect. Load the intended workspace; do not blindly retry.');
+    return b;
+  }catch(error){
+    ensureSelectionUnchanged();
+    if(controller.signal.aborted)throw new Error('Workspace request timed out. Outcome remains unknown. A sent operation may have taken effect; load the intended workspace. Do not blindly retry.');
+    throw error;
+  }finally{clearTimeout(timeout)}
+}
 async function createWorkspace(){return workspaceAction(async()=>{const question=$('question').value.trim();if(!question)return setStatus('Enter a question.',true);try{const body={question,provenance_id:provenance()};if(currentId())body.workspace_id=currentId();const fresh=await api('/v1/workspaces',{method:'POST',body:JSON.stringify(body)});adoptSnapshot(fresh);setStatus('Workspace created. Download a backup if this host is ephemeral.')}catch(e){setStatus(e.message,true)}})}
 async function loadWorkspace(){return workspaceAction(async()=>{if(!currentId())return setStatus('Enter a workspace ID.',true);try{const fresh=await api(`/v1/workspaces/${encodeURIComponent(currentId())}`);adoptSnapshot(fresh);setStatus('Workspace loaded.')}catch(e){setStatus(e.message,true)}})}
 async function importWorkspace(file){return workspaceAction(async()=>{if(!file)return;try{const parsed=JSON.parse(await file.text());if(!parsed?.schema_version||!parsed?.workspace?.id||!Array.isArray(parsed?.events))throw new Error('Backup is missing required snapshot structure.');const fresh=await api('/v1/workspaces/import',{method:'POST',body:JSON.stringify(parsed)},parsed.workspace.id);adoptSnapshot(fresh);setStatus('Backup revalidated and restored.');setBackupStatus(`Restored workspace ${snapshot.workspace.id}.`)}catch(e){setStatus(e.message,true);setBackupStatus(e.message,true)}finally{$('importFile').value=''}})}

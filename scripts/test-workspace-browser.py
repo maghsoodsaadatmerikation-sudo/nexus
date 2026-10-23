@@ -9,13 +9,14 @@ from pathlib import Path
 BOOTSTRAP = r'''
 window.nexusBrowserWitness = (() => {
   const calls = [];
-  let deferred = null;
+  let deferred = null, hangNext = false;
   const snapshot = id => ({schema_version: 1, workspace: {id, question: 'Question ' + id,
     claims: [{text: '<img src=x onerror="window.untrustedMarkupRan=true">',
       origin: {kind: 'external_evidence', source: 'synthetic'}, uncertainty: 'unknown'}],
     alternatives: [], judgment: null}, events: []});
   window.fetch = async (path, options = {}) => {
     calls.push({path, method: options.method || 'GET', body: options.body});
+    if (hangNext) {hangNext = false; await new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(new DOMException('synthetic', 'AbortError'))));}
     let value;
     if (deferred) {const next = deferred; deferred = null; value = await next;}
     else if (path === '/readyz') value = {httpResponse: {status: 503, json: async () => ({status: 'quarantined'})}};
@@ -30,7 +31,7 @@ window.nexusBrowserWitness = (() => {
     else value = snapshot(decodeURIComponent(path.split('/')[3]));
     return value?.httpResponse ?? {ok: true, status: 200, json: async () => value};
   };
-  return {calls, snapshot, defer() {let resolve; deferred = new Promise(r => {resolve = r}); return resolve;}};
+  return {calls, snapshot, hang() {hangNext = true;}, defer() {let resolve; deferred = new Promise(r => {resolve = r}); return resolve;}};
 })();
 window.nexusBrowserErrors = [];
 window.addEventListener('error', event => window.nexusBrowserErrors.push(event.message));
@@ -158,6 +159,25 @@ window.addEventListener('load', async () => {
     assert(node('backupStatus').textContent.includes('unexpected workspace'), 'import mismatch warning missing');
     checks.push('workspace-response-target');
 
+
+    await load('timeout-target'); fill();
+    const originalTimer = window.setTimeout;
+    let expireWorkspace;
+    window.setTimeout = (callback, ms, ...args) => ms === 10000 ? (expireWorkspace = callback, -1) : originalTimer(callback, ms, ...args);
+    try {
+      for (const button of ['loadWorkspaceButton','recordJudgmentButton']) {
+        const before = lab.calls.length; lab.hang(); node(button).click();
+        assert(node('loadWorkspaceButton').disabled, 'workspace did not become busy');
+        expireWorkspace(); await tick();
+        assert(!node('loadWorkspaceButton').disabled, 'timeout kept workspace locked');
+        assert(node('status').textContent.includes('Outcome remains unknown'), 'timeout hid unknown outcome');
+        assert(node('status').textContent.includes('Do not blindly retry'), 'timeout retry warning missing');
+        assert(lab.calls.length === before + 1, 'timeout retried request');
+        assert(node('question').value === 'Question timeout-target', 'timeout changed snapshot');
+      }
+    } finally {window.setTimeout = originalTimer;}
+    checks.push('workspace-timeout-uncertainty');
+
     const first = node('claims').closest('section').getBoundingClientRect();
     const second = node('alts').closest('section').getBoundingClientRect();
     const narrow = window.innerWidth <= 760;
@@ -201,7 +221,7 @@ def main():
             if result.returncode:
                 raise RuntimeError('real browser process failed: ' + result.stderr[-2000:])
             report = json.loads(result.stdout)
-            if report.get('status') != 'PASS' or len(report.get('checks', [])) != 11:
+            if report.get('status') != 'PASS' or len(report.get('checks', [])) != 12:
                 raise RuntimeError('browser witness failed: ' + json.dumps(report, sort_keys=True))
             if (name == 'narrow') != (report['width'] <= 760):
                 raise RuntimeError('browser did not exercise the requested layout class')
