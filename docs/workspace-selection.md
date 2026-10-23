@@ -70,3 +70,10 @@ This is real DOM and computed-layout evidence with synthetic in-page transport, 
 authentication, physical Android testing, a pixel-perfect visual review, or
 production readiness. Passing it creates no authority and does not clear restore
 quarantine or publish a Seal.
+
+Browser driver failures emit one bounded JSON diagnostic to stderr naming the
+stage (devtools-port, page-target, debugger-address, debugger-connect or
+completed-report), elapsed milliseconds, and process/launch failure booleans.
+It omits browser stderr, page content, URLs and profile paths. This diagnostic is
+failure evidence only; it neither retries a witness nor changes acceptance,
+startup deadlines, authority, or production verification.
