@@ -140,6 +140,24 @@ window.addEventListener('load', async () => {
     assert(lab.calls.slice(statusStart).every(call => call.method === 'GET' && call.path.startsWith('/v1/requests/')), 'lookup sent a mutation');
     checks.push('request-status-stale-read');
 
+
+    await load('response-target'); fill();
+    for (const button of ['loadWorkspaceButton','recordJudgmentButton','backupWorkspaceButton']) {
+      const before = lab.calls.length, wrong = lab.defer();
+      node(button).click(); wrong(lab.snapshot('unexpected-response')); await tick();
+      assert(node('workspaceId').value === 'response-target', 'response redirected selected workspace');
+      assert(node('question').value === 'Question response-target', 'wrong response replaced content');
+      assert(node('status').textContent.includes('unexpected workspace'), 'response mismatch warning missing');
+      assert(lab.calls.length === before + 1, 'mismatch retried transport');
+    }
+    const wrongImport = lab.defer();
+    const importing = importWorkspace(new File([JSON.stringify(lab.snapshot('file-target'))], 'synthetic.json'));
+    // Real File.text() completes asynchronously before transport can resolve.
+    wrongImport(lab.snapshot('unexpected-response')); await importing;
+    assert(node('workspaceId').value === 'response-target', 'import accepted wrong response ID');
+    assert(node('backupStatus').textContent.includes('unexpected workspace'), 'import mismatch warning missing');
+    checks.push('workspace-response-target');
+
     const first = node('claims').closest('section').getBoundingClientRect();
     const second = node('alts').closest('section').getBoundingClientRect();
     const narrow = window.innerWidth <= 760;
@@ -183,7 +201,7 @@ def main():
             if result.returncode:
                 raise RuntimeError('real browser process failed: ' + result.stderr[-2000:])
             report = json.loads(result.stdout)
-            if report.get('status') != 'PASS' or len(report.get('checks', [])) != 10:
+            if report.get('status') != 'PASS' or len(report.get('checks', [])) != 11:
                 raise RuntimeError('browser witness failed: ' + json.dumps(report, sort_keys=True))
             if (name == 'narrow') != (report['width'] <= 760):
                 raise RuntimeError('browser did not exercise the requested layout class')

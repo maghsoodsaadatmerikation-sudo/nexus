@@ -30,7 +30,7 @@ evidence != authority, CT-001..020 and Bootstrap/Verify separation remain intact
 both Cargo.lock files remain pinned. A browser success message is not Seal or
 production readiness and request acceptance is not proof of execution completion.
 
-Run `node scripts/test-workspace-ui.mjs` with Node 20 or later. Eighteen tests execute
+Run `node scripts/test-workspace-ui.mjs` with Node 20 or later. Twenty-one tests execute
 the actual inline application code with a synthetic DOM and deferred transport.
 They cover mismatched selection, cleared/preserved drafts, create/import/export,
 late loads, duplicate clicks, in-flight writes and selection changes during file
@@ -53,7 +53,7 @@ production endpoint or user backup is involved.
 
 The real browser exercises disabled controls, explicit judgment targeting,
 late-load rejection, duplicate clicks, uncertain sent writes, File input import,
-escaped evidence rendering, and read-only request-status semantics with late-response rejection. Ten completed checks are required at each of
+escaped evidence rendering, and read-only request-status semantics with late-response rejection. Eleven completed checks are required at each of
 two layout classes: a narrow stacked layout and a wide two-column layout. Actual
 viewport width, browser version and bounded witness scope are logged in JSON.
 The browser build comes from the hosted runner image and is recorded rather than
@@ -85,3 +85,22 @@ existing profile, and bounded port timeout with owned-child termination. Failed
 spawn cleanup observes `close` (which follows spawn errors as well as exits) and
 sends signals only when a child PID exists. These tests do not replace the real
 browser witness or establish production/Seal readiness.
+
+## Returned workspace identity
+
+Each workspace API call captures its expected workspace ID before transport. A
+successful response for another ID (or missing the expected ID) is rejected before
+snapshot adoption or backup download. Loading, edits, explicit-ID creation and
+backup bind to the requested ID; import binds to the file's workspace ID, which
+may intentionally differ from the selected workspace. Creation without an
+explicit ID still accepts a server-generated ID. Existing displayed state and
+drafts are retained on a mismatch; the warning requires explicit inspection and
+never asserts that an already sent mutation did not execute or retries it.
+
+Twenty-one Node tests and eleven checks per Chrome layout cover this boundary,
+including wrong-ID reads/writes/exports, mismatched import, accepted matching
+import and generated-ID creation. This is accidental-context protection, not
+response authenticity or authorization: matching an ID grants no authority,
+creates no AuthorizedRequest, and changes neither A_out <= A_in nor evidence !=
+authority. CT-001..020, Bootstrap/Verify separation and pinned Cargo.lock files
+remain required. Production and Seal readiness are not established.

@@ -296,3 +296,37 @@ test('token change while reading an import file stops the write before transport
   a.run('finishFile('+JSON.stringify(JSON.stringify(fixture('B')))+')');await task;
   assert.equal(a.calls.length,1);assert.equal(a.run('snapshot'),null);
 });
+
+test('workspace responses cannot redirect load, create, edits or backup to a different ID', async () => {
+  for(const action of ['loadWorkspace()','createWorkspace()','addClaim()','addAlternative()','recordJudgment()','backupWorkspace()']){
+    const a=app();await a.load('A');a.fill();a.transport(async()=>fixture('unexpected'));
+    await a.run(action);
+    assert.equal(a.calls.length,2);assert.equal(a.downloads.length,0);
+    assert.equal(a.run('snapshot.workspace.id'),'A');assert.equal(a.element('workspaceId').value,'A');
+    assert.equal(a.element('question').value,'Question A');
+    assert.doesNotMatch(a.element('claims').innerHTML,/Claim unexpected/);
+    assert.match(a.element('status').textContent,/unexpected workspace.*may have taken effect.*do not blindly retry/);
+  }
+});
+
+test('import binds its response to the file ID rather than the previously selected workspace', async () => {
+  const a=app();await a.load('A');a.fill();a.transport(async()=>fixture('unexpected'));
+  await a.run('importWorkspace')({text:async()=>JSON.stringify(fixture('C'))});
+  assert.equal(a.run('snapshot.workspace.id'),'A');assert.equal(a.element('workspaceId').value,'A');
+  assert.equal(a.element('importFile').value,'');assert.equal(a.calls.length,2);
+  assert.match(a.element('backupStatus').textContent,/unexpected workspace/);
+  a.transport(async()=>fixture('C'));
+  await a.run('importWorkspace')({text:async()=>JSON.stringify(fixture('C'))});
+  assert.equal(a.run('snapshot.workspace.id'),'C');assert.equal(a.downloads.length,0);
+});
+
+test('server-generated create IDs remain allowed and explicit IDs must match exactly', async () => {
+  const a=app();a.element('question').value='New question';a.transport(async()=>fixture('generated'));
+  await a.run('createWorkspace()');
+  assert.equal(a.run('snapshot.workspace.id'),'generated');
+  assert.equal(JSON.parse(a.calls[0].options.body).workspace_id,undefined);
+  a.select('explicit/é');a.transport(async()=>fixture('unexpected'));
+  await a.run('createWorkspace()');assert.equal(a.run('snapshot.workspace.id'),'generated');
+  a.transport(async()=>fixture('explicit/é'));await a.run('createWorkspace()');
+  assert.equal(a.run('snapshot.workspace.id'),'explicit/é');
+});
