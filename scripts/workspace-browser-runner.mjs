@@ -20,7 +20,7 @@ const started = Date.now();
 let stage = 'launch';
 let launchError;
 child.on('error', error => {launchError = error});
-const exited = new Promise(resolve => child.once('exit', resolve));
+const exited = new Promise(resolve => child.once('close', resolve));
 child.stderr.on('data', () => {}); // Chrome diagnostics are not acceptance evidence.
 let socket;
 let serial = 0;
@@ -117,9 +117,9 @@ try {
     await Promise.race([rpc('Browser.close').catch(() => {}), delay(1000)]);
     socket.close();
   }
-  if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+  if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
   await Promise.race([exited, delay(3000)]);
-  if (child.exitCode === null && child.signalCode === null) {
+  if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
     child.kill('SIGKILL');
     await exited;
   }
