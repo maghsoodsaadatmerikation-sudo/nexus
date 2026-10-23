@@ -119,7 +119,7 @@ try {
   }
   if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
   await Promise.race([exited, delay(3000)]);
-  if (child.exitCode === null && child.signalCode === null) {
+  if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
     child.kill('SIGKILL');
     await exited;
   }
