@@ -30,7 +30,7 @@ evidence != authority, CT-001..020 and Bootstrap/Verify separation remain intact
 both Cargo.lock files remain pinned. A browser success message is not Seal or
 production readiness and request acceptance is not proof of execution completion.
 
-Run `node scripts/test-workspace-ui.mjs` with Node 20 or later. Twenty-one tests execute
+Run `node scripts/test-workspace-ui.mjs` with Node 20 or later. Twenty-four tests execute
 the actual inline application code with a synthetic DOM and deferred transport.
 They cover mismatched selection, cleared/preserved drafts, create/import/export,
 late loads, duplicate clicks, in-flight writes and selection changes during file
@@ -53,7 +53,7 @@ production endpoint or user backup is involved.
 
 The real browser exercises disabled controls, explicit judgment targeting,
 late-load rejection, duplicate clicks, uncertain sent writes, File input import,
-escaped evidence rendering, and read-only request-status semantics with late-response rejection. Eleven completed checks are required at each of
+escaped evidence rendering, and read-only request-status semantics with late-response rejection. Twelve completed checks are required at each of
 two layout classes: a narrow stacked layout and a wide two-column layout. Actual
 viewport width, browser version and bounded witness scope are logged in JSON.
 The browser build comes from the hosted runner image and is recorded rather than
@@ -97,10 +97,28 @@ explicit ID still accepts a server-generated ID. Existing displayed state and
 drafts are retained on a mismatch; the warning requires explicit inspection and
 never asserts that an already sent mutation did not execute or retries it.
 
-Twenty-one Node tests and eleven checks per Chrome layout cover this boundary,
+Twenty-four Node tests and twelve checks per Chrome layout cover this boundary,
 including wrong-ID reads/writes/exports, mismatched import, accepted matching
 import and generated-ID creation. This is accidental-context protection, not
 response authenticity or authorization: matching an ID grants no authority,
 creates no AuthorizedRequest, and changes neither A_out <= A_in nor evidence !=
 authority. CT-001..020, Bootstrap/Verify separation and pinned Cargo.lock files
 remain required. Production and Seal readiness are not established.
+
+## Bounded workspace transport
+
+Workspace API calls use a ten-second AbortController timer, including response
+body consumption, and explicit cache: no-store. On timeout they release the UI
+operation lock, retain the previously loaded snapshot and drafts, and report
+unknown outcome. A sent mutation may already have executed; aborting the browser
+observation does not cancel server work, roll it back, or establish nonexecution.
+There is no automatic replay or retry. Reload the intended workspace explicitly
+to inspect state. A timed-out snapshot is never adopted or exported.
+
+The timer covers transport and body reading, not local File.text() parsing, and
+is subject to browser scheduling (including background-tab throttling). It is
+not a server execution deadline or an end-to-end availability guarantee.
+Twenty-four Node tests include all workspace action timeouts, body-read abort,
+explicit recovery, cache bypass and timer cleanup. A twelfth Chrome check per
+layout exercises read/write timeout uncertainty with synthetic transport and a
+controlled timer; it is not a real-network latency measurement.
