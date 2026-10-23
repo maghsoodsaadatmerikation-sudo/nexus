@@ -32,6 +32,7 @@ esac
 python3 scripts/verify_test_matrix.py
 python3 scripts/test-data-snapshot.py
 node scripts/test-workspace-ui.mjs
+python3 scripts/test-browser-runner-failures.py
 python3 scripts/test-workspace-browser.py
 bash -n scripts/workspace-backup.sh
 bash -n scripts/workspace-restore.sh

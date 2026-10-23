@@ -77,3 +77,11 @@ completed-report), elapsed milliseconds, and process/launch failure booleans.
 It omits browser stderr, page content, URLs and profile paths. This diagnostic is
 failure evidence only; it neither retries a witness nor changes acceptance,
 startup deadlines, authority, or production verification.
+
+The Linux driver failure suite (`python3 scripts/test-browser-runner-failures.py`)
+runs in canonical Verify before the real Chrome witness. Four synthetic-process
+tests cover missing executables, successful exit without a report, refusal of an
+existing profile, and bounded port timeout with owned-child termination. Failed
+spawn cleanup observes `close` (which follows spawn errors as well as exits) and
+sends signals only when a child PID exists. These tests do not replace the real
+browser witness or establish production/Seal readiness.
