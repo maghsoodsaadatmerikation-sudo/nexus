@@ -23,6 +23,11 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Test fail-closed runtime diagnostics
+        run: |
+          bash -n scripts/observe-runtime-drift.sh
+          python3 scripts/test-runtime-drift.py
+
       - name: Verify without publication or attestation authority
         env:
           RUST_IMAGE: ${{ env.RUST_IMAGE }}
