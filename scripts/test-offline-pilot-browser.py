@@ -204,8 +204,9 @@ window.addEventListener('load', async () => {
     assert(byId('decision-view').textContent.includes('هیچ تصمیم انسانی'),
       'concurrent-new-workspace-failed');
     await waitFor(()=>blob!==encryptedBefore,'snapshot-crypto-timeout');
-    await waitFor(()=>!byId('encrypt-export').disabled===false||blobCount===beforeConcurrent+1,'busy-not-released');
-    assert(blobCount===beforeConcurrent+1,'duplicate-simultaneous-encrypt-exports');
+    await waitFor(()=>byId('export-passphrase').value==='','busy-not-released');
+    assert(blobCount===beforeConcurrent+1 && byId('encrypt-export').disabled,
+      'duplicate-simultaneous-encrypt-exports');
     checks.push('no-concurrent-protected-exports');
     fill('restore-passphrase','a-long-synthetic-passphrase-2026');
     await upload(await blob.text());
