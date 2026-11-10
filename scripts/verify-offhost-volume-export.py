@@ -77,6 +77,7 @@ def verify_quarantined_restore(restored, expected):
     for index, path in enumerate(restored.rglob("*")):
         require(index < snapshot.MAX_FILES + 2, "isolated restore file count exceeded")
         name = path.relative_to(restored).as_posix()
+        require(not path.is_symlink(), "isolated restored tree contains symlink")
         if path.is_dir():
             actual_dirs.add(name)
         else:
