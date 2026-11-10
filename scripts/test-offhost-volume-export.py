@@ -126,7 +126,7 @@ class IntakeTests(unittest.TestCase):
 
     def test_new_request_marker_added_after_archive_is_blocked(self):
         def add_request():
-            (self.export / "requests" / "6e6577").write_bytes(b"pending\\n")
+            (self.export / "requests" / "6e6577").write_bytes(b"pending\n")
         self.simulate_copy_mutation(add_request)
 
     def test_request_removed_after_archive_is_blocked(self):
