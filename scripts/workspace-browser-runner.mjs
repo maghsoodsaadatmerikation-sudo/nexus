@@ -4,9 +4,14 @@ import {spawn} from 'node:child_process';
 import {mkdir, readFile} from 'node:fs/promises';
 import path from 'node:path';
 
-const [browser, page, profile, dimensions] = process.argv.slice(2);
+const [browser, page, profile, dimensions, witnessDeadline] = process.argv.slice(2);
+// The default remains fail-fast; exceptionally heavy offline crypto tests may
+// request a bounded longer report deadline without relaxing other controls.
+const reportDeadline = witnessDeadline === undefined ? 15000 : Number(witnessDeadline);
 if (!browser || !page || !profile || !/^\d+,\d+$/.test(dimensions || '') ||
-    typeof WebSocket === 'undefined') throw new Error('browser runner requires Node 22 and explicit private inputs');
+    typeof WebSocket === 'undefined' || !Number.isInteger(reportDeadline) ||
+    reportDeadline < 15000 || reportDeadline > 60000)
+  throw new Error('browser runner requires Node 22 and bounded private inputs');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 // Refuse every pre-existing profile rather than attaching to a user's session.
 await mkdir(profile, {mode: 0o700});
@@ -103,7 +108,7 @@ try {
     });
     if (response.exceptionDetails) throw new Error('browser report evaluation failed');
     return response.result.value || null;
-  }, 15000);
+  }, reportDeadline);
   process.stdout.write(report + '\n');
 } catch (error) {
   // Fixed labels and process state only: never dump page content, URLs, stderr,
