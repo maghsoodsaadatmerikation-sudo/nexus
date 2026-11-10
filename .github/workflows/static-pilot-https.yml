@@ -27,12 +27,21 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Verify observer rejects bad HTTP and unexpected payloads
         run: python3 scripts/verify-public-static-pilot.py --self-test
       - name: Independently fetch public static pilot (PR and main)
         run: |
           set -euo pipefail
-          python3 scripts/verify-public-static-pilot.py > static-pilot-https-report.json
+          expected="web/offline-pilot.html"
+          # AutoDeploy is intentionally off. A PR is compared against the
+          # documented *currently deployed* revision, not the unreleased PR.
+          # After merge + manual promotion, main verifies the new exact bytes.
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git show 80aad728fa8e278392716f84d7eded7b593371b1:web/offline-pilot.html > /tmp/nexus-current-deployed-pilot.html
+            expected="/tmp/nexus-current-deployed-pilot.html"
+          fi
+          python3 scripts/verify-public-static-pilot.py --expected "$expected" > static-pilot-https-report.json
           python3 - <<'PY'
           import json
           report=json.load(open('static-pilot-https-report.json'))
@@ -42,7 +51,7 @@ jobs:
           assert report["authority"]=="none"
           assert report["production_mutation"] is False
           assert report["authenticated_live_user"] is False
-          print("NEXUS STATIC PILOT: PASS exact public HTTPS HTML")
+          print("NEXUS STATIC PILOT: PASS exact currently deployed HTTPS HTML")
           PY
       - name: Upload sanitized read-only report
         if: always()
