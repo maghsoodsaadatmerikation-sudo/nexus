@@ -1,7 +1,7 @@
 # NEXUS Offline Pilot — a usable single-file mobile prototype
 
 **Scope:** offline, one-person decision-structuring prototype; no Rust engine,
-no public endpoint, no authorization, no automated machine decision, no
+public static HTML only, no authorization, no automated machine decision, no
 provider-backed persistence. This is not a production deployment or an
 authenticated single-host NEXUS service.
 
@@ -10,19 +10,26 @@ authenticated single-host NEXUS service.
 The file is [web/offline-pilot.html](../web/offline-pilot.html). Download **the
 HTML file itself** from the repository and open it in a browser capable of
 running local HTML. A code preview is not the app; a rendered offline file is.
-The repository's GitHub Pages setting was observed disabled on 2026-11-10,
-so there is currently no verified public web-app URL. Do not claim otherwise.
+The same static page is independently verified at
+https://nexus-offline-pilot.onrender.com/ . This is a browser-only entrypoint,
+not an authenticated Rust service.
 
 1. Enter a question, a goal, constraints and values; press **ثبت مسئله**.
 2. Record externally sourced claims with source identifiers and uncertainty,
    options with possible consequences, and review them independently.
 3. Only your click on **ثبت تصمیم من** can create a human judgment.
-4. Press **دریافت فایل JSON** after meaningful changes. Save that private file
-   in storage you control. There is **no autosave** and all unsaved state is
-   lost upon reload/close. Data is retained in memory while the page is open.
-5. On later visits choose **بازکردن فایل قبلی**. Only this offline v1 format
-   is accepted; malformed/corrupt history is refused without replacing the
-   current workspace. The file should be treated as **sensitive plaintext**.
+4. Prefer **دریافت نسخهٔ رمزگذاری‌شده** with a unique 12+ character
+   passphrase entered twice. Keep the protected downloaded file in private
+   storage and the passphrase separately; without the passphrase the file
+   cannot be recovered. **خروجی JSON بدون رمز** needs explicit confirmation
+   and creates readable plaintext — it is not a protected backup.
+5. Later, enter the protected file passphrase first, then select
+   **بازکردن فایل قبلی**. Both original plaintext offline v1 and the new
+   authenticated encrypted envelope can be opened; corrupt files and wrong
+   passphrases leave existing data unchanged. See
+   [Pilot 03 private exports](PILOT-03-PRIVATE-EXPORTS.md) for the exact
+   format, threats and limitations. There is still **no autosave**;
+   unsaved state disappears on reload or tab close.
 
 This offline JSON is not a Rust gateway-compatible
 `nexus.data-snapshot.v1` or server `DecisionWorkspace` backup; do
@@ -50,8 +57,9 @@ present in this demo (`A_out <= A_in`).
 in real headless Chromium at a narrow and a wide viewport, in private temporary
 profiles. It checks question/goal/constraints, missing-source rejection,
 escaped evidence, non-authoritative machine analysis, options, explicit
-judgment, JSON download structure, re-import, corruption rejection, and zero
-network calls. The program exercises only synthetic user content; CI never
+judgment, plaintext/export compatibility, WebCrypto AES-GCM encryption,
+nonce/salt randomness, wrong passphrase and tamper rejection, encrypted
+restoration, corruption rejection, and zero network calls. The program exercises only synthetic user content; CI never
 receives real personal data, operator tokens, or Railway resources.
 
 The test report means **only a standalone file prototype was exercised**.
