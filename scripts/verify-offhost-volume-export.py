@@ -66,14 +66,26 @@ def local_copy_manifest(source):
 
 
 def verify_quarantined_restore(restored, expected):
-    """Reject drift in the restored tree, including recovery quarantine bytes.
+    """Reject post-restore drift, including directory layout and quarantine bytes.
 
-    Run once after restore and again after an optional external Rust process.
-    The external executable is operator-supplied, so its return code alone
-    must not certify that the previously inspected bytes still exist.
+    Called after isolated restore and again after the optional operator-supplied
+    Rust subprocess, whose exit code cannot certify that the input remains
+    unchanged. All file bytes and markers are private.
     """
-    verify_quarantined_restore(restored, expected)
-
+    restored_paths = list(restored.rglob("*"))
+    actual_dirs = {p.relative_to(restored).as_posix()
+                   for p in restored_paths if p.is_dir()}
+    require(actual_dirs == {"requests"}, "isolated restored directory layout differs")
+    actual_names = {p.relative_to(restored).as_posix()
+                    for p in restored_paths if not p.is_dir()}
+    require(actual_names == set(expected) | {snapshot.RECOVERY_MARKER},
+            "isolated restored file set differs from archived data")
+    for name, data in expected.items():
+        require(snapshot.read_regular(restored / name, snapshot.MAX_BYTES) == data,
+                "isolated restored data differs from archive")
+    require(snapshot.read_regular(restored / snapshot.RECOVERY_MARKER,
+                                  len(snapshot.RECOVERY_BYTES)) == snapshot.RECOVERY_BYTES,
+            "restore quarantine is missing")
 
 def run(args):
     source = valid_origin(args.export_root)
@@ -111,20 +123,7 @@ def run(args):
     snapshot.restore(archive, restored)
     expected = dict(snapshot.validated_records(archive))
     expected.pop(snapshot.RECOVERY_MARKER, None)
-    restored_paths = list(restored.rglob("*"))
-    actual_dirs = {p.relative_to(restored).as_posix()
-                   for p in restored_paths if p.is_dir()}
-    require(actual_dirs == {"requests"}, "isolated restored directory layout differs")
-    actual_names = {p.relative_to(restored).as_posix()
-                    for p in restored_paths if not p.is_dir()}
-    require(actual_names == set(expected) | {snapshot.RECOVERY_MARKER},
-            "isolated restored file set differs from archived data")
-    for name, data in expected.items():
-        require(snapshot.read_regular(restored / name, snapshot.MAX_BYTES) == data,
-                "isolated restored data differs from archive")
-    require(snapshot.read_regular(restored / snapshot.RECOVERY_MARKER,
-                                  len(snapshot.RECOVERY_BYTES)) == snapshot.RECOVERY_BYTES,
-            "restore quarantine is missing")
+    verify_quarantined_restore(restored, expected)
     after = local_copy_manifest(source)
     require(after == before == inside_archive,
             "copied data changed while validating the isolated restore")
