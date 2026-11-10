@@ -35,6 +35,22 @@ class BrowserRunnerFailures(unittest.TestCase):
         self.assertNotIn('SECRET_BROWSER_STDERR', result.stderr)
         return value
 
+    def test_deadline_beyond_hard_cap_is_denied_before_browser_launch(self):
+        result = subprocess.run(['node', str(RUNNER), str(self.root / 'absent'),
+            'file:///synthetic-private-page', str(self.profile), '500,1100',
+            '60001'], capture_output=True, text=True, timeout=2)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, '')
+        self.assertFalse(self.profile.exists())
+        self.assertIn('bounded private inputs', result.stderr)
+
+    def test_invalid_deadline_is_denied(self):
+        result = subprocess.run(['node', str(RUNNER), str(self.root / 'absent'),
+            'file:///synthetic-private-page', str(self.profile), '500,1100',
+            'not-a-number'], capture_output=True, text=True, timeout=2)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.profile.exists())
+
     def test_missing_executable_finishes_without_waiting_for_exit(self):
         # The old cleanup always waited three seconds for a nonexistent child.
         value = self.diagnostic(self.run_driver(self.root / 'absent', timeout=2.5))
