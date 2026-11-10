@@ -37,10 +37,10 @@ if args[-1:] == ["--help"]:
     print("Volume file options: download, --volume")
   sys.exit(0)
 expected=[
-"--project","2ac7887b-d67a-48be-8a7b-bd54092893ae",
+"volume","--project","2ac7887b-d67a-48be-8a7b-bd54092893ae",
 "--environment","56c4bc45-0e62-4aa9-832f-884bb1aa620c",
 "--service","0032fc74-2c52-475d-b9df-9dca59237d93",
-"volume","files","--volume","cc47a350-6c7e-4487-89d9-c4b390f94884",
+"files","--volume","cc47a350-6c7e-4487-89d9-c4b390f94884",
 "download","/"
 ]
 if args[:len(expected)]!=expected or args[-2:]!=["--concurrency","1"]:
