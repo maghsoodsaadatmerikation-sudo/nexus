@@ -29,8 +29,7 @@ jobs:
           persist-credentials: false
       - name: Verify observer rejects bad HTTP and unexpected payloads
         run: python3 scripts/verify-public-static-pilot.py --self-test
-      - name: Independently fetch public static pilot after merge
-        if: github.event_name != 'pull_request'
+      - name: Independently fetch public static pilot (PR and main)
         run: |
           set -euo pipefail
           python3 scripts/verify-public-static-pilot.py > static-pilot-https-report.json
@@ -46,7 +45,7 @@ jobs:
           print("NEXUS STATIC PILOT: PASS exact public HTTPS HTML")
           PY
       - name: Upload sanitized read-only report
-        if: always() && github.event_name != 'pull_request'
+        if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: nexus-static-pilot-https-identity
