@@ -52,7 +52,26 @@ python3 scripts/verify-offhost-volume-export.py \
   --runtime-commit 3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959
 ```
 
-The destination must not already exist. The tool uses the existing
+The destination must not already exist. **New local-copy drift gate:** the
+tool independently reads the operator-held copied directory **before** its
+snapshot, compares every path/byte-length/SHA-256 to the archive's validated
+content, and reads the directory again **after** the quarantined restore.
+Any changed, added, deleted, missing or symlinked data file/request marker
+prevents a successful report. This closes an important earlier false-positive
+possibility in which archive contents round-tripped perfectly even though
+the *input copied directory was changing during intake*. A private PASS
+report now includes `local_copy_scans_matched_archive=true` but still marks
+`source_consistency=not_verified`.
+
+The comparison is **not** a consistent Railway backup: the copied directory
+might already contain mixed versions from a live file-by-file download,
+changes may occur then revert between scans, and new changes could occur
+after the last check. This gate proves only matching observed bytes of the
+**local operator-held copy** across this bounded rehearsal window. Do not
+mistake it for source provenance, an atomic remote point-in-time capture,
+or independently recoverable off-provider custody.
+
+The tool uses the existing
 `data-snapshot.py` offline format and its validation rules, creates a
 SHA-256-addressable private archive, inspects its structure, exercises an
 isolated restore, compares recovered file bytes, and requires a
