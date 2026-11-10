@@ -7,6 +7,7 @@ on:
       - 'scripts/verify-offhost-volume-export.py'
       - 'scripts/capture-railway-volume-readonly.py'
       - 'scripts/test-capture-railway-volume-readonly.py'
+      - 'scripts/test-railway-cli-help.py'
       - 'docs/STAGE-D-READONLY-CLI-CAPTURE.md'
       - 'scripts/test-offhost-volume-export.py'
       - 'scripts/data-snapshot.py'
@@ -34,3 +35,64 @@ jobs:
           test -z "${RAILWAY_TOKEN:-}"
           test -z "${RAILWAY_API_TOKEN:-}"
           python3 scripts/test-capture-railway-volume-readonly.py
+
+  real-cli-parser-conformance:
+    name: real-railway-cli-readonly-grammar
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out exact tested code, without persistent Git credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Assert no production credentials are available
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+      - name: Download publicly released CLI v5.71.0 and verify immutable SHA-256
+        shell: bash
+        env:
+          RAILWAY_NO_AUTO_UPDATE: '1'
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/railway-v5.71.0.tar.gz"
+          curl --fail --location --silent --show-error --retry 2 --max-time 90 \
+            "https://github.com/railwayapp/cli/releases/download/v5.71.0/railway-v5.71.0-x86_64-unknown-linux-musl.tar.gz" \
+            --output "$archive"
+          printf '%s  %s\n' \
+            '2e682fd2ddf8d6fdf9e46d9d99d99646ff0022a6abb0c2bca93011348a269fb9' \
+            "$archive" | sha256sum --check --status
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import tarfile
+          archive=Path(os.environ['RUNNER_TEMP'])/'railway-v5.71.0.tar.gz'
+          binary=Path(os.environ['RUNNER_TEMP'])/'railway-v5.71.0'
+          with tarfile.open(archive,'r:gz') as content:
+              matches=[f for f in content.getmembers()
+                       if f.name in ('railway','./railway') and f.isfile()]
+              assert len(matches)==1, 'pinned CLI artifact does not include single railway executable'
+              assert matches[0].size<40*1024*1024
+              f=content.extractfile(matches[0])
+              assert f is not None
+              with binary.open('xb') as target:
+                  while True:
+                      chunk=f.read(65536)
+                      if not chunk: break
+                      target.write(chunk)
+          binary.chmod(0o700)
+          PY
+      - name: Test actual provider CLI parser with help/version only
+        shell: bash
+        env:
+          RAILWAY_NO_AUTO_UPDATE: '1'
+        run: |
+          set -euo pipefail
+          python3 scripts/test-railway-cli-help.py \
+            --railway-bin "$RUNNER_TEMP/railway-v5.71.0"
+          echo 'No Railway network authentication, volume listing or download was attempted.'

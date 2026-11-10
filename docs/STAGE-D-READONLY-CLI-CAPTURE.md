@@ -14,7 +14,7 @@ the **same project and environment**, and incremental backup storage is
 metered. This gives one recovery route but not an independent, off-provider
 copy. Railway's
 [documented CLI](https://docs.railway.com/cli/volume) supports the separate
-read-only operation `railway volume files --volume ... download / ...`.
+read-only operation `railway volume --project <PROJECT> --environment <ENV> --service <SERVICE> files --volume <VOLUME> download / <PRIVATE_DEST> --concurrency 1`.
 A directory download is NOT a consistent point-in-time snapshot when
 writers remain active; source identity and consistency need independent
 evidence.
@@ -34,6 +34,39 @@ selection of a lookalike production service. Reconfirm all of them
 independently before a *real* attempt: the code does not have privileged
 provider identity attestation. If the original volume or deployed revision
 has changed, stop and review it, rather than updating a UUID by guess.
+
+## Pilot 07: real Railway CLI parser (not a fake provider)
+
+The earlier Stage D capture tests used a **local fake CLI**. A fake proves
+our own validation and fail-closed behavior, but it **does not verify
+Railway's actual option ordering, flags or version compatibility**.
+
+`.github/workflows/stage-d-private-volume-intake.yml` now has an independent
+`real-railway-cli-readonly-grammar` job. It downloads the official **Railway
+CLI v5.71.0** Linux binary from a fixed GitHub Release, verifies that the
+archive SHA-256 is exactly
+`2e682fd2ddf8d6fdf9e46d9d99d99646ff0022a6abb0c2bca93011348a269fb9`,
+extracts only the expected `railway` executable into a private CI temp
+directory, and asks the **real parser** for `--version` and `--help`.
+This genuine CLI test **caught and fixed an operational bug**: the original
+helper placed `--project`, `--environment` and `--service` before the `volume`
+subcommand, causing the real CLI to exit with argument error code 2. The
+corrected invocation places those three flags *on the `volume` command*,
+then `files --volume <ID> download / <DEST> --concurrency 1`. The real CLI
+parser now accepts it. The old fake-only tests could not have detected this. The binary's auto-update is disabled. CI
+contains no real Railway credentials and deliberately never performs a
+volume list, files read, backup creation or download.
+
+The execution tool itself now checks the **same pinned version and help
+grammar before creating its local output directory**. If the operator's
+installed CLI has been upgraded, its compatibility must be re-reviewed and
+the pin deliberately updated. This is a security and repeatability control,
+not an instruction to downgrade a shared installed CLI blindly.
+
+**Even a real CLI parser PASS is not a production volume copy, remote
+authentication check, consistency guarantee or recovery proof.** It closes
+only the *local invocation syntax* uncertainty. The original volume
+and server remain untouched.
 
 ## Two modes — plan first, execute only from trusted private environment
 
@@ -60,8 +93,9 @@ python3 scripts/capture-railway-volume-readonly.py \
 The explicit `--execute` mode requires `RAILWAY_TOKEN` or
 `RAILWAY_API_TOKEN` to be set in the operator's private process environment
 **before invocation**. Do not place tokens in the command line or share them
-in chat. Actual Railway CLI login/permissions and the version-dependent
-placement of global flags must first be checked in the private environment.
+in chat. Actual Railway CLI login/permissions and source volume identity must be
+checked in the private environment. The CLI syntax was tested on the exact
+pinned v5.71.0 build; different versions are rejected until reviewed.
 If that check fails, stop; never fall back to a mutation or another volume.
 
 The tool creates a new private `0700` directory **outside the public Git

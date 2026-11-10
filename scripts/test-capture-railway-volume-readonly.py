@@ -24,11 +24,23 @@ import os
 from pathlib import Path
 import sys
 args=sys.argv[1:]
+if args==["--version"]:
+  if os.getenv("MOCK_MODE")=="wrong-version": print("railway 0.0.0")
+  else: print("railway 5.71.0")
+  sys.exit(0)
+if args[-1:] == ["--help"]:
+  if os.getenv("MOCK_MODE")=="broken-help":
+    print("unknown command")
+  elif "download" in args:
+    print("Usage: railway volume files download <REMOTE_PATH> [LOCAL_PATH]\n--concurrency <N>\n--overwrite")
+  else:
+    print("Volume file options: download, --volume")
+  sys.exit(0)
 expected=[
-"--project","2ac7887b-d67a-48be-8a7b-bd54092893ae",
+"volume","--project","2ac7887b-d67a-48be-8a7b-bd54092893ae",
 "--environment","56c4bc45-0e62-4aa9-832f-884bb1aa620c",
 "--service","0032fc74-2c52-475d-b9df-9dca59237d93",
-"volume","files","--volume","cc47a350-6c7e-4487-89d9-c4b390f94884",
+"files","--volume","cc47a350-6c7e-4487-89d9-c4b390f94884",
 "download","/"
 ]
 if args[:len(expected)]!=expected or args[-2:]!=["--concurrency","1"]:
@@ -150,6 +162,24 @@ class CaptureTests(unittest.TestCase):
         result=self.run_capture(execute=True,path=REPO/".unsafe-test-capture")
         self.assertNotEqual(result.returncode,0)
         self.assertFalse((REPO/".unsafe-test-capture").exists())
+
+    def test_mismatched_cli_version_rejected_before_private_copy(self):
+        result=self.run_capture(execute=True,mode="wrong-version")
+        self.assertNotEqual(result.returncode,0)
+        self.assertFalse(self.root.exists())
+        self.assertIn("version or download syntax unsupported",result.stderr)
+
+    def test_missing_cli_flag_rejected_before_private_copy(self):
+        result=self.run_capture(execute=True,mode="broken-help")
+        self.assertNotEqual(result.returncode,0)
+        self.assertFalse(self.root.exists())
+        self.assertIn("version or download syntax unsupported",result.stderr)
+
+    def test_nonexistent_cli_binary_rejected_before_private_copy(self):
+        self.bin.unlink()
+        result=self.run_capture(execute=True)
+        self.assertNotEqual(result.returncode,0)
+        self.assertFalse(self.root.exists())
 
     def test_never_includes_any_mutating_railway_command(self):
         import importlib.util
