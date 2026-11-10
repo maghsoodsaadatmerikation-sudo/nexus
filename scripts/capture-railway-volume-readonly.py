@@ -78,7 +78,7 @@ def validate_railway_cli(railway_bin):
     clean_environment = os.environ.copy()
     clean_environment["RAILWAY_NO_AUTO_UPDATE"] = "1"
     clean_environment["CI"] = "true"
-    for cmd, required_tokens in commands:
+    for stage, (cmd, required_tokens) in enumerate(commands):
         try:
             probe = subprocess.run(
                 cmd, stdin=subprocess.DEVNULL,
@@ -90,7 +90,8 @@ def validate_railway_cli(railway_bin):
         content = probe.stdout.decode("utf-8", "replace").lower()
         require(probe.returncode == 0 and
                 all(token.lower() in content for token in required_tokens),
-                "Railway CLI version or download syntax unsupported")
+                "Railway CLI version or download syntax unsupported (stage " +
+                str(stage + 1) + ", exit " + str(probe.returncode) + ")")
     return True
 
 
