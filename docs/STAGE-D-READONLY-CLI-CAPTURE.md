@@ -111,6 +111,16 @@ and stderr are suppressed; it never prints private files, paths or tokens.
 If anything fails, the private directory is retained for operator inspection
 and no PASS receipt is published.
 
+The private validator now performs a three-way **local** content comparison:
+read the complete downloaded file set before archive creation, compare its
+name/size/SHA-256 manifest to the archived content, then re-read the same
+file set after the quarantined byte-restored rehearsal. The CLI wrapper
+requires `local_copy_scans_matched_archive=true` in the private report before
+issuing its receipt. This fails closed for a copied directory modified
+while preparing its own snapshot, but says **nothing conclusive** about
+whether the original live Railway volume had simultaneous writes during the
+earlier download or whether the copied bytes are the most recent bytes.
+
 The terminal PASS is
 `PRIVATE_CLI_COPY_AND_STRUCTURAL_REHEARSAL_PASS`. The
 `capture-receipt.json` explicitly records:

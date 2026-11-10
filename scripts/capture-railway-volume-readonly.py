@@ -163,8 +163,9 @@ def execute(args):
         require(check.returncode == 0, "isolated structural verification failed")
         inspection = json.loads((report_dir / "intake-report.json").read_text())
         require(inspection.get("status") == "STRUCTURAL_REHEARSAL_PASS" and
-                inspection.get("isolated_byte_roundtrip") is True,
-                "isolated evidence is not a structural pass")
+                inspection.get("isolated_byte_roundtrip") is True and
+                inspection.get("local_copy_scans_matched_archive") is True,
+                "isolated evidence or source-copy stability is not a structural pass")
         receipt = {
             "schema": "nexus.railway-volume-readonly-capture.v1",
             "status": "PRIVATE_CLI_COPY_AND_STRUCTURAL_REHEARSAL_PASS",
@@ -173,6 +174,7 @@ def execute(args):
                        "service_id": SERVICE, "volume_id": VOLUME},
             "cli_subcommand": "volume files download",
             "source_consistency": "NOT_VERIFIED_ATOMIC",
+            "local_copy_scans_matched_archive": True,
             "provider_file_origin": "CLI_SELECTED_ID_NOT_INDEPENDENTLY_ATTESTED",
             "offsite_copy": "PRIVATE_PATH_OPERATOR_MUST_PRESERVE",
             "archive_sha256": inspection["snapshot_sha256"],
