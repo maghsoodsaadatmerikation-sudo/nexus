@@ -121,7 +121,19 @@ With an operator-supplied binary that successfully validates every
 workspace, the private report states
 `rust_core_audit: pass_operator_supplied_rust_binary` and
 `rust_core_binary_identity: operator_supplied_unverified`. A failing Rust
-audit stops the successful receipt. This additional witness does *not*
+audit stops the successful receipt. **After** the Rust subprocess returns,
+the intake rechecks the entire local source copy (path set, lengths,
+SHA-256) against the archived bytes, confirms the private archive's own
+SHA-256 is unchanged, **and** rechecks the isolated restored directory
+layout, exact file bytes and recovery-required quarantine marker. Only
+then can it write the receipt; the private field
+`post_rust_source_archive_and_restore_rechecked=true` records this bounded
+post-audit observation. Without Rust this field is false/not applicable.
+Synthetic negative tests deliberately mutate the local copy, a recovered
+workspace, the archive, or the quarantine marker after Rust succeeds and require a
+blocked receipt. The archive's original SHA-256 is also checked again at
+receipt time in structural-only mode; a post-restore archive mutation cannot
+silently become a new successful snapshot digest. This additional witness does *not*
 cryptographically identify or attest the compiler, the original production
 source revision, provenance, original-file consistency or the provider.
 The current main Rust version may differ from the pinned deployment

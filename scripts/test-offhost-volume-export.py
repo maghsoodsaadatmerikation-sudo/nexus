@@ -141,6 +141,26 @@ class IntakeTests(unittest.TestCase):
             source.symlink_to(self.root / "private-unrelated.json")
         self.simulate_copy_mutation(replace_with_link)
 
+    def test_structural_only_archive_drift_after_restore_is_blocked(self):
+        """The final archive digest must match even without the optional Rust audit."""
+        intake = self.load_verifier()
+        original_restore = intake.snapshot.restore
+        args = argparse.Namespace(
+            export_root=self.export, private_evidence_dir=self.out,
+            volume_id=VOLUME, deployment_id=DEPLOY, runtime_commit=COMMIT,
+            rust_validator_bin=None)
+
+        def mutate_archive_after_restore(archive, restored):
+            original_restore(archive, restored)
+            with archive.open("ab") as fd:
+                fd.write(b" ")
+
+        with patch.object(intake.snapshot, "restore",
+                          side_effect=mutate_archive_after_restore):
+            with self.assertRaises(ValueError):
+                intake.run(args)
+        self.assertFalse((self.out / "intake-report.json").exists())
+
     def test_invalid_data_is_blocked_without_success_evidence(self):
         (self.export / "77.json").write_text('{"private": "PRIVATE_SENTINEL"}')
         result = self.command()

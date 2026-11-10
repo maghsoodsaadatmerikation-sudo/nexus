@@ -65,6 +65,33 @@ def local_copy_manifest(source):
     return entries
 
 
+def verify_quarantined_restore(restored, expected):
+    """Reject post-restore drift, including directory layout and quarantine bytes.
+
+    Called after isolated restore and again after the optional operator-supplied
+    Rust subprocess, whose exit code cannot certify that the input remains
+    unchanged. All file bytes and markers are private.
+    """
+    actual_dirs = set()
+    actual_names = set()
+    for index, path in enumerate(restored.rglob("*")):
+        require(index < snapshot.MAX_FILES + 2, "isolated restore file count exceeded")
+        name = path.relative_to(restored).as_posix()
+        require(not path.is_symlink(), "isolated restored tree contains symlink")
+        if path.is_dir():
+            actual_dirs.add(name)
+        else:
+            actual_names.add(name)
+    require(actual_dirs == {"requests"}, "isolated restored directory layout differs")
+    require(actual_names == set(expected) | {snapshot.RECOVERY_MARKER},
+            "isolated restored file set differs from archived data")
+    for name, data in expected.items():
+        require(snapshot.read_regular(restored / name, snapshot.MAX_BYTES) == data,
+                "isolated restored data differs from archive")
+    require(snapshot.read_regular(restored / snapshot.RECOVERY_MARKER,
+                                  len(snapshot.RECOVERY_BYTES)) == snapshot.RECOVERY_BYTES,
+            "restore quarantine is missing")
+
 def run(args):
     source = valid_origin(args.export_root)
     output = args.private_evidence_dir.absolute()
@@ -89,6 +116,7 @@ def run(args):
     before = local_copy_manifest(source)
     snapshot.backup(source, archive)
     archive_records = snapshot.validated_records(archive)
+    archive_sha_before_audit = hashlib.sha256(archive.read_bytes()).hexdigest()
     inside_archive = {
         name: (len(data), hashlib.sha256(data).hexdigest())
         for name, data in archive_records
@@ -100,16 +128,7 @@ def run(args):
     snapshot.restore(archive, restored)
     expected = dict(snapshot.validated_records(archive))
     expected.pop(snapshot.RECOVERY_MARKER, None)
-    actual_names = {p.relative_to(restored).as_posix()
-                    for p in restored.rglob("*") if not p.is_dir()}
-    require(actual_names == set(expected) | {snapshot.RECOVERY_MARKER},
-            "isolated restored file set differs from archived data")
-    for name, data in expected.items():
-        require(snapshot.read_regular(restored / name, snapshot.MAX_BYTES) == data,
-                "isolated restored data differs from archive")
-    require(snapshot.read_regular(restored / snapshot.RECOVERY_MARKER,
-                                  len(snapshot.RECOVERY_BYTES)) == snapshot.RECOVERY_BYTES,
-            "restore quarantine is missing")
+    verify_quarantined_restore(restored, expected)
     after = local_copy_manifest(source)
     require(after == before == inside_archive,
             "copied data changed while validating the isolated restore")
@@ -133,10 +152,21 @@ def run(args):
         except (OSError, subprocess.TimeoutExpired):
             raise ValueError("private Rust core audit failed") from None
         require(result.returncode == 0, "private Rust core audit rejected copied data")
+        # A validator executes between the earlier copy/restore checks and
+        # receipt creation. Catch any source or quarantine drift in that gap
+        # before issuing success. This remains a bounded local observation,
+        # not proof of atomic Railway capture or a trusted Rust binary.
+        require(local_copy_manifest(source) == before == inside_archive,
+                "copied data changed during private Rust audit")
+        verify_quarantined_restore(restored, expected)
         core_audit = "pass_operator_supplied_rust_binary"
         core_binary_identity = "operator_supplied_unverified"
-    # A missing Rust binary is never silently reported as an audit PASS.
+    # Verify exact archive identity at receipt time in BOTH structural-only
+    # and optional Rust modes; never report a stale pre-audit digest.
     archive_sha = hashlib.sha256(archive.read_bytes()).hexdigest()
+    require(archive_sha == archive_sha_before_audit,
+            "private archive changed during private intake")
+    # A missing Rust binary is never silently reported as an audit PASS.
     report = {
         "schema": "nexus.offhost-volume-intake.v1",
         "status": "STRUCTURAL_REHEARSAL_PASS",
@@ -151,6 +181,7 @@ def run(args):
         "local_copy_check": "before_archive_and_after_restored_bytes",
         "rust_core_audit": core_audit,
         "rust_core_binary_identity": core_binary_identity,
+        "post_rust_source_archive_and_restore_rechecked": rust_validator is not None,
         "independent_railway_backup": "not_proven",
         "live_survival": "not_evaluated",
         "live_recovery": "not_evaluated",
