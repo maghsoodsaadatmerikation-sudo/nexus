@@ -28,6 +28,11 @@ jobs:
           bash -n scripts/observe-runtime-drift.sh
           python3 scripts/test-runtime-drift.py
 
+      - name: Test fail-closed public Stage D authentication diagnostics
+        run: |
+          bash -n scripts/observe-stage-d-auth.sh
+          python3 scripts/test-stage-d-auth.py
+
       - name: Verify without publication or attestation authority
         env:
           RUST_IMAGE: ${{ env.RUST_IMAGE }}
