@@ -98,7 +98,7 @@ class PrivateCoreAuditTests(unittest.TestCase):
         self.assertEqual(report["independent_railway_backup"], "not_proven")
         self.assertTrue(report["local_copy_scans_matched_archive"])
         self.assertTrue(report["isolated_byte_roundtrip"])
-        self.assertTrue(report["post_rust_source_and_restore_rechecked"])
+        self.assertTrue(report["post_rust_source_archive_and_restore_rechecked"])
         self.assertNotIn(self.id, result.stdout + result.stderr)
 
     def test_unverified_rust_check_never_appears_as_audit_pass(self):
@@ -107,7 +107,7 @@ class PrivateCoreAuditTests(unittest.TestCase):
         report = json.loads((self.work / "intake-report.json").read_text())
         self.assertEqual(report["rust_core_audit"], "not_evaluated")
         self.assertEqual(report["rust_core_binary_identity"], "not_verified")
-        self.assertFalse(report["post_rust_source_and_restore_rechecked"])
+        self.assertFalse(report["post_rust_source_archive_and_restore_rechecked"])
 
     def test_structurally_valid_but_tampered_audit_sequence_fails(self):
         self.snapshot["events"][0]["sequence"] = 9
@@ -144,6 +144,7 @@ class PrivateCoreAuditTests(unittest.TestCase):
             "source": repr(str(self.target)),
             "restored_workspace": "str(Path(sys.argv[1]) / " + repr(self.filename) + ")",
             "restored_marker": "str(Path(sys.argv[1]) / '.nexus-recovery-required')",
+            "private_archive": "str(Path(sys.argv[1]).parent / 'nexus-private-data-snapshot.json')",
         }
         location = targets[target]
         wrapper = self.root / ("post-rust-" + target + ".py")
@@ -172,6 +173,11 @@ class PrivateCoreAuditTests(unittest.TestCase):
     def test_quarantine_marker_changed_after_rust_validated_is_blocked(self):
         self.assert_blocked(
             self.invoke(bin_path=self.post_rust_mutator("restored_marker"))
+        )
+
+    def test_private_archive_changed_after_rust_validated_is_blocked(self):
+        self.assert_blocked(
+            self.invoke(bin_path=self.post_rust_mutator("private_archive"))
         )
 
     def test_invalid_core_validator_binary_fails_closed(self):
