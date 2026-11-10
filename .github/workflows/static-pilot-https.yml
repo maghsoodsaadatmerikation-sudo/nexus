@@ -1,0 +1,55 @@
+name: NEXUS Static Pilot HTTPS Identity
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/verify-public-static-pilot.py'
+      - '.github/workflows/static-pilot-https.yml'
+      - 'web/offline-pilot.html'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/verify-public-static-pilot.py'
+      - '.github/workflows/static-pilot-https.yml'
+      - 'web/offline-pilot.html'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  observer:
+    name: static-pilot-identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Checkout exact tested revision
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Verify observer rejects bad HTTP and unexpected payloads
+        run: python3 scripts/verify-public-static-pilot.py --self-test
+      - name: Independently fetch public static pilot after merge
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-public-static-pilot.py > static-pilot-https-report.json
+          python3 - <<'PY'
+          import json
+          report=json.load(open('static-pilot-https-report.json'))
+          assert report["status"]=="PASS_STATIC_HTTPS_IDENTITY"
+          assert report["http_status"]==200
+          assert report["matched_exact_html"] is True
+          assert report["authority"]=="none"
+          assert report["production_mutation"] is False
+          assert report["authenticated_live_user"] is False
+          print("NEXUS STATIC PILOT: PASS exact public HTTPS HTML")
+          PY
+      - name: Upload sanitized read-only report
+        if: always() && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-static-pilot-https-identity
+          path: static-pilot-https-report.json
+          if-no-files-found: ignore
+          retention-days: 30
