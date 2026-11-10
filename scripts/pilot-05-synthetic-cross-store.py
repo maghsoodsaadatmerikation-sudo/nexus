@@ -208,10 +208,13 @@ def main():
         require((copied / "requests").is_dir(), "request-ledger-copy-missing")
 
         phase = "snapshot-and-tamper"
+        phase = "snapshot-backup"
         run(sys.executable, SNAPSHOT, "backup", copied, archive, "--offline")
+        phase = "snapshot-parse"
         raw = json.loads(archive.read_text())
         require(raw["schema"] == "nexus.data-snapshot.v1", "snapshot-schema")
         require(raw["authority"] == "none", "snapshot-no-authority")
+        phase = "snapshot-tamper-reject"
         bad_archive = scratch / "damaged-snapshot.json"
         invalid = json.loads(archive.read_text())
         require(bool(invalid["files"]), "empty-backup")
@@ -225,11 +228,15 @@ def main():
             stderr=subprocess.DEVNULL, timeout=40)
         require(bad.returncode != 0 and not forbidden_target.exists(),
                 "corrupt-snapshot-restored")
+        phase = "restore-new-root"
         # Ownership is preserved for unprivileged runtime UID 10001.
         run("sudo", sys.executable, SNAPSHOT, "restore", archive,
             recovered, "--offline", "--owner", "10001:10001", timeout=45)
-        require((recovered / ".nexus-recovery-required").is_file(),
-                "restore-missing-quarantine")
+        phase = "check-quarantine-root-ownership"
+        # The restored directory is deliberately 0700 and belongs to UID 10001.
+        # Reading it as the CI runner is correctly denied; check file presence
+        # with privileged test, then let the unprivileged gateway handle data.
+        run("sudo", "test", "-f", recovered / ".nexus-recovery-required")
 
         phase = "quarantined-gateway"
         gateway_start(recovery_name, recovered, port, token)
