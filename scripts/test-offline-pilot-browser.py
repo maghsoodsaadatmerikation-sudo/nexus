@@ -37,12 +37,12 @@ window.addEventListener('load', async () => {
     input.dispatchEvent(new Event('change', {bubbles:true}));
     await tick();
   };
-  let requests = 0, blob;
+  let requests = 0, blob, blobCount=0;
   window.fetch = () => { requests++; throw new Error('network-disallowed'); };
   window.XMLHttpRequest = class { constructor(){ requests++; throw Error('network-disallowed'); } };
   window.confirm = () => true;
   const realObjectURL = URL.createObjectURL.bind(URL);
-  URL.createObjectURL = value => {blob = value; return realObjectURL(value);};
+  URL.createObjectURL = value => {blob = value; blobCount++; return realObjectURL(value);};
   const checks = [];
   try {
     const narrow = window.innerWidth <= 760;
@@ -194,6 +194,24 @@ window.addEventListener('load', async () => {
     assert(byId('restore-passphrase').value==='' &&
       byId('audit').textContent.includes('#5'),'encrypted-state-mismatch');
     checks.push('real-webcrypto-restores-synthetic-workspace');
+    // A long KDF must not combine a new workspace ID with an older payload.
+    const beforeConcurrent=blobCount, encryptedBefore=blob;
+    fill('export-passphrase','a-long-synthetic-passphrase-2026');
+    fill('confirm-passphrase','a-long-synthetic-passphrase-2026');
+    byId('encrypt-export').click();
+    byId('encrypt-export').click();
+    byId('new').click(); await tick();
+    assert(byId('decision-view').textContent.includes('هیچ تصمیم انسانی'),
+      'concurrent-new-workspace-failed');
+    await waitFor(()=>blob!==encryptedBefore,'snapshot-crypto-timeout');
+    await waitFor(()=>!byId('encrypt-export').disabled===false||blobCount===beforeConcurrent+1,'busy-not-released');
+    assert(blobCount===beforeConcurrent+1,'duplicate-simultaneous-encrypt-exports');
+    checks.push('no-concurrent-protected-exports');
+    fill('restore-passphrase','a-long-synthetic-passphrase-2026');
+    await upload(await blob.text());
+    await waitFor(()=>byId('decision-view').textContent.includes('انتخاب آگاهانهٔ من'),
+      'snapshot-was-mutated-while-encrypting');
+    checks.push('atomic-snapshot-survives-concurrent-new-workspace');
     assert(requests === 0, 'network-attempted');
     checks.push('no-external-requests');
     const width = window.innerWidth;
@@ -235,7 +253,7 @@ def main():
             if proc.returncode:
                 raise RuntimeError("real browser did not report PASS")
             report = json.loads(proc.stdout)
-            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 22 or
+            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 24 or
                 report.get("network_requests") != 0 or
                 (layout == "narrow") != (report["width"] <= 760)):
                 raise RuntimeError("offline real-browser contract did not PASS")
