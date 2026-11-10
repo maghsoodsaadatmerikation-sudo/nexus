@@ -147,6 +147,7 @@ code{direction:ltr;unicode-bidi:embed}
     id:uuid(),question:'',goal:'',constraints:[],values:[],claims:[],alternatives:[],judgment:null
   },events:[]});
   let state=fresh();
+  let encryptBusy=false;
   function status(message,bad=false){
     $('status').textContent=message;
     $('status').classList.toggle('error',bad);
@@ -214,7 +215,7 @@ code{direction:ltr;unicode-bidi:embed}
     if(!notes.length)quality.append(part('span','بررسی ساختاری موردی یافت نکرد؛ صحت و کفایت شواهد همچنان تأیید نشده است.'));
     else notes.forEach(note=>quality.append(part('p','• '+note)));
     $('export').disabled=!w.question;
-    $('encrypt-export').disabled=!w.question;
+    $('encrypt-export').disabled=!w.question||encryptBusy;
   }
   $('ask-form').addEventListener('submit',e=>{
     e.preventDefault();
@@ -341,19 +342,24 @@ code{direction:ltr;unicode-bidi:embed}
     window.setTimeout(()=>URL.revokeObjectURL(url),5000);
   }
   $('encrypt-export').addEventListener('click',async()=>{
+    if(encryptBusy)return;
     if(!state.workspace.question)return status('پیش از خروجی گرفتن، پرسش را ثبت کنید.',true);
     const pw=$('export-passphrase').value,confirm=$('confirm-passphrase').value;
     if(Array.from(pw).length<12||Array.from(pw).length>256)
       return status('گذرواژه باید بین ۱۲ تا ۲۵۶ نویسه باشد.',true);
     if(pw!==confirm)return status('تکرار گذرواژه یکسان نیست.',true);
     if(!protectedContext())return status('مرورگر از رمزگذاری امن پشتیبانی نمی‌کند؛ فایل بدون رمز را به‌عنوان فایل امن به کار نبرید.',true);
-    const button=$('encrypt-export');button.disabled=true;
+    // Atomic workspace bytes and file identity: UI edits during KDF cannot
+    // change the exported payload or its filename.
+    const snapshot=JSON.stringify(state),snapshotId=state.workspace.id;
+    const button=$('encrypt-export');encryptBusy=true;button.disabled=true;
+    status('در حال رمزگذاری؛ گذرواژه و داده‌ها فقط در همین مرورگر پردازش می‌شوند.');
     try {
-      const envelope=await seal(JSON.stringify(state),pw);
-      downloadJson(JSON.stringify(envelope,null,2)+'\n','nexus-protected-'+state.workspace.id+'.json');
+      const envelope=await seal(snapshot,pw);
+      downloadJson(JSON.stringify(envelope,null,2)+'\n','nexus-protected-'+snapshotId+'.json');
       status('فایل رمزگذاری‌شده آماده شد. گذرواژه را جدا و امن نگه دارید؛ بدون آن امکان بازیابی نیست.');
     } catch {status('رمزگذاری انجام نشد؛ فایل جدیدی ذخیره نشده است.',true)}
-    finally{$('export-passphrase').value='';$('confirm-passphrase').value='';button.disabled=false}
+    finally{$('export-passphrase').value='';$('confirm-passphrase').value='';encryptBusy=false;button.disabled=!state.workspace.question}
   });
   $('export').addEventListener('click',()=>{
     if(!state.workspace.question)return status('پیش از خروجی گرفتن، پرسش را ثبت کنید.',true);
