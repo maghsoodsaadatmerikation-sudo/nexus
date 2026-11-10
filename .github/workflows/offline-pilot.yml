@@ -1,0 +1,58 @@
+name: NEXUS No-Cost Offline Pilot
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/offline-pilot.yml'
+      - 'web/offline-pilot.html'
+      - 'scripts/test-offline-pilot-browser.py'
+      - 'scripts/workspace-browser-runner.mjs'
+      - 'docs/OFFLINE-PILOT.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/offline-pilot.yml'
+      - 'web/offline-pilot.html'
+      - 'scripts/test-offline-pilot-browser.py'
+      - 'scripts/workspace-browser-runner.mjs'
+      - 'docs/OFFLINE-PILOT.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-pilot-browser:
+    name: offline-pilot-browser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout exact revision without persistent credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify offline Persian mobile and desktop pilot in real Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/test-offline-pilot-browser.py > offline-pilot-ci-report.json
+          python3 - <<'PY'
+          import json
+          report=json.load(open('offline-pilot-ci-report.json'))
+          assert report['status']=='PASS'
+          assert report['authority']=='none'
+          assert report['production_verified'] is False
+          assert len(report['reports'])==2
+          assert all(x['status']=='PASS' and x['network_requests']==0 and
+                     len(x['checks'])==11 for x in report['reports'])
+          print('NEXUS OFFLINE PILOT: REAL BROWSER PASS')
+          PY
+      - name: Upload sanitized offline-browser evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-offline-pilot-synthetic-witness
+          path: offline-pilot-ci-report.json
+          if-no-files-found: ignore
+          retention-days: 30
