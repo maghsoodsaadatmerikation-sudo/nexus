@@ -115,7 +115,9 @@ proof. For a future deployed revision, derive and independently review a
 new bounded source map; do not treat an unsupported runtime revision as
 corrupt data. The structural-only path remains available without a
 Rust semantic compatibility claim.
-This is stronger than JSON/schema/SHA-256 integrity alone: it checks ordered
+
+The **separate optional Rust loader**, not the source-parity preflight,
+is stronger than JSON/schema/SHA-256 structure alone: it checks ordered
 audit events, presence of provenance, correspondence between claims,
 alternatives and their events, and explicit human-judgment transitions.
 The program is `src/bin/nexus-private-core-audit.rs`; it is compiled
