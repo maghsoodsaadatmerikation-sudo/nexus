@@ -34,6 +34,35 @@ def valid_origin(directory):
     return directory
 
 
+def local_copy_manifest(source):
+    """Bounded read-only manifest of exact copied NEXUS file layout.
+
+    This is a *local* copy stability observation, not a Railway
+    point-in-time snapshot. Never return file names, hashes or user text in
+    logs, published artifacts or user-facing receipts.
+    """
+    request_dir = source / "requests"
+    require(request_dir.is_dir() and not request_dir.is_symlink(),
+            "private copy must contain a regular request ledger directory")
+    files = []
+    for entry in source.iterdir():
+        if entry.name == "requests":
+            files.extend(request_dir.iterdir())
+        else:
+            files.append(entry)
+    require(len(files) <= snapshot.MAX_FILES, "copied file limit exceeded")
+    total = 0
+    entries = {}
+    for path in sorted(files):
+        name = path.relative_to(source).as_posix()
+        content = snapshot.read_regular(path, snapshot.MAX_BYTES - total)
+        total += len(content)
+        snapshot.validate_file(name, content)
+        entries[name] = (len(content), hashlib.sha256(content).hexdigest())
+    require(len(entries) == len(files), "duplicate copied paths")
+    return entries
+
+
 def run(args):
     source = valid_origin(args.export_root)
     output = args.private_evidence_dir.absolute()
@@ -51,7 +80,19 @@ def run(args):
 
     output.mkdir(mode=0o700)
     archive = output / "nexus-private-data-snapshot.json"
+    # Distinguish a stable *local* copy from an internally consistent
+    # archive made from a copy that was still being changed. Three
+    # independent reads (before, snapshot, after) must agree by exact
+    # name, size and SHA-256, including request markers.
+    before = local_copy_manifest(source)
     snapshot.backup(source, archive)
+    archive_records = snapshot.validated_records(archive)
+    inside_archive = {
+        name: (len(data), hashlib.sha256(data).hexdigest())
+        for name, data in archive_records
+    }
+    require(before == inside_archive,
+            "copied data changed before or during archive construction")
     inspection = snapshot.inspect_snapshot(archive)
     restored = output / "isolated-restore-rehearsal"
     snapshot.restore(archive, restored)
@@ -67,6 +108,9 @@ def run(args):
     require(snapshot.read_regular(restored / snapshot.RECOVERY_MARKER,
                                   len(snapshot.RECOVERY_BYTES)) == snapshot.RECOVERY_BYTES,
             "restore quarantine is missing")
+    after = local_copy_manifest(source)
+    require(after == before == inside_archive,
+            "copied data changed while validating the isolated restore")
     archive_sha = hashlib.sha256(archive.read_bytes()).hexdigest()
     report = {
         "schema": "nexus.offhost-volume-intake.v1",
@@ -78,6 +122,8 @@ def run(args):
         "copy_provenance": "unverified",
         "production_volume_contents": "not_directly_observed",
         "source_consistency": "not_verified",
+        "local_copy_scans_matched_archive": True,
+        "local_copy_check": "before_archive_and_after_restored_bytes",
         "independent_railway_backup": "not_proven",
         "live_survival": "not_evaluated",
         "live_recovery": "not_evaluated",
@@ -92,7 +138,7 @@ def run(args):
         json.dump(report, f, sort_keys=True, indent=2)
         f.write("\n")
     path.chmod(stat.S_IRUSR | stat.S_IWUSR)
-    print("OFFHOST COPY STRUCTURAL REHEARSAL: PASS (origin and live recovery NOT VERIFIED)")
+    print("OFFHOST COPY STRUCTURAL REHEARSAL: PASS (local-copy scans match; Railway origin, atomicity and live recovery NOT VERIFIED)")
 
 
 def main():
