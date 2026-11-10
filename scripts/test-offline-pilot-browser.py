@@ -213,6 +213,37 @@ window.addEventListener('load', async () => {
     await waitFor(()=>byId('decision-view').textContent.includes('انتخاب آگاهانهٔ من'),
       'snapshot-was-mutated-while-encrypting');
     checks.push('atomic-snapshot-survives-concurrent-new-workspace');
+    // Regression: a self-exported large workspace must be importable.
+    const stamp=exported.events[0].at;
+    const manyClaims=Array.from({length:100},(_,i)=>({
+      id:'synthetic-claim-'+i,text:'ش'.repeat(1900),
+      origin:'human',source:'',uncertainty:'unknown'
+    }));
+    const manyEvents=[{sequence:1,kind:'question',at:stamp}];
+    for(let i=0;i<100;i++)manyEvents.push({sequence:i+2,kind:'claim',at:stamp});
+    manyEvents.push({sequence:102,kind:'alternative',at:stamp});
+    manyEvents.push({sequence:103,kind:'judgment',at:stamp});
+    const big={...exported,workspace:{...exported.workspace,claims:manyClaims},
+      events:manyEvents};
+    const bigJson=JSON.stringify(big);
+    assert(new Blob([bigJson]).size>256*1024 &&
+      new Blob([bigJson]).size<2*1024*1024,'oversize-fixture-invalid');
+    await upload(bigJson);
+    await waitFor(()=>byId('claims').querySelectorAll('.entry').length===100,
+      'large-plaintext-export-was-not-restored');
+    checks.push('large-legacy-workspace-importable');
+    const preLargeBlob=blob;
+    fill('export-passphrase','a-long-synthetic-passphrase-2026');
+    fill('confirm-passphrase','a-long-synthetic-passphrase-2026');
+    byId('encrypt-export').click();
+    await waitFor(()=>blob!==preLargeBlob,'large-encryption-timeout');
+    const protectedLarge=await blob.text();
+    byId('new').click(); await tick();
+    fill('restore-passphrase','a-long-synthetic-passphrase-2026');
+    await upload(protectedLarge);
+    await waitFor(()=>byId('claims').querySelectorAll('.entry').length===100,
+      'large-encrypted-restore-failed');
+    checks.push('large-encrypted-workspace-recoverable');
     assert(requests === 0, 'network-attempted');
     checks.push('no-external-requests');
     const width = window.innerWidth;
@@ -254,7 +285,7 @@ def main():
             if proc.returncode:
                 raise RuntimeError("real browser did not report PASS")
             report = json.loads(proc.stdout)
-            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 24 or
+            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 26 or
                 report.get("network_requests") != 0 or
                 (layout == "narrow") != (report["width"] <= 760)):
                 raise RuntimeError("offline real-browser contract did not PASS")
