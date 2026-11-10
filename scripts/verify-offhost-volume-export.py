@@ -13,7 +13,9 @@ import json
 from pathlib import Path
 import re
 import stat
+import subprocess
 import sys
+import os
 
 SCRIPT = Path(__file__).with_name("data-snapshot.py")
 spec = importlib.util.spec_from_file_location("nexus_data_snapshot", SCRIPT)
@@ -111,6 +113,29 @@ def run(args):
     after = local_copy_manifest(source)
     require(after == before == inside_archive,
             "copied data changed while validating the isolated restore")
+    core_audit = "not_evaluated"
+    core_binary_identity = "not_verified"
+    rust_validator = getattr(args, "rust_validator_bin", None)
+    if rust_validator is not None:
+        rust_validator = rust_validator.absolute()
+        require(rust_validator.is_file() and not rust_validator.is_symlink()
+                and os.access(rust_validator, os.X_OK),
+                "private Rust audit executable unavailable")
+        require(rust_validator.parent == rust_validator.parent.resolve(),
+                "Rust audit executable directory is not canonical")
+        try:
+            result = subprocess.run(
+                [str(rust_validator), str(restored)],
+                cwd=output,
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, timeout=90, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            raise ValueError("private Rust core audit failed") from None
+        require(result.returncode == 0, "private Rust core audit rejected copied data")
+        core_audit = "pass_operator_supplied_rust_binary"
+        core_binary_identity = "operator_supplied_unverified"
+    # A missing Rust binary is never silently reported as an audit PASS.
     archive_sha = hashlib.sha256(archive.read_bytes()).hexdigest()
     report = {
         "schema": "nexus.offhost-volume-intake.v1",
@@ -124,6 +149,8 @@ def run(args):
         "source_consistency": "not_verified",
         "local_copy_scans_matched_archive": True,
         "local_copy_check": "before_archive_and_after_restored_bytes",
+        "rust_core_audit": core_audit,
+        "rust_core_binary_identity": core_binary_identity,
         "independent_railway_backup": "not_proven",
         "live_survival": "not_evaluated",
         "live_recovery": "not_evaluated",
@@ -138,7 +165,7 @@ def run(args):
         json.dump(report, f, sort_keys=True, indent=2)
         f.write("\n")
     path.chmod(stat.S_IRUSR | stat.S_IWUSR)
-    print("OFFHOST COPY STRUCTURAL REHEARSAL: PASS (local-copy scans match; Railway origin, atomicity and live recovery NOT VERIFIED)")
+    print("OFFHOST COPY STRUCTURAL REHEARSAL: PASS (local-copy scans match; Rust audit status in private report; Railway origin, atomicity and live recovery NOT VERIFIED)")
 
 
 def main():
@@ -148,6 +175,8 @@ def main():
     p.add_argument("--volume-id", required=True)
     p.add_argument("--deployment-id", required=True)
     p.add_argument("--runtime-commit", required=True)
+    p.add_argument("--rust-validator-bin", type=Path,
+                   help="optional current-source Rust semantic validator; never authenticates provider identity")
     args = p.parse_args()
     try:
         run(args)
