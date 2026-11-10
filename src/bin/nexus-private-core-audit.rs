@@ -4,7 +4,7 @@
 //! consistency, an authenticated service login, or provider recovery witness.
 //! Any failure is deliberately redacted: no workspace ID, path or content is
 //! printed. The evaluator never writes to the directory it examines.
-use nexus_constitutional_core::{FileWorkspaceRepository, WorkspaceRepository, WorkspaceSnapshot};
+use nexus_constitutional_core::{FileWorkspaceRepository, WorkspaceSnapshot};
 use std::fs;
 use std::path::{Path, PathBuf};
 
