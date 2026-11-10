@@ -6,16 +6,26 @@ on:
       - '.github/workflows/offline-pilot.yml'
       - 'web/offline-pilot.html'
       - 'scripts/test-offline-pilot-browser.py'
+      - 'scripts/test-offline-to-rust-http.py'
+      - 'docs/PILOT-06-OFFLINE-RUST-BRIDGE.md'
       - 'scripts/workspace-browser-runner.mjs'
       - 'docs/OFFLINE-PILOT.md'
+      - 'Dockerfile'
+      - 'artifact-05/**'
+      - 'src/**'
   push:
     branches: [main]
     paths:
       - '.github/workflows/offline-pilot.yml'
       - 'web/offline-pilot.html'
       - 'scripts/test-offline-pilot-browser.py'
+      - 'scripts/test-offline-to-rust-http.py'
+      - 'docs/PILOT-06-OFFLINE-RUST-BRIDGE.md'
       - 'scripts/workspace-browser-runner.mjs'
       - 'docs/OFFLINE-PILOT.md'
+      - 'Dockerfile'
+      - 'artifact-05/**'
+      - 'src/**'
   workflow_dispatch:
 
 permissions:
@@ -36,6 +46,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export NEXUS_BRIDGE_SYNTHETIC_OUTPUT="$RUNNER_TEMP/nexus-p06-synthetic-browser.json"
           python3 scripts/test-offline-pilot-browser.py > offline-pilot-ci-report.json
           python3 - <<'PY'
           import json
@@ -45,9 +56,47 @@ jobs:
           assert report['production_verified'] is False
           assert len(report['reports'])==2
           assert all(x['status']=='PASS' and x['network_requests']==0 and
-                     len(x['checks'])==26 for x in report['reports'])
-          print('NEXUS PILOT 03: ENCRYPTED/PLAIN REAL BROWSER PASS')
+                     len(x['checks'])==29 for x in report['reports'])
+          print('NEXUS PILOT 06: ENCRYPTED/PLAIN + CORE BRIDGE REAL BROWSER PASS')
           PY
+      - name: Verify exported synthetic bridge against live disposable Rust API
+        shell: bash
+        env:
+          NEXUS_BRIDGE_DISPOSABLE: 'true'
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          export NEXUS_BRIDGE_SYNTHETIC_OUTPUT="$RUNNER_TEMP/nexus-p06-synthetic-browser.json"
+          docker build --pull=false -t nexus-pilot-06:ci .
+          python3 scripts/test-offline-to-rust-http.py
+          python3 - <<'PY'
+          import json
+          with open('pilot-06-rust-bridge-report.json', encoding='utf8') as f:
+              report=json.load(f)
+          assert report['status']=='PASS_REAL_RUST_IMPORT_OF_BROWSER_RECONSTRUCTION'
+          assert report['browser_generated_schema_accepted']
+          assert report['import_creates_new_workspace']
+          assert report['missing_and_wrong_bearer_denied']
+          assert report['duplicate_conflict']
+          assert report['audit_tampering_rejected']
+          assert report['survived_disposable_restart']
+          assert report['provenance_explicitly_unattested']
+          assert report['production_gateway_contacted'] is False
+          assert report['production_backup_proven'] is False
+          assert report['authority']=='none'
+          print('NEXUS PILOT 06: AUTHENTICATED RUST IMPORT REPLAY PASS')
+          PY
+      - name: Upload sanitized Rust compatibility witness
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-pilot-06-rust-bridge-witness
+          path: pilot-06-rust-bridge-report.json
+          if-no-files-found: ignore
+          retention-days: 30
       - name: Publish standalone HTML artifact for direct offline use
         if: ${{ success() }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
