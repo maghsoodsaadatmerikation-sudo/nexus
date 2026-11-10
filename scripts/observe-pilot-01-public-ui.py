@@ -22,13 +22,15 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def inspect_page(body, pinned, current):
     if len(body) > LIMIT:
         return "BODY_OVERSIZE"
-    if (b"<title>NEXUS" not in body or b'id="token"' not in body or
-            b'id="createWorkspaceButton"' not in body or
-            b'id="recordJudgmentButton"' not in body or
-            b'id="backupWorkspaceButton"' not in body):
-        return "UNRECOGNIZED_UI"
+    # Historical pinned pages have onclick handlers but no stable button IDs;
+    # byte equality to the immutable pinned source is the stronger invariant.
     if body != pinned:
         return "PINNED_UI_MISMATCH"
+    if (b"<title>NEXUS" not in body or b'id="token"' not in body or
+            b'onclick="createWorkspace()"' not in body or
+            b'onclick="recordJudgment()"' not in body or
+            b'onclick="backupWorkspace()"' not in body):
+        return "UNRECOGNIZED_UI"
     return "CURRENT_MAIN_UI" if body == current else "OLDER_PINNED_UI"
 
 
