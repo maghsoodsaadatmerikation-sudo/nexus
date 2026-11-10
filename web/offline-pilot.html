@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'">
+<title>NEXUS — کارگاه آفلاین تصمیم</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,"Segoe UI",Tahoma,sans-serif;background:#f4f7f6;color:#17313d}
+*{box-sizing:border-box}body{margin:0}
+header{background:linear-gradient(135deg,#153644,#155e64);color:white;padding:26px max(18px,calc((100% - 1050px)/2));}
+header .eyebrow{letter-spacing:.15em;font:700 12px system-ui;opacity:.76}header h1{font-size:clamp(25px,5vw,38px);margin:8px 0}header p{max-width:65ch;line-height:1.9;color:#dcf4f1;margin:0}
+main{max-width:1060px;margin:auto;padding:20px 16px 60px}
+.banner{border:1px solid #b3d7d2;background:#eaf8f5;border-radius:14px;padding:15px 18px;line-height:1.85;margin-bottom:18px}
+.banner strong{color:#075b5c}.banner small{display:block;color:#36535e}
+.toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
+button{font:inherit;cursor:pointer;border:0;border-radius:10px;background:#116969;color:white;font-weight:700;padding:11px 17px;min-height:45px}
+button.secondary{background:#e4eff0;color:#17404d;border:1px solid #b9cfd1}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #74c8bd;outline-offset:2px}
+button:disabled{cursor:not-allowed;opacity:.48}
+.status{font-size:13px;color:#2e6263;line-height:1.7;margin:0 0 16px}
+.status.error{color:#a62e30}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+section.panel{background:white;border:1px solid #dce8e7;border-radius:15px;padding:18px;box-shadow:0 4px 18px #123b4220;min-width:0}
+section.full{grid-column:1/-1}h2{font-size:18px;margin:0 0 6px}p.help{color:#516c73;font-size:13px;line-height:1.7;margin:0 0 15px}
+label{display:block;font-size:13px;font-weight:700;margin:14px 0 6px}
+input,textarea,select{display:block;width:100%;font:inherit;border:1px solid #bfcfd1;border-radius:9px;padding:11px;color:#17313d;background:white}
+textarea{min-height:85px;resize:vertical}
+.flex{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.flex>*{flex:1;min-width:155px}.inline-action{margin-top:12px}
+.empty{color:#789095;font-size:13px;padding:10px 0}.entry{border-top:1px solid #e5eded;padding:11px 0;line-height:1.8;overflow-wrap:anywhere}.entry b{color:#17313d}.entry small{display:block;color:#5c7b80}
+#decision-view .entry{border-right:3px solid #116969;padding-right:12px}
+.audit{max-height:225px;overflow:auto}.audit .entry{font-size:13px}
+footer{max-width:1060px;margin:auto;padding:0 18px 34px;color:#577078;font-size:12px;line-height:1.9}
+code{direction:ltr;unicode-bidi:embed}
+@media(max-width:760px){.grid{grid-template-columns:1fr}section.full{grid-column:auto}section.panel{padding:15px}header{padding:23px 18px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow" dir="ltr">NEXUS / OFFLINE PILOT</div>
+  <h1>کارگاه آفلاین تصمیم</h1>
+  <p>از پرسش به شواهد، از شواهد به گزینه‌ها، و از گزینه‌ها به تصمیم خودتان. این نسخه هیچ تصمیمی را به‌جای شما نمی‌گیرد.</p>
+</header>
+<main>
+  <div class="banner">
+    <strong>بدون حساب، توکن یا اینترنت پس از دریافت فایل</strong>
+    <small>اطلاعات فقط در حافظهٔ همین صفحه نگه داشته می‌شود. برای جلوگیری از ازدست‌رفتن اطلاعات، پس از هر تغییر مهم «دریافت فایل JSON» را بزنید. این نسخه به سرور Railway متصل نیست و خروجی‌اش مستقیماً با فرمت پشتیبان سرور NEXUS سازگار نیست.</small>
+  </div>
+  <div class="toolbar">
+    <button type="button" id="export" class="primary">دریافت فایل JSON</button>
+    <button type="button" id="import" class="secondary">بازکردن فایل قبلی</button>
+    <button type="button" id="new" class="secondary">کارگاه جدید</button>
+    <input type="file" accept=".json,application/json" id="file" hidden aria-label="فایل کارگاه آفلاین">
+  </div>
+  <p id="status" class="status" role="status" aria-live="polite">فضای جدید آماده است. یک پرسش بنویسید.</p>
+  <div class="grid">
+    <section class="panel full" aria-labelledby="ask-title">
+      <h2 id="ask-title">۱. پرسش، هدف و محدودیت‌ها</h2>
+      <p class="help">اول مسئله را توصیف کنید. پاسخ نهایی در این مرحله ثبت نمی‌شود.</p>
+      <form id="ask-form">
+        <label for="question">پرسش اصلی</label>
+        <textarea id="question" maxlength="2000" required placeholder="برای بررسی این تصمیم چه چیزهایی را باید بدانم؟"></textarea>
+        <div class="flex">
+          <div><label for="goal">هدف</label><input id="goal" maxlength="1000" placeholder="چه نتیجه‌ای برایم مهم است؟"></div>
+          <div><label for="constraints">محدودیت‌ها (هر مورد در یک خط یا با ویرگول)</label><textarea id="constraints" maxlength="2000" placeholder="بودجه، زمان، تعهدات ..."></textarea></div>
+          <div><label for="values">ارزش‌ها (هر مورد در یک خط یا با ویرگول)</label><textarea id="values" maxlength="2000" placeholder="استقلال، امنیت، شفافیت ..."></textarea></div>
+        </div>
+        <button type="submit" class="inline-action">ثبت مسئله</button>
+      </form>
+      <div id="question-view" class="empty">هنوز پرسشی ثبت نشده است.</div>
+    </section>
+    <section class="panel" aria-labelledby="evidence-title">
+      <h2 id="evidence-title">۲. ادعاها و شواهد</h2>
+      <p class="help">منبع هر ادعای بیرونی را مشخص کنید. ادعا به‌خودی‌خود مجوز تصمیم نیست.</p>
+      <form id="claim-form">
+        <label for="claim">متن ادعا / شاهد</label>
+        <textarea id="claim" maxlength="2000" required></textarea>
+        <div class="flex">
+          <div><label for="origin">نوع منشأ</label><select id="origin"><option value="human">گفتهٔ انسان</option><option value="external_evidence">شاهد بیرونی</option><option value="machine_analysis">تحلیل ماشینی (واردشده توسط کاربر)</option></select></div>
+          <div><label for="uncertainty">میزان عدم‌قطعیت</label><select id="uncertainty"><option value="unknown">نامشخص</option><option value="high">زیاد</option><option value="medium">متوسط</option><option value="low">کم</option></select></div>
+        </div>
+        <label for="source">منبع / شناسهٔ منشأ</label>
+        <input id="source" maxlength="600" placeholder="پیوند یا شناسهٔ دقیق شاهد؛ صحت آن خودکار بررسی نمی‌شود">
+        <button type="submit" class="inline-action">افزودن شاهد</button>
+      </form>
+      <div id="claims" class="empty">شاهدی ثبت نشده است.</div>
+    </section>
+    <section class="panel" aria-labelledby="option-title">
+      <h2 id="option-title">۳. گزینه‌ها و پیامدها</h2>
+      <p class="help">گزینه‌ها رتبه‌بندی خودکار نمی‌شوند؛ پیامدهای احتمالی را بنویسید.</p>
+      <form id="option-form">
+        <label for="option">عنوان گزینه</label>
+        <input id="option" maxlength="500" required placeholder="مثلاً گزینهٔ A — انتشار محدود">
+        <label for="consequences">پیامدها (هر مورد در یک خط؛ دست‌کم یک مورد)</label>
+        <textarea id="consequences" maxlength="2000" placeholder="مثلاً دریافت بازخورد زودهنگام یا محدودیت ذخیره‌سازی"></textarea>
+        <button type="submit" class="inline-action">افزودن گزینه</button>
+      </form>
+      <div id="alternatives" class="empty">گزینه‌ای ثبت نشده است.</div>
+    </section>
+    <section class="panel full" aria-labelledby="decision-title">
+      <h2 id="decision-title">۴. تصمیم انسانی</h2>
+      <p class="help">تصمیم باید روشن کند کدام گزینه را انتخاب می‌کنید یا چرا تصمیم را به تعویق می‌اندازید. هدف آزمایش، خودِ تصمیم نیست. ثبت فقط با اقدام شما انجام می‌شود.</p>
+      <form id="decision-form">
+        <label for="decision">تصمیم شما</label>
+        <textarea id="decision" maxlength="2000" required placeholder="مثلاً گزینهٔ C را فعلاً انتخاب می‌کنم؛ یا تصمیم را تا تکمیل شواهد به تعویق می‌اندازم."></textarea>
+        <label for="rationale">دلیل تصمیم (الزامی برای تصمیم‌های تازه)</label>
+        <textarea id="rationale" maxlength="2000" required placeholder="دلیل انتخاب و مهم‌ترین عدم‌قطعیت باقی‌مانده"></textarea>
+        <button type="submit" class="inline-action">ثبت تصمیم من</button>
+      </form>
+      <div id="decision-view" class="empty">هیچ تصمیم انسانی ثبت نشده است.</div>
+    </section>
+    <section class="panel full" aria-labelledby="quality-title">
+      <h2 id="quality-title">۵. مرور تکمیل‌بودن اطلاعات</h2>
+      <p class="help">این بررسی فقط خالی‌بودن یا ساختار برخی فیلدها را نشان می‌دهد، نه درست‌بودن شواهد یا کیفیت واقعی تصمیم.</p>
+      <div id="quality" role="status" aria-live="polite" class="entry"></div>
+    </section>
+    <section class="panel full" aria-labelledby="audit-title">
+      <h2 id="audit-title">۶. تاریخچهٔ اقدامات</h2>
+      <p class="help">این تاریخچه محلی و قابل‌ویرایش است؛ شاهد حسابرسی رمزنگاری‌شده یا تأیید مستقل محسوب نمی‌شود.</p>
+      <div id="audit" class="audit empty">هنوز رویدادی ثبت نشده است.</div>
+    </section>
+  </div>
+</main>
+<footer>
+  <b>NEXUS Offline Pilot v1</b> — فقط ابزار تمرین تصمیم‌گیری انسان. بدون اتصال شبکه، ذخیره‌سازی خودکار یا تولید تحلیل هوش مصنوعی. داده‌ها پس از بستن یا بارگذاری مجدد صفحه باقی نمی‌مانند مگر اینکه خودتان فایل JSON بگیرید. این فایل، بکاپ Volume سرور NEXUS نیست. اصل پروژه: <code>A_out ≤ A_in</code>.
+</footer>
+<script>
+(function(){
+  'use strict';
+  const SCHEMA='nexus.offline-pilot.v1';
+  const $=id=>document.getElementById(id);
+  const MAX_FILE=256*1024,MAX_CLAIMS=100,MAX_OPTIONS=60,MAX_EVENTS=300;
+  const uuid=()=> 'offline-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,11);
+  const fresh=()=>({schema:SCHEMA,authority:'none',storage:'memory_only',workspace:{
+    id:uuid(),question:'',goal:'',constraints:[],values:[],claims:[],alternatives:[],judgment:null
+  },events:[]});
+  let state=fresh();
+  function status(message,bad=false){
+    $('status').textContent=message;
+    $('status').classList.toggle('error',bad);
+  }
+  const trim=(x,max)=>String(x||'').trim().slice(0,max);
+  const lines=(x,maxItems)=>String(x||'').split('\n').map(x=>trim(x,300)).filter(Boolean).slice(0,maxItems);
+  const commaItems=(x,maxItems)=>String(x||'').split(/[\n،,]+/).map(x=>trim(x,300)).filter(Boolean).slice(0,maxItems);
+  function event(kind){
+    if(state.events.length>=MAX_EVENTS){status('سقف تاریخچه پر شده است؛ پیش از ادامه فایل بگیرید و کارگاه جدید بسازید.',true);return false;}
+    state.events.push({sequence:state.events.length+1,kind,at:new Date().toISOString()});
+    return true;
+  }
+  function part(tag,content,className){
+    const el=document.createElement(tag);
+    el.textContent=content;
+    if(className)el.className=className;
+    return el;
+  }
+  function entries(container,items,emptyMsg,renderItem){
+    container.replaceChildren();
+    if(items.length===0){container.append(part('p',emptyMsg,'empty'));return;}
+    items.forEach((item,index)=>{
+      const row=document.createElement('div');row.className='entry';
+      renderItem(row,item,index);
+      container.append(row);
+    });
+  }
+  function render(){
+    const w=state.workspace;
+    entries($('question-view'),w.question?[w]:[],'هنوز پرسشی ثبت نشده است.',(row,item)=>{
+      row.append(part('b',item.question));
+      if(item.goal)row.append(part('small','هدف: '+item.goal));
+      if(item.constraints.length)row.append(part('small','محدودیت‌ها: '+item.constraints.join(' • ')));
+      if(item.values.length)row.append(part('small','ارزش‌ها: '+item.values.join(' • ')));
+    });
+    entries($('claims'),w.claims,'شاهدی ثبت نشده است.',(row,item)=>{
+      row.append(part('b',(w.claims.indexOf(item)+1)+'. '+item.text));
+      row.append(part('small','منشأ: '+item.origin+' | عدم‌قطعیت: '+item.uncertainty));
+      if(item.source)row.append(part('small','منبع: '+item.source));
+    });
+    entries($('alternatives'),w.alternatives,'گزینه‌ای ثبت نشده است.',(row,item)=>{
+      row.append(part('b',(w.alternatives.indexOf(item)+1)+'. '+item.label));
+      if(item.consequences.length)row.append(part('small',item.consequences.join(' • ')));
+    });
+    entries($('decision-view'),w.judgment?[w.judgment]:[],'هیچ تصمیم انسانی ثبت نشده است.',(row,item)=>{
+      row.append(part('b',item.decision));
+      if(item.rationale)row.append(part('small','دلیل: '+item.rationale));
+    });
+    const names={question:'ثبت پرسش و هدف',claim:'افزودن شاهد',alternative:'افزودن گزینه',judgment:'ثبت صریح تصمیم انسان'};
+    let seenQuestion=false;
+    entries($('audit'),state.events,'هنوز رویدادی ثبت نشده است.',(row,item)=>{
+      const label=item.kind==='question'&&seenQuestion?'بازثبت یا ویرایش مسئله':names[item.kind];
+      if(item.kind==='question')seenQuestion=true;
+      row.append(part('span','#'+item.sequence+' — '+label));
+      row.append(part('small',item.at));
+    });
+    const notes=[];
+    if(!w.question)notes.push('هنوز پرسشی ثبت نشده است.');
+    if(w.question&&w.claims.length<2)notes.push('کمتر از دو ادعا یا شاهد ثبت شده؛ شواهد موافق و مخالف را نیز بررسی کنید.');
+    if(w.claims.some(c=>c.origin==='external_evidence'))notes.push('نشانی منبع درج شده است؛ ارتباط و صحت آن به‌صورت مستقل بررسی نشده است.');
+    if(w.alternatives.some(a=>!a.consequences.length))notes.push('دست‌کم یک گزینه بدون پیامد ثبت شده است.');
+    if(w.judgment&&!w.judgment.rationale.trim())notes.push('دلیل تصمیم در فایل وجود ندارد.');
+    if(w.judgment)notes.push('بررسی کنید متن تصمیم مشخصاً انتخاب گزینه یا تعویق آن را بیان کند؛ این موضوع خودکار تشخیص داده نمی‌شود.');
+    const quality=$('quality');quality.replaceChildren();
+    if(!notes.length)quality.append(part('span','بررسی ساختاری موردی یافت نکرد؛ صحت و کفایت شواهد همچنان تأیید نشده است.'));
+    else notes.forEach(note=>quality.append(part('p','• '+note)));
+    $('export').disabled=!w.question;
+  }
+  $('ask-form').addEventListener('submit',e=>{
+    e.preventDefault();
+    const q=trim($('question').value,2000);
+    if(!q)return status('پرسش اصلی را وارد کنید.',true);
+    const draft={question:q,goal:trim($('goal').value,1000),
+      constraints:commaItems($('constraints').value,25),values:commaItems($('values').value,25)};
+    const old=state.workspace;
+    if(old.question===draft.question&&old.goal===draft.goal&&
+       JSON.stringify(old.constraints)===JSON.stringify(draft.constraints)&&
+       JSON.stringify(old.values)===JSON.stringify(draft.values))return status('اطلاعات مسئله تغییری نکرده است؛ رویداد تازه ثبت نشد.');
+    if(!event('question'))return;
+    Object.assign(state.workspace,draft);
+    status('پرسش ثبت شد؛ برای حفظ آن فایل JSON دریافت کنید.');
+    render();
+  });
+  $('claim-form').addEventListener('submit',e=>{
+    e.preventDefault();
+    if(!state.workspace.question)return status('ابتدا پرسش را ثبت کنید.',true);
+    if(state.workspace.claims.length>=MAX_CLAIMS)return status('حداکثر ۱۰۰ شاهد در هر کارگاه.',true);
+    const txt=trim($('claim').value,2000),source=trim($('source').value,600),origin=$('origin').value;
+    if(!txt)return status('متن شاهد را وارد کنید.',true);
+    if(origin==='external_evidence'&&!source)return status('شاهد بیرونی باید منبع مشخص داشته باشد.',true);
+    if(!event('claim'))return;
+    state.workspace.claims.push({id:uuid(),text:txt,origin,source,uncertainty:$('uncertainty').value});
+    $('claim').value='';$('source').value='';
+    status('شاهد اضافه شد؛ این ادعا به‌خودی‌خود تصمیم نیست.');render();
+  });
+  $('option-form').addEventListener('submit',e=>{
+    e.preventDefault();
+    if(!state.workspace.question)return status('ابتدا پرسش را ثبت کنید.',true);
+    if(state.workspace.alternatives.length>=MAX_OPTIONS)return status('حداکثر ۶۰ گزینه در هر کارگاه.',true);
+    const label=trim($('option').value,500);
+    if(!label)return status('عنوان گزینه را وارد کنید.',true);
+    const consequences=lines($('consequences').value,30);
+    if(!consequences.length)return status('برای هر گزینه دست‌کم یک پیامد احتمالی بنویسید.',true);
+    if(!event('alternative'))return;
+    state.workspace.alternatives.push({id:uuid(),label,consequences});
+    $('option').value='';$('consequences').value='';
+    status('گزینه اضافه شد. رتبه‌بندی خودکار انجام نشد.');render();
+  });
+  $('decision-form').addEventListener('submit',e=>{
+    e.preventDefault();
+    if(!state.workspace.question)return status('ابتدا پرسش را ثبت کنید.',true);
+    const decision=trim($('decision').value,2000);
+    if(!decision)return status('متن تصمیم خود را وارد کنید.',true);
+    const rationale=trim($('rationale').value,2000);
+    if(!rationale)return status('برای ثبت تصمیم تازه، دلیل انتخاب یا تعویق را وارد کنید.',true);
+    if(state.workspace.judgment!==null)return status('تصمیم این کارگاه قبلاً ثبت شده؛ برای تصمیم تازه کارگاه جدید بسازید.',true);
+    if(!event('judgment'))return;
+    state.workspace.judgment={decision,rationale};
+    status('تصمیم انسانی شما ثبت شد؛ اکنون فایل JSON را ذخیره کنید.');render();
+  });
+  $('new').addEventListener('click',()=>{
+    if(state.events.length&&!window.confirm('اطلاعات ذخیره‌نشده با ساخت کارگاه تازه از بین می‌رود. ادامه می‌دهید؟'))return;
+    state=fresh();
+    for(const id of ['question','goal','constraints','values','claim','source','option','consequences','decision','rationale'])$(id).value='';
+    status('کارگاه جدید ساخته شد. داده‌های قبلی فقط در فایل صادرشده باقی می‌ماند.');render();
+  });
+  $('export').addEventListener('click',()=>{
+    if(!state.workspace.question)return status('پیش از خروجی گرفتن، پرسش را ثبت کنید.',true);
+    const payload=JSON.stringify(state,null,2)+'\n';
+    const blob=new Blob([payload],{type:'application/json;charset=utf-8'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='nexus-offline-'+state.workspace.id+'.json';
+    document.body.append(a);a.click();a.remove();
+    window.setTimeout(()=>URL.revokeObjectURL(url),5000);
+    status('فایل خروجی آماده شد. آن را در محلی امن نگه دارید؛ ذخیرهٔ خودکار وجود ندارد.');
+  });
+  function typeString(x,max,required=false){
+    if(typeof x!=='string'||x.length>max||(required&&!x.trim()))throw Error('invalid-string');
+    return x;
+  }
+  function validate(raw){
+    if(!raw||typeof raw!=='object'||Array.isArray(raw)||
+      raw.schema!==SCHEMA||raw.authority!=='none'||raw.storage!=='memory_only')throw Error('invalid-format');
+    const w=raw.workspace;
+    if(!w||typeof w!=='object'||Array.isArray(w)||!/^offline-[a-z0-9-]{5,90}$/.test(w.id))throw Error('invalid-workspace');
+    if(!Array.isArray(w.constraints)||w.constraints.length>25||!Array.isArray(w.values)||w.values.length>25||
+       !Array.isArray(w.claims)||w.claims.length>MAX_CLAIMS||
+       !Array.isArray(w.alternatives)||w.alternatives.length>MAX_OPTIONS||
+       !Array.isArray(raw.events)||raw.events.length>MAX_EVENTS)throw Error('invalid-limits');
+    const strList=(arr)=>arr.map(x=>typeString(x,300,true));
+    const claims=w.claims.map(c=>{
+      if(!c||typeof c!=='object'||Array.isArray(c))throw Error('invalid-claim');
+      const origin=typeString(c.origin,32,true),source=typeString(c.source,600);
+      if(!['human','external_evidence','machine_analysis'].includes(origin)||
+         !['unknown','high','medium','low'].includes(c.uncertainty)||
+         (origin==='external_evidence'&&!source.trim()))throw Error('invalid-provenance');
+      return {id:typeString(c.id,100,true),text:typeString(c.text,2000,true),
+        origin,source,uncertainty:c.uncertainty};
+    });
+    const alternatives=w.alternatives.map(a=>{
+      if(!a||typeof a!=='object'||Array.isArray(a)||!Array.isArray(a.consequences)||a.consequences.length>30)throw Error('invalid-option');
+      return {id:typeString(a.id,100,true),label:typeString(a.label,500,true),
+        consequences:strList(a.consequences)};
+    });
+    if(new Set(claims.map(c=>c.id)).size!==claims.length||
+       new Set(alternatives.map(a=>a.id)).size!==alternatives.length)throw Error('duplicate-ids');
+    let judgment=null;
+    if(w.judgment!==null){
+      if(!w.judgment||typeof w.judgment!=='object'||Array.isArray(w.judgment))throw Error('invalid-judgment');
+      judgment={decision:typeString(w.judgment.decision,2000,true),
+        rationale:typeString(w.judgment.rationale,2000)};
+    }
+    const kinds=['question','claim','alternative','judgment'];
+    const events=raw.events.map((e,i)=>{
+      if(!e||typeof e!=='object'||Array.isArray(e)||e.sequence!==i+1||
+         !kinds.includes(e.kind)||!(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/).test(e.at))throw Error('invalid-history');
+      return {sequence:i+1,kind:e.kind,at:e.at};
+    });
+    if(events.filter(e=>e.kind==='claim').length!==claims.length||
+       events.filter(e=>e.kind==='alternative').length!==alternatives.length||
+       events.filter(e=>e.kind==='judgment').length!==(judgment?1:0)||
+       !events.some(e=>e.kind==='question'))throw Error('history-mismatch');
+    return {schema:SCHEMA,authority:'none',storage:'memory_only',workspace:{
+      id:w.id,question:typeString(w.question,2000,true),
+      goal:typeString(w.goal,1000),constraints:strList(w.constraints),values:strList(w.values),
+      claims,alternatives,judgment
+    },events};
+  }
+  $('import').addEventListener('click',()=>$('file').click());
+  $('file').addEventListener('change',async()=>{
+    const f=$('file').files?.[0];
+    if(!f)return;
+    try{
+      if(f.size>MAX_FILE)throw Error('file-too-large');
+      const incoming=validate(JSON.parse(await f.text()));
+      if(state.events.length&&!window.confirm('بارگذاری، کارگاه جاری را جایگزین می‌کند. ادامه می‌دهید؟'))return;
+      state=incoming;
+      $('question').value=state.workspace.question;
+      $('goal').value=state.workspace.goal;
+      $('constraints').value=state.workspace.constraints.join('\n');
+      $('values').value=state.workspace.values.join('\n');
+      $('decision').value=state.workspace.judgment?.decision||'';
+      $('rationale').value=state.workspace.judgment?.rationale||'';
+      for(const id of ['claim','source','option','consequences'])$(id).value='';
+      status('فایل آفلاین اعتبارسنجی و باز شد. اصالت فایل و منشأ داده‌ها مستقلاً قابل‌اثبات نیست.');
+      render();
+    }catch{status('فایل نامعتبر یا ناسازگار است؛ کارگاه قبلی تغییر نکرد.',true)}
+    finally{$('file').value=''}
+  });
+  render();
+})();
+</script>
+</body>
+</html>
