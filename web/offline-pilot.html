@@ -48,11 +48,22 @@ code{direction:ltr;unicode-bidi:embed}
     <small>اطلاعات فقط در حافظهٔ همین صفحه نگه داشته می‌شود. برای جلوگیری از ازدست‌رفتن اطلاعات، پس از هر تغییر مهم «دریافت فایل JSON» را بزنید. این نسخه به سرور Railway متصل نیست و خروجی‌اش مستقیماً با فرمت پشتیبان سرور NEXUS سازگار نیست.</small>
   </div>
   <div class="toolbar">
-    <button type="button" id="export" class="primary">دریافت فایل JSON</button>
+    <button type="button" id="encrypt-export">دریافت نسخهٔ رمزگذاری‌شده</button>
+    <button type="button" id="export" class="secondary">خروجی JSON بدون رمز</button>
     <button type="button" id="import" class="secondary">بازکردن فایل قبلی</button>
     <button type="button" id="new" class="secondary">کارگاه جدید</button>
     <input type="file" accept=".json,application/json" id="file" hidden aria-label="فایل کارگاه آفلاین">
   </div>
+  <section class="panel full" aria-labelledby="crypto-title" style="margin-bottom:16px">
+    <h2 id="crypto-title">نگهداری امن‌تر فایل خروجی</h2>
+    <p class="help">برای فایل رمزگذاری‌شده یک گذرواژهٔ بلند (حداقل ۱۲ نویسه) انتخاب کنید. گذرواژه فقط روی همین دستگاه هنگام ساخت یا بازکردن فایل استفاده می‌شود و به سرور ارسال یا در فایل ذخیره نمی‌شود. در صورت فراموشی، بازیابی فایل ممکن نیست. خروجی JSON معمولی **بدون رمز** است.</p>
+    <div class="flex">
+      <div><label for="export-passphrase">گذرواژهٔ فایل جدید</label><input type="password" id="export-passphrase" autocomplete="new-password" minlength="12" maxlength="256" placeholder="حداقل ۱۲ نویسه"></div>
+      <div><label for="confirm-passphrase">تکرار گذرواژه</label><input type="password" id="confirm-passphrase" autocomplete="new-password" minlength="12" maxlength="256"></div>
+      <div><label for="restore-passphrase">گذرواژهٔ بازکردن فایل رمزدار</label><input type="password" id="restore-passphrase" autocomplete="off" maxlength="256" placeholder="پیش از بازکردن فایل وارد کنید"></div>
+    </div>
+    <p class="help">رمزگذاری: AES-256-GCM با کلید ساخته‌شده از PBKDF2-SHA-256 و نمک تصادفی. این روش در برابر گذرواژهٔ ضعیف، دستگاه آلوده یا ازدست‌رفتن فایل و گذرواژه تضمین مطلق ندارد. فقط فایل رمزگذاری‌شده را در جای امن نگه دارید.</p>
+  </section>
   <p id="status" class="status" role="status" aria-live="polite">فضای جدید آماده است. یک پرسش بنویسید.</p>
   <div class="grid">
     <section class="panel full" aria-labelledby="ask-title">
@@ -203,6 +214,7 @@ code{direction:ltr;unicode-bidi:embed}
     if(!notes.length)quality.append(part('span','بررسی ساختاری موردی یافت نکرد؛ صحت و کفایت شواهد همچنان تأیید نشده است.'));
     else notes.forEach(note=>quality.append(part('p','• '+note)));
     $('export').disabled=!w.question;
+    $('encrypt-export').disabled=!w.question;
   }
   $('ask-form').addEventListener('submit',e=>{
     e.preventDefault();
@@ -262,15 +274,92 @@ code{direction:ltr;unicode-bidi:embed}
     for(const id of ['question','goal','constraints','values','claim','source','option','consequences','decision','rationale'])$(id).value='';
     status('کارگاه جدید ساخته شد. داده‌های قبلی فقط در فایل صادرشده باقی می‌ماند.');render();
   });
-  $('export').addEventListener('click',()=>{
-    if(!state.workspace.question)return status('پیش از خروجی گرفتن، پرسش را ثبت کنید.',true);
-    const payload=JSON.stringify(state,null,2)+'\n';
-    const blob=new Blob([payload],{type:'application/json;charset=utf-8'});
+  const ENCRYPTED_SCHEMA='nexus.offline-pilot.encrypted.v1';
+  const PBKDF2_ITERATIONS=310000;
+  const encoder=new TextEncoder();
+  const decoder=new TextDecoder('utf-8',{fatal:true});
+  const protectedContext=()=>Boolean(window.isSecureContext&&globalThis.crypto&&crypto.subtle&&crypto.getRandomValues);
+  function toB64(bytes) {
+    const a=new Uint8Array(bytes),parts=[];
+    for(let i=0;i<a.length;i+=8192)parts.push(String.fromCharCode(...a.subarray(i,i+8192)));
+    return btoa(parts.join(''));
+  }
+  function fromB64(value,expectedBytes=null) {
+    if(typeof value!=='string'||value.length>500000||value.length===0||value.length%4!==0||
+       !/^[A-Za-z0-9+/]+={0,2}$/.test(value))throw Error('bad-base64');
+    const raw=atob(value);
+    if((expectedBytes!==null&&raw.length!==expectedBytes)||
+       toB64(Uint8Array.from(raw,c=>c.charCodeAt(0)))!==value)throw Error('invalid-binary');
+    return Uint8Array.from(raw,c=>c.charCodeAt(0));
+  }
+  async function deriveAesKey(passphrase,salt,usage) {
+    const material=await crypto.subtle.importKey(
+      'raw',encoder.encode(passphrase),'PBKDF2',false,['deriveKey']);
+    return crypto.subtle.deriveKey(
+      {name:'PBKDF2',salt,iterations:PBKDF2_ITERATIONS,hash:'SHA-256'},
+      material,{name:'AES-GCM',length:256},false,[usage]);
+  }
+  async function seal(payload,passphrase) {
+    if(!protectedContext())throw Error('no-secure-context');
+    const salt=crypto.getRandomValues(new Uint8Array(16));
+    const iv=crypto.getRandomValues(new Uint8Array(12));
+    const key=await deriveAesKey(passphrase,salt,'encrypt');
+    const ciphertext=await crypto.subtle.encrypt(
+      {name:'AES-GCM',iv,additionalData:encoder.encode(ENCRYPTED_SCHEMA),tagLength:128},
+      key,encoder.encode(payload));
+    return {
+      schema:ENCRYPTED_SCHEMA,
+      kdf:{name:'PBKDF2',hash:'SHA-256',iterations:PBKDF2_ITERATIONS,salt:toB64(salt)},
+      cipher:{name:'AES-GCM',iv:toB64(iv),tagLength:128},
+      ciphertext:toB64(ciphertext)
+    };
+  }
+  async function unseal(envelope,passphrase) {
+    if(!protectedContext())throw Error('no-secure-context');
+    if(!envelope||typeof envelope!=='object'||Array.isArray(envelope)||
+       envelope.schema!==ENCRYPTED_SCHEMA||
+       !envelope.kdf||envelope.kdf.name!=='PBKDF2'||
+       envelope.kdf.hash!=='SHA-256'||envelope.kdf.iterations!==PBKDF2_ITERATIONS||
+       !envelope.cipher||envelope.cipher.name!=='AES-GCM'||envelope.cipher.tagLength!==128)
+      throw Error('bad-envelope');
+    const salt=fromB64(envelope.kdf.salt,16);
+    const iv=fromB64(envelope.cipher.iv,12);
+    const bytes=fromB64(envelope.ciphertext);
+    if(bytes.length<17||bytes.length>MAX_FILE+10000)throw Error('encrypted-size');
+    const key=await deriveAesKey(passphrase,salt,'decrypt');
+    const decrypted=await crypto.subtle.decrypt(
+      {name:'AES-GCM',iv,additionalData:encoder.encode(ENCRYPTED_SCHEMA),tagLength:128},
+      key,bytes);
+    if(decrypted.byteLength>MAX_FILE)throw Error('plaintext-size');
+    return JSON.parse(decoder.decode(decrypted));
+  }
+  function downloadJson(body,filename) {
+    const blob=new Blob([body],{type:'application/json;charset=utf-8'});
     const url=URL.createObjectURL(blob),a=document.createElement('a');
-    a.href=url;a.download='nexus-offline-'+state.workspace.id+'.json';
+    a.href=url;a.download=filename;
     document.body.append(a);a.click();a.remove();
     window.setTimeout(()=>URL.revokeObjectURL(url),5000);
-    status('فایل خروجی آماده شد. آن را در محلی امن نگه دارید؛ ذخیرهٔ خودکار وجود ندارد.');
+  }
+  $('encrypt-export').addEventListener('click',async()=>{
+    if(!state.workspace.question)return status('پیش از خروجی گرفتن، پرسش را ثبت کنید.',true);
+    const pw=$('export-passphrase').value,confirm=$('confirm-passphrase').value;
+    if(Array.from(pw).length<12||Array.from(pw).length>256)
+      return status('گذرواژه باید بین ۱۲ تا ۲۵۶ نویسه باشد.',true);
+    if(pw!==confirm)return status('تکرار گذرواژه یکسان نیست.',true);
+    if(!protectedContext())return status('مرورگر از رمزگذاری امن پشتیبانی نمی‌کند؛ فایل بدون رمز را به‌عنوان فایل امن به کار نبرید.',true);
+    const button=$('encrypt-export');button.disabled=true;
+    try {
+      const envelope=await seal(JSON.stringify(state),pw);
+      downloadJson(JSON.stringify(envelope,null,2)+'\n','nexus-protected-'+state.workspace.id+'.json');
+      status('فایل رمزگذاری‌شده آماده شد. گذرواژه را جدا و امن نگه دارید؛ بدون آن امکان بازیابی نیست.');
+    } catch {status('رمزگذاری انجام نشد؛ فایل جدیدی ذخیره نشده است.',true)}
+    finally{$('export-passphrase').value='';$('confirm-passphrase').value='';button.disabled=false}
+  });
+  $('export').addEventListener('click',()=>{
+    if(!state.workspace.question)return status('پیش از خروجی گرفتن، پرسش را ثبت کنید.',true);
+    if(!window.confirm('این فایل JSON بدون رمز و خواندنی است. آیا با ساخت نسخهٔ بدون رمز موافقید؟'))return;
+    downloadJson(JSON.stringify(state,null,2)+'\n','nexus-offline-'+state.workspace.id+'.json');
+    status('نسخهٔ JSON بدون رمز آماده شد؛ این فایل را خصوصی نگه دارید.');
   });
   function typeString(x,max,required=false){
     if(typeof x!=='string'||x.length>max||(required&&!x.trim()))throw Error('invalid-string');
@@ -329,8 +418,15 @@ code{direction:ltr;unicode-bidi:embed}
     const f=$('file').files?.[0];
     if(!f)return;
     try{
-      if(f.size>MAX_FILE)throw Error('file-too-large');
-      const incoming=validate(JSON.parse(await f.text()));
+      if(f.size>450000)throw Error('file-too-large');
+      const raw=JSON.parse(await f.text());
+      let data=raw;
+      if(raw?.schema===ENCRYPTED_SCHEMA){
+        const pw=$('restore-passphrase').value;
+        if(!pw)throw Error('password-needed');
+        data=await unseal(raw,pw);
+      } else if(f.size>MAX_FILE)throw Error('plaintext-too-large');
+      const incoming=validate(data);
       if(state.events.length&&!window.confirm('بارگذاری، کارگاه جاری را جایگزین می‌کند. ادامه می‌دهید؟'))return;
       state=incoming;
       $('question').value=state.workspace.question;
@@ -342,8 +438,11 @@ code{direction:ltr;unicode-bidi:embed}
       for(const id of ['claim','source','option','consequences'])$(id).value='';
       status('فایل آفلاین اعتبارسنجی و باز شد. اصالت فایل و منشأ داده‌ها مستقلاً قابل‌اثبات نیست.');
       render();
-    }catch{status('فایل نامعتبر یا ناسازگار است؛ کارگاه قبلی تغییر نکرد.',true)}
-    finally{$('file').value=''}
+    }catch(err){
+      status(err?.message==='password-needed'?'گذرواژهٔ فایل رمزدار را در بخش بالا وارد کنید و فایل را دوباره انتخاب کنید.':
+        'فایل نامعتبر، گذرواژهٔ نادرست یا اطلاعات دستکاری‌شده است؛ کارگاه قبلی تغییر نکرد.',true);
+    }
+    finally{$('file').value='';$('restore-passphrase').value=''}
   });
   render();
 })();
