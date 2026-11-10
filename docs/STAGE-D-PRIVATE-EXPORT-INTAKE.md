@@ -89,6 +89,50 @@ For additional defense, place the downloaded archive and the private
 intake directory on independent storage and verify the recorded SHA-256
 from that copy. Use `data-snapshot.py inspect` to revalidate integrity.
 
+## Optional Rust semantic audit — current-source compatibility check
+
+The private intake may additionally validate the quarantined restored
+workspace files with **the real Rust durable-workspace repository loader**.
+This is stronger than JSON/schema/SHA-256 integrity alone: it checks ordered
+audit events, presence of provenance, correspondence between claims,
+alternatives and their events, and explicit human-judgment transitions.
+The program is `src/bin/nexus-private-core-audit.rs`; it is compiled
+against the **current repository's pinned Rust source** (not against a
+remote production binary). It performs read-only, bounded directory scans
+and prints no paths, decisions, identifiers or data.
+
+On a trusted private operator machine, after obtaining the *separate*
+operator-held copy and building this repository's Rust validator:
+
+```bash
+cargo build --locked --bin nexus-private-core-audit
+python3 scripts/verify-offhost-volume-export.py \
+  --export-root /private/copied-data \
+  --private-evidence-dir /private/stage-d-semantic-intake \
+  --volume-id cc47a350-6c7e-4487-89d9-c4b390f94884 \
+  --deployment-id db2fd959-918e-49d5-b077-1ac74fac9a82 \
+  --runtime-commit 3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959 \
+  --rust-validator-bin ./target/debug/nexus-private-core-audit
+```
+
+The validator is **optional** for the earlier structural-only mode:
+without it the receipt MUST state `rust_core_audit: not_evaluated`.
+With an operator-supplied binary that successfully validates every
+workspace, the private report states
+`rust_core_audit: pass_operator_supplied_rust_binary` and
+`rust_core_binary_identity: operator_supplied_unverified`. A failing Rust
+audit stops the successful receipt. This additional witness does *not*
+cryptographically identify or attest the compiler, the original production
+source revision, provenance, original-file consistency or the provider.
+The current main Rust version may differ from the pinned deployment
+revision and reject valid earlier formats; incompatibility is NOT evidence
+of real data corruption. Keep the original copy private and unchanged.
+
+A disposable CI job validates this exact implementation using synthetic
+well-formed workspaces and negative fixtures for invalid audit sequence,
+unaudited claims, unaudited human judgment, missing provenance and
+unsafe validator paths. It does not fetch or publish live private data.
+
 ## Fail-closed next gate
 
 Before live replacement/survival tests, obtain (a) independently verified
