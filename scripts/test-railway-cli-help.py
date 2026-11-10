@@ -34,10 +34,10 @@ def main():
     cmd=module.permitted_download_command(cli,
         Path("/private/nexus-export/copied-data"))
     assert cmd[1:]==[
-        "--project",module.PROJECT,
+        "volume","--project",module.PROJECT,
         "--environment",module.ENVIRONMENT,
         "--service",module.SERVICE,
-        "volume","files","--volume",module.VOLUME,
+        "files","--volume",module.VOLUME,
         "download","/","/private/nexus-export/copied-data",
         "--concurrency","1"
     ]
