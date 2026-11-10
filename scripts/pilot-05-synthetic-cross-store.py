@@ -46,8 +46,13 @@ def run(*args, timeout=90):
     require(action.returncode == 0, "disposable-command-failed")
 
 
+def safe_path(path):
+    return (re.fullmatch(r"/[A-Za-z0-9/_-]*", path) is not None and
+            not path.startswith("//") and "//" not in path)
+
+
 def http(port, method, path, token=None, data=None):
-    require(re.fullmatch(r"/[A-Za-z0-9/_-]*", path) is not None, "invalid-local-route")
+    require(safe_path(path), "invalid-local-route")
     body = None if data is None else json.dumps(data, separators=(",", ":")).encode()
     headers = {"cache-control": "no-store"}
     if data is not None:
@@ -108,8 +113,7 @@ def test_pure_contract():
                                        "schema_version": 1}), "canonical-digest")
     for illegal in ("https://example.org", "/v1/requests?token=bad",
                     "//wronghost/readyz", "/v1/workspaces/../bad"):
-        require(re.fullmatch(r"/[A-Za-z0-9/_-]*", illegal) is None,
-                "nonlocal-http-disallowed")
+        require(not safe_path(illegal), "nonlocal-http-disallowed")
     print(json.dumps({"scope": "pure-local-validation",
                       "status": "PASS", "checks": 3}))
 
