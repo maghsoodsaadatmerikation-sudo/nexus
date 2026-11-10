@@ -11,7 +11,6 @@ from pathlib import Path
 import stat
 import subprocess
 import sys
-from types import SimpleNamespace
 
 PROJECT = "2ac7887b-d67a-48be-8a7b-bd54092893ae"
 ENVIRONMENT = "56c4bc45-0e62-4aa9-832f-884bb1aa620c"
@@ -22,6 +21,7 @@ RUNTIME = "3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INTAKE = Path(__file__).with_name("verify-offhost-volume-export.py")
 MAX_COPY_FILES = 20_000
+PINNED_CLI_VERSION = "5.71.0"
 
 
 class CaptureBlocked(ValueError):
@@ -55,6 +55,45 @@ def permitted_download_command(railway_bin, target):
     ]
 
 
+def validate_railway_cli(railway_bin):
+    """Fail closed on an unverified binary or mismatched real CLI grammar.
+
+    These commands are all help/version; they must never open a volume,
+    send a production request, read workspace bytes or modify files.
+    The official v5.71.0 artifact is hash-pinned in CI.
+    """
+    require(railway_bin.is_file() and not railway_bin.is_symlink(),
+            "Railway CLI executable is missing")
+    require(os.access(railway_bin, os.X_OK), "Railway CLI not executable")
+    require(railway_bin.is_absolute(), "Railway CLI path must be absolute")
+    require(railway_bin.parent.resolve() == railway_bin.parent,
+            "Railway CLI directory must not resolve through symlinks")
+    commands = (
+        ([str(railway_bin), "--version"], ("railway", PINNED_CLI_VERSION)),
+        ([str(railway_bin), "volume", "files", "--help"],
+         ("download", "--volume")),
+        (permitted_download_command(railway_bin, "/nonexistent/nexus-no-file-copy")
+         + ["--help"], ("--concurrency", "download")),
+    )
+    clean_environment = os.environ.copy()
+    clean_environment["RAILWAY_NO_AUTO_UPDATE"] = "1"
+    clean_environment["CI"] = "true"
+    for cmd, required_tokens in commands:
+        try:
+            probe = subprocess.run(
+                cmd, stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                env=clean_environment, check=False, timeout=15,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            raise CaptureBlocked("Railway CLI local grammar preflight failed") from None
+        content = probe.stdout.decode("utf-8", "replace").lower()
+        require(probe.returncode == 0 and
+                all(token.lower() in content for token in required_tokens),
+                "Railway CLI version or download syntax unsupported")
+    return True
+
+
 def require_regular_copy(root):
     """Reject symlink/pipes/device/hard-link or path escape in downloaded tree."""
     require(root.is_dir() and not root.is_symlink(), "no copied directory")
@@ -83,9 +122,9 @@ def execute(args):
 
     require(os.environ.get("RAILWAY_TOKEN") or os.environ.get("RAILWAY_API_TOKEN"),
             "authenticated CLI environment not configured")
-    require(args.railway_bin.is_file() and not args.railway_bin.is_symlink(),
-            "Railway CLI executable is missing")
-    require(os.access(args.railway_bin, os.X_OK), "Railway CLI not executable")
+    # Refuse to create a private destination until the real binary accepts
+    # the exact pinned version, command option order and --help grammar.
+    validate_railway_cli(args.railway_bin)
     require(INTAKE.is_file(), "isolated structural intake is missing")
     previous_umask = os.umask(0o077)
     try:
