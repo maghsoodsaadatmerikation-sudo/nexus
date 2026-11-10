@@ -14,6 +14,18 @@ The system separates human authority, evidence, machine analysis, execution auth
 A_out <= A_in
 ```
 
+## Try NEXUS on the web (static, no account)
+
+The standalone Persian/RTL mobile pilot is hosted at
+**https://nexus-offline-pilot.onrender.com/** (Render static site, with automatic
+releases disabled). This page runs the same memory-only HTML as
+[`web/offline-pilot.html`](web/offline-pilot.html). It does not connect to the
+Rust gateway, store your decisions on Render or issue machine decisions.
+Export your JSON privately to preserve work before closing the tab.
+See [Pilot 02 hosting and independent HTTPS evidence](docs/STATIC-PILOT-HOST.md)
+for what has and has not been verified. The full authenticated online pilot
+remains a separate open milestone.
+
 ## Try NEXUS now — free offline decision pilot
 
 A [standalone Persian mobile decision workshop](web/offline-pilot.html)
