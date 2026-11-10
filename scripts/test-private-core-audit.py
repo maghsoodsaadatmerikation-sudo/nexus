@@ -98,6 +98,7 @@ class PrivateCoreAuditTests(unittest.TestCase):
         self.assertEqual(report["independent_railway_backup"], "not_proven")
         self.assertTrue(report["local_copy_scans_matched_archive"])
         self.assertTrue(report["isolated_byte_roundtrip"])
+        self.assertTrue(report["post_rust_source_and_restore_rechecked"])
         self.assertNotIn(self.id, result.stdout + result.stderr)
 
     def test_unverified_rust_check_never_appears_as_audit_pass(self):
@@ -106,6 +107,7 @@ class PrivateCoreAuditTests(unittest.TestCase):
         report = json.loads((self.work / "intake-report.json").read_text())
         self.assertEqual(report["rust_core_audit"], "not_evaluated")
         self.assertEqual(report["rust_core_binary_identity"], "not_verified")
+        self.assertFalse(report["post_rust_source_and_restore_rechecked"])
 
     def test_structurally_valid_but_tampered_audit_sequence_fails(self):
         self.snapshot["events"][0]["sequence"] = 9
@@ -131,6 +133,46 @@ class PrivateCoreAuditTests(unittest.TestCase):
         self.snapshot["events"][0]["provenance_id"] = " "
         self.write()
         self.assert_blocked(self.invoke())
+
+    def post_rust_mutator(self, target):
+        """Run the actual Rust binary first, then alter synthetic private bytes.
+
+        This recreates the window that was unguarded between a successful
+        Rust subprocess exit and an intake receipt; no provider is involved.
+        """
+        targets = {
+            "source": repr(str(self.target)),
+            "restored_workspace": "str(Path(sys.argv[1]) / " + repr(self.filename) + ")",
+            "restored_marker": "str(Path(sys.argv[1]) / '.nexus-recovery-required')",
+        }
+        location = targets[target]
+        wrapper = self.root / ("post-rust-" + target + ".py")
+        wrapper.write_text(
+            "#!/usr/bin/env python3\\n"
+            "from pathlib import Path\\n"
+            "import subprocess, sys\\n"
+            "done = subprocess.run([" + repr(str(VALIDATOR)) + ", sys.argv[1]], "
+            "stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)\\n"
+            "if done.returncode != 0: sys.exit(done.returncode)\\n"
+            "with open(" + location + ", 'ab') as file: file.write(b' ')\\n"
+        )
+        wrapper.chmod(0o700)
+        return wrapper
+
+    def test_copy_changed_after_rust_validated_is_blocked(self):
+        self.assert_blocked(
+            self.invoke(bin_path=self.post_rust_mutator("source"))
+        )
+
+    def test_quarantine_workspace_changed_after_rust_validated_is_blocked(self):
+        self.assert_blocked(
+            self.invoke(bin_path=self.post_rust_mutator("restored_workspace"))
+        )
+
+    def test_quarantine_marker_changed_after_rust_validated_is_blocked(self):
+        self.assert_blocked(
+            self.invoke(bin_path=self.post_rust_mutator("restored_marker"))
+        )
 
     def test_invalid_core_validator_binary_fails_closed(self):
         self.assert_blocked(self.invoke(bin_path=self.root / "missing-rust-binary"))
