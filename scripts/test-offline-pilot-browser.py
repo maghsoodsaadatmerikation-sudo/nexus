@@ -252,8 +252,9 @@ window.addEventListener('load', async () => {
     output.textContent = JSON.stringify({status:'PASS',width,checks,
       scope:'standalone-browser-file-only',network_requests:requests,
       production_verified:false,authority:'none'});
-  } catch {
-    output.textContent = JSON.stringify({status:'FAIL',reason:'offline-pilot-contract'});
+  } catch (e) {
+    const code=String(e?.message||'offline-pilot-contract').replace(/[^A-Za-z0-9-]/g,'').slice(0,120);
+    output.textContent = JSON.stringify({status:'FAIL',reason:code});
   }
 });
 """
@@ -283,7 +284,7 @@ def main():
                    browser, page.as_uri(), str(root / layout), dimensions]
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             if proc.returncode:
-                raise RuntimeError("real browser did not report PASS")
+                raise RuntimeError("real browser did not report PASS: "+proc.stdout.strip()[:300])
             report = json.loads(proc.stdout)
             if (report.get("status") != "PASS" or len(report.get("checks", [])) != 26 or
                 report.get("network_requests") != 0 or
