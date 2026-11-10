@@ -14,6 +14,22 @@ The system separates human authority, evidence, machine analysis, execution auth
 A_out <= A_in
 ```
 
+## Try NEXUS now — free offline decision pilot
+
+A [standalone Persian mobile decision workshop](web/offline-pilot.html)
+is available without a hosting account, device setup, API token or ongoing
+service. **Download the HTML file and open the downloaded file in your browser**;
+GitHub's source preview is not the running app. See the
+[offline-use and privacy guide](docs/OFFLINE-PILOT.md).
+
+This is a browser-memory-only, explicitly exported/imported demo with
+**no network requests and no automatic storage**, not the sealed Rust gateway,
+a live production instance, a compatible server snapshot, or an attested audit.
+A real authenticated online user pilot is tracked separately in [Issue #70](
+https://github.com/maghsoodsaadatmerikation-sudo/nexus/issues/70).
+The original Railway storage must not be modified before independently
+verified recovery.
+
 ## Current sealed release — v2.5.0
 
 `v2.5.0` is the current sealed **unified transport-authentication** boundary.
