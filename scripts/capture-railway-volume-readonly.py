@@ -49,8 +49,9 @@ def protected_target(root):
 def permitted_download_command(railway_bin, target):
     """One exact non-mutating subcommand, for an exact known original volume."""
     return [
-        str(railway_bin), "--project", PROJECT, "--environment", ENVIRONMENT,
-        "--service", SERVICE, "volume", "files", "--volume", VOLUME,
+        str(railway_bin), "volume", "--project", PROJECT,
+        "--environment", ENVIRONMENT, "--service", SERVICE,
+        "files", "--volume", VOLUME,
         "download", "/", str(target), "--concurrency", "1",
     ]
 
