@@ -47,12 +47,17 @@ window.addEventListener('load', async () => {
     checks.push('empty-workspace-no-auto-decision');
     fill('question','آیا این گزینه برای من مناسب است؟');
     fill('goal','استقلال');
-    fill('constraints','زمان\nبودجه');
-    fill('values','دقت');
+    fill('constraints','زمان، بودجه');
+    fill('values','شفافیت، استقلال');
     await submit('ask-form');
     assert(!byId('export').disabled, 'question-not-accepted');
     assert(byId('question-view').textContent.includes('استقلال'), 'goal-not-rendered');
     checks.push('question-goal-constraints-values');
+    assert(byId('question-view').textContent.includes('زمان • بودجه') &&
+      byId('question-view').textContent.includes('شفافیت • استقلال'), 'comma-separated-fields-not-split');
+    await submit('ask-form');
+    assert(byId('audit').querySelectorAll('.entry').length === 1, 'unchanged-question-created-audit-event');
+    checks.push('comma-lists-and-noop-resubmission');
     fill('origin','external_evidence');
     fill('claim','<img src=x onerror="window.testXss=true"> شاهد آزمایشی');
     await submit('claim-form');
@@ -68,11 +73,20 @@ window.addEventListener('load', async () => {
     await submit('claim-form');
     assert(byId('decision-view').textContent.includes('هیچ تصمیم انسانی'), 'machine-turned-into-decision');
     checks.push('machine-analysis-non-authority');
-    fill('option','گزینهٔ A');fill('consequences','ریسک\nفایده');
+    fill('option','گزینهٔ A');
+    await submit('option-form');
+    assert(byId('status').classList.contains('error') &&
+      byId('alternatives').textContent.includes('گزینه‌ای ثبت نشده'), 'empty-consequence-accepted');
+    checks.push('empty-consequence-rejected');
+    fill('consequences','ریسک\nفایده');
     await submit('option-form');
     assert(byId('alternatives').textContent.includes('گزینهٔ A'), 'option-not-recorded');
     checks.push('explicit-option-with-consequences');
     fill('decision','انتخاب آگاهانهٔ من');
+    await submit('decision-form');
+    assert(byId('status').classList.contains('error') &&
+      byId('decision-view').textContent.includes('هیچ تصمیم انسانی'), 'empty-rationale-accepted');
+    checks.push('empty-rationale-rejected');
     fill('rationale','به تصمیم خودم');
     await submit('decision-form');
     assert(byId('decision-view').textContent.includes('انتخاب آگاهانهٔ من'), 'human-judgment-not-recorded');
@@ -95,6 +109,14 @@ window.addEventListener('load', async () => {
     assert(byId('decision-view').textContent.includes('انتخاب آگاهانهٔ من') &&
       byId('audit').textContent.includes('#5'), 'import-not-restored');
     checks.push('json-import-retains-state');
+    const legacy = {...exported, workspace:{...exported.workspace,
+      judgment:{...exported.workspace.judgment, rationale:''},
+      alternatives:exported.workspace.alternatives.map(a=>({...a,consequences:[]}))}};
+    await upload(JSON.stringify(legacy));
+    assert(byId('decision-view').textContent.includes('انتخاب آگاهانهٔ من') &&
+      byId('quality').textContent.includes('دلیل تصمیم در فایل وجود ندارد') &&
+      byId('quality').textContent.includes('بدون پیامد'), 'historical-incomplete-json-not-reviewed');
+    checks.push('older-incomplete-export-imported-with-warning');
     const prior = byId('decision-view').textContent;
     const corrupt = {...exported, workspace:{...exported.workspace, claims:[]}};
     await upload(JSON.stringify(corrupt));
@@ -142,7 +164,7 @@ def main():
             if proc.returncode:
                 raise RuntimeError("real browser did not report PASS")
             report = json.loads(proc.stdout)
-            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 11 or
+            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 15 or
                 report.get("network_requests") != 0 or
                 (layout == "narrow") != (report["width"] <= 760)):
                 raise RuntimeError("offline real-browser contract did not PASS")
