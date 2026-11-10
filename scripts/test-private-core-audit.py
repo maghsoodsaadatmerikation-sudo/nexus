@@ -148,13 +148,13 @@ class PrivateCoreAuditTests(unittest.TestCase):
         location = targets[target]
         wrapper = self.root / ("post-rust-" + target + ".py")
         wrapper.write_text(
-            "#!/usr/bin/env python3\\n"
-            "from pathlib import Path\\n"
-            "import subprocess, sys\\n"
+            "#!/usr/bin/env python3\n"
+            "from pathlib import Path\n"
+            "import subprocess, sys\n"
             "done = subprocess.run([" + repr(str(VALIDATOR)) + ", sys.argv[1]], "
-            "stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)\\n"
-            "if done.returncode != 0: sys.exit(done.returncode)\\n"
-            "with open(" + location + ", 'ab') as file: file.write(b' ')\\n"
+            "stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)\n"
+            "if done.returncode != 0: sys.exit(done.returncode)\n"
+            "with open(" + location + ", 'ab') as file: file.write(b' ')\n"
         )
         wrapper.chmod(0o700)
         return wrapper
