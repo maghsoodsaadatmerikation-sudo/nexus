@@ -63,8 +63,8 @@ code{direction:ltr;unicode-bidi:embed}
         <textarea id="question" maxlength="2000" required placeholder="برای بررسی این تصمیم چه چیزهایی را باید بدانم؟"></textarea>
         <div class="flex">
           <div><label for="goal">هدف</label><input id="goal" maxlength="1000" placeholder="چه نتیجه‌ای برایم مهم است؟"></div>
-          <div><label for="constraints">محدودیت‌ها (هر مورد در یک خط)</label><textarea id="constraints" maxlength="2000" placeholder="بودجه، زمان، تعهدات ..."></textarea></div>
-          <div><label for="values">ارزش‌ها (هر مورد در یک خط)</label><textarea id="values" maxlength="2000" placeholder="استقلال، امنیت، شفافیت ..."></textarea></div>
+          <div><label for="constraints">محدودیت‌ها (هر مورد در یک خط یا با ویرگول)</label><textarea id="constraints" maxlength="2000" placeholder="بودجه، زمان، تعهدات ..."></textarea></div>
+          <div><label for="values">ارزش‌ها (هر مورد در یک خط یا با ویرگول)</label><textarea id="values" maxlength="2000" placeholder="استقلال، امنیت، شفافیت ..."></textarea></div>
         </div>
         <button type="submit" class="inline-action">ثبت مسئله</button>
       </form>
@@ -81,7 +81,7 @@ code{direction:ltr;unicode-bidi:embed}
           <div><label for="uncertainty">میزان عدم‌قطعیت</label><select id="uncertainty"><option value="unknown">نامشخص</option><option value="high">زیاد</option><option value="medium">متوسط</option><option value="low">کم</option></select></div>
         </div>
         <label for="source">منبع / شناسهٔ منشأ</label>
-        <input id="source" maxlength="600" placeholder="برای شاهد بیرونی الزامی است">
+        <input id="source" maxlength="600" placeholder="پیوند یا شناسهٔ دقیق شاهد؛ صحت آن خودکار بررسی نمی‌شود">
         <button type="submit" class="inline-action">افزودن شاهد</button>
       </form>
       <div id="claims" class="empty">شاهدی ثبت نشده است.</div>
@@ -91,27 +91,32 @@ code{direction:ltr;unicode-bidi:embed}
       <p class="help">گزینه‌ها رتبه‌بندی خودکار نمی‌شوند؛ پیامدهای احتمالی را بنویسید.</p>
       <form id="option-form">
         <label for="option">عنوان گزینه</label>
-        <input id="option" maxlength="500" required>
-        <label for="consequences">پیامدها (هر مورد در یک خط)</label>
-        <textarea id="consequences" maxlength="2000"></textarea>
+        <input id="option" maxlength="500" required placeholder="مثلاً گزینهٔ A — انتشار محدود">
+        <label for="consequences">پیامدها (هر مورد در یک خط؛ دست‌کم یک مورد)</label>
+        <textarea id="consequences" maxlength="2000" placeholder="مثلاً دریافت بازخورد زودهنگام یا محدودیت ذخیره‌سازی"></textarea>
         <button type="submit" class="inline-action">افزودن گزینه</button>
       </form>
       <div id="alternatives" class="empty">گزینه‌ای ثبت نشده است.</div>
     </section>
     <section class="panel full" aria-labelledby="decision-title">
       <h2 id="decision-title">۴. تصمیم انسانی</h2>
-      <p class="help">تنها با فشردن «ثبت تصمیم من» این بخش پر می‌شود. NEXUS هیچ تصمیمی را به‌صورت ضمنی ثبت نمی‌کند.</p>
+      <p class="help">تصمیم باید روشن کند کدام گزینه را انتخاب می‌کنید یا چرا تصمیم را به تعویق می‌اندازید. هدف آزمایش، خودِ تصمیم نیست. ثبت فقط با اقدام شما انجام می‌شود.</p>
       <form id="decision-form">
         <label for="decision">تصمیم شما</label>
-        <textarea id="decision" maxlength="2000" required></textarea>
-        <label for="rationale">دلیل و ملاحظات</label>
-        <textarea id="rationale" maxlength="2000"></textarea>
+        <textarea id="decision" maxlength="2000" required placeholder="مثلاً گزینهٔ C را فعلاً انتخاب می‌کنم؛ یا تصمیم را تا تکمیل شواهد به تعویق می‌اندازم."></textarea>
+        <label for="rationale">دلیل تصمیم (الزامی برای تصمیم‌های تازه)</label>
+        <textarea id="rationale" maxlength="2000" required placeholder="دلیل انتخاب و مهم‌ترین عدم‌قطعیت باقی‌مانده"></textarea>
         <button type="submit" class="inline-action">ثبت تصمیم من</button>
       </form>
       <div id="decision-view" class="empty">هیچ تصمیم انسانی ثبت نشده است.</div>
     </section>
+    <section class="panel full" aria-labelledby="quality-title">
+      <h2 id="quality-title">۵. مرور تکمیل‌بودن اطلاعات</h2>
+      <p class="help">این بررسی فقط خالی‌بودن یا ساختار برخی فیلدها را نشان می‌دهد، نه درست‌بودن شواهد یا کیفیت واقعی تصمیم.</p>
+      <div id="quality" role="status" aria-live="polite" class="entry"></div>
+    </section>
     <section class="panel full" aria-labelledby="audit-title">
-      <h2 id="audit-title">۵. تاریخچهٔ اقدامات</h2>
+      <h2 id="audit-title">۶. تاریخچهٔ اقدامات</h2>
       <p class="help">این تاریخچه محلی و قابل‌ویرایش است؛ شاهد حسابرسی رمزنگاری‌شده یا تأیید مستقل محسوب نمی‌شود.</p>
       <div id="audit" class="audit empty">هنوز رویدادی ثبت نشده است.</div>
     </section>
@@ -137,6 +142,7 @@ code{direction:ltr;unicode-bidi:embed}
   }
   const trim=(x,max)=>String(x||'').trim().slice(0,max);
   const lines=(x,maxItems)=>String(x||'').split('\n').map(x=>trim(x,300)).filter(Boolean).slice(0,maxItems);
+  const commaItems=(x,maxItems)=>String(x||'').split(/[\n،,]+/).map(x=>trim(x,300)).filter(Boolean).slice(0,maxItems);
   function event(kind){
     if(state.events.length>=MAX_EVENTS){status('سقف تاریخچه پر شده است؛ پیش از ادامه فایل بگیرید و کارگاه جدید بسازید.',true);return false;}
     state.events.push({sequence:state.events.length+1,kind,at:new Date().toISOString()});
@@ -179,19 +185,37 @@ code{direction:ltr;unicode-bidi:embed}
       if(item.rationale)row.append(part('small','دلیل: '+item.rationale));
     });
     const names={question:'ثبت پرسش و هدف',claim:'افزودن شاهد',alternative:'افزودن گزینه',judgment:'ثبت صریح تصمیم انسان'};
+    let seenQuestion=false;
     entries($('audit'),state.events,'هنوز رویدادی ثبت نشده است.',(row,item)=>{
-      row.append(part('span','#'+item.sequence+' — '+names[item.kind]));
+      const label=item.kind==='question'&&seenQuestion?'بازثبت یا ویرایش مسئله':names[item.kind];
+      if(item.kind==='question')seenQuestion=true;
+      row.append(part('span','#'+item.sequence+' — '+label));
       row.append(part('small',item.at));
     });
+    const notes=[];
+    if(!w.question)notes.push('هنوز پرسشی ثبت نشده است.');
+    if(w.question&&w.claims.length<2)notes.push('کمتر از دو ادعا یا شاهد ثبت شده؛ شواهد موافق و مخالف را نیز بررسی کنید.');
+    if(w.claims.some(c=>c.origin==='external_evidence'))notes.push('نشانی منبع درج شده است؛ ارتباط و صحت آن به‌صورت مستقل بررسی نشده است.');
+    if(w.alternatives.some(a=>!a.consequences.length))notes.push('دست‌کم یک گزینه بدون پیامد ثبت شده است.');
+    if(w.judgment&&!w.judgment.rationale.trim())notes.push('دلیل تصمیم در فایل وجود ندارد.');
+    if(w.judgment)notes.push('بررسی کنید متن تصمیم مشخصاً انتخاب گزینه یا تعویق آن را بیان کند؛ این موضوع خودکار تشخیص داده نمی‌شود.');
+    const quality=$('quality');quality.replaceChildren();
+    if(!notes.length)quality.append(part('span','بررسی ساختاری موردی یافت نکرد؛ صحت و کفایت شواهد همچنان تأیید نشده است.'));
+    else notes.forEach(note=>quality.append(part('p','• '+note)));
     $('export').disabled=!w.question;
   }
   $('ask-form').addEventListener('submit',e=>{
     e.preventDefault();
     const q=trim($('question').value,2000);
     if(!q)return status('پرسش اصلی را وارد کنید.',true);
+    const draft={question:q,goal:trim($('goal').value,1000),
+      constraints:commaItems($('constraints').value,25),values:commaItems($('values').value,25)};
+    const old=state.workspace;
+    if(old.question===draft.question&&old.goal===draft.goal&&
+       JSON.stringify(old.constraints)===JSON.stringify(draft.constraints)&&
+       JSON.stringify(old.values)===JSON.stringify(draft.values))return status('اطلاعات مسئله تغییری نکرده است؛ رویداد تازه ثبت نشد.');
     if(!event('question'))return;
-    Object.assign(state.workspace,{question:q,goal:trim($('goal').value,1000),
-      constraints:lines($('constraints').value,25),values:lines($('values').value,25)});
+    Object.assign(state.workspace,draft);
     status('پرسش ثبت شد؛ برای حفظ آن فایل JSON دریافت کنید.');
     render();
   });
@@ -213,8 +237,10 @@ code{direction:ltr;unicode-bidi:embed}
     if(state.workspace.alternatives.length>=MAX_OPTIONS)return status('حداکثر ۶۰ گزینه در هر کارگاه.',true);
     const label=trim($('option').value,500);
     if(!label)return status('عنوان گزینه را وارد کنید.',true);
+    const consequences=lines($('consequences').value,30);
+    if(!consequences.length)return status('برای هر گزینه دست‌کم یک پیامد احتمالی بنویسید.',true);
     if(!event('alternative'))return;
-    state.workspace.alternatives.push({id:uuid(),label,consequences:lines($('consequences').value,30)});
+    state.workspace.alternatives.push({id:uuid(),label,consequences});
     $('option').value='';$('consequences').value='';
     status('گزینه اضافه شد. رتبه‌بندی خودکار انجام نشد.');render();
   });
@@ -223,9 +249,11 @@ code{direction:ltr;unicode-bidi:embed}
     if(!state.workspace.question)return status('ابتدا پرسش را ثبت کنید.',true);
     const decision=trim($('decision').value,2000);
     if(!decision)return status('متن تصمیم خود را وارد کنید.',true);
+    const rationale=trim($('rationale').value,2000);
+    if(!rationale)return status('برای ثبت تصمیم تازه، دلیل انتخاب یا تعویق را وارد کنید.',true);
     if(state.workspace.judgment!==null)return status('تصمیم این کارگاه قبلاً ثبت شده؛ برای تصمیم تازه کارگاه جدید بسازید.',true);
     if(!event('judgment'))return;
-    state.workspace.judgment={decision,rationale:trim($('rationale').value,2000)};
+    state.workspace.judgment={decision,rationale};
     status('تصمیم انسانی شما ثبت شد؛ اکنون فایل JSON را ذخیره کنید.');render();
   });
   $('new').addEventListener('click',()=>{
