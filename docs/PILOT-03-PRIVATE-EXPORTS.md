@@ -49,8 +49,10 @@ screenshot capture and untrusted browsers remain threats.
   unencrypted JSON contains only encryption metadata and ciphertext, **not**
   the question, claim, decision or passphrase.
 - Base64 is canonical and checked; exact known algorithm IDs, sizes and
-  iterations are required when importing. Max encrypted file 450 kB;
-  decryption and JSON validation are bounded. Missing WebCrypto/secure context
+  iterations are required when importing. Max encrypted file 3 MiB,
+  maximum decrypted payload 2 MiB; decryption and JSON validation are bounded.
+  Large-workspace plaintext and encrypted roundtrips are also exercised in
+  the disposable Chrome acceptance tests. Missing WebCrypto/secure context
   fails closed — no automatic fallback to unencrypted export.
 - The cleartext plaintext-export option remains explicitly available for
   compatibility and is **not** a secure copy.
