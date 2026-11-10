@@ -16,6 +16,10 @@ window.addEventListener('load', async () => {
   const byId = id => document.getElementById(id);
   const assert = (ok, why) => { if (!ok) throw new Error(why); };
   const tick = () => new Promise(resolve => setTimeout(resolve, 60));
+  const waitFor = async (predicate,why) => {
+    for(let n=0;n<300;n++) {if(predicate())return; await tick();}
+    throw Error(why);
+  };
   const fill = (id, value) => {
     byId(id).value = value;
     byId(id).dispatchEvent(new Event('input', {bubbles:true}));
@@ -123,6 +127,73 @@ window.addEventListener('load', async () => {
     assert(byId('status').classList.contains('error') &&
       byId('decision-view').textContent === prior,'corrupt-import-mutated-state');
     checks.push('corrupt-import-fail-closed');
+    // Synthetic browser-only protected-file acceptance: no user secrets.
+    let oldBlob=blob;
+    fill('export-passphrase','short');
+    fill('confirm-passphrase','short');
+    byId('encrypt-export').click();
+    await tick();
+    assert(blob===oldBlob && byId('status').classList.contains('error'),
+      'weak-password-accepted');
+    fill('export-passphrase','a-long-synthetic-passphrase-2026');
+    fill('confirm-passphrase','wrong-password-test');
+    byId('encrypt-export').click();
+    await tick();
+    assert(blob===oldBlob && byId('status').classList.contains('error'),
+      'password-mismatch-accepted');
+    checks.push('protected-export-password-guards');
+    fill('confirm-passphrase','a-long-synthetic-passphrase-2026');
+    byId('encrypt-export').click();
+    await waitFor(()=>blob!==oldBlob,'protected-export-timeout');
+    const encrypted=JSON.parse(await blob.text());
+    assert(encrypted.schema==='nexus.offline-pilot.encrypted.v1' &&
+      encrypted.kdf.iterations===310000 &&
+      encrypted.kdf.name==='PBKDF2' && encrypted.kdf.hash==='SHA-256' &&
+      encrypted.cipher.name==='AES-GCM' && encrypted.cipher.tagLength===128 &&
+      !JSON.stringify(encrypted).includes('انتخاب آگاهانهٔ من') &&
+      !JSON.stringify(encrypted).includes('a-long-synthetic-passphrase-2026'),
+      'weak-or-plaintext-encrypted-envelope');
+    await waitFor(()=>byId('export-passphrase').value==='','export-password-not-cleared');
+    checks.push('aes256-gcm-encrypted-no-plaintext-or-password');
+    oldBlob=blob;
+    fill('export-passphrase','a-long-synthetic-passphrase-2026');
+    fill('confirm-passphrase','a-long-synthetic-passphrase-2026');
+    byId('encrypt-export').click();
+    await waitFor(()=>blob!==oldBlob,'second-encrypted-export-timeout');
+    const encrypted2=JSON.parse(await blob.text());
+    assert(encrypted.kdf.salt!==encrypted2.kdf.salt &&
+      encrypted.cipher.iv!==encrypted2.cipher.iv &&
+      encrypted.ciphertext!==encrypted2.ciphertext,'reused-salt-or-nonce');
+    checks.push('fresh-random-salt-nonce-per-export');
+    const preserved=byId('decision-view').textContent;
+    await upload(JSON.stringify(encrypted2));
+    assert(byId('status').classList.contains('error') &&
+      byId('decision-view').textContent===preserved &&
+      byId('status').textContent.includes('گذرواژهٔ'), 'missing-import-passphrase');
+    checks.push('encrypted-import-needs-user-passphrase');
+    fill('restore-passphrase','bad-test-password-2026');
+    await upload(JSON.stringify(encrypted2));
+    await waitFor(()=>byId('status').classList.contains('error'),'wrong-passphrase-timeout');
+    assert(byId('decision-view').textContent===preserved &&
+      byId('restore-passphrase').value==='','wrong-passphrase-mutated-state');
+    checks.push('wrong-passphrase-fail-closed');
+    const corrupted={...encrypted2,ciphertext:
+      (encrypted2.ciphertext[0]==='A'?'B':'A')+encrypted2.ciphertext.slice(1)};
+    fill('restore-passphrase','a-long-synthetic-passphrase-2026');
+    await upload(JSON.stringify(corrupted));
+    await waitFor(()=>byId('restore-passphrase').value==='','tamper-restore-did-not-finish');
+    assert(byId('status').classList.contains('error') &&
+      byId('decision-view').textContent===preserved,'tampered-ciphertext-accepted');
+    checks.push('tampered-ciphertext-fail-closed');
+    byId('new').click(); await tick();
+    assert(byId('decision-view').textContent.includes('هیچ تصمیم انسانی'),'new-did-not-clear');
+    fill('restore-passphrase','a-long-synthetic-passphrase-2026');
+    await upload(JSON.stringify(encrypted2));
+    await waitFor(()=>byId('decision-view').textContent.includes('انتخاب آگاهانهٔ من'),
+      'encrypted-roundtrip-not-restored');
+    assert(byId('restore-passphrase').value==='' &&
+      byId('audit').textContent.includes('#5'),'encrypted-state-mismatch');
+    checks.push('real-webcrypto-restores-synthetic-workspace');
     assert(requests === 0, 'network-attempted');
     checks.push('no-external-requests');
     const width = window.innerWidth;
@@ -164,7 +235,7 @@ def main():
             if proc.returncode:
                 raise RuntimeError("real browser did not report PASS")
             report = json.loads(proc.stdout)
-            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 15 or
+            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 22 or
                 report.get("network_requests") != 0 or
                 (layout == "narrow") != (report["width"] <= 760)):
                 raise RuntimeError("offline real-browser contract did not PASS")
