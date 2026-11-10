@@ -48,6 +48,14 @@ jobs:
                      len(x['checks'])==11 for x in report['reports'])
           print('NEXUS OFFLINE PILOT: REAL BROWSER PASS')
           PY
+      - name: Publish standalone HTML artifact for direct offline use
+        if: ${{ success() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-offline-pilot-standalone-html
+          path: web/offline-pilot.html
+          if-no-files-found: error
+          retention-days: 30
       - name: Upload sanitized offline-browser evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
