@@ -114,6 +114,9 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(receipt["authority"],"none")
         self.assertEqual(receipt["independent_complete_production_backup"],"NOT_PROVEN")
         self.assertEqual(receipt["source_consistency"],"NOT_VERIFIED_ATOMIC")
+        self.assertTrue(receipt["local_copy_scans_matched_archive"])
+        self.assertTrue(intake["local_copy_scans_matched_archive"])
+        self.assertEqual(intake["source_consistency"],"not_verified")
         self.assertEqual(receipt["archive_sha256"],intake["snapshot_sha256"])
         self.assertTrue(intake["isolated_byte_roundtrip"])
         self.assertTrue((self.root/"isolated-intake"/
