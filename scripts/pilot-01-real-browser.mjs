@@ -223,8 +223,11 @@ function reloadScript(workspace, layout) {
       if (!node('loadWorkspaceButton') || !node('addClaimButton').disabled)
         throw new Error('fresh-browser-did-not-reset');
       set('workspaceId', id);
+      const rejected = await fetch('/v1/workspaces/' + encodeURIComponent(id),
+        {cache:'no-store'});
+      if (rejected.status !== 401) throw new Error('backend-allowed-missing-bearer');
       node('loadWorkspaceButton').click();
-      await wait(() => node('status').textContent.includes('401'));
+      await wait(() => node('status').textContent.includes('Authentication required.'));
       if (!node('addClaimButton').disabled) throw new Error('missing-auth-granted-access');
       set('token', token);
       node('loadWorkspaceButton').click();
