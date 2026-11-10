@@ -35,10 +35,10 @@ jobs:
           set -euo pipefail
           expected="web/offline-pilot.html"
           # AutoDeploy is intentionally off. A PR is compared against the
-          # last independently verified deployed Pilot 03 revision, not the unreleased PR.
+          # last independently verified deployed Pilot 06 revision, not the unreleased PR.
           # After merge + manual promotion, main verifies the new exact bytes.
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            git show 7f6b71304ee8099aaa4b46f76ea8d6761de6ed87:web/offline-pilot.html > /tmp/nexus-current-deployed-pilot.html
+            git show 24644558cfe96f8f1a725986efbe94e1710032f2:web/offline-pilot.html > /tmp/nexus-current-deployed-pilot.html
             expected="/tmp/nexus-current-deployed-pilot.html"
           fi
           python3 scripts/verify-public-static-pilot.py --expected "$expected" > static-pilot-https-report.json
