@@ -11,6 +11,12 @@ on:
       - 'docs/STAGE-D-READONLY-CLI-CAPTURE.md'
       - 'scripts/test-offhost-volume-export.py'
       - 'scripts/data-snapshot.py'
+      - 'scripts/test-private-core-audit.py'
+      - 'src/bin/nexus-private-core-audit.rs'
+      - 'src/workspace_persistence.rs'
+      - 'src/workspace.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'docs/STAGE-D-PRIVATE-EXPORT-INTAKE.md'
 
 permissions:
@@ -96,3 +102,37 @@ jobs:
           python3 scripts/test-railway-cli-help.py \
             --railway-bin "$RUNNER_TEMP/railway-v5.71.0"
           echo 'No Railway network authentication, volume listing or download was attempted.'
+
+  private-rust-core-audit:
+    name: private-rust-semantic-audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - name: Checkout exact revision with no persistent credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Require zero production credentials and a pinned source toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          grep -Eq '^channel = "1.85.0"$' rust-toolchain.toml
+      - name: Compile current Rust durable workspace semantic validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --bin nexus-private-core-audit
+          cargo test --locked --bin nexus-private-core-audit
+      - name: Run real Rust semantic validation against synthetic copied data
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_PRIVATE_CORE_AUDIT_BIN="$PWD/target/debug/nexus-private-core-audit"
+          python3 -m py_compile scripts/test-private-core-audit.py
+          python3 scripts/test-private-core-audit.py
+          echo 'No Railway access; no user data or recovery archive published.'
