@@ -28,7 +28,8 @@ def main():
     try:
         module.validate_railway_cli(cli)
     except (module.CaptureBlocked,OSError,ValueError) as exc:
-        raise SystemExit("BLOCKED: real CLI did not accept pinned read-only grammar") from None
+        reason = str(exc) if isinstance(exc,module.CaptureBlocked) else type(exc).__name__
+        raise SystemExit("BLOCKED: "+reason) from None
 
     cmd=module.permitted_download_command(cli,
         Path("/private/nexus-export/copied-data"))
