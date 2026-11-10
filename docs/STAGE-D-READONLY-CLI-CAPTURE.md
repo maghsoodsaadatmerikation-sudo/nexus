@@ -35,6 +35,36 @@ independently before a *real* attempt: the code does not have privileged
 provider identity attestation. If the original volume or deployed revision
 has changed, stop and review it, rather than updating a UUID by guess.
 
+## Pilot 07: real Railway CLI parser (not a fake provider)
+
+The earlier Stage D capture tests used a **local fake CLI**. A fake proves
+our own validation and fail-closed behavior, but it **does not verify
+Railway's actual option ordering, flags or version compatibility**.
+
+`.github/workflows/stage-d-private-volume-intake.yml` now has an independent
+`real-railway-cli-readonly-grammar` job. It downloads the official **Railway
+CLI v5.71.0** Linux binary from a fixed GitHub Release, verifies that the
+archive SHA-256 is exactly
+`2e682fd2ddf8d6fdf9e46d9d99d99646ff0022a6abb0c2bca93011348a269fb9`,
+extracts only the expected `railway` executable into a private CI temp
+directory, and asks the **real parser** for `--version` and `--help`.
+The parser must accept the exact project/environment/service flags, volume
+selector **before** `download`, remote directory `/`, destination
+argument and `--concurrency 1`. The binary's auto-update is disabled. CI
+contains no real Railway credentials and deliberately never performs a
+volume list, files read, backup creation or download.
+
+The execution tool itself now checks the **same pinned version and help
+grammar before creating its local output directory**. If the operator's
+installed CLI has been upgraded, its compatibility must be re-reviewed and
+the pin deliberately updated. This is a security and repeatability control,
+not an instruction to downgrade a shared installed CLI blindly.
+
+**Even a real CLI parser PASS is not a production volume copy, remote
+authentication check, consistency guarantee or recovery proof.** It closes
+only the *local invocation syntax* uncertainty. The original volume
+and server remain untouched.
+
 ## Two modes — plan first, execute only from trusted private environment
 
 Dry run (no credentials, no network, no directory created):
