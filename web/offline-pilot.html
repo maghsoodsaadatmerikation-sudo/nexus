@@ -45,10 +45,11 @@ code{direction:ltr;unicode-bidi:embed}
 <main>
   <div class="banner">
     <strong>بدون حساب، توکن یا اینترنت پس از دریافت فایل</strong>
-    <small>اطلاعات فقط در حافظهٔ همین صفحه نگه داشته می‌شود. برای جلوگیری از ازدست‌رفتن اطلاعات، پس از هر تغییر مهم «دریافت فایل JSON» را بزنید. این نسخه به سرور Railway متصل نیست و خروجی‌اش مستقیماً با فرمت پشتیبان سرور NEXUS سازگار نیست.</small>
+    <small>اطلاعات فقط در حافظهٔ همین صفحه است؛ برای حفظ آن خروجی رمزدار بگیرید. این نسخه هیچ اتصالی به Railway ندارد. فایل آفلاین مستقیماً با هستهٔ Rust سازگار نیست؛ انتقال اختیاری فقط با خروجی جداگانهٔ «فایل انتقال به هستهٔ Rust» انجام می‌شود.</small>
   </div>
   <div class="toolbar">
     <button type="button" id="encrypt-export">دریافت نسخهٔ رمزگذاری‌شده</button>
+    <button type="button" id="core-export" class="secondary">فایل انتقال به هستهٔ Rust (بدون رمز)</button>
     <button type="button" id="export" class="secondary">خروجی JSON بدون رمز</button>
     <button type="button" id="import" class="secondary">بازکردن فایل قبلی</button>
     <button type="button" id="new" class="secondary">کارگاه جدید</button>
@@ -121,13 +122,17 @@ code{direction:ltr;unicode-bidi:embed}
       </form>
       <div id="decision-view" class="empty">هیچ تصمیم انسانی ثبت نشده است.</div>
     </section>
+    <section class="panel full" aria-labelledby="migration-title">
+      <h2 id="migration-title">۵. انتقال اختیاری به هستهٔ Rust</h2>
+      <p class="help">دکمهٔ انتقال فقط فایل JSON جدید می‌سازد و هیچ چیزی به سرور ارسال نمی‌کند. فایل جدید <strong>بدون رمز</strong> است. NEXUS تاریخچهٔ محلی را قابل‌تأیید نمی‌داند و برای سازگاری، رویدادهای جدید با برچسب «بازسازی‌شده از دادهٔ کاربر» می‌سازد؛ زمان رویدادها و ویرایش‌های قبلیِ پرسش منتقل نمی‌شوند. گزینه‌ها رتبه‌بندی نمی‌شوند و تصمیم فقط اگر قبلاً به‌صورت صریح ثبت شده باشد منتقل خواهد شد. فایل رمزدار اصلی را همچنان جداگانه نگه دارید.</p>
+    </section>
     <section class="panel full" aria-labelledby="quality-title">
-      <h2 id="quality-title">۵. مرور تکمیل‌بودن اطلاعات</h2>
+      <h2 id="quality-title">۶. مرور تکمیل‌بودن اطلاعات</h2>
       <p class="help">این بررسی فقط خالی‌بودن یا ساختار برخی فیلدها را نشان می‌دهد، نه درست‌بودن شواهد یا کیفیت واقعی تصمیم.</p>
       <div id="quality" role="status" aria-live="polite" class="entry"></div>
     </section>
     <section class="panel full" aria-labelledby="audit-title">
-      <h2 id="audit-title">۶. تاریخچهٔ اقدامات</h2>
+      <h2 id="audit-title">۷. تاریخچهٔ اقدامات</h2>
       <p class="help">این تاریخچه محلی و قابل‌ویرایش است؛ شاهد حسابرسی رمزنگاری‌شده یا تأیید مستقل محسوب نمی‌شود.</p>
       <div id="audit" class="audit empty">هنوز رویدادی ثبت نشده است.</div>
     </section>
@@ -215,6 +220,7 @@ code{direction:ltr;unicode-bidi:embed}
     if(!notes.length)quality.append(part('span','بررسی ساختاری موردی یافت نکرد؛ صحت و کفایت شواهد همچنان تأیید نشده است.'));
     else notes.forEach(note=>quality.append(part('p','• '+note)));
     $('export').disabled=!w.question;
+    $('core-export').disabled=!w.question;
     $('encrypt-export').disabled=!w.question||encryptBusy;
   }
   $('ask-form').addEventListener('submit',e=>{
@@ -366,6 +372,64 @@ code{direction:ltr;unicode-bidi:embed}
     if(!window.confirm('این فایل JSON بدون رمز و خواندنی است. آیا با ساخت نسخهٔ بدون رمز موافقید؟'))return;
     downloadJson(JSON.stringify(state,null,2)+'\n','nexus-offline-'+state.workspace.id+'.json');
     status('نسخهٔ JSON بدون رمز آماده شد؛ این فایل را خصوصی نگه دارید.');
+  });
+
+  // This is a new, explicitly reconstructed Rust audit trail, NOT a claim
+  // that the original offline event timestamps were verified or preserved.
+  // The exporter is deterministic, local, and sends no request to a gateway.
+  function toCoreSnapshot(raw){
+    const original=validate(raw);
+    const w=original.workspace;
+    const provenance='offline-bridge:user-supplied-unattested';
+    const uncertainty={unknown:'Unknown',high:'High',medium:'Medium',low:'Low'};
+    const claims=w.claims.map(c=>({
+      id:c.id,text:c.text,
+      origin:c.origin==='external_evidence'?{ExternalEvidence:{source:c.source}}:
+             c.origin==='machine_analysis'?'MachineAnalysis':'Human',
+      uncertainty:uncertainty[c.uncertainty]
+    }));
+    const alternatives=w.alternatives.map(a=>({
+      id:a.id,label:a.label,consequences:[...a.consequences]
+    }));
+    const judgment=w.judgment?{...w.judgment}:null;
+    const events=[{sequence:0,provenance_id:provenance,kind:'WorkspaceCreated'}];
+    let nextClaim=0,nextOption=0,seenJudgment=false;
+    for(const e of original.events){
+      let kind=null;
+      if(e.kind==='claim'){
+        if(nextClaim>=claims.length)throw Error('migration-claim-mismatch');
+        kind={ClaimAdded:{claim_id:claims[nextClaim++].id}};
+      }else if(e.kind==='alternative'){
+        if(nextOption>=alternatives.length)throw Error('migration-option-mismatch');
+        kind={AlternativeAdded:{alternative_id:alternatives[nextOption++].id}};
+      }else if(e.kind==='judgment'){
+        if(!judgment||seenJudgment)throw Error('migration-judgment-mismatch');
+        kind={HumanJudgmentTransition:{previous:null,current:judgment}};
+        seenJudgment=true;
+      }else if(e.kind!=='question')throw Error('migration-unknown-event');
+      if(kind)events.push({sequence:events.length,provenance_id:provenance,kind});
+    }
+    if(nextClaim!==claims.length||nextOption!==alternatives.length||
+       seenJudgment!==Boolean(judgment))throw Error('migration-count-mismatch');
+    return {
+      schema_version:1,
+      workspace:{id:w.id,question:w.question,
+        goal:w.goal||null,constraints:[...w.constraints],values:[...w.values],
+        claims,alternatives,judgment},
+      events
+    };
+  }
+  $('core-export').addEventListener('click',()=>{
+    if(!state.workspace.question)return status('ابتدا مسئله را ثبت کنید.',true);
+    if(!window.confirm('این فایل برای واردکردن به Rust بدون رمز خواهد بود و همهٔ متن‌های کارگاه را دربر دارد. تاریخچهٔ قابل‌تأیید نیست و فقط به‌صورت رویدادهای جدید بازسازی می‌شود. ادامه می‌دهید؟'))return;
+    try{
+      const compatible=toCoreSnapshot(state);
+      downloadJson(JSON.stringify(compatible,null,2)+'\n',
+        'nexus-core-reconstructed-'+state.workspace.id+'.json');
+      status('فایل جدیدِ بدون رمز آماده شد؛ به هیچ سروری ارسال نشده است. واردکردن آن نیازمند تأیید جداگانه و سرور احرازهویت‌شده است.');
+    }catch{
+      status('فایل انتقال ساخته نشد؛ ساختار کارگاه معتبر نیست. کارگاه فعلی تغییر نکرد.',true);
+    }
   });
   function typeString(x,max,required=false){
     if(typeof x!=='string'||x.length>max||(required&&!x.trim()))throw Error('invalid-string');
