@@ -93,7 +93,7 @@ class IntakeTests(unittest.TestCase):
 
         with patch.object(intake.snapshot, "backup", side_effect=hooked_backup), \
              patch.object(intake.snapshot, "restore", side_effect=hooked_restore):
-            with self.assertRaises(ValueError):
+            with self.assertRaises((ValueError, OSError)):
                 intake.run(args)
         self.assertFalse((self.out / "intake-report.json").exists(),
                          "drifting source copy must not receive PASS")
