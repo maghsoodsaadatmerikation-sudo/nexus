@@ -1,0 +1,123 @@
+name: NEXUS Pilot 01 — Real Browser and Public UI
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pilot-01.yml'
+      - 'scripts/pilot-01-real-browser.mjs'
+      - 'scripts/observe-pilot-01-public-ui.py'
+      - 'docs/PILOT-01-FIRST-USER.md'
+      - 'web/**'
+      - 'Dockerfile'
+      - 'artifact-05/**'
+      - 'src/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pilot-01.yml'
+      - 'scripts/pilot-01-real-browser.mjs'
+      - 'scripts/observe-pilot-01-public-ui.py'
+      - 'docs/PILOT-01-FIRST-USER.md'
+      - 'web/**'
+      - 'Dockerfile'
+      - 'artifact-05/**'
+      - 'src/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-real-browser:
+    name: disposable-real-browser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact proposed revision
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Build and exercise private real-browser pilot
+        env:
+          PILOT_DISPOSABLE_CONTAINER: 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_ACTIONS:-}" = "true"
+          test -n "${GITHUB_RUN_ID:-}"
+          node --version
+          test "$(node -p 'Number(process.versions.node.split(".")[0]) >= 22')" = "true"
+          export PILOT_BROWSER="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          test -n "$PILOT_BROWSER"
+          export PILOT_CONTAINER_NAME="nexus-pilot-01-${GITHUB_RUN_ID}"
+          volume="${PILOT_CONTAINER_NAME}-data"
+          cleanup() {
+            docker rm -f "$PILOT_CONTAINER_NAME" >/dev/null 2>&1 || true
+            docker volume rm -f "$volume" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          # Fresh CI-owned synthetic data only. Never connect to a provider.
+          docker build --pull=false -t nexus-pilot-01:ci .
+          docker volume create "$volume" >/dev/null
+          export NEXUS_API_TOKEN="$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')"
+          docker run -d --name "$PILOT_CONTAINER_NAME" \
+            -p 127.0.0.1:3000:3000 \
+            -e NEXUS_API_TOKEN -e NEXUS_DATA_DIR=/data \
+            -e NEXUS_BIND_ADDR=0.0.0.0:3000 \
+            --mount "type=volume,source=$volume,target=/data" \
+            nexus-pilot-01:ci >/dev/null
+          node --check scripts/pilot-01-real-browser.mjs
+          node scripts/pilot-01-real-browser.mjs > pilot-01-acceptance.json
+          python3 - <<'PY'
+          import json
+          report = json.load(open('pilot-01-acceptance.json', encoding='utf-8'))
+          assert report['status'] == 'PASS'
+          assert report['scope'] == 'synthetic-disposable-ci-only'
+          assert report['live_railway_tested'] is False
+          assert report['human_user_tested'] is False
+          assert report['independent_production_backup_verified'] is False
+          assert report['release_authority'] == 'none'
+          assert {x['layout'] for x in report['layouts']} == {'narrow', 'wide'}
+          assert all(x['survived_process_restart'] and
+                     x['browser_export_equal_to_server'] and
+                     x['human_judgment_explicit'] for x in report['layouts'])
+          print('PILOT 01 REAL BROWSER / DISPOSABLE GATEWAY: PASS')
+          PY
+      - name: Upload sanitized disposable pilot report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: pilot-01-disposable-real-browser
+          path: pilot-01-acceptance.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  public-ui-readonly:
+    name: public-ui-readonly
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable UI comparison sources
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Observe public UI without a token or write
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/observe-pilot-01-public-ui.py \
+            --origin https://nexus-stage-d-production.up.railway.app \
+            --deployed-commit 3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959 \
+            > pilot-01-public-ui.json
+      - name: Upload non-authoritative public observation
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: pilot-01-public-ui-observation
+          path: pilot-01-public-ui.json
+          if-no-files-found: ignore
+          retention-days: 30
