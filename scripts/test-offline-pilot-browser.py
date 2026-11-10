@@ -334,7 +334,7 @@ def main():
                    browser, page.as_uri(), str(root / layout), dimensions]
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             if proc.returncode:
-                raise RuntimeError("real browser did not report PASS: "+proc.stdout.strip()[:300])
+                raise RuntimeError("real browser did not report PASS: exit="+str(proc.returncode)+" stdout="+proc.stdout.strip()[:300]+" stderr="+proc.stderr.strip()[-450:])
             report = json.loads(proc.stdout)
             if (report.get("status") != "PASS" or len(report.get("checks", [])) != 29 or
                 report.get("network_requests") != 0 or
