@@ -95,9 +95,10 @@ def gateway_start(container, storage, port, token):
         IMAGE, timeout=60)
 
 
-def gateway_stop(container):
+def gateway_stop(container, *, remove=True):
     run("docker", "stop", "-t", "8", container, timeout=30)
-    run("docker", "rm", container, timeout=30)
+    if remove:
+        run("docker", "rm", container, timeout=30)
 
 
 def test_pure_contract():
@@ -107,8 +108,8 @@ def test_pure_contract():
                                        "schema_version": 1}), "canonical-digest")
     for illegal in ("https://example.org", "/v1/requests?token=bad",
                     "//wronghost/readyz", "/v1/workspaces/../bad"):
-        require(re.fullmatch(r"/[A-Za-z0-9/_-]*", illegal) is None or
-                illegal == "/v1/workspaces/../bad", "nonlocal-http-disallowed")
+        require(re.fullmatch(r"/[A-Za-z0-9/_-]*", illegal) is None,
+                "nonlocal-http-disallowed")
     print(json.dumps({"scope": "pure-local-validation",
                       "status": "PASS", "checks": 3}))
 
@@ -190,7 +191,7 @@ def main():
         before_hash = sha_json(before)
         status, q = http(port, "GET", "/v1/requests/" + request_id, token)
         require(status == 200 and q["status"] == "pending", "ledger-unreadable")
-        gateway_stop(source_name)
+        gateway_stop(source_name, remove=False)
 
         phase = "cold-copy"
         # Freeze writers before copying; Docker reads the stopped instance's
