@@ -45,7 +45,7 @@ jobs:
           assert report['production_verified'] is False
           assert len(report['reports'])==2
           assert all(x['status']=='PASS' and x['network_requests']==0 and
-                     len(x['checks'])==22 for x in report['reports'])
+                     len(x['checks'])==24 for x in report['reports'])
           print('NEXUS PILOT 03: ENCRYPTED/PLAIN REAL BROWSER PASS')
           PY
       - name: Publish standalone HTML artifact for direct offline use
