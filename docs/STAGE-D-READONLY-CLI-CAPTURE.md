@@ -68,6 +68,22 @@ authentication check, consistency guarantee or recovery proof.** It closes
 only the *local invocation syntax* uncertainty. The original volume
 and server remain untouched.
 
+## Additional optional Rust durable-audit check
+
+With the exact current-source Rust audit binary built on a trusted
+private machine, the operator can opt into a semantic audit of the
+quarantined restored copy by adding
+`--rust-validator-bin /absolute/path/to/nexus-private-core-audit`
+to the private capture command. The private intake/receipt then records
+either `pass_operator_supplied_rust_binary` or `not_evaluated`. The
+Rust check verifies workspace audit events and explicit human judgment
+against the current core's durable file loader, not simply JSON syntax.
+Invalid history blocks a semantically audited receipt. It does not prove
+the supplied binary's independent identity, the original deployed Rust
+revision, atomic Railway capture, live provider recovery or offsite custody.
+The original `nexus.data-snapshot.v1` archive remains an **unencrypted
+private copy** and must not be uploaded to a public CI artifact.
+
 ## Two modes — plan first, execute only from trusted private environment
 
 Dry run (no credentials, no network, no directory created):

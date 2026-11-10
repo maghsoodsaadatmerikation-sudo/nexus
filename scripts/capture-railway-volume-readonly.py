@@ -153,6 +153,8 @@ def execute(args):
             "--deployment-id", DEPLOYMENT,
             "--runtime-commit", RUNTIME,
         ]
+        if args.rust_validator_bin is not None:
+            verify.extend(["--rust-validator-bin", str(args.rust_validator_bin)])
         try:
             check = subprocess.run(
                 verify, cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
@@ -174,6 +176,8 @@ def execute(args):
                        "service_id": SERVICE, "volume_id": VOLUME},
             "cli_subcommand": "volume files download",
             "source_consistency": "NOT_VERIFIED_ATOMIC",
+            "rust_core_audit": inspection.get("rust_core_audit", "not_evaluated"),
+            "rust_core_binary_identity": inspection.get("rust_core_binary_identity", "not_verified"),
             "local_copy_scans_matched_archive": True,
             "provider_file_origin": "CLI_SELECTED_ID_NOT_INDEPENDENTLY_ATTESTED",
             "offsite_copy": "PRIVATE_PATH_OPERATOR_MUST_PRESERVE",
@@ -202,6 +206,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--private-root", required=True, type=Path)
     parser.add_argument("--railway-bin", type=Path, default=Path("/usr/local/bin/railway"))
+    parser.add_argument("--rust-validator-bin", type=Path,
+                        help="optional operator-built Rust durable-audit executable for copied data")
     parser.add_argument("--execute", action="store_true", help="Operator opts in to CLI download")
     args = parser.parse_args()
     try:
