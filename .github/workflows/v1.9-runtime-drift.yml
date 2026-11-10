@@ -8,6 +8,8 @@ on:
       - '.github/workflows/v1.9-runtime-drift.yml'
       - 'scripts/observe-runtime-drift.sh'
       - 'scripts/test-runtime-drift.py'
+      - 'scripts/observe-stage-d-auth.sh'
+      - 'scripts/test-stage-d-auth.py'
   schedule:
     - cron: '17 1 * * *'
     - cron: '17 9 * * *'
@@ -31,16 +33,34 @@ jobs:
       - name: Test fail-closed observation diagnostics
         run: python3 scripts/test-runtime-drift.py
 
+      - name: Test fail-closed Stage D public auth diagnostics
+        run: |
+          bash -n scripts/observe-stage-d-auth.sh
+          python3 scripts/test-stage-d-auth.py
+
       - name: Observe public runtime identity fail-closed
         env:
           URL: https://nexus-stage-d-production.up.railway.app/v1/runtime-identity
           EXPECTED_DIGEST: d66021fc1e8c276df2c673d26b05f2de58ef4c81589261cb41aefa1ad047f1c7
         run: bash scripts/observe-runtime-drift.sh
 
+      - name: Observe public Stage D authentication boundary
+        if: ${{ always() }}
+        env:
+          NEXUS_BASE_URL: https://nexus-stage-d-production.up.railway.app
+        run: bash scripts/observe-stage-d-auth.sh
+
       - name: Attest drift evidence
+        if: ${{ success() }}
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
         with:
           subject-path: v1.9-runtime-drift-evidence.json
+
+      - name: Attest public auth evidence
+        if: ${{ success() }}
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: stage-d-public-auth-evidence.json
 
       - name: Upload drift evidence
         if: ${{ always() }}
@@ -50,4 +70,14 @@ jobs:
           path: |
             v1.9-runtime-drift-evidence.json
             v1.9-runtime-drift-evidence.sha256
+          if-no-files-found: error
+
+      - name: Upload public auth evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: stage-d-public-auth-evidence
+          path: |
+            stage-d-public-auth-evidence.json
+            stage-d-public-auth-evidence.sha256
           if-no-files-found: error
