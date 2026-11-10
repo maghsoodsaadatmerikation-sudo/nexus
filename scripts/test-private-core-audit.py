@@ -146,7 +146,15 @@ class PrivateCoreAuditTests(unittest.TestCase):
             "restored_marker": "str(Path(sys.argv[1]) / '.nexus-recovery-required')",
             "private_archive": "str(Path(sys.argv[1]).parent / 'nexus-private-data-snapshot.json')",
         }
-        location = targets[target]
+        if target == "symlink_ledger":
+            mutation = (
+                "ledger = Path(sys.argv[1]) / 'requests'\n"
+                "ledger.rmdir()\n"
+                "ledger.symlink_to(Path(sys.argv[1]).parent, target_is_directory=True)\n"
+            )
+        else:
+            location = targets[target]
+            mutation = "with open(" + location + ", 'ab') as file: file.write(b' ')\n"
         wrapper = self.root / ("post-rust-" + target + ".py")
         wrapper.write_text(
             "#!/usr/bin/env python3\n"
@@ -155,7 +163,7 @@ class PrivateCoreAuditTests(unittest.TestCase):
             "done = subprocess.run([" + repr(str(VALIDATOR)) + ", sys.argv[1]], "
             "stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)\n"
             "if done.returncode != 0: sys.exit(done.returncode)\n"
-            "with open(" + location + ", 'ab') as file: file.write(b' ')\n"
+            + mutation
         )
         wrapper.chmod(0o700)
         return wrapper
@@ -178,6 +186,11 @@ class PrivateCoreAuditTests(unittest.TestCase):
     def test_private_archive_changed_after_rust_validated_is_blocked(self):
         self.assert_blocked(
             self.invoke(bin_path=self.post_rust_mutator("private_archive"))
+        )
+
+    def test_quarantine_ledger_symlinked_after_rust_validated_is_blocked(self):
+        self.assert_blocked(
+            self.invoke(bin_path=self.post_rust_mutator("symlink_ledger"))
         )
 
     def test_invalid_core_validator_binary_fails_closed(self):
