@@ -1,0 +1,95 @@
+name: NEXUS Pilot 05 — Isolated Synthetic Full-Data Recovery
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pilot-05-cross-store.yml'
+      - 'scripts/pilot-05-synthetic-cross-store.py'
+      - 'scripts/data-snapshot.py'
+      - 'Dockerfile'
+      - 'artifact-05/**'
+      - 'src/**'
+      - 'web/index.html'
+      - 'docs/PILOT-05-CROSS-STORE-RECOVERY.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pilot-05-cross-store.yml'
+      - 'scripts/pilot-05-synthetic-cross-store.py'
+      - 'scripts/data-snapshot.py'
+      - 'Dockerfile'
+      - 'artifact-05/**'
+      - 'src/**'
+      - 'web/index.html'
+      - 'docs/PILOT-05-CROSS-STORE-RECOVERY.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent-synthetic-recovery:
+    name: independent-synthetic-recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    env:
+      NEXUS_P05_DISPOSABLE: 'true'
+    steps:
+      - name: Check out exact proposed source without persistent credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify no provider authentication or production authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_ACTIONS:-}" = true
+          test -n "${GITHUB_RUN_ID:-}"
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          python3 -m py_compile scripts/pilot-05-synthetic-cross-store.py
+          python3 scripts/pilot-05-synthetic-cross-store.py --self-test
+      - name: Build disposable Rust gateway only
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull=false -t nexus-pilot-05:ci .
+      - name: Exercise real HTTP lifecycle on distinct isolated data stores
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/pilot-05-synthetic-cross-store.py
+          python3 - <<'PY'
+          import json
+          with open('pilot-05-synthetic-recovery.json', encoding='utf8') as f:
+              r=json.load(f)
+          assert r['status']=='PASS_SYNTHETIC_CROSS_STORE_RECOVERY'
+          assert r['scope']=='two-distinct-disposable-docker-containers-same-ci-runner'
+          for key in ('source_writes_stopped_before_copy','source_storage_not_mounted_on_restored_container',
+                      'cold_external_directory_copy','corrupt_archive_rejected',
+                      'full_archive_restored_to_separate_storage',
+                      'restore_quarantined_before_resume','authenticated_data_hash_preserved',
+                      'request_ledger_preserved','unauthenticated_access_rejected',
+                      'replay_prevention_preserved','fresh_request_survived_container_restart'):
+              assert r[key] is True, key
+          for key in ('production_volume_read','railway_access_used',
+                      'external_host_independence_proven','production_consistency_proven',
+                      'production_backup_proven','production_restore_proven',
+                      'human_authentication_tested','seal'):
+              assert r[key] is False, key
+          assert r['authority']=='none'
+          assert len(r['synthetic_workspace_sha256']) == 64
+          assert len(r['synthetic_archive_sha256']) == 64
+          print('PILOT 05: ISOLATED SYNTHETIC DATA RESTORE / REAL HTTP: PASS')
+          PY
+      - name: Upload sanitized, synthetic-only report (never data archives)
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-pilot-05-synthetic-evidence
+          path: pilot-05-synthetic-recovery.json
+          retention-days: 30
+          if-no-files-found: ignore
