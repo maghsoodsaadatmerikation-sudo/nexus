@@ -1,5 +1,17 @@
 # Pilot 06 — Offline mobile workshop → Rust core (explicit, unattested conversion)
 
+## Published static pilot / verified evidence
+
+Pilot 06 static entrypoint is deployed at
+https://nexus-offline-pilot.onrender.com/ on commit
+`24644558cfe96f8f1a725986efbe94e1710032f2`.
+The exact-byte independent public HTTPS identity observer
+[main run 42872200533](https://github.com/maghsoodsaadatmerikation-sudo/nexus/actions/runs/42872200533)
+passed on its second attempt after the provider reported the new deploy
+LIVE; the first attempt raced the manual release and failed. This is a
+webpage-identity gate, **not** a real-user gateway migration or provider
+volume recovery proof. The static site's autoDeploy remains OFF.
+
 ## What changed
 
 The one-file Persian mobile HTML gains **فایل انتقال به هستهٔ Rust (بدون رمز)**.
