@@ -36,7 +36,7 @@ GitHub's source preview is not the running app. See the
 
 This is a browser-memory-only, explicitly exported/imported demo with
 **no network requests and no automatic storage**, not the sealed Rust gateway,
-a live production instance, a compatible server snapshot, or an attested audit.
+a live production instance or an attested audit. The optional Pilot 06 plaintext Rust v1 export reconstructs an explicitly unattested event stream for a separate authenticated import; it never connects to the server. See [bridge contract](docs/PILOT-06-OFFLINE-RUST-BRIDGE.md).
 A real authenticated online user pilot is tracked separately in [Issue #70](
 https://github.com/maghsoodsaadatmerikation-sudo/nexus/issues/70).
 The original Railway storage must not be modified before independently

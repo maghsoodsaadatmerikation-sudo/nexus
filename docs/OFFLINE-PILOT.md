@@ -31,7 +31,7 @@ not an authenticated Rust service.
    format, threats and limitations. There is still **no autosave**;
    unsaved state disappears on reload or tab close.
 
-This offline JSON is not a Rust gateway-compatible
+The original offline JSON files are not Rust gateway-compatible
 `nexus.data-snapshot.v1` or server `DecisionWorkspace` backup; do
 not import it through the production workspace restore endpoint or represent it
 as an independent Railway volume backup. It lacks the request ledger,

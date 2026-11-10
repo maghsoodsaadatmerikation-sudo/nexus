@@ -5,6 +5,7 @@ The app is exercised in a disposable file:// browser and has no backend.
 No production credential, URL, storage, real user data, or mock network response.
 """
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -44,6 +45,7 @@ window.addEventListener('load', async () => {
   const realObjectURL = URL.createObjectURL.bind(URL);
   URL.createObjectURL = value => {blob = value; blobCount++; return realObjectURL(value);};
   const checks = [];
+  let coreFixture = null;
   try {
     const narrow = window.innerWidth <= 760;
     assert(byId('export').disabled, 'blank-workspace-export-enabled');
@@ -77,6 +79,19 @@ window.addEventListener('load', async () => {
     await submit('claim-form');
     assert(byId('decision-view').textContent.includes('هیچ تصمیم انسانی'), 'machine-turned-into-decision');
     checks.push('machine-analysis-non-authority');
+    byId('core-export').click();
+    const earlyCore=JSON.parse(await blob.text());
+    assert(earlyCore.schema_version===1 &&
+      earlyCore.workspace.judgment===null &&
+      earlyCore.events[0].kind==='WorkspaceCreated' &&
+      earlyCore.events.every(e=>!e.kind.HumanJudgmentTransition) &&
+      earlyCore.events.some(e=>e.kind.ClaimAdded) &&
+      earlyCore.events.every(e=>e.provenance_id==='offline-bridge:user-supplied-unattested'),
+      'core-export-invented-early-human-judgment');
+    assert(earlyCore.workspace.claims[1].origin==='MachineAnalysis' &&
+      !earlyCore.events.some(e=>e.kind.MachineAnalysisRecorded),
+      'core-export-forged-machine-adapter');
+    checks.push('core-bridge-before-human-choice-is-nonauthoritative');
     fill('option','گزینهٔ A');
     await submit('option-form');
     assert(byId('status').classList.contains('error') &&
@@ -106,6 +121,35 @@ window.addEventListener('load', async () => {
       exported.workspace.alternatives.length === 1 &&
       exported.events.length === 5, 'export-incomplete');
     checks.push('downloadable-full-workspace');
+    byId('core-export').click();
+    coreFixture=JSON.parse(await blob.text());
+    assert(coreFixture.schema_version===1 &&
+       coreFixture.workspace.id===exported.workspace.id &&
+       coreFixture.workspace.question===exported.workspace.question &&
+       coreFixture.workspace.goal===exported.workspace.goal &&
+       coreFixture.workspace.constraints.join('|')==='زمان|بودجه' &&
+       coreFixture.workspace.values.join('|')==='شفافیت|استقلال' &&
+       coreFixture.workspace.claims.length===2 &&
+       coreFixture.workspace.claims[0].origin.ExternalEvidence.source==='test:synthetic' &&
+       coreFixture.workspace.claims[0].uncertainty==='High' &&
+       coreFixture.workspace.claims[1].origin==='MachineAnalysis' &&
+       coreFixture.workspace.alternatives[0].consequences.length===2 &&
+       coreFixture.workspace.judgment.decision===exported.workspace.judgment.decision &&
+       coreFixture.events.length===5 &&
+       coreFixture.events[0].sequence===0 &&
+       coreFixture.events.every((e,i)=>e.sequence===i &&
+          e.provenance_id==='offline-bridge:user-supplied-unattested') &&
+       JSON.stringify(coreFixture).includes('HumanJudgmentTransition') &&
+       !JSON.stringify(coreFixture).includes('machine_analysis_recorded') &&
+       !JSON.stringify(coreFixture).includes(exported.events[0].at),
+       'core-bridge-schema-or-data-mismatch');
+    checks.push('core-bridge-preserves-content-reconstructs-local-audit');
+    const originalBlob=blob;
+    window.confirm=()=>false;
+    byId('core-export').click();
+    assert(blob===originalBlob,'core-bridge-plaintext-bypassed-user-decline');
+    checks.push('core-bridge-must-confirm-plaintext');
+    window.confirm=()=>true;
     byId('new').click(); await tick();
     assert(byId('export').disabled && byId('decision-view').textContent.includes('هیچ تصمیم انسانی'),
       'fresh-workspace-retained-decision');
@@ -251,7 +295,7 @@ window.addEventListener('load', async () => {
     checks.push(narrow?'narrow-mobile-layout':'wide-desktop-layout');
     output.textContent = JSON.stringify({status:'PASS',width,checks,
       scope:'standalone-browser-file-only',network_requests:requests,
-      production_verified:false,authority:'none'});
+      production_verified:false,authority:'none',core_fixture:coreFixture});
   } catch (e) {
     const code=String(e?.message||'offline-pilot-contract').replace(/[^A-Za-z0-9-]/g,'').slice(0,120);
     output.textContent = JSON.stringify({status:'FAIL',reason:code});
@@ -275,6 +319,12 @@ def main():
     html = html.replace("</body>", '<pre id="nexus-browser-result" hidden></pre><script>'
                         + WITNESS + "</script></body>")
     reports = []
+    bridge_output=os.environ.get("NEXUS_BRIDGE_SYNTHETIC_OUTPUT")
+    if bridge_output:
+        path=Path(bridge_output)
+        runner=Path(os.environ.get("RUNNER_TEMP", "/nonexistent"))
+        assert (path.is_absolute() and path.parent.resolve()==runner.resolve()
+                and runner.is_dir() and not path.exists()), "unsafe-synthetic-destination"
     with tempfile.TemporaryDirectory(prefix="nexus-offline-pilot-test-") as td:
         root = Path(td)
         page = root / "index.html"
@@ -284,12 +334,19 @@ def main():
                    browser, page.as_uri(), str(root / layout), dimensions]
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             if proc.returncode:
-                raise RuntimeError("real browser did not report PASS: "+proc.stdout.strip()[:300])
+                raise RuntimeError("real browser did not report PASS: exit="+str(proc.returncode)+" stdout="+proc.stdout.strip()[:300]+" stderr="+proc.stderr.strip()[-450:])
             report = json.loads(proc.stdout)
-            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 26 or
+            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 29 or
                 report.get("network_requests") != 0 or
                 (layout == "narrow") != (report["width"] <= 760)):
                 raise RuntimeError("offline real-browser contract did not PASS")
+            fixture=report.pop("core_fixture", None)
+            assert isinstance(fixture, dict) and fixture.get("schema_version")==1
+            if bridge_output and layout=="narrow":
+                descriptor=os.open(path, os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o600)
+                with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                    json.dump(fixture, handle, ensure_ascii=False, separators=(",", ":"))
+                    handle.write("\n")
             reports.append({"layout": layout, **report})
     print(json.dumps({"schema":"nexus.offline-pilot.browser-witness.v1","status":"PASS",
                       "reports":reports, "production_verified":False,
