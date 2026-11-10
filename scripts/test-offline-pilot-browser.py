@@ -142,7 +142,7 @@ def main():
             if proc.returncode:
                 raise RuntimeError("real browser did not report PASS")
             report = json.loads(proc.stdout)
-            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 10 or
+            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 11 or
                 report.get("network_requests") != 0 or
                 (layout == "narrow") != (report["width"] <= 760)):
                 raise RuntimeError("offline real-browser contract did not PASS")
