@@ -65,6 +65,16 @@ def local_copy_manifest(source):
     return entries
 
 
+def verify_quarantined_restore(restored, expected):
+    """Reject drift in the restored tree, including recovery quarantine bytes.
+
+    Run once after restore and again after an optional external Rust process.
+    The external executable is operator-supplied, so its return code alone
+    must not certify that the previously inspected bytes still exist.
+    """
+    verify_quarantined_restore(restored, expected)
+
+
 def run(args):
     source = valid_origin(args.export_root)
     output = args.private_evidence_dir.absolute()
@@ -133,6 +143,13 @@ def run(args):
         except (OSError, subprocess.TimeoutExpired):
             raise ValueError("private Rust core audit failed") from None
         require(result.returncode == 0, "private Rust core audit rejected copied data")
+        # A validator executes between the earlier copy/restore checks and
+        # receipt creation. Catch any source or quarantine drift in that gap
+        # before issuing success. This remains a bounded local observation,
+        # not proof of atomic Railway capture or a trusted Rust binary.
+        require(local_copy_manifest(source) == before == inside_archive,
+                "copied data changed during private Rust audit")
+        verify_quarantined_restore(restored, expected)
         core_audit = "pass_operator_supplied_rust_binary"
         core_binary_identity = "operator_supplied_unverified"
     # A missing Rust binary is never silently reported as an audit PASS.
@@ -151,6 +168,7 @@ def run(args):
         "local_copy_check": "before_archive_and_after_restored_bytes",
         "rust_core_audit": core_audit,
         "rust_core_binary_identity": core_binary_identity,
+        "post_rust_source_and_restore_rechecked": rust_validator is not None,
         "independent_railway_backup": "not_proven",
         "live_survival": "not_evaluated",
         "live_recovery": "not_evaluated",
