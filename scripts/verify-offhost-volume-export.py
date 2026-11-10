@@ -72,12 +72,16 @@ def verify_quarantined_restore(restored, expected):
     Rust subprocess, whose exit code cannot certify that the input remains
     unchanged. All file bytes and markers are private.
     """
-    restored_paths = list(restored.rglob("*"))
-    actual_dirs = {p.relative_to(restored).as_posix()
-                   for p in restored_paths if p.is_dir()}
+    actual_dirs = set()
+    actual_names = set()
+    for index, path in enumerate(restored.rglob("*")):
+        require(index < snapshot.MAX_FILES + 2, "isolated restore file count exceeded")
+        name = path.relative_to(restored).as_posix()
+        if path.is_dir():
+            actual_dirs.add(name)
+        else:
+            actual_names.add(name)
     require(actual_dirs == {"requests"}, "isolated restored directory layout differs")
-    actual_names = {p.relative_to(restored).as_posix()
-                    for p in restored_paths if not p.is_dir()}
     require(actual_names == set(expected) | {snapshot.RECOVERY_MARKER},
             "isolated restored file set differs from archived data")
     for name, data in expected.items():
@@ -153,13 +157,15 @@ def run(args):
         # not proof of atomic Railway capture or a trusted Rust binary.
         require(local_copy_manifest(source) == before == inside_archive,
                 "copied data changed during private Rust audit")
-        require(hashlib.sha256(archive.read_bytes()).hexdigest() == archive_sha_before_audit,
-                "private archive changed during Rust audit")
         verify_quarantined_restore(restored, expected)
         core_audit = "pass_operator_supplied_rust_binary"
         core_binary_identity = "operator_supplied_unverified"
+    # Verify exact archive identity at receipt time in BOTH structural-only
+    # and optional Rust modes; never report a stale pre-audit digest.
+    archive_sha = hashlib.sha256(archive.read_bytes()).hexdigest()
+    require(archive_sha == archive_sha_before_audit,
+            "private archive changed during private intake")
     # A missing Rust binary is never silently reported as an audit PASS.
-    archive_sha = archive_sha_before_audit
     report = {
         "schema": "nexus.offhost-volume-intake.v1",
         "status": "STRUCTURAL_REHEARSAL_PASS",
