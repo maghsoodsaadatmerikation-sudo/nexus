@@ -6,6 +6,7 @@ on:
       - '.github/workflows/pilot-01.yml'
       - 'scripts/pilot-01-real-browser.mjs'
       - 'scripts/observe-pilot-01-public-ui.py'
+      - 'scripts/test-observe-pilot-01-public-ui.py'
       - 'docs/PILOT-01-FIRST-USER.md'
       - 'web/**'
       - 'Dockerfile'
@@ -17,6 +18,7 @@ on:
       - '.github/workflows/pilot-01.yml'
       - 'scripts/pilot-01-real-browser.mjs'
       - 'scripts/observe-pilot-01-public-ui.py'
+      - 'scripts/test-observe-pilot-01-public-ui.py'
       - 'docs/PILOT-01-FIRST-USER.md'
       - 'web/**'
       - 'Dockerfile'
@@ -95,7 +97,6 @@ jobs:
 
   public-ui-readonly:
     name: public-ui-readonly
-    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -105,7 +106,10 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Verify legacy/current public UI classification without network
+        run: python3 scripts/test-observe-pilot-01-public-ui.py
       - name: Observe public UI without a token or write
+        if: ${{ github.event_name != 'pull_request' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -114,7 +118,7 @@ jobs:
             --deployed-commit 3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959 \
             > pilot-01-public-ui.json
       - name: Upload non-authoritative public observation
-        if: ${{ always() }}
+        if: ${{ always() && github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: pilot-01-public-ui-observation
