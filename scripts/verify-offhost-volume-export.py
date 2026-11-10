@@ -99,6 +99,7 @@ def run(args):
     before = local_copy_manifest(source)
     snapshot.backup(source, archive)
     archive_records = snapshot.validated_records(archive)
+    archive_sha_before_audit = hashlib.sha256(archive.read_bytes()).hexdigest()
     inside_archive = {
         name: (len(data), hashlib.sha256(data).hexdigest())
         for name, data in archive_records
@@ -110,8 +111,12 @@ def run(args):
     snapshot.restore(archive, restored)
     expected = dict(snapshot.validated_records(archive))
     expected.pop(snapshot.RECOVERY_MARKER, None)
+    restored_paths = list(restored.rglob("*"))
+    actual_dirs = {p.relative_to(restored).as_posix()
+                   for p in restored_paths if p.is_dir()}
+    require(actual_dirs == {"requests"}, "isolated restored directory layout differs")
     actual_names = {p.relative_to(restored).as_posix()
-                    for p in restored.rglob("*") if not p.is_dir()}
+                    for p in restored_paths if not p.is_dir()}
     require(actual_names == set(expected) | {snapshot.RECOVERY_MARKER},
             "isolated restored file set differs from archived data")
     for name, data in expected.items():
@@ -149,11 +154,13 @@ def run(args):
         # not proof of atomic Railway capture or a trusted Rust binary.
         require(local_copy_manifest(source) == before == inside_archive,
                 "copied data changed during private Rust audit")
+        require(hashlib.sha256(archive.read_bytes()).hexdigest() == archive_sha_before_audit,
+                "private archive changed during Rust audit")
         verify_quarantined_restore(restored, expected)
         core_audit = "pass_operator_supplied_rust_binary"
         core_binary_identity = "operator_supplied_unverified"
     # A missing Rust binary is never silently reported as an audit PASS.
-    archive_sha = hashlib.sha256(archive.read_bytes()).hexdigest()
+    archive_sha = archive_sha_before_audit
     report = {
         "schema": "nexus.offhost-volume-intake.v1",
         "status": "STRUCTURAL_REHEARSAL_PASS",
@@ -168,7 +175,7 @@ def run(args):
         "local_copy_check": "before_archive_and_after_restored_bytes",
         "rust_core_audit": core_audit,
         "rust_core_binary_identity": core_binary_identity,
-        "post_rust_source_and_restore_rechecked": rust_validator is not None,
+        "post_rust_source_archive_and_restore_rechecked": rust_validator is not None,
         "independent_railway_backup": "not_proven",
         "live_survival": "not_evaluated",
         "live_recovery": "not_evaluated",
