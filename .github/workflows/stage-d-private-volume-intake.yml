@@ -12,6 +12,8 @@ on:
       - 'scripts/test-offhost-volume-export.py'
       - 'scripts/data-snapshot.py'
       - 'scripts/test-private-core-audit.py'
+      - 'scripts/stage-d-core-parity.py'
+      - 'scripts/test-stage-d-core-parity.py'
       - 'src/bin/nexus-private-core-audit.rs'
       - 'src/workspace_persistence.rs'
       - 'src/workspace.rs'
@@ -122,6 +124,13 @@ jobs:
           test -z "${RENDER_API_KEY:-}"
           test -z "${NEXUS_API_TOKEN:-}"
           grep -Eq '^channel = "1.85.0"$' rust-toolchain.toml
+      - name: Prove selected workspace sources equal observed pinned Railway revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/stage-d-core-parity.py scripts/test-stage-d-core-parity.py
+          python3 scripts/test-stage-d-core-parity.py
+          python3 scripts/stage-d-core-parity.py --runtime-commit 3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959
       - name: Compile current Rust durable workspace semantic validator
         shell: bash
         run: |

@@ -93,7 +93,31 @@ from that copy. Use `data-snapshot.py inspect` to revalidate integrity.
 
 The private intake may additionally validate the quarantined restored
 workspace files with **the real Rust durable-workspace repository loader**.
-This is stronger than JSON/schema/SHA-256 integrity alone: it checks ordered
+
+**Pre-audit source-revision guard (added 2026-11-11):** For the observed
+Railway deployed source `3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959`, the
+public Git object identities of `src/workspace.rs`,
+`src/workspace_persistence.rs`, `src/epistemic.rs`,
+`src/analysis.rs`, and `rust-toolchain.toml` were separately compared
+with the repository checkout. These selected files are byte-identical to
+the observed deployed *source commit*. Before any optional Rust-audited
+private intake creates its evidence directory, an **offline fail-closed**
+preflight `scripts/stage-d-core-parity.py` checks the same pinned Git
+blob identities from local files and rejects unsupported supplied runtime
+commits or local code changes. Success is recorded privately as
+`rust_core_source_parity: pass_selected_pinned_git_blobs`.
+Without the Rust audit it is `not_evaluated`. This is **selected-file
+source parity only**: the complete crate, Cargo lock, other code,
+compiled validator executable and binary actually running on Railway are
+*not* asserted identical or independently attested. The deployed commit
+string itself is still operator-supplied metadata, not a provider identity
+proof. For a future deployed revision, derive and independently review a
+new bounded source map; do not treat an unsupported runtime revision as
+corrupt data. The structural-only path remains available without a
+Rust semantic compatibility claim.
+
+The **separate optional Rust loader**, not the source-parity preflight,
+is stronger than JSON/schema/SHA-256 structure alone: it checks ordered
 audit events, presence of provenance, correspondence between claims,
 alternatives and their events, and explicit human-judgment transitions.
 The program is `src/bin/nexus-private-core-audit.rs`; it is compiled
@@ -136,9 +160,12 @@ receipt time in structural-only mode; a post-restore archive mutation cannot
 silently become a new successful snapshot digest. This additional witness does *not*
 cryptographically identify or attest the compiler, the original production
 source revision, provenance, original-file consistency or the provider.
-The current main Rust version may differ from the pinned deployment
-revision and reject valid earlier formats; incompatibility is NOT evidence
-of real data corruption. Keep the original copy private and unchanged.
+The selected source files above currently match the pinned deployed
+revision, but differences in the rest of the crate or dependency lock and
+an independently unverified executable leave real deployment-binary
+compatibility unproven. A future source change may make an offline audit
+reject older valid files; incompatibility is NOT evidence of real data
+corruption. Keep the original copy private and unchanged.
 
 A disposable CI job validates this exact implementation using synthetic
 well-formed workspaces and negative fixtures for invalid audit sequence,

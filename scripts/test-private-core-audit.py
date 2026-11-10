@@ -94,6 +94,8 @@ class PrivateCoreAuditTests(unittest.TestCase):
                          "pass_operator_supplied_rust_binary")
         self.assertEqual(report["rust_core_binary_identity"],
                          "operator_supplied_unverified")
+        self.assertEqual(report["rust_core_source_parity"],
+                         "pass_selected_pinned_git_blobs")
         self.assertEqual(report["source_consistency"], "not_verified")
         self.assertEqual(report["independent_railway_backup"], "not_proven")
         self.assertTrue(report["local_copy_scans_matched_archive"])
@@ -107,7 +109,21 @@ class PrivateCoreAuditTests(unittest.TestCase):
         report = json.loads((self.work / "intake-report.json").read_text())
         self.assertEqual(report["rust_core_audit"], "not_evaluated")
         self.assertEqual(report["rust_core_binary_identity"], "not_verified")
+        self.assertEqual(report["rust_core_source_parity"], "not_evaluated")
         self.assertFalse(report["post_rust_source_archive_and_restore_rechecked"])
+
+    def test_rust_audit_rejects_unmapped_runtime_commit_before_evidence_dir(self):
+        args = [
+            sys.executable, str(INTAKE), "--export-root", str(self.data),
+            "--private-evidence-dir", str(self.work),
+            "--volume-id", VOLUME, "--deployment-id", DEPLOYMENT,
+            "--runtime-commit", "a" * 40,
+            "--rust-validator-bin", str(VALIDATOR),
+        ]
+        result = subprocess.run(args, capture_output=True, text=True, timeout=30)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.work.exists())
+        self.assertNotIn(self.id, result.stdout + result.stderr)
 
     def test_structurally_valid_but_tampered_audit_sequence_fails(self):
         self.snapshot["events"][0]["sequence"] = 9

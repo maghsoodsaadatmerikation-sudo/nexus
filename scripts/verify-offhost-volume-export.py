@@ -22,6 +22,10 @@ spec = importlib.util.spec_from_file_location("nexus_data_snapshot", SCRIPT)
 snapshot = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(snapshot)
 REPO = Path(__file__).resolve().parent.parent
+PARITY_SCRIPT = Path(__file__).with_name("stage-d-core-parity.py")
+parity_spec = importlib.util.spec_from_file_location("nexus_stage_d_core_parity", PARITY_SCRIPT)
+parity = importlib.util.module_from_spec(parity_spec)
+parity_spec.loader.exec_module(parity)
 
 
 def require(ok, reason):
@@ -106,6 +110,17 @@ def run(args):
             "evidence must be separate from the exported directory")
     require(not output.is_relative_to(REPO), "private snapshot must not enter a public checkout")
     require(not source.is_relative_to(REPO), "exported data must not enter a public checkout")
+    rust_validator = getattr(args, "rust_validator_bin", None)
+    source_parity = "not_evaluated"
+    if rust_validator is not None:
+        # Before writing even a private archive, reject a mismatched local
+        # workspace/serialization source or an unsupported supplied revision.
+        # This does NOT authenticate the supplied executable or remote runtime.
+        try:
+            parity.check(REPO, args.runtime_commit)
+        except parity.ParityError:
+            raise ValueError("private Rust source parity unavailable") from None
+        source_parity = "pass_selected_pinned_git_blobs"
 
     output.mkdir(mode=0o700)
     archive = output / "nexus-private-data-snapshot.json"
@@ -134,7 +149,6 @@ def run(args):
             "copied data changed while validating the isolated restore")
     core_audit = "not_evaluated"
     core_binary_identity = "not_verified"
-    rust_validator = getattr(args, "rust_validator_bin", None)
     if rust_validator is not None:
         rust_validator = rust_validator.absolute()
         require(rust_validator.is_file() and not rust_validator.is_symlink()
@@ -181,6 +195,7 @@ def run(args):
         "local_copy_check": "before_archive_and_after_restored_bytes",
         "rust_core_audit": core_audit,
         "rust_core_binary_identity": core_binary_identity,
+        "rust_core_source_parity": source_parity,
         "post_rust_source_archive_and_restore_rechecked": rust_validator is not None,
         "independent_railway_backup": "not_proven",
         "live_survival": "not_evaluated",
