@@ -114,6 +114,19 @@ jobs:
             --private-root "$RUNNER_TEMP/nexus-stage-d-private-copy" \
             --encrypted-output-dir "$RUNNER_TEMP/nexus-stage-d-encrypted"
 
+      - name: Anchor non-secret ciphertext digest to this GitHub run log
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The log anchor contains ONLY hashes, byte lengths, workflow/run
+          # identity and explicit nonclaims. Neither the provider token nor
+          # decrypted workspace bytes are passed to this process or printed.
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          python3 scripts/stage-d-run-log-anchor.py emit \
+            --encrypted-dir "$RUNNER_TEMP/nexus-stage-d-encrypted"
+
       - name: Upload ciphertext and sanitized receipt ONLY
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
