@@ -76,9 +76,13 @@ start NEXUS or write to Railway. Do not remove the quarantine marker.
   byte length, fixed public certificate digest, and explicit
   `release_authorized=false`, `seal=false`, `authority=none`.
 - Invoke OpenSSL CMS decryption with a reduced credential-free subprocess
-  environment; refuse any unsuccessful AES-GCM authentication. No output is
-  published until OpenSSL exits **successfully**, so partially decrypted
-  plaintext cannot be mistaken for authentic evidence.
+  environment; refuse any unsuccessful AES-GCM authentication. Feed OpenSSL
+  **the exact immutable ciphertext bytes already SHA-256 checked** through
+  stdin, rather than reopening a possibly swapped file path. After isolated
+  restore, independently reread both the encrypted input and its receipt:
+  any post-hash substitution blocks publication. No output is published
+  until OpenSSL exits **successfully**, so partially decrypted plaintext
+  cannot be mistaken for authentic evidence.
 - Parse the plaintext TAR **in memory**, without extracting TAR paths.
   Require exactly the three fixed regular files (one each), size limits,
   no duplicate names, no symlink, no hardlink, no unexpected PAX data.
