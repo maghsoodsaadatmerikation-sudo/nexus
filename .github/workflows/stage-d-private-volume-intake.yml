@@ -14,6 +14,9 @@ on:
       - 'scripts/test-stage-d-encrypted-escrow.py'
       - 'scripts/restore-stage-d-encrypted-escrow.py'
       - 'scripts/test-stage-d-offline-recovery.py'
+      - 'scripts/stage-d-run-log-anchor.py'
+      - 'scripts/test-stage-d-run-log-anchor.py'
+      - 'docs/STAGE-D-RUN-LOG-ANCHOR.md'
       - 'docs/STAGE-D-ENCRYPTED-OFFLINE-RECOVERY.md'
       - 'docs/keys/stage-d-recovery-public-cert.pem'
       - 'scripts/test-railway-cli-help.py'
@@ -48,6 +51,7 @@ jobs:
           python3 scripts/test-private-subprocess-env.py
           python3 scripts/test-offhost-volume-export.py
           python3 scripts/test-stage-d-encrypted-escrow.py
+          python3 scripts/test-stage-d-run-log-anchor.py
           python3 scripts/test-stage-d-offline-recovery.py
       - name: Verify private read-only CLI download with fake provider only
         run: |
