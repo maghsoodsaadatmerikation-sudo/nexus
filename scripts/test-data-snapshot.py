@@ -48,6 +48,76 @@ class SnapshotTests(unittest.TestCase):
         self.assertFalse(self.target.exists())
         self.assertFalse(list(self.root.glob(".nexus-restore-*")))
 
+    def test_hardlinked_workspace_from_outside_source_is_rejected(self):
+        # This was previously accepted as an ordinary file: the snapshot
+        # could silently include bytes also reachable outside the export.
+        source_file = self.source / "77.json"
+        outside = self.root / "operator-private-workspace.json"
+        source_file.rename(outside)
+        os.link(outside, source_file)
+        original = outside.read_bytes()
+        with self.assertRaises((snapshot.SnapshotError, OSError)):
+            snapshot.backup(self.source, self.archive)
+        self.assertEqual(outside.read_bytes(), original)
+        self.assertFalse(self.archive.exists())
+
+    def test_hardlinked_request_marker_from_outside_source_is_rejected(self):
+        marker = self.source / "requests" / b"accepted".hex()
+        outside = self.root / "operator-private-request-marker"
+        marker.rename(outside)
+        os.link(outside, marker)
+        with self.assertRaises((snapshot.SnapshotError, OSError)):
+            snapshot.backup(self.source, self.archive)
+        self.assertEqual(outside.read_bytes(), b"pending\n")
+        self.assertFalse(self.archive.exists())
+
+    def test_hardlinked_archive_is_not_accepted_for_inspection(self):
+        self.capture()
+        alias = self.root / "aliased-archive.json"
+        os.link(self.archive, alias)
+        with self.assertRaises((snapshot.SnapshotError, OSError)):
+            snapshot.inspect_snapshot(self.archive)
+        self.assertFalse(self.target.exists())
+
+    def test_requests_directory_replacement_during_scan_blocks_backup(self):
+        # Swap requests/ after the trusted directory fd has been opened.
+        # The anchored descriptor cannot follow the new symlink; the
+        # directory identity/liveness recheck must also block publication.
+        moved = self.root / "moved-requests"
+        initial = snapshot._read_from_directory
+        swapped = []
+
+        def inject(dir_fd, basename, limit):
+            if not swapped:
+                (self.source / "requests").rename(moved)
+                (self.source / "requests").symlink_to(moved, target_is_directory=True)
+                swapped.append(True)
+            return initial(dir_fd, basename, limit)
+
+        with patch.object(snapshot, "_read_from_directory", side_effect=inject):
+            with self.assertRaises((snapshot.SnapshotError, OSError)):
+                snapshot.backup(self.source, self.archive)
+        self.assertEqual(swapped, [True])
+        self.assertFalse(self.archive.exists())
+        self.assertEqual((moved / b"accepted".hex()).read_bytes(), b"pending\n")
+
+    def test_source_file_added_during_scan_blocks_backup(self):
+        first_read = snapshot._read_from_directory
+        edited = []
+
+        def inject(dir_fd, basename, limit):
+            if not edited:
+                (self.source / "78.json").write_text(json.dumps({
+                    "schema_version": 1, "workspace": {"id": "x"}, "events": []}))
+                edited.append(True)
+            return first_read(dir_fd, basename, limit)
+
+        with patch.object(snapshot, "_read_from_directory", side_effect=inject):
+            with self.assertRaises(snapshot.SnapshotError):
+                snapshot.backup(self.source, self.archive)
+        self.assertEqual(edited, [True])
+        self.assertFalse(self.archive.exists())
+
     def test_complete_round_trip_preserves_pending_and_uncertain_bytes(self):
         self.capture()
         self.assertEqual(snapshot.restore(self.archive, self.target), 4)
