@@ -64,3 +64,25 @@ proof of privileged host integrity, exact history, external backup custody,
 or the absence of a hostile writer **inside** the ledger. No new network
 service, provider token, product deployment, mutable Railway volume access,
 paid infrastructure, release or Seal is involved. `A_out <= A_in`.
+
+### HTTP acceptance and recovery distinction
+
+The full Rust HTTP suite uncovered an important contract mismatch: a legacy
+test deleted `requests` from underneath a live authenticated application,
+recreated the same pathname, and then expected a fresh request to be **202
+Accepted** without a restart. This was unsafe under directory replacement:
+the new path is **not** the original durable store and must not inherit its
+authority. The test now requires **503 Service Unavailable** for new requests
+after this replacement on the still-running instance, even if the pathname
+has been recreated, and ensures the delegate was never invoked. It also
+checks the original failed request remains indeterminate and not replayed.
+
+A different process freshly started on an empty replacement directory has
+**no way to reconstruct deleted request history** from that empty directory
+alone. This stage does **not** claim cross-process detection of total storage
+loss, nor does it authorize a reboot/redeploy onto a replacement volume.
+The operator must restore independently verified, authenticated durable
+state and establish replay safety before resuming the actual service.
+The CI suite directly runs the precise HTTP test in addition to the
+eleven marker tests; the full PR verification exercises the complete Rust
+HTTP contract, not only standalone module tests.
