@@ -4,12 +4,19 @@ use std::{
     collections::HashMap,
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
-    os::unix::fs::{MetadataExt, OpenOptionsExt},
+    os::{
+        fd::AsRawFd,
+        unix::fs::{MetadataExt, OpenOptionsExt},
+    },
     path::{Path, PathBuf},
 };
 
 pub(crate) struct RequestStore {
     root: PathBuf,
+    // Keep a descriptor to the original directory for the store's lifetime.
+    // Names are reopened through /proc/self/fd instead of through a mutable
+    // ancestor pathname; a replaced directory cannot redirect writes.
+    ledger: File,
 }
 
 impl RequestStore {
@@ -28,11 +35,14 @@ impl RequestStore {
         for ancestor in root.ancestors() {
             File::open(ancestor)?.sync_all()?;
         }
-        let store = Self {
-            root: root.to_owned(),
-        };
+        let ledger = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(&root)?;
+        let store = Self { root, ledger };
+        store.verify_root()?;
         let mut statuses = HashMap::new();
-        for entry in fs::read_dir(root)? {
+        for entry in fs::read_dir(store.pinned_dir_path())? {
             let entry = entry?;
             let name = entry.file_name().into_string().map_err(|_| invalid())?;
             if !name.is_ascii()
@@ -60,43 +70,93 @@ impl RequestStore {
             };
             statuses.insert(id, status);
         }
+        store.verify_root()?;
         Ok((store, statuses))
     }
 
+    fn encoded_id(id: &str) -> String {
+        id.as_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    }
+
     fn path(&self, id: &str) -> PathBuf {
-        self.root.join(
-            id.as_bytes()
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>(),
-        )
+        self.root.join(Self::encoded_id(id))
+    }
+
+    fn pinned_dir_path(&self) -> PathBuf {
+        // Linux procfs resolves this handle to the already-open directory,
+        // even if a parent path is subsequently renamed or replaced.
+        Path::new("/proc/self/fd").join(self.ledger.as_raw_fd().to_string())
+    }
+
+    fn pinned_marker_path(&self, id: &str) -> PathBuf {
+        self.pinned_dir_path().join(Self::encoded_id(id))
+    }
+
+    fn verify_root(&self) -> io::Result<()> {
+        let linked = fs::symlink_metadata(&self.root)?;
+        let pinned = self.ledger.metadata()?;
+        if !linked.file_type().is_dir()
+            || !pinned.is_dir()
+            || (linked.dev(), linked.ino()) != (pinned.dev(), pinned.ino())
+        {
+            return Err(invalid());
+        }
+        Ok(())
+    }
+
+    fn verify_marker_identity(&self, file: &File, path: &Path, size: u64) -> io::Result<()> {
+        let linked = fs::symlink_metadata(path)?;
+        let actual = file.metadata()?;
+        if !linked.file_type().is_file()
+            || linked.nlink() != 1
+            || actual.nlink() != 1
+            || linked.len() != size
+            || actual.len() != size
+            || (linked.dev(), linked.ino()) != (actual.dev(), actual.ino())
+        {
+            return Err(invalid());
+        }
+        Ok(())
     }
 
     pub(crate) fn reserve(&self, id: &str) -> io::Result<()> {
+        self.verify_root()?;
+        let path = self.pinned_marker_path(id);
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(self.path(id))?;
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
+            .open(&path)?;
         // Allocate and sync a non-accepted prefix before crossing the delegate
         // boundary. An empty inode alone does not detect byte-capacity ENOSPC.
         // Legacy empty markers and a torn prefix still recover indeterminate.
         file.write_all(b"p")?;
         file.sync_all()?;
-        File::open(&self.root)?.sync_all()
+        self.ledger.sync_all()?;
+        self.verify_marker_identity(&file, &path, 1)?;
+        self.verify_root()
     }
 
     pub(crate) fn pending(&self, id: &str) -> io::Result<()> {
+        self.verify_root()?;
         // A torn write recovers conservatively as indeterminate, never as accepted.
-        let mut file = open_marker(&self.path(id), true)?;
+        let path = self.pinned_marker_path(id);
+        let mut file = open_marker(&path, true)?;
         file.write_all(b"pending\n")?;
-        file.sync_all()
+        file.sync_all()?;
+        self.verify_marker_identity(&file, &path, 8)?;
+        self.verify_root()
     }
 }
 
 // The gateway runs on Linux. Do not follow a replaced final-path symlink,
 // block on a substituted FIFO, or write through an aliased hard-linked inode.
-// This is a bounded local filesystem guard, not protection from a hostile
-// actor controlling an ancestor directory while the service is running.
+// The opened directory descriptor now prevents redirecting marker reads or
+// writes through a replaced ancestor path. It does not authorize untrusted
+// writers in that directory or replace host ownership/permission controls.
 fn open_marker(path: &Path, writing: bool) -> io::Result<File> {
     let initial = fs::symlink_metadata(path)?;
     if !initial.file_type().is_file() || initial.nlink() != 1 || initial.len() > 8 {
