@@ -18,6 +18,9 @@ on:
       - 'scripts/test-stage-d-offline-recovery.py'
       - 'scripts/stage-d-run-log-anchor.py'
       - 'scripts/test-stage-d-run-log-anchor.py'
+      - 'scripts/verify-stage-d-uploaded-artifact.py'
+      - 'scripts/test-stage-d-uploaded-artifact.py'
+      - 'docs/STAGE-D-INDEPENDENT-ARTIFACT-READBACK.md'
       - 'scripts/verify-stage-d-recovery-key.py'
       - 'scripts/test-stage-d-recovery-key.py'
       - 'docs/STAGE-D-RECOVERY-KEY-POSSESSION.md'
@@ -57,6 +60,8 @@ jobs:
           python3 scripts/test-offhost-volume-export.py
           python3 scripts/test-stage-d-encrypted-escrow.py
           python3 scripts/test-stage-d-run-log-anchor.py
+          python3 -m py_compile scripts/verify-stage-d-uploaded-artifact.py scripts/test-stage-d-uploaded-artifact.py
+          python3 scripts/test-stage-d-uploaded-artifact.py
           python3 scripts/test-stage-d-offline-recovery.py
           python3 -m py_compile scripts/verify-stage-d-recovery-key.py scripts/test-stage-d-recovery-key.py
           python3 scripts/test-stage-d-recovery-key.py
