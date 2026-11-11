@@ -215,7 +215,8 @@ def validate_quarantined_tree(root, records):
 def recover(ciphertext, receipt, key, destination):
     validate_paths(ciphertext, receipt, key, destination)
     encrypted = private_regular(ciphertext, MAX_CIPHER)
-    require_receipt(private_regular(receipt, MAX_RECEIPT), encrypted)
+    receipt_bytes = private_regular(receipt, MAX_RECEIPT)
+    require_receipt(receipt_bytes, encrypted)
     require(hashlib.sha256(private_regular(escrow.CERT, 16384)).hexdigest()
             == escrow.CERT_SHA256)
     # Never write partial or unauthenticated decryption output to disk.
@@ -248,6 +249,11 @@ def recover(ciphertext, receipt, key, destination):
         candidate = staging / "candidate"
         snapshot.restore(archive, candidate)
         validate_quarantined_tree(candidate, records)
+        # Reject post-check file replacement before publishing any success:
+        # the same exact ciphertext and sanitized receipt must still be
+        # present after OpenSSL authentication and isolated restore.
+        require(private_regular(ciphertext, MAX_CIPHER) == encrypted and
+                private_regular(receipt, MAX_RECEIPT) == receipt_bytes)
         # The only destination publication is a kernel no-replace rename,
         # after all authenticated and post-restore checks have succeeded.
         require(not destination.exists() and not destination.is_symlink())
