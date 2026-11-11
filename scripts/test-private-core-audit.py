@@ -119,19 +119,18 @@ class PrivateCoreAuditTests(unittest.TestCase):
         # are printed, stored or passed into the real Rust core.
         wrapper = self.root / "check-scoped-rust-env.py"
         script = (
-            "#!/usr/bin/env python3\\n"
-            "import os, subprocess, sys\\n"
+            "#!/usr/bin/env python3\n"
+            "import os, subprocess, sys\n"
             "secrets = {'RAILWAY_TOKEN', 'RAILWAY_API_TOKEN', 'NEXUS_API_TOKEN', "
-            "'RENDER_API_KEY', 'GITHUB_TOKEN', 'UNRELATED_PRIVATE_SECRET'}\\n"
-            "if secrets.intersection(os.environ) or 'PYTHONPATH' in os.environ: sys.exit(47)\\n"
-            "if os.environ.get('HOME') != " + repr(str(self.work)) + ": sys.exit(48)\\n"
+            "'RENDER_API_KEY', 'GITHUB_TOKEN', 'UNRELATED_PRIVATE_SECRET'}\n"
+            "if secrets.intersection(os.environ) or 'PYTHONPATH' in os.environ: sys.exit(47)\n"
+            "if os.environ.get('HOME') != " + repr(str(self.work)) + ": sys.exit(48)\n"
             "run = subprocess.run([" + repr(str(VALIDATOR)) + ", sys.argv[1]], "
             "stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, "
-            "stderr=subprocess.DEVNULL, timeout=20)\\n"
-            "sys.exit(run.returncode)\\n"
+            "stderr=subprocess.DEVNULL, timeout=20)\n"
+            "sys.exit(run.returncode)\n"
         )
-        # Decode the fixture escapes exactly once; source remains static.
-        wrapper.write_text(script.replace("\\\\n", "\\n"))
+        wrapper.write_text(script)
         wrapper.chmod(0o700)
         env = {"RAILWAY_TOKEN": "synthetic-provider-secret",
                "RAILWAY_API_TOKEN": "synthetic-second-provider-secret",
