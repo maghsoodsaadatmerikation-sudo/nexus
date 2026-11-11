@@ -7,6 +7,18 @@ on:
         description: "Enter exact original Volume UUID to authorize a READ-ONLY download"
         required: true
         type: string
+      credential_scope:
+        description: "Prefer project. Workspace grants broader access; select only if project token fails."
+        required: true
+        default: project
+        type: choice
+        options:
+          - project
+          - workspace
+      confirm_workspace_scope:
+        description: "For workspace mode only, enter I ACCEPT WORKSPACE TOKEN SCOPE"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -47,6 +59,31 @@ jobs:
           test -z "${RAILWAY_TOKEN:-}"
           test -z "${RAILWAY_API_TOKEN:-}"
 
+      - name: Fail-closed selected Railway credential scope BEFORE CLI download
+        shell: bash
+        env:
+          SCOPE: ${{ inputs.credential_scope }}
+          WORKSPACE_ACK: ${{ inputs.confirm_workspace_scope }}
+          PROJECT_TOKEN: ${{ inputs.credential_scope == 'project' && secrets.NEXUS_STAGE_D_RAILWAY_TOKEN || '' }}
+          WORKSPACE_TOKEN: ${{ inputs.credential_scope == 'workspace' && secrets.NEXUS_STAGE_D_RAILWAY_WORKSPACE_API_TOKEN || '' }}
+        run: |
+          set -euo pipefail
+          if [ "$SCOPE" = project ]; then
+            if [ -n "$WORKSPACE_ACK" ] || [ -z "$PROJECT_TOKEN" ] || [ -n "$WORKSPACE_TOKEN" ]; then
+              echo 'BLOCKED: project scope requires exactly its authorized private secret and no workspace acknowledgment'
+              exit 1
+            fi
+          elif [ "$SCOPE" = workspace ]; then
+            if [ "$WORKSPACE_ACK" != 'I ACCEPT WORKSPACE TOKEN SCOPE' ] || [ -z "$WORKSPACE_TOKEN" ] || [ -n "$PROJECT_TOKEN" ]; then
+              echo 'BLOCKED: explicit workspace scope acknowledgment and exactly its private secret required'
+              exit 1
+            fi
+          else
+            echo 'BLOCKED: unknown Railway credential scope'
+            exit 1
+          fi
+          echo 'Selected Railway credential scope is present; no provider token value printed.'
+
       - name: Download genuine pinned Railway CLI (no Railway credential)
         shell: bash
         run: |
@@ -78,21 +115,11 @@ jobs:
           binary.chmod(0o700)
           PY
 
-      - name: Require dedicated operator-authorized Railway secret
-        shell: bash
-        env:
-          RAILWAY_TOKEN: ${{ secrets.NEXUS_STAGE_D_RAILWAY_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "$RAILWAY_TOKEN" ]; then
-            echo 'BLOCKED: NEXUS_STAGE_D_RAILWAY_TOKEN must be added privately in GitHub Settings'
-            exit 1
-          fi
-
       - name: Exact-target READ-ONLY download + private quarantine rehearsal
         shell: bash
         env:
-          RAILWAY_TOKEN: ${{ secrets.NEXUS_STAGE_D_RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ inputs.credential_scope == 'project' && secrets.NEXUS_STAGE_D_RAILWAY_TOKEN || '' }}
+          RAILWAY_API_TOKEN: ${{ inputs.credential_scope == 'workspace' && secrets.NEXUS_STAGE_D_RAILWAY_WORKSPACE_API_TOKEN || '' }}
           RAILWAY_NO_AUTO_UPDATE: '1'
         run: |
           set -euo pipefail
