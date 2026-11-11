@@ -206,6 +206,34 @@ class OfflineRecoveryTests(unittest.TestCase):
             self.recover()
         self.assertEqual(seen, [True])
 
+    def test_ciphertext_swapped_after_hash_check_blocks_publication(self):
+        # Even authenticated decryption of *originally validated bytes*
+        # must not certify an owner-held file that drifted mid-operation.
+        original = recovery.decrypt_authenticated
+        def change_after_hash(verified_bytes, key, private_home):
+            self.ciphertext.write_bytes(b"POST_HASH_PATH_SWAP_SENTINEL")
+            return original(verified_bytes, key, private_home)
+        with patch.object(recovery.escrow, "CERT", self.f.cert), \
+             patch.object(recovery.escrow, "CERT_SHA256", self.f.cert_sha), \
+             patch.object(recovery, "decrypt_authenticated", side_effect=change_after_hash):
+            with self.assertRaises(recovery.RecoveryBlocked):
+                recovery.recover(self.ciphertext, self.meta, self.f.key, self.target)
+        self.assertFalse(self.target.exists())
+
+    def test_receipt_swapped_during_decryption_blocks_publication(self):
+        original = recovery.decrypt_authenticated
+        def change_after_hash(verified_bytes, key, private_home):
+            data = json.loads(self.meta.read_text())
+            data["authority"] = "forged-after-check"
+            self.meta.write_text(json.dumps(data))
+            return original(verified_bytes, key, private_home)
+        with patch.object(recovery.escrow, "CERT", self.f.cert), \
+             patch.object(recovery.escrow, "CERT_SHA256", self.f.cert_sha), \
+             patch.object(recovery, "decrypt_authenticated", side_effect=change_after_hash):
+            with self.assertRaises(recovery.RecoveryBlocked):
+                recovery.recover(self.ciphertext, self.meta, self.f.key, self.target)
+        self.assertFalse(self.target.exists())
+
     def test_cli_failure_does_not_echo_private_data_paths_or_key(self):
         self.rewrite_meta("ciphertext_sha256", "0" * 64)
         stderr = io.StringIO()
