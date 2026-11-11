@@ -3,7 +3,8 @@ use crate::RequestStatus;
 use std::{
     collections::HashMap,
     fs::{self, File, OpenOptions},
-    io::{self, Write},
+    io::{self, Read, Write},
+    os::unix::fs::{MetadataExt, OpenOptionsExt},
     path::{Path, PathBuf},
 };
 
@@ -19,6 +20,10 @@ impl RequestStore {
             std::env::current_dir()?.join(root)
         };
         fs::create_dir_all(&root)?;
+        // A path alias to a different ledger must not become a durable root.
+        if !fs::symlink_metadata(&root)?.file_type().is_dir() {
+            return Err(invalid());
+        }
         // Persist every newly created ancestor as well as the marker directory.
         for ancestor in root.ancestors() {
             File::open(ancestor)?.sync_all()?;
@@ -45,10 +50,7 @@ impl RequestStore {
             if store.path(&id).file_name() != Some(entry.file_name().as_os_str()) {
                 return Err(invalid());
             }
-            if entry.metadata()?.len() > 8 {
-                return Err(invalid());
-            }
-            let marker = fs::read(entry.path())?;
+            let marker = read_marker(&entry.path())?;
             let status = if marker == b"pending\n" {
                 RequestStatus::Pending
             } else if marker.is_empty() || b"pending\n".starts_with(&marker) {
@@ -85,10 +87,57 @@ impl RequestStore {
 
     pub(crate) fn pending(&self, id: &str) -> io::Result<()> {
         // A torn write recovers conservatively as indeterminate, never as accepted.
-        let mut file = OpenOptions::new().write(true).open(self.path(id))?;
+        let mut file = open_marker(&self.path(id), true)?;
         file.write_all(b"pending\n")?;
         file.sync_all()
     }
+}
+
+
+// The gateway runs on Linux. Do not follow a replaced final-path symlink,
+// block on a substituted FIFO, or write through an aliased hard-linked inode.
+// This is a bounded local filesystem guard, not protection from a hostile
+// actor controlling an ancestor directory while the service is running.
+fn open_marker(path: &Path, writing: bool) -> io::Result<File> {
+    let initial = fs::symlink_metadata(path)?;
+    if !initial.file_type().is_file() || initial.nlink() != 1 || initial.len() > 8 {
+        return Err(invalid());
+    }
+    let file = OpenOptions::new()
+        .read(!writing)
+        .write(writing)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)?;
+    let opened = file.metadata()?;
+    if !opened.is_file()
+        || opened.nlink() != 1
+        || opened.len() > 8
+        || (initial.dev(), initial.ino()) != (opened.dev(), opened.ino())
+    {
+        return Err(invalid());
+    }
+    Ok(file)
+}
+
+fn read_marker(path: &Path) -> io::Result<Vec<u8>> {
+    let mut file = open_marker(path, false)?;
+    let before = file.metadata()?;
+    let mut bytes = Vec::new();
+    (&mut file).take(9).read_to_end(&mut bytes)?;
+    let after = file.metadata()?;
+    let final_path = fs::symlink_metadata(path)?;
+    if bytes.len() > 8
+        || !final_path.is_file()
+        || final_path.nlink() != 1
+        || (after.dev(), after.ino()) != (before.dev(), before.ino())
+        || (final_path.dev(), final_path.ino()) != (before.dev(), before.ino())
+        || (before.len(), before.mtime(), before.mtime_nsec(), before.ctime(), before.ctime_nsec())
+            != (after.len(), after.mtime(), after.mtime_nsec(), after.ctime(), after.ctime_nsec())
+        || after.len() != bytes.len() as u64
+    {
+        return Err(invalid());
+    }
+    Ok(bytes)
 }
 
 fn invalid() -> io::Error {
