@@ -315,6 +315,63 @@ mod tests {
     }
 
     #[test]
+    fn replacing_ledger_directory_cannot_redirect_reserved_or_pending_writes() {
+        let root = isolated_ledger("replace-root");
+        let (store, _) = RequestStore::open(&root).unwrap();
+        store.reserve("a").unwrap();
+        let original = root.with_extension("original");
+        fs::rename(&root, &original).unwrap();
+        fs::create_dir(&root).unwrap();
+        fs::write(root.join("61"), b"p").unwrap();
+
+        // The pinned descriptor still names the original directory, but
+        // the changed visible path makes the store refuse any further write.
+        assert_eq!(fs::read(store.pinned_marker_path("a")).unwrap(), b"p");
+        assert!(store.reserve("b").is_err());
+        assert!(store.pending("a").is_err());
+        assert_eq!(fs::read(root.join("61")).unwrap(), b"p");
+        assert_eq!(fs::read(original.join("61")).unwrap(), b"p");
+        assert!(!root.join("62").exists());
+        assert!(!original.join("62").exists());
+
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(original).unwrap();
+    }
+
+    #[test]
+    fn replacing_ancestor_directory_cannot_redirect_writes() {
+        let parent = isolated_ledger("replace-parent");
+        let root = parent.join("requests");
+        fs::create_dir(&root).unwrap();
+        let (store, _) = RequestStore::open(&root).unwrap();
+        store.reserve("a").unwrap();
+        let original = parent.with_extension("original");
+        fs::rename(&parent, &original).unwrap();
+        fs::create_dir(&parent).unwrap();
+        fs::create_dir(&root).unwrap();
+
+        assert!(store.reserve("b").is_err());
+        assert!(store.pending("a").is_err());
+        assert!(!root.join("61").exists());
+        assert!(!root.join("62").exists());
+        assert_eq!(fs::read(original.join("requests/61")).unwrap(), b"p");
+
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_dir_all(original).unwrap();
+    }
+
+    #[test]
+    fn new_store_rejects_symlinked_directory_alias() {
+        use std::os::unix::fs::symlink;
+        let root = isolated_ledger("symlink-root");
+        let alias = root.with_extension("alias");
+        symlink(&root, &alias).unwrap();
+        assert!(RequestStore::open(&alias).is_err());
+        fs::remove_file(alias).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn crash_writer() {
         let Some(root) = std::env::var_os("NEXUS_TEST_CRASH_STORE") else {
             return;
