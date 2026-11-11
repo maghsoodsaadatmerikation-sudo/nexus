@@ -19,6 +19,10 @@ The manual workflow now contains a **mandatory** dependent job named `recheck-up
 
 No real provider download, artifact upload, or paid deployment is triggered by a PR. The new tests operate on synthetic random bytes, not real CMS payloads or NEXUS workspaces, and they cannot manufacture an actual operator proof.
 
+## Actual GitHub transport rehearsal with fake bytes
+
+The separate PR-triggered [synthetic two-runner workflow](../.github/workflows/stage-d-synthetic-artifact-transport.yml) creates exactly two **fake**, non-CMS, randomly seeded files and a strictly non-authoritative receipt on an ephemeral runner, uses the same pinned `actions/upload-artifact` action as Stage D, transfers the immutable artifact ID and both SHA-256 digests as job outputs, and re-downloads that precise artifact by ID with the same pinned `actions/download-artifact` SHA used by the future manual capture. A **second runner** checks the exact two-file set, strict receipt schema and original SHA-256 hashes. If upload, transfer, extraction or hash checks fail, the synthetic CI run fails. This is a real GitHub artifact transport test, **not** a real encrypted Railway backup or an end-to-end test using the operator's secret.
+
 ## Synthetic negative cases
 
 CI tests require an exact two-file artifact and correctly matched immutable run anchor, while refusing altered ciphertext even when the receipt was updated to match, harmless-looking receipt whitespace changes, modified Run/Attempt/Commit, missing or invalid artifact ID, malformed/noncanonical base64, duplicate/forged authority metadata, symlinked files, hardlinked files, extra subdirectories, and ambient Railway tokens. Static workflow-contract tests require both producer outputs, immutable artifact-ID downloader, a separate dependent runner, exact SHA pinning, and no provider credential passed to the verifier.
