@@ -21,6 +21,46 @@ Rust `RequestStore::open` previously inspected a directory entry and then indepe
 
 ## Limits and self-critique
 
-This is **not** a complete defense against an attacker who can rewrite an ancestor directory, exploit same-size in-place modifications with filesystem timestamp manipulation, or compromise the service process. The path name is not anchored by a directory FD as in Python's read-only snapshot scanner. Strong ownership, permissions and a single trusted writer on `/data/requests` remain necessary. The checks reduce accidental/malicious marker aliasing; they do not prove atomic provider backups or authenticate the entire filesystem. A successful Rust test is not a production-capture or recovery witness.
+The November 11 safeguard covered the **final file component** only. The November 12 follow-on below pins the directory descriptor and prevents an ancestor rename or replacement from redirecting ordinary request reads/writes; it remains insufficient against an attacker who can modify files **inside that pinned directory**, manipulate the host process or file metadata, or swap a marker just after the final check. Strong ownership, permissions and a single trusted writer on `/data/requests` remain necessary. The checks do not prove atomic provider backups or authenticate the entire filesystem. A successful Rust test is not a production-capture or recovery witness.
 
 The change has **not** been deployed to the pinned live Railway runtime. The original Volume `cc47a350-6c7e-4487-89d9-c4b390f94884` has not been accessed or mutated. No token, release, Seal, restart or new charge. Issue #70 stays OPEN; `A_out <= A_in`.
+
+## November 12 follow-on: pinned original ledger directory (PR #98)
+
+The earlier protection correctly refused substituted **marker** symlinks and external
+hardlinks, but request creation and final Pending writes still passed a mutable
+absolute root pathname to the operating system. A renamed `requests` ancestor
+or substituted directory could therefore redirect a later operation.
+
+The Rust `RequestStore` now owns an opened **Linux directory File Descriptor**
+for its entire lifetime. It opens `requests` with
+`O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC`, checks the opened device/inode against
+the visible path, and enumerates entries and opens/creates markers beneath
+`/proc/self/fd/<directory-fd>/`. The latter is a Linux-specific, fd-bound
+directory reference available in the actual Railway Linux container and
+GitHub Linux CI: it tracks the **original inode**, not a subsequently substituted
+path. Both before and after mutation, the code requires the original directory's
+device/inode still to occupy the expected visible root path.
+
+- `reserve()` creates a unique marker relative to the pinned directory,
+  syncs the new file and the **same opened directory**, checks the final
+  file's identity/length, and refuses success if the root was replaced.
+- `pending()` opens the existing marker relative to that directory with
+  `O_NOFOLLOW | O_NONBLOCK`, syncs the complete marker, rechecks file identity
+  and length, and refuses success if the visible root was replaced.
+- Startup enumerates the pinned directory and refuses success if the expected
+  root no longer resolves to the same inode after reading markers.
+- Rust regressions rename the ledger directory and separately rename an
+  ancestor **after** the store opens, replace the path, then demonstrate that
+  attempts to reserve or mark Pending fail without modifying either displaced
+  original or substituted data. A startup symlink alias is also rejected.
+  Existing legal interrupted-write and replay-avoidance semantics remain
+  unchanged.
+
+The `/proc/self/fd` design requires a Linux host with procfs mounted. If it is
+absent or inaccessible, the store **fails closed** rather than using a
+pathname fallback. Directory pinning narrows a real filesystem race but is not
+proof of privileged host integrity, exact history, external backup custody,
+or the absence of a hostile writer **inside** the ledger. No new network
+service, provider token, product deployment, mutable Railway volume access,
+paid infrastructure, release or Seal is involved. `A_out <= A_in`.
