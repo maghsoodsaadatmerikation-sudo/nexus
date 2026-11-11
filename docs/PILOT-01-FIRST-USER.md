@@ -132,3 +132,14 @@ durable online use requires independently recoverable storage. Do not
 solve that limitation by exposing tokens in GitHub Actions logs or publishing
 a populated database through Pages or a public artifact. No payment or
 provider change was made by this pilot implementation.
+
+## Latest release-gate interpretation and mobile recovery handoff (2026-11-11)
+
+[Stage D release-intent triage and conditional mobile operator
+handoff](STAGE-D-RELEASE-AND-MOBILE-RECOVERY.md) distinguishes seven
+**expected fail-closed refusals** of a non-release commit from actual
+engineering verification failures, without turning them into Release PASS.
+It also records the official, conditional in-browser Railway Console
+file-browser route and why it is **not yet verified as enabled** for this
+account. Neither diagnostic evidence nor a mobile-browser option closes the
+real production backup/recoverability or human acceptance gates above.
