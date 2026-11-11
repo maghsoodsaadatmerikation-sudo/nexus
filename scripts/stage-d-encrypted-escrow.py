@@ -36,7 +36,9 @@ class EscrowBlocked(ValueError):
     pass
 
 
-def require(ok):
+def require(ok, reason=None):
+    # Do not interpolate paths, metadata, command stderr, or private values
+    # into a user-facing failure. Reasons are fixed literals for developers.
     if not ok:
         raise EscrowBlocked("private capture, recipient or encrypted output did not meet the exact contract")
 
