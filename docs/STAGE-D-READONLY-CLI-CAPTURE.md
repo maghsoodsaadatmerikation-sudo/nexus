@@ -133,18 +133,20 @@ name/size/SHA-256 manifest to the archived content, then re-read the same
 file set after the quarantined byte-restored rehearsal. The CLI wrapper previously relied chiefly on the child report's
 `local_copy_scans_matched_archive=true`. **Final parent-level receipt gate
 (2026-11-11):** *after* the child exits successfully, the capture process
-separately reopens the private report with bounded, no-symlink reads and
-checks the exact expected project volume, deployment, runtime commit, schema,
+separately reopens the private report with bounded, no-symlink reads,
+rejects extra/unknown report keys, and checks the exact expected volume,
+deployment, runtime commit, schema,
 authority and strictly limited nonclaims. It rereads the archive, validates
 all stored checksums and paths, verifies its *current* SHA-256 matches the
 child's declared digest and file count, rescans the local copied data against
 the archive, and rechecks every isolated restored byte and quarantine marker
-before allowing `capture-receipt.json`. If Rust audit was requested, the
+before allowing `capture-receipt.json`. It rereads the report and the
+quarantined restored tree at the final boundary as well. If Rust audit was requested, the
 parent also requires explicit positive Rust/source-parity/post-audit fields;
 without Rust these fields must state `not_evaluated`. A new receipt field
 `post_intake_copy_archive_and_restore_rechecked=true` records the bounded
 post-child observation. Tests inject source, archive, recovery-marker and
-report mutations *after* a real synthetic child PASS: the parent must BLOCK
+forged/extended report mutations *after* a real synthetic child PASS: the parent must BLOCK
 without publishing a receipt.
 
 This closes a **local post-intake-to-receipt gap**. The parent reuses the
@@ -173,7 +175,7 @@ reviewed data-retention decision.
 
 The no-secret CI job
 `.github/workflows/stage-d-private-volume-intake.yml` runs private-intake
-and capture regression tests, including six post-child tamper/forgery
+and capture regression tests, including eight post-child tamper/forgery
 scenarios with a **fake local Railway CLI**. It proves the command target cannot drift, plan
 mode performs nothing, an absent token fails before a copy, unexpected files,
 symlinks and download failures block PASS, and a synthetic exported directory
