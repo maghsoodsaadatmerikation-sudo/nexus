@@ -129,19 +129,17 @@ def validate_capture(root):
     inspected, digest = capture.validate_final_private_receipt(
         source, report_dir, rust_requested=False)
     receipt_path = report_dir / "capture-receipt.json"
-    raw = capture.importlib.util  # keeps import available, not evidence
-    del raw
-    data = capture.importlib.util  # no token or provider access
-    del data
-    snap = capture.hashlib  # no secret values
-    del snap
-    report_bytes = capture.importlib.util  # placeholder-free parser below
-    del report_bytes
-    with receipt_path.open("rb") as handle:
-        original = handle.read(32769)
-    require(len(original) <= 32768, "invalid private capture receipt")
-    snapshot = __import__("importlib").util
-    del snapshot
+    # A symlinked or hard-linked receipt is never trusted: open the inode
+    # without following paths, then reject mutable/shared or oversized files.
+    fd = os.open(receipt_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        info = os.fstat(fd)
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and
+                info.st_size <= 32768, "invalid private capture receipt")
+        original = os.read(fd, 32769)
+        require(len(original) == info.st_size, "private capture receipt changed")
+    finally:
+        os.close(fd)
     def distinct(pairs):
         result = {}
         for key, val in pairs:
