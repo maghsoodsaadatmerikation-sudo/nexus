@@ -1,0 +1,127 @@
+name: NEXUS Stage D Synthetic Two-Runner Artifact Transport
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/stage-d-synthetic-artifact-transport.yml'
+      - '.github/workflows/stage-d-encrypted-volume-capture.yml'
+      - 'scripts/verify-stage-d-uploaded-artifact.py'
+      - 'scripts/test-stage-d-uploaded-artifact.py'
+      - 'scripts/stage-d-run-log-anchor.py'
+      - 'scripts/stage-d-encrypted-escrow.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-upload:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      cipher_sha256: ${{ steps.fixture.outputs.cipher_sha256 }}
+      receipt_sha256: ${{ steps.fixture.outputs.receipt_sha256 }}
+    steps:
+      - name: Checkout test-only source without persisted GitHub credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Build fake ciphertext and strict NON-PRODUCTION receipt
+        id: fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          out=Path(os.environ['RUNNER_TEMP'])/'nexus-stage-d-synthetic-encrypted'
+          out.mkdir(mode=0o700)
+          # Not a valid CMS envelope and not a Railway snapshot: transport only.
+          fake=b'SYNTHETIC_TEST_ONLY_NOT_CMS_NOT_VOLUME_DATA_' + os.urandom(640)
+          cipher=out/'nexus-stage-d-private-capture.cms'
+          cipher.write_bytes(fake)
+          receipt={
+            'schema':'nexus.stage-d-encrypted-escrow.v1',
+            'status':'ENCRYPTED_PRIVATE_COPY_NOT_ATOMICALLY_VERIFIED',
+            'content_claim':'local_structural_intake_only',
+            'independent_live_restore':'not_evaluated',
+            'railway_origin':'not_independently_attested',
+            'release_authorized':False, 'seal':False, 'authority':'none',
+            'recipient_cert_sha256':'b27cc7a84e333fce78f790dce20335258b11e724bac1a91b3b7c886ac3812091',
+            'ciphertext_sha256':hashlib.sha256(fake).hexdigest(),
+            'ciphertext_bytes':len(fake)
+          }
+          rec=out/'nexus-stage-d-ciphertext-receipt.json'
+          rec.write_text(json.dumps(receipt,sort_keys=True)+'\n',encoding='utf-8')
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:
+              output.write('cipher_sha256='+hashlib.sha256(fake).hexdigest()+'\n')
+              output.write('receipt_sha256='+hashlib.sha256(rec.read_bytes()).hexdigest()+'\n')
+          print('SYNTHETIC ONLY: generated two fake, non-sensitive artifact files.')
+          PY
+      - name: Upload ONLY the fake ciphertext and redacted synthetic receipt
+        id: upload
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-stage-d-synthetic-transfer-test
+          path: |
+            ${{ runner.temp }}/nexus-stage-d-synthetic-encrypted/nexus-stage-d-private-capture.cms
+            ${{ runner.temp }}/nexus-stage-d-synthetic-encrypted/nexus-stage-d-ciphertext-receipt.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  synthetic-retrieve:
+    needs: synthetic-upload
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact test source on a separate runner
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Download ONLY this run's immutable synthetic artifact ID
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ needs.synthetic-upload.outputs.artifact_id }}
+          path: ${{ runner.temp }}/nexus-stage-d-synthetic-redownload
+      - name: Compare bytes on this distinct runner without real secrets
+        shell: bash
+        env:
+          EXPECTED_CIPHER_SHA: ${{ needs.synthetic-upload.outputs.cipher_sha256 }}
+          EXPECTED_RECEIPT_SHA: ${{ needs.synthetic-upload.outputs.receipt_sha256 }}
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          python3 - <<'PY'
+          import hashlib,importlib.util,os,re,stat,sys
+          from pathlib import Path
+          sys.path.insert(0,str(Path.cwd()/'scripts'))
+          spec=importlib.util.spec_from_file_location('stage_d_anchor','scripts/stage-d-run-log-anchor.py')
+          anchor=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(anchor)
+          root=Path(os.environ['RUNNER_TEMP'])/'nexus-stage-d-synthetic-redownload'/'nexus-stage-d-synthetic-transfer-test'
+          assert root.is_dir() and not root.is_symlink()
+          expected={anchor.CIPHERTEXT,anchor.RECEIPT}
+          observed=set()
+          for path in root.iterdir():
+              info=path.lstat()
+              assert path.name in expected
+              assert stat.S_ISREG(info.st_mode) and info.st_nlink==1
+              observed.add(path.name)
+          assert observed==expected
+          _,receipt_bytes,meta=anchor.read_cipher_receipt(root)
+          assert re.fullmatch('[0-9a-f]{64}',os.environ['EXPECTED_CIPHER_SHA'])
+          assert re.fullmatch('[0-9a-f]{64}',os.environ['EXPECTED_RECEIPT_SHA'])
+          assert meta['ciphertext_sha256']==os.environ['EXPECTED_CIPHER_SHA']
+          assert hashlib.sha256(receipt_bytes).hexdigest()==os.environ['EXPECTED_RECEIPT_SHA']
+          print('SYNTHETIC TWO-RUNNER ARTIFACT TRANSPORT: PASS')
+          print('No real Railway copy, CMS decryption, owner backup, human pilot or Seal.')
+          PY
