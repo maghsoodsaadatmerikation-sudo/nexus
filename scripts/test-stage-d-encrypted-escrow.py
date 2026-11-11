@@ -107,6 +107,30 @@ class EncryptedEscrowTests(unittest.TestCase):
              "-inkey", str(private_key or self.key)],
             capture_output=True, timeout=15)
 
+    def test_offsite_workflow_is_manual_only_and_never_uploads_raw_data(self):
+        workflow = (ROOT.parent / ".github/workflows/stage-d-encrypted-volume-capture.yml").read_text()
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("  push:", workflow)
+        self.assertNotIn("  pull_request:", workflow)
+        self.assertIn("github.ref == 'refs/heads/main'", workflow)
+        self.assertIn("NEXUS_STAGE_D_RAILWAY_TOKEN", workflow)
+        self.assertIn("confirm_volume:", workflow)
+        self.assertIn("actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f", workflow)
+        path_block = workflow.split("      - name: Upload ciphertext and sanitized receipt ONLY", 1)[1]
+        path_block = path_block.split("      - name: Cleanup temporary plaintext", 1)[0]
+        self.assertIn("nexus-stage-d-private-capture.cms", path_block)
+        self.assertIn("nexus-stage-d-ciphertext-receipt.json", path_block)
+        self.assertNotIn("copied-data", path_block)
+        self.assertNotIn("nexus-private-data-snapshot.json", path_block)
+        self.assertNotIn("isolated-intake", path_block)
+
+    def test_repo_public_certificate_is_pinned_and_has_no_private_key(self):
+        public = ROOT.parent / "docs/keys/stage-d-recovery-public-cert.pem"
+        self.assertEqual(hashlib.sha256(public.read_bytes()).hexdigest(),
+                         "b27cc7a84e333fce78f790dce20335258b11e724bac1a91b3b7c886ac3812091")
+        self.assertIn(b"BEGIN CERTIFICATE", public.read_bytes())
+        self.assertNotIn(b"PRIVATE KEY", public.read_bytes())
+
     def test_synthetic_full_snapshot_encrypted_and_authenticated_roundtrip(self):
         blob, report = self.encrypt()
         self.assertEqual(report["status"], "ENCRYPTED_PRIVATE_COPY_NOT_ATOMICALLY_VERIFIED")
