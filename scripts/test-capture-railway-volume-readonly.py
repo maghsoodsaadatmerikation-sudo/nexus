@@ -202,6 +202,23 @@ class CaptureTests(unittest.TestCase):
             report.write_text(json.dumps(value))
         self.mutate_after_successful_intake(mutate)
 
+    def test_extra_release_claim_after_child_pass_is_blocked(self):
+        def mutate():
+            report = self.root / "isolated-intake" / "intake-report.json"
+            value = json.loads(report.read_text())
+            value["seal"] = True
+            report.write_text(json.dumps(value))
+        self.mutate_after_successful_intake(mutate)
+
+    def test_forged_rust_audit_on_structural_only_mode_is_blocked(self):
+        def mutate():
+            report = self.root / "isolated-intake" / "intake-report.json"
+            value = json.loads(report.read_text())
+            value["rust_core_audit"] = "pass_operator_supplied_rust_binary"
+            value["rust_core_source_parity"] = "pass_selected_pinned_git_blobs"
+            report.write_text(json.dumps(value))
+        self.mutate_after_successful_intake(mutate)
+
     def test_intake_report_symlink_after_child_pass_is_blocked(self):
         def mutate():
             report = self.root / "isolated-intake" / "intake-report.json"
