@@ -78,7 +78,7 @@ class BrowserRunnerFailures(unittest.TestCase):
 
     def test_valid_opted_in_grace_cannot_turn_browser_exit_into_pass(self):
         browser = self.root / 'exit-opted-in'
-        browser.write_text('#!/bin/sh\\necho SECRET_BROWSER_STDERR >&2\\nexit 0\\n')
+        browser.write_text('#!/bin/sh\necho SECRET_BROWSER_STDERR >&2\nexit 0\n')
         browser.chmod(0o700)
         result = self.run_driver(browser, startup_ms=25000)
         value = self.diagnostic(result)
