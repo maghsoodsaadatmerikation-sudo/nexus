@@ -236,7 +236,7 @@ jobs:
           TRANSFER_ANCHOR_B64: ${{ needs.encrypted-private-capture.outputs.anchor_b64 }}
           TRANSFER_ARTIFACT_ID: ${{ needs.encrypted-private-capture.outputs.artifact_id }}
           EXPECTED_SHA: ${{ github.sha }}
-          RETRIEVED_ARTIFACT_DIR: ${{ runner.temp }}/nexus-stage-d-redownloaded
+          RETRIEVED_ARTIFACT_DIR: ${{ runner.temp }}/nexus-stage-d-redownloaded/nexus-stage-d-encrypted-offsite-copy
         run: |
           set -euo pipefail
           python3 scripts/verify-stage-d-uploaded-artifact.py
