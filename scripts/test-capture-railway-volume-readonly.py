@@ -151,9 +151,9 @@ class CaptureTests(unittest.TestCase):
                 mutated.append(True)
             return result
 
-        with patch.dict(os.environ, {"RAILWAY_TOKEN": "synthetic-token-do-not-use"}), \\
-             patch.object(capture.subprocess, "run", side_effect=intercept), \\
-             contextlib.redirect_stdout(io.StringIO()):
+        with (patch.dict(os.environ, {"RAILWAY_TOKEN": "synthetic-token-do-not-use"}),
+              patch.object(capture.subprocess, "run", side_effect=intercept),
+              contextlib.redirect_stdout(io.StringIO())):
             with self.assertRaises((capture.CaptureBlocked, ValueError, OSError)):
                 capture.execute(arguments)
         self.assertEqual(mutated, [True], "synthetic post-intake injection did not run")
