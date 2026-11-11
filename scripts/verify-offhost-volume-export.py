@@ -42,32 +42,16 @@ def valid_origin(directory):
 
 
 def local_copy_manifest(source):
-    """Bounded read-only manifest of exact copied NEXUS file layout.
+    """Read a local copied tree through the same no-follow dirfd scanner.
 
-    This is a *local* copy stability observation, not a Railway
-    point-in-time snapshot. Never return file names, hashes or user text in
-    logs, published artifacts or user-facing receipts.
+    This ties pre/post private-copy checks to the snapshot's bounded,
+    anchored root + request-ledger file grammar. A hardlink or symlink swap
+    blocks before accepting a source manifest. No original Railway origin,
+    freshness or atomic production snapshot is inferred.
     """
-    request_dir = source / "requests"
-    require(request_dir.is_dir() and not request_dir.is_symlink(),
-            "private copy must contain a regular request ledger directory")
-    files = []
-    for entry in source.iterdir():
-        if entry.name == "requests":
-            files.extend(request_dir.iterdir())
-        else:
-            files.append(entry)
-    require(len(files) <= snapshot.MAX_FILES, "copied file limit exceeded")
-    total = 0
-    entries = {}
-    for path in sorted(files):
-        name = path.relative_to(source).as_posix()
-        content = snapshot.read_regular(path, snapshot.MAX_BYTES - total)
-        total += len(content)
-        snapshot.validate_file(name, content)
-        entries[name] = (len(content), hashlib.sha256(content).hexdigest())
-    require(len(entries) == len(files), "duplicate copied paths")
-    return entries
+    records = snapshot.read_source_records(source)
+    return {name: (len(data), hashlib.sha256(data).hexdigest())
+            for name, data in records}
 
 
 def verify_quarantined_restore(restored, expected):
