@@ -151,6 +151,42 @@ class CaptureTests(unittest.TestCase):
         self.assertFalse((self.root/"copied-data"/".nexus-recovery-required").exists())
         self.assertFalse((self.root/"isolated-intake"/"capture-receipt.json").stat().st_mode & 0o077)
 
+    def test_private_intake_subprocess_never_inherits_provider_or_ci_secrets(self):
+        spec = importlib.util.spec_from_file_location("nexus_capture_env_test", SCRIPT)
+        capture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(capture)
+        arguments = argparse.Namespace(private_root=self.root, railway_bin=self.bin,
+                                      rust_validator_bin=None, execute=True)
+        original_run = subprocess.run
+        observed = []
+        sensitive = {"RAILWAY_TOKEN", "RAILWAY_API_TOKEN", "GITHUB_TOKEN",
+                     "RENDER_API_KEY", "NEXUS_API_TOKEN", "UNRELATED_PRIVATE_SECRET"}
+
+        def intercept(command, *positional, **kwargs):
+            if len(command) > 1 and str(command[1]) == str(capture.INTAKE):
+                child = kwargs.get("env")
+                self.assertIsInstance(child, dict)
+                self.assertFalse(sensitive.intersection(child))
+                self.assertFalse("PYTHONPATH" in child)
+                self.assertEqual(child["HOME"], str(self.root))
+                observed.append(True)
+            return original_run(command, *positional, **kwargs)
+
+        secrets = {"RAILWAY_TOKEN": "synthetic-provider-token",
+                   "GITHUB_TOKEN": "synthetic-ci-token",
+                   "RENDER_API_KEY": "synthetic-render-token",
+                   "NEXUS_API_TOKEN": "synthetic-nexus-token",
+                   "UNRELATED_PRIVATE_SECRET": "synthetic-unrelated-token",
+                   "PYTHONPATH": str(self.base)}
+        # Importing the already loaded capture module avoids depending on a
+        # modified PYTHONPATH in this parent test interpreter.
+        with (patch.dict(os.environ, secrets),
+              patch.object(capture.subprocess, "run", side_effect=intercept),
+              contextlib.redirect_stdout(io.StringIO())):
+            self.assertEqual(capture.execute(arguments), 0)
+        self.assertEqual(observed, [True])
+        self.assertTrue((self.root / "isolated-intake" / "capture-receipt.json").is_file())
+
     def mutate_after_successful_intake(self, mutate):
         """Inject between the child's success and the parent's final receipt.
 
