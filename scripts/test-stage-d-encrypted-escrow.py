@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Fully local synthetic encrypted Railway escrow tests. NO live secrets/network."""
+import base64
 import contextlib
 import hashlib
 import importlib.util
@@ -146,7 +147,13 @@ class EncryptedEscrowTests(unittest.TestCase):
             names = set(archive.getnames())
             self.assertEqual(names, set(escrow.EVIDENCE))
             snapshot = archive.extractfile("nexus-private-data-snapshot.json").read()
-            self.assertIn(self.sentinel.encode(), snapshot)
+            # Snapshot records encode original workspace bytes as base64;
+            # the plaintext sentinel is intentionally not directly in JSON.
+            document = json.loads(snapshot)
+            workspace_record = next(record for record in document["files"]
+                                    if record["path"] == "77.json")
+            workspace_bytes = base64.b64decode(workspace_record["data"], validate=True)
+            self.assertIn(self.sentinel.encode(), workspace_bytes)
             self.assertEqual(hashlib.sha256(snapshot).hexdigest(),
                              self.receipt["archive_sha256"])
             self.assertNotIn("PRIVATE_SYNTHETIC_WORKSPACE_SENTINEL",
