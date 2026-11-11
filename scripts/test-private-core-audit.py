@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 VALIDATOR = os.environ.get("NEXUS_PRIVATE_CORE_AUDIT_BIN", "")
 INTAKE = Path(__file__).with_name("verify-offhost-volume-export.py")
@@ -111,6 +112,41 @@ class PrivateCoreAuditTests(unittest.TestCase):
         self.assertEqual(report["rust_core_binary_identity"], "not_verified")
         self.assertEqual(report["rust_core_source_parity"], "not_evaluated")
         self.assertFalse(report["post_rust_source_archive_and_restore_rechecked"])
+
+    def test_operator_validator_does_not_inherit_provider_or_ci_credentials(self):
+        # The wrapper runs the genuinely compiled Rust validator after
+        # inspecting its own actual subprocess environment. No secret values
+        # are printed, stored or passed into the real Rust core.
+        wrapper = self.root / "check-scoped-rust-env.py"
+        script = (
+            "#!/usr/bin/env python3\n"
+            "import os, subprocess, sys\n"
+            "secrets = {'RAILWAY_TOKEN', 'RAILWAY_API_TOKEN', 'NEXUS_API_TOKEN', "
+            "'RENDER_API_KEY', 'GITHUB_TOKEN', 'UNRELATED_PRIVATE_SECRET'}\n"
+            "if secrets.intersection(os.environ) or 'PYTHONPATH' in os.environ: sys.exit(47)\n"
+            "if os.environ.get('HOME') != " + repr(str(self.work)) + ": sys.exit(48)\n"
+            "run = subprocess.run([" + repr(str(VALIDATOR)) + ", sys.argv[1]], "
+            "stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, "
+            "stderr=subprocess.DEVNULL, timeout=20)\n"
+            "sys.exit(run.returncode)\n"
+        )
+        wrapper.write_text(script)
+        wrapper.chmod(0o700)
+        env = {"RAILWAY_TOKEN": "synthetic-provider-secret",
+               "RAILWAY_API_TOKEN": "synthetic-second-provider-secret",
+               "NEXUS_API_TOKEN": "synthetic-nexus-secret",
+               "RENDER_API_KEY": "synthetic-render-secret",
+               "GITHUB_TOKEN": "synthetic-ci-secret",
+               "UNRELATED_PRIVATE_SECRET": "synthetic-unrelated-secret",
+               "PYTHONPATH": str(self.root)}
+        with patch.dict(os.environ, env):
+            result = self.invoke(bin_path=wrapper)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads((self.work / "intake-report.json").read_text())
+        self.assertEqual(report["rust_core_audit"], "pass_operator_supplied_rust_binary")
+        self.assertTrue(report["post_rust_source_archive_and_restore_rechecked"])
+        for value in env.values():
+            self.assertNotIn(value, result.stdout + result.stderr)
 
     def test_rust_audit_rejects_unmapped_runtime_commit_before_evidence_dir(self):
         args = [

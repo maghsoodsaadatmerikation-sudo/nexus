@@ -84,6 +84,51 @@ revision, atomic Railway capture, live provider recovery or offsite custody.
 The original `nexus.data-snapshot.v1` archive remains an **unencrypted
 private copy** and must not be uploaded to a public CI artifact.
 
+## Stage D credential exposure boundary (2026-11-11)
+
+The original private capture process passed the operator's complete
+environment to its subprocesses: Railway CLI `--version`/`--help`,
+the authenticated `volume files download`, and the offline intake child.
+The offline intake in turn inherited that environment when running an
+**operator-supplied**, independently unverified Rust validator. This allowed
+unnecessary inherited access to Railway, GitHub, NEXUS, Render or other
+ambient credentials during checks that need none of those privileges.
+
+The capture and intake now share `scripts/private_subprocess_env.py`.
+Its small explicit allowlist supplies only fixed runtime locale/path settings,
+a HOME directory, no auto-update, and Python isolation flags.
+The three permission scopes are deliberately distinct:
+
+- **CLI parser/version/help probes:** zero Railway or other provider tokens.
+- **One exact Railway `volume files download`:** only the current
+  `RAILWAY_TOKEN`/`RAILWAY_API_TOKEN` values, when set; no unrelated
+  ambient variables (including `PYTHONPATH`, CI credentials, proxies, cloud
+  keys or custom secret names).
+- **Offline private intake and optional Rust semantic audit:** no Railway
+  provider credentials or ambient user tokens. HOME is set to their
+  newly created private work directory, not the operator's original HOME.
+
+The fake-provider tests now **fail** if help/version sees any tokens, if
+download does not receive its designated provider token, or if download
+sees unrelated secrets. A real sub-process intake is separately asserted
+to receive no tokens or `PYTHONPATH`; a real compiled Rust validator
+wrapped in a synthetic environment-check script confirms credentials are
+absent at the final validator boundary. These are local/CI tests with
+synthetic environment values, not a production download.
+
+**Security limitation:** This is credential *environment scoping*, not an
+OS security sandbox. Untrusted executables might read inherited open
+files, local storage, process information or attempt network connections
+through other means. Execute only a trusted, pinned Railway CLI and trusted
+validator, in a private host context. The real download necessarily
+receives Railway authentication and can incur transfer charges. A
+restricted environment may also omit a proxy or custom CA configuration
+required in some networks; in that case execution must BLOCK and be
+reviewed, not fall back to passing the full ambient environment.
+
+No provider backup was retrieved, no account credential was accessed, no
+production host altered and no real backup/recovery gate was closed.
+
 ## Two modes — plan first, execute only from trusted private environment
 
 Dry run (no credentials, no network, no directory created):

@@ -13,6 +13,7 @@ from pathlib import Path
 import stat
 import subprocess
 import sys
+from private_subprocess_env import child_env
 
 PROJECT = "2ac7887b-d67a-48be-8a7b-bd54092893ae"
 ENVIRONMENT = "56c4bc45-0e62-4aa9-832f-884bb1aa620c"
@@ -78,9 +79,9 @@ def validate_railway_cli(railway_bin):
         (permitted_download_command(railway_bin, "/nonexistent/nexus-no-file-copy")
          + ["--help"], ("--concurrency", "download")),
     )
-    clean_environment = os.environ.copy()
-    clean_environment["RAILWAY_NO_AUTO_UPDATE"] = "1"
-    clean_environment["CI"] = "true"
+    # --version and --help never need the Railway token; keep every
+    # ambient provider/CI credential out of these parser subprocesses.
+    clean_environment = child_env(railway_download=False)
     for stage, (cmd, required_tokens) in enumerate(commands):
         try:
             probe = subprocess.run(
@@ -234,6 +235,7 @@ def execute(args):
             result = subprocess.run(
                 cmd, cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, check=False, timeout=1200,
+                env=child_env(railway_download=True),
             )
         except (OSError, subprocess.TimeoutExpired):
             raise CaptureBlocked("volume download did not complete") from None
@@ -253,6 +255,7 @@ def execute(args):
             check = subprocess.run(
                 verify, cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, check=False, timeout=90,
+                env=child_env(railway_download=False, private_home=root),
             )
         except (OSError, subprocess.TimeoutExpired):
             raise CaptureBlocked("isolated structural verification did not finish") from None
