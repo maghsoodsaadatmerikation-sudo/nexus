@@ -101,8 +101,9 @@ jobs:
           test -z "${RAILWAY_API_TOKEN:-}"
           test -z "${NEXUS_API_TOKEN:-}"
           python3 - <<'PY'
-          import hashlib,importlib.util,os,re,stat
+          import hashlib,importlib.util,os,re,stat,sys
           from pathlib import Path
+          sys.path.insert(0,str(Path.cwd()/'scripts'))
           spec=importlib.util.spec_from_file_location('stage_d_anchor','scripts/stage-d-run-log-anchor.py')
           anchor=importlib.util.module_from_spec(spec)
           spec.loader.exec_module(anchor)
