@@ -217,8 +217,12 @@ def execute(args):
         print("Does NOT prove capture consistency, provider identity or real restore.")
         return 0
 
-    require(os.environ.get("RAILWAY_TOKEN") or os.environ.get("RAILWAY_API_TOKEN"),
-            "authenticated CLI environment not configured")
+    # Railway's CLI accepts project OR account/workspace token, never both.
+    # Reject ambiguity before any CLI invocation or private directory writes.
+    project_auth = bool(os.environ.get("RAILWAY_TOKEN"))
+    workspace_auth = bool(os.environ.get("RAILWAY_API_TOKEN"))
+    require(project_auth != workspace_auth,
+            "exactly one Railway credential scope must be selected")
     # Refuse to create a private destination until the real binary accepts
     # the exact pinned version, command option order and --help grammar.
     validate_railway_cli(args.railway_bin)
