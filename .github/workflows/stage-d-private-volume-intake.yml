@@ -7,6 +7,8 @@ on:
       - 'scripts/verify-offhost-volume-export.py'
       - 'scripts/capture-railway-volume-readonly.py'
       - 'scripts/test-capture-railway-volume-readonly.py'
+      - 'scripts/private_subprocess_env.py'
+      - 'scripts/test-private-subprocess-env.py'
       - 'scripts/test-railway-cli-help.py'
       - 'docs/STAGE-D-READONLY-CLI-CAPTURE.md'
       - 'scripts/test-offhost-volume-export.py'
@@ -35,7 +37,8 @@ jobs:
           persist-credentials: false
       - name: Validate private volume export intake contract with synthetic data
         run: |
-          python3 -m py_compile scripts/verify-offhost-volume-export.py scripts/test-offhost-volume-export.py scripts/capture-railway-volume-readonly.py scripts/test-capture-railway-volume-readonly.py
+          python3 -m py_compile scripts/verify-offhost-volume-export.py scripts/test-offhost-volume-export.py scripts/capture-railway-volume-readonly.py scripts/test-capture-railway-volume-readonly.py scripts/private_subprocess_env.py scripts/test-private-subprocess-env.py
+          python3 scripts/test-private-subprocess-env.py
           python3 scripts/test-offhost-volume-export.py
       - name: Verify private read-only CLI download with fake provider only
         run: |
