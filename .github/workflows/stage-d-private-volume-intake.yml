@@ -9,6 +9,10 @@ on:
       - 'scripts/test-capture-railway-volume-readonly.py'
       - 'scripts/private_subprocess_env.py'
       - 'scripts/test-private-subprocess-env.py'
+      - '.github/workflows/stage-d-encrypted-volume-capture.yml'
+      - 'scripts/stage-d-encrypted-escrow.py'
+      - 'scripts/test-stage-d-encrypted-escrow.py'
+      - 'docs/keys/stage-d-recovery-public-cert.pem'
       - 'scripts/test-railway-cli-help.py'
       - 'docs/STAGE-D-READONLY-CLI-CAPTURE.md'
       - 'scripts/test-offhost-volume-export.py'
@@ -40,6 +44,7 @@ jobs:
           python3 -m py_compile scripts/verify-offhost-volume-export.py scripts/test-offhost-volume-export.py scripts/capture-railway-volume-readonly.py scripts/test-capture-railway-volume-readonly.py scripts/private_subprocess_env.py scripts/test-private-subprocess-env.py
           python3 scripts/test-private-subprocess-env.py
           python3 scripts/test-offhost-volume-export.py
+          python3 scripts/test-stage-d-encrypted-escrow.py
       - name: Verify private read-only CLI download with fake provider only
         run: |
           set -euo pipefail
