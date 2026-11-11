@@ -162,6 +162,7 @@ class IndependentDownloadTests(unittest.TestCase):
         self.assertIn("needs.encrypted-private-capture.outputs.artifact_id", second)
         self.assertIn("needs.encrypted-private-capture.outputs.anchor_b64", second)
         self.assertIn("scripts/verify-stage-d-uploaded-artifact.py", second)
+        self.assertIn("nexus-stage-d-redownloaded/nexus-stage-d-encrypted-offsite-copy", second)
         self.assertNotIn("secrets.", second)
         self.assertNotIn("volume files download", second)
         first = workflow.split("  encrypted-private-capture:", 1)[1].split(
