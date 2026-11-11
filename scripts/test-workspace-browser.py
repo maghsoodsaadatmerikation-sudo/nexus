@@ -215,9 +215,12 @@ def main():
         page.write_text(html)
         for name, dimensions in [('narrow', '500,1000'), ('wide', '1280,1000')]:
             runner = Path(__file__).with_name('workspace-browser-runner.mjs')
+            # Only this synthetic real-Chromium CI acceptance opts into an
+            # additional, bounded DevTools port startup grace (25s vs 10s).
+            # Report deadline remains 15s; failures still block acceptance.
             result = subprocess.run(['node', str(runner), browser, page.as_uri(),
-                                     str(root / name), dimensions], capture_output=True,
-                                    text=True, timeout=45)
+                                     str(root / name), dimensions, '15000', '25000'],
+                                    capture_output=True, text=True, timeout=85)
             if result.returncode:
                 raise RuntimeError('real browser process failed: ' + result.stderr[-2000:])
             report = json.loads(result.stdout)

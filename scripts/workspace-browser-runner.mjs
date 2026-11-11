@@ -4,13 +4,19 @@ import {spawn} from 'node:child_process';
 import {mkdir, readFile} from 'node:fs/promises';
 import path from 'node:path';
 
-const [browser, page, profile, dimensions, witnessDeadline] = process.argv.slice(2);
+const [browser, page, profile, dimensions, witnessDeadline, startupDeadline] = process.argv.slice(2);
 // The default remains fail-fast; exceptionally heavy offline crypto tests may
 // request a bounded longer report deadline without relaxing other controls.
 const reportDeadline = witnessDeadline === undefined ? 15000 : Number(witnessDeadline);
+// Separate the browser's DevTools startup grace from report evaluation.
+// Only explicitly opted-in CI witnesses may exceed the 10s default.
+// Neither budget can convert a missing witness or a failed report to PASS.
+const portStartupDeadline = startupDeadline === undefined ? 10000 : Number(startupDeadline);
 if (!browser || !page || !profile || !/^\d+,\d+$/.test(dimensions || '') ||
-    typeof WebSocket === 'undefined' || !Number.isInteger(reportDeadline) ||
-    reportDeadline < 15000 || reportDeadline > 60000)
+    process.argv.length > 8 || typeof WebSocket === 'undefined' ||
+    !Number.isInteger(reportDeadline) || reportDeadline < 15000 || reportDeadline > 60000 ||
+    !Number.isInteger(portStartupDeadline) || portStartupDeadline < 10000 ||
+    portStartupDeadline > 30000)
   throw new Error('browser runner requires Node 22 and bounded private inputs');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 // Refuse every pre-existing profile rather than attaching to a user's session.
@@ -62,7 +68,7 @@ try {
       const value = (await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0];
       return /^\d+$/.test(value) ? value : null;
     } catch {return null}
-  }, 10000);
+  }, portStartupDeadline);
   stage = 'page-target';
   const target = await waitFor(async () => {
     try {

@@ -92,6 +92,37 @@ Any failed or missing gate is **OPEN / NOT PROVEN**; never report a real
 production pilot, public launch, successful disaster recovery, new Seal, or
 provider promotion from these tests. A_out <= A_in and evidence != authority.
 
+## Separate synthetic browser-witness startup reliability (2026-11-11)
+
+The **main read-only verification** uses `scripts/test-workspace-browser.py`
+with a real headless Chromium and *synthetic in-page transport*. It is
+separate from the Pilot 01 real gateway/container test and from production.
+An exact-main verification attempt on merged commit
+`3df1ab6f3f1da66f45f549801b75a3d206bd9d7c` failed at
+`devtools-port` because Chrome did not publish its local port within
+10 seconds; the identical-commit failed-job rerun succeeded. That initial
+failure produced **no application acceptance verdict**.
+
+The runner now accepts an **optional sixth** argument for the browser
+DevTools-port startup deadline in milliseconds: minimum 10000, hard
+maximum 30000, default still 10000. Only the main real-Chromium synthetic
+DOM witness opts into 25000. The separate completed-report deadline
+remains 15000 by default and is passed explicitly for that caller.
+The private browser startup does not auto-retry, and a missing DevTools
+port, process exit, failed target, missing report or failed assertion
+still blocks acceptance. Other callers retain the short default; the
+outer Python subprocess budget is raised only for this test, to avoid
+preempting the bounded child start/target/report deadlines. Synthetic
+failure tests check invalid, above-cap and extra argument rejection
+before profile creation, plus continued fail-closed process-exit
+behavior with the opt-in. Diagnostics remain redacted.
+
+This reduces **CI false-negative risk** under a loaded runner; it does
+not prove that Chromium will always start, that production works, that
+a credential was authenticated or that the original Railway data is
+recoverable. No provider changes, network writes to production, paid
+resources, Seal or expansion of authority.
+
 ## No-cost / no-device boundary
 
 This project can prepare, verify and audit CI using GitHub-hosted standard
