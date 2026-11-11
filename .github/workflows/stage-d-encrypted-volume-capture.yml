@@ -7,6 +7,10 @@ on:
         description: "Enter exact original Volume UUID to authorize a READ-ONLY download"
         required: true
         type: string
+      confirm_recovery_key:
+        description: "After your private local key decryption test passes, enter I VERIFIED MY STAGE D RECOVERY KEY LOCALLY"
+        required: true
+        type: string
       credential_scope:
         description: "Prefer project. Workspace grants broader access; select only if project token fails."
         required: true
@@ -43,10 +47,15 @@ jobs:
         shell: bash
         env:
           CONFIRM_VOLUME: ${{ inputs.confirm_volume }}
+          KEY_ACK: ${{ inputs.confirm_recovery_key }}
         run: |
           set -euo pipefail
           test "$CONFIRM_VOLUME" = 'cc47a350-6c7e-4487-89d9-c4b390f94884' || {
             echo 'BLOCKED: the exact original Railway volume was not confirmed'
+            exit 1
+          }
+          test "$KEY_ACK" = 'I VERIFIED MY STAGE D RECOVERY KEY LOCALLY' || {
+            echo 'BLOCKED: owner-local recovery-key decryptability must be acknowledged before any provider download'
             exit 1
           }
           printf '%s  %s\n' \

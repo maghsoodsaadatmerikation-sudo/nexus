@@ -18,6 +18,9 @@ on:
       - 'scripts/test-stage-d-offline-recovery.py'
       - 'scripts/stage-d-run-log-anchor.py'
       - 'scripts/test-stage-d-run-log-anchor.py'
+      - 'scripts/verify-stage-d-recovery-key.py'
+      - 'scripts/test-stage-d-recovery-key.py'
+      - 'docs/STAGE-D-RECOVERY-KEY-POSSESSION.md'
       - 'docs/STAGE-D-RUN-LOG-ANCHOR.md'
       - 'docs/STAGE-D-ENCRYPTED-OFFLINE-RECOVERY.md'
       - 'docs/keys/stage-d-recovery-public-cert.pem'
@@ -55,6 +58,8 @@ jobs:
           python3 scripts/test-stage-d-encrypted-escrow.py
           python3 scripts/test-stage-d-run-log-anchor.py
           python3 scripts/test-stage-d-offline-recovery.py
+          python3 -m py_compile scripts/verify-stage-d-recovery-key.py scripts/test-stage-d-recovery-key.py
+          python3 scripts/test-stage-d-recovery-key.py
       - name: Verify private read-only CLI download with fake provider only
         run: |
           set -euo pipefail
