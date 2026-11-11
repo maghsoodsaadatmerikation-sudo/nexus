@@ -171,6 +171,14 @@ def validate_final_private_receipt(copy, report_dir, rust_requested):
     for key, expected in audit_expected.items():
         require(type(inspection.get(key)) is type(expected) and
                 inspection[key] == expected, "private Rust audit claim disagrees")
+    # Deny undeclared authority or release claims in the child report, even
+    # when the expected status fields appear to be correct.
+    require(set(inspection) == set(required) | set(audit_expected) |
+            {"file_count", "snapshot_sha256", "local_copy_check"},
+            "private intake report schema disagrees")
+    require(inspection["local_copy_check"] ==
+            "before_archive_and_after_restored_bytes",
+            "private source-copy scan contract disagrees")
 
     archive_bytes = private.snapshot.read_regular(archive, private.snapshot.MAX_BYTES)
     digest = hashlib.sha256(archive_bytes).hexdigest()
@@ -192,8 +200,10 @@ def validate_final_private_receipt(copy, report_dir, rust_requested):
     # Final read prevents certifying a stale archive or source at receipt time.
     require(hashlib.sha256(private.snapshot.read_regular(
                 archive, private.snapshot.MAX_BYTES)).hexdigest() == digest and
-            private.local_copy_manifest(copy) == source_manifest,
-            "private archive or source changed during final receipt validation")
+            private.local_copy_manifest(copy) == source_manifest and
+            private.snapshot.read_regular(report_file, 32768) == raw_report,
+            "private archive, source or report changed during final receipt validation")
+    private.verify_quarantined_restore(restored, expected)
     return inspection, digest
 
 
