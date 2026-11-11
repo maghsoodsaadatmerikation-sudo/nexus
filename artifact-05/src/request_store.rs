@@ -93,7 +93,6 @@ impl RequestStore {
     }
 }
 
-
 // The gateway runs on Linux. Do not follow a replaced final-path symlink,
 // block on a substituted FIFO, or write through an aliased hard-linked inode.
 // This is a bounded local filesystem guard, not protection from a hostile
@@ -131,8 +130,19 @@ fn read_marker(path: &Path) -> io::Result<Vec<u8>> {
         || final_path.nlink() != 1
         || (after.dev(), after.ino()) != (before.dev(), before.ino())
         || (final_path.dev(), final_path.ino()) != (before.dev(), before.ino())
-        || (before.len(), before.mtime(), before.mtime_nsec(), before.ctime(), before.ctime_nsec())
-            != (after.len(), after.mtime(), after.mtime_nsec(), after.ctime(), after.ctime_nsec())
+        || (
+            before.len(),
+            before.mtime(),
+            before.mtime_nsec(),
+            before.ctime(),
+            before.ctime_nsec(),
+        ) != (
+            after.len(),
+            after.mtime(),
+            after.mtime_nsec(),
+            after.ctime(),
+            after.ctime_nsec(),
+        )
         || after.len() != bytes.len() as u64
     {
         return Err(invalid());
@@ -153,8 +163,8 @@ mod tests {
     };
 
     fn isolated_ledger(label: &str) -> PathBuf {
-        let root = std::env::temp_dir()
-            .join(format!("nexus-ledger-{}-{}", label, uuid::Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("nexus-ledger-{}-{}", label, uuid::Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
         root
     }
