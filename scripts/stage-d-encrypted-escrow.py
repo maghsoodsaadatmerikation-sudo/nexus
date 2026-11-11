@@ -15,6 +15,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+from private_subprocess_env import child_env
 
 REPO = Path(__file__).resolve().parent.parent
 CERT = REPO / "docs/keys/stage-d-recovery-public-cert.pem"
@@ -85,23 +86,31 @@ def encrypt_fixed_evidence(directory, cert, destination):
     temp = Path(temp_name)
     try:
         os.chmod(temp, 0o600)
-        tar = subprocess.Popen(
-            ["tar", "-C", str(directory), "-cf", "-", *EVIDENCE],
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-        )
+        subprocess_env = child_env(railway_download=False, private_home=directory.parent)
+        tar = None
+        crypt = None
         try:
+            tar = subprocess.Popen(
+                ["tar", "-C", str(directory), "-cf", "-", *EVIDENCE],
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL, env=subprocess_env,
+            )
             crypt = subprocess.Popen(
                 ["openssl", "cms", "-encrypt", "-aes-256-gcm", "-binary",
                  "-stream", "-outform", "DER", "-out", str(temp), str(cert)],
-                stdin=tar.stdout, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdin=tar.stdout, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, env=subprocess_env,
             )
             tar.stdout.close()
             crypt_ok = crypt.wait(timeout=90) == 0
             tar_ok = tar.wait(timeout=90) == 0
         finally:
-            if tar.poll() is None:
-                tar.kill()
-                tar.wait()
+            # Never leave a subprocess alive after failure/timeout and never
+            # fall back to an unrestricted inherited token environment.
+            for child in (crypt, tar):
+                if child is not None and child.poll() is None:
+                    child.kill()
+                    child.wait()
         require(crypt_ok and tar_ok and temp.stat().st_size > 256,
                 "encryption was incomplete")
         # Check for late evidence mutation before publishing the ciphertext.
