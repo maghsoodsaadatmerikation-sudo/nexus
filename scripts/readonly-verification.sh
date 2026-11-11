@@ -29,6 +29,9 @@ case "$RUST_IMAGE" in
 esac
 
 # Static and fail-closed release checks.
+# This does NOT change release gates, classify an actual run from CI, or
+# grant publication. Unit fixtures only guard against false green reports.
+python3 scripts/test-release-intent-triage.py
 python3 scripts/verify_test_matrix.py
 python3 scripts/test-data-snapshot.py
 node scripts/test-workspace-ui.mjs
