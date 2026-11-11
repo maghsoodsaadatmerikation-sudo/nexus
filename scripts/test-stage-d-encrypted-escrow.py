@@ -177,6 +177,26 @@ class EncryptedEscrowTests(unittest.TestCase):
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
         self.assertNotEqual(self.decrypt(blob, other_key).returncode, 0)
 
+    def test_tar_and_openssl_never_inherit_provider_secrets(self):
+        real = subprocess.Popen
+        checked = []
+        secrets = {"RAILWAY_TOKEN": "synthetic-railway-private",
+                   "RAILWAY_API_TOKEN": "synthetic-railway-api-private",
+                   "GITHUB_TOKEN": "synthetic-github-private",
+                   "NEXUS_API_TOKEN": "synthetic-nexus-private",
+                   "PYTHONPATH": "/private/nexus"}
+        def spy(command, *args, **kwargs):
+            if command[0] in ("tar", "openssl"):
+                restricted = kwargs.get("env")
+                self.assertIsInstance(restricted, dict)
+                self.assertFalse(set(secrets).intersection(restricted))
+                checked.append(command[0])
+            return real(command, *args, **kwargs)
+        with (patch.dict(os.environ, secrets),
+              patch.object(escrow.subprocess, "Popen", side_effect=spy)):
+            self.encrypt()
+        self.assertEqual(checked, ["tar", "openssl"])
+
     def test_wrong_recipient_certificate_is_rejected_before_output(self):
         with patch.object(escrow, "CERT", self.cert):
             with self.assertRaises(escrow.EscrowBlocked):
