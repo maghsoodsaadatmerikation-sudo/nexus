@@ -4,6 +4,10 @@
 The fake CLI is a local executable: no live Railway user data is fetched.
 All copies live under TemporaryDirectory; no public CI artifact is uploaded.
 """
+import argparse
+import contextlib
+import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -11,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "capture-railway-volume-readonly.py"
@@ -115,6 +120,8 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(receipt["independent_complete_production_backup"],"NOT_PROVEN")
         self.assertEqual(receipt["source_consistency"],"NOT_VERIFIED_ATOMIC")
         self.assertTrue(receipt["local_copy_scans_matched_archive"])
+        self.assertTrue(receipt["post_intake_copy_archive_and_restore_rechecked"])
+        self.assertEqual(receipt["rust_core_source_parity"], "not_evaluated")
         self.assertTrue(intake["local_copy_scans_matched_archive"])
         self.assertEqual(intake["source_consistency"],"not_verified")
         self.assertEqual(receipt["archive_sha256"],intake["snapshot_sha256"])
@@ -123,6 +130,102 @@ class CaptureTests(unittest.TestCase):
                          "isolated-restore-rehearsal"/".nexus-recovery-required").is_file())
         self.assertFalse((self.root/"copied-data"/".nexus-recovery-required").exists())
         self.assertFalse((self.root/"isolated-intake"/"capture-receipt.json").stat().st_mode & 0o077)
+
+    def mutate_after_successful_intake(self, mutate):
+        """Inject between the child's success and the parent's final receipt.
+
+        Uses the real local fake-CLI + real private intake, never Railway.
+        The only interception changes disposable files AFTER intake exits 0.
+        """
+        spec = importlib.util.spec_from_file_location("nexus_capture_final_test", SCRIPT)
+        capture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(capture)
+        arguments = argparse.Namespace(private_root=self.root, railway_bin=self.bin,
+                                      rust_validator_bin=None, execute=True)
+        original_run = subprocess.run
+        mutated = []
+
+        def intercept(cmd, *args, **kwargs):
+            result = original_run(cmd, *args, **kwargs)
+            if (len(cmd) > 1 and str(cmd[1]) == str(capture.INTAKE) and
+                    result.returncode == 0):
+                mutate()
+                mutated.append(True)
+            return result
+
+        with (patch.dict(os.environ, {"RAILWAY_TOKEN": "synthetic-token-do-not-use"}),
+              patch.object(capture.subprocess, "run", side_effect=intercept),
+              contextlib.redirect_stdout(io.StringIO())):
+            with self.assertRaises((capture.CaptureBlocked, ValueError, OSError)):
+                capture.execute(arguments)
+        self.assertEqual(mutated, [True], "synthetic post-intake injection did not run")
+        self.assertFalse((self.root / "isolated-intake" /
+                          "capture-receipt.json").exists(),
+                         "stale or altered private evidence must not get PASS")
+
+    def test_archive_changed_after_child_pass_is_blocked(self):
+        def mutate():
+            archive = self.root / "isolated-intake" / "nexus-private-data-snapshot.json"
+            with archive.open("ab") as handle:
+                handle.write(b" ")
+        self.mutate_after_successful_intake(mutate)
+
+    def test_source_workspace_changed_after_child_pass_is_blocked(self):
+        def mutate():
+            file = self.root / "copied-data" / (EXAMPLE_ID.encode().hex() + ".json")
+            value = json.loads(file.read_text())
+            value["synthetic_revision"] = "post-intake-drift"
+            file.write_text(json.dumps(value))
+        self.mutate_after_successful_intake(mutate)
+
+    def test_restored_quarantine_changed_after_child_pass_is_blocked(self):
+        def mutate():
+            marker = (self.root / "isolated-intake" /
+                      "isolated-restore-rehearsal" / ".nexus-recovery-required")
+            with marker.open("ab") as handle:
+                handle.write(b" ")
+        self.mutate_after_successful_intake(mutate)
+
+    def test_intake_report_wrong_origin_after_child_pass_is_blocked(self):
+        def mutate():
+            report = self.root / "isolated-intake" / "intake-report.json"
+            value = json.loads(report.read_text())
+            value["volume_id"] = "00000000-0000-0000-0000-000000000000"
+            report.write_text(json.dumps(value))
+        self.mutate_after_successful_intake(mutate)
+
+    def test_intake_report_forged_archive_hash_after_child_pass_is_blocked(self):
+        def mutate():
+            report = self.root / "isolated-intake" / "intake-report.json"
+            value = json.loads(report.read_text())
+            value["snapshot_sha256"] = "0" * 64
+            report.write_text(json.dumps(value))
+        self.mutate_after_successful_intake(mutate)
+
+    def test_extra_release_claim_after_child_pass_is_blocked(self):
+        def mutate():
+            report = self.root / "isolated-intake" / "intake-report.json"
+            value = json.loads(report.read_text())
+            value["seal"] = True
+            report.write_text(json.dumps(value))
+        self.mutate_after_successful_intake(mutate)
+
+    def test_forged_rust_audit_on_structural_only_mode_is_blocked(self):
+        def mutate():
+            report = self.root / "isolated-intake" / "intake-report.json"
+            value = json.loads(report.read_text())
+            value["rust_core_audit"] = "pass_operator_supplied_rust_binary"
+            value["rust_core_source_parity"] = "pass_selected_pinned_git_blobs"
+            report.write_text(json.dumps(value))
+        self.mutate_after_successful_intake(mutate)
+
+    def test_intake_report_symlink_after_child_pass_is_blocked(self):
+        def mutate():
+            report = self.root / "isolated-intake" / "intake-report.json"
+            outside = self.base / "private-synthetic-report.json"
+            report.rename(outside)
+            report.symlink_to(outside)
+        self.mutate_after_successful_intake(mutate)
 
     def test_download_failure_never_reports_pass(self):
         result=self.run_capture(execute=True,mode="fail")

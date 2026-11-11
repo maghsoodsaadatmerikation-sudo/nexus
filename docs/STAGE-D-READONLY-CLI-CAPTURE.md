@@ -130,12 +130,31 @@ and no PASS receipt is published.
 The private validator now performs a three-way **local** content comparison:
 read the complete downloaded file set before archive creation, compare its
 name/size/SHA-256 manifest to the archived content, then re-read the same
-file set after the quarantined byte-restored rehearsal. The CLI wrapper
-requires `local_copy_scans_matched_archive=true` in the private report before
-issuing its receipt. This fails closed for a copied directory modified
-while preparing its own snapshot, but says **nothing conclusive** about
-whether the original live Railway volume had simultaneous writes during the
-earlier download or whether the copied bytes are the most recent bytes.
+file set after the quarantined byte-restored rehearsal. The CLI wrapper previously relied chiefly on the child report's
+`local_copy_scans_matched_archive=true`. **Final parent-level receipt gate
+(2026-11-11):** *after* the child exits successfully, the capture process
+separately reopens the private report with bounded, no-symlink reads,
+rejects extra/unknown report keys, and checks the exact expected volume,
+deployment, runtime commit, schema,
+authority and strictly limited nonclaims. It rereads the archive, validates
+all stored checksums and paths, verifies its *current* SHA-256 matches the
+child's declared digest and file count, rescans the local copied data against
+the archive, and rechecks every isolated restored byte and quarantine marker
+before allowing `capture-receipt.json`. It rereads the report and the
+quarantined restored tree at the final boundary as well. If Rust audit was requested, the
+parent also requires explicit positive Rust/source-parity/post-audit fields;
+without Rust these fields must state `not_evaluated`. A new receipt field
+`post_intake_copy_archive_and_restore_rechecked=true` records the bounded
+post-child observation. Tests inject source, archive, recovery-marker and
+forged/extended report mutations *after* a real synthetic child PASS: the parent must BLOCK
+without publishing a receipt.
+
+This closes a **local post-intake-to-receipt gap**. The parent reuses the
+versioned validator's parsing and byte-verification rules, so it is another
+temporal observation rather than cryptographically independent validation.
+It says **nothing conclusive** about whether the original live Railway
+volume had simultaneous writes during the earlier download or whether the
+copied bytes are the most recent bytes.
 
 The terminal PASS is
 `PRIVATE_CLI_COPY_AND_STRUCTURAL_REHEARSAL_PASS`. The
@@ -155,9 +174,9 @@ reviewed data-retention decision.
 ## What this implementation actually proved
 
 The no-secret CI job
-`.github/workflows/stage-d-private-volume-intake.yml` runs the existing
-five private-intake fixtures plus eleven new negative/positive tests with a
-**fake local Railway CLI**. It proves the command target cannot drift, plan
+`.github/workflows/stage-d-private-volume-intake.yml` runs private-intake
+and capture regression tests, including eight post-child tamper/forgery
+scenarios with a **fake local Railway CLI**. It proves the command target cannot drift, plan
 mode performs nothing, an absent token fails before a copy, unexpected files,
 symlinks and download failures block PASS, and a synthetic exported directory
 passes an isolated bytes-restored rehearsal. CI uses no Railway login, no

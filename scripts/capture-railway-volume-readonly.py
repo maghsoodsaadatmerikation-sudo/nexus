@@ -5,6 +5,8 @@ Default is PLAN-ONLY. This DOES NOT run in CI with a production credential.
 Never upload data, plaintext or backup artifacts to this public repository.
 """
 import argparse
+import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -113,6 +115,98 @@ def require_regular_copy(root):
     return total
 
 
+def validate_final_private_receipt(copy, report_dir, rust_requested):
+    """Revalidate child evidence and private bytes at the final receipt boundary.
+
+    The child succeeded earlier, but neither its exit code nor an old PASS
+    report proves that bytes and origin metadata are still the same when this
+    parent script signs off. No provider access or private paths are logged.
+    """
+    require(report_dir.is_dir() and not report_dir.is_symlink()
+            and report_dir == report_dir.resolve(),
+            "private intake directory is not canonical")
+    # Reuse the validated archive and file grammar, but perform new reads in
+    # the parent *after* the child has exited. This is temporal corroboration,
+    # not an independent implementation or atomic Railway snapshot.
+    spec = importlib.util.spec_from_file_location("nexus_final_private_intake", INTAKE)
+    private = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(private)
+    archive = report_dir / "nexus-private-data-snapshot.json"
+    report_file = report_dir / "intake-report.json"
+    require(archive.lstat().st_nlink == 1 and report_file.lstat().st_nlink == 1,
+            "private evidence hard link is not permitted")
+    raw_report = private.snapshot.read_regular(report_file, 32768)
+    inspection = json.loads(raw_report, object_pairs_hook=private.snapshot.unique_object)
+    require(isinstance(inspection, dict), "private intake report is invalid")
+    required = {
+        "schema": "nexus.offhost-volume-intake.v1",
+        "status": "STRUCTURAL_REHEARSAL_PASS",
+        "volume_id": VOLUME,
+        "deployment_id": DEPLOYMENT,
+        "runtime_commit": RUNTIME,
+        "provider_identity": "operator_supplied_unverified",
+        "copy_provenance": "unverified",
+        "production_volume_contents": "not_directly_observed",
+        "source_consistency": "not_verified",
+        "independent_railway_backup": "not_proven",
+        "live_survival": "not_evaluated",
+        "live_recovery": "not_evaluated",
+        "isolated_byte_roundtrip": True,
+        "restored_quarantined": True,
+        "local_copy_scans_matched_archive": True,
+        "authority": "none",
+    }
+    for key, expected in required.items():
+        require(type(inspection.get(key)) is type(expected) and
+                inspection[key] == expected, "private intake report field disagrees")
+    audit_expected = {
+        "rust_core_audit": ("pass_operator_supplied_rust_binary"
+                            if rust_requested else "not_evaluated"),
+        "rust_core_binary_identity": ("operator_supplied_unverified"
+                                      if rust_requested else "not_verified"),
+        "rust_core_source_parity": ("pass_selected_pinned_git_blobs"
+                                    if rust_requested else "not_evaluated"),
+        "post_rust_source_archive_and_restore_rechecked": bool(rust_requested),
+    }
+    for key, expected in audit_expected.items():
+        require(type(inspection.get(key)) is type(expected) and
+                inspection[key] == expected, "private Rust audit claim disagrees")
+    # Deny undeclared authority or release claims in the child report, even
+    # when the expected status fields appear to be correct.
+    require(set(inspection) == set(required) | set(audit_expected) |
+            {"file_count", "snapshot_sha256", "local_copy_check"},
+            "private intake report schema disagrees")
+    require(inspection["local_copy_check"] ==
+            "before_archive_and_after_restored_bytes",
+            "private source-copy scan contract disagrees")
+
+    archive_bytes = private.snapshot.read_regular(archive, private.snapshot.MAX_BYTES)
+    digest = hashlib.sha256(archive_bytes).hexdigest()
+    records = private.snapshot.validated_records(archive)
+    require(inspection.get("snapshot_sha256") == digest and
+            type(inspection.get("file_count")) is int and
+            inspection["file_count"] == len(records),
+            "private archive digest or file count disagrees")
+    expected = dict(records)
+    source_manifest = {name: (len(data), hashlib.sha256(data).hexdigest())
+                       for name, data in records}
+    # Must match both archive and live local source after the child report.
+    require_regular_copy(copy)
+    require(private.local_copy_manifest(copy) == source_manifest,
+            "copied source changed after private intake")
+    expected.pop(private.snapshot.RECOVERY_MARKER, None)
+    restored = report_dir / "isolated-restore-rehearsal"
+    private.verify_quarantined_restore(restored, expected)
+    # Final read prevents certifying a stale archive or source at receipt time.
+    require(hashlib.sha256(private.snapshot.read_regular(
+                archive, private.snapshot.MAX_BYTES)).hexdigest() == digest and
+            private.local_copy_manifest(copy) == source_manifest and
+            private.snapshot.read_regular(report_file, 32768) == raw_report,
+            "private archive, source or report changed during final receipt validation")
+    private.verify_quarantined_restore(restored, expected)
+    return inspection, digest
+
+
 def execute(args):
     root = protected_target(args.private_root)
     if not args.execute:
@@ -163,11 +257,8 @@ def execute(args):
         except (OSError, subprocess.TimeoutExpired):
             raise CaptureBlocked("isolated structural verification did not finish") from None
         require(check.returncode == 0, "isolated structural verification failed")
-        inspection = json.loads((report_dir / "intake-report.json").read_text())
-        require(inspection.get("status") == "STRUCTURAL_REHEARSAL_PASS" and
-                inspection.get("isolated_byte_roundtrip") is True and
-                inspection.get("local_copy_scans_matched_archive") is True,
-                "isolated evidence or source-copy stability is not a structural pass")
+        inspection, archive_digest = validate_final_private_receipt(
+            copy, report_dir, rust_requested=args.rust_validator_bin is not None)
         receipt = {
             "schema": "nexus.railway-volume-readonly-capture.v1",
             "status": "PRIVATE_CLI_COPY_AND_STRUCTURAL_REHEARSAL_PASS",
@@ -177,11 +268,13 @@ def execute(args):
             "cli_subcommand": "volume files download",
             "source_consistency": "NOT_VERIFIED_ATOMIC",
             "rust_core_audit": inspection.get("rust_core_audit", "not_evaluated"),
-            "rust_core_binary_identity": inspection.get("rust_core_binary_identity", "not_verified"),
+            "rust_core_binary_identity": inspection["rust_core_binary_identity"],
+            "rust_core_source_parity": inspection["rust_core_source_parity"],
             "local_copy_scans_matched_archive": True,
+            "post_intake_copy_archive_and_restore_rechecked": True,
             "provider_file_origin": "CLI_SELECTED_ID_NOT_INDEPENDENTLY_ATTESTED",
             "offsite_copy": "PRIVATE_PATH_OPERATOR_MUST_PRESERVE",
-            "archive_sha256": inspection["snapshot_sha256"],
+            "archive_sha256": archive_digest,
             "restored_quarantined": True,
             "independent_complete_production_backup": "NOT_PROVEN",
             "production_restart": "NOT_PERFORMED",
