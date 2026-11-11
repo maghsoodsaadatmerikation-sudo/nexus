@@ -3,6 +3,7 @@
 import argparse
 import importlib.util
 import json
+import os
 from pathlib import Path
 import stat
 import subprocess
@@ -167,6 +168,30 @@ class IntakeTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("PRIVATE_SENTINEL", result.stdout + result.stderr)
         self.assertFalse((self.out / "intake-report.json").exists())
+
+    def test_private_intake_blocks_hardlink_to_external_workspace(self):
+        # Direct operator-supplied copies skip the CLI wrapper. They must
+        # still refuse bytes also reachable outside the copied directory.
+        original = self.export / "77.json"
+        external = self.root / "private-mirrored-workspace"
+        original.rename(external)
+        os.link(external, original)
+        result = self.command()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.out / "intake-report.json").exists())
+        self.assertFalse(self.out.exists())
+        self.assertNotIn(str(external), result.stdout + result.stderr)
+
+    def test_private_intake_blocks_external_hardlinked_request_marker(self):
+        source = self.export / "requests" / "6163636570746564"
+        external = self.root / "private-mirrored-request"
+        source.rename(external)
+        os.link(external, source)
+        result = self.command()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.out.exists())
+        self.assertEqual(external.read_bytes(), b"pending\n")
+        self.assertNotIn(str(external), result.stdout + result.stderr)
 
     def test_symlink_source_is_rejected(self):
         link = self.root / "linked"
