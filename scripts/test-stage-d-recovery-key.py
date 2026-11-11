@@ -79,6 +79,17 @@ class KeyProofTests(unittest.TestCase):
         with self.assertRaises(keycheck.KeyCheckBlocked):
             self.check(self.cert)
 
+    def test_real_manual_workflow_requires_exact_local_key_ack_before_download(self):
+        workflow = (HERE.parent / ".github/workflows/stage-d-encrypted-volume-capture.yml").read_text()
+        self.assertIn("confirm_recovery_key:", workflow)
+        self.assertIn("required: true", workflow.split("confirm_recovery_key:", 1)[1].split("credential_scope:", 1)[0])
+        guard = workflow.split("- name: Fail-closed target and recipient check (no secret)", 1)[1]
+        guard = guard.split("- name: Fail-closed selected Railway credential scope", 1)[0]
+        self.assertIn("KEY_ACK: ${{ inputs.confirm_recovery_key }}", guard)
+        self.assertIn("test \"$KEY_ACK\" = 'I VERIFIED MY STAGE D RECOVERY KEY LOCALLY'", guard)
+        self.assertIn("exit 1", guard)
+        self.assertLess(workflow.index("test \"$KEY_ACK\""), workflow.index("- name: Download genuine pinned Railway CLI"))
+
     def test_ci_is_explicitly_denied_without_reading_key(self):
         with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}):
             with patch.object(sys, "argv", ["verify-stage-d-recovery-key.py", "--private-key", "/no-such-file"]):
