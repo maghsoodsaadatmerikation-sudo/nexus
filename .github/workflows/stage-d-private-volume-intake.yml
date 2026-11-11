@@ -37,6 +37,7 @@ on:
       - 'src/bin/nexus-private-core-audit.rs'
       - 'src/workspace_persistence.rs'
       - 'artifact-05/src/request_store.rs'
+      - 'artifact-05/tests/http_contract.rs'
       - 'artifact-05/Cargo.toml'
       - 'artifact-05/Cargo.lock'
       - 'docs/STAGE-D-RUST-LEDGER-FILESYSTEM-BOUNDARY.md'
@@ -172,6 +173,8 @@ jobs:
           cargo test --locked --bin nexus-private-core-audit
           # Real Rust gateway recovery semantics, not a Python-only emulation.
           cargo test --locked --manifest-path artifact-05/Cargo.toml request_store::tests
+          # Confirm a replaced ledger directory never resumes HTTP delegation.
+          cargo test --locked --manifest-path artifact-05/Cargo.toml --test http_contract durable_store_io_failure_never_delegates
       - name: Run real Rust semantic validation against synthetic copied data
         shell: bash
         run: |
