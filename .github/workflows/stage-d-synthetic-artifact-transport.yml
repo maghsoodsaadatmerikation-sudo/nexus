@@ -107,7 +107,7 @@ jobs:
           spec=importlib.util.spec_from_file_location('stage_d_anchor','scripts/stage-d-run-log-anchor.py')
           anchor=importlib.util.module_from_spec(spec)
           spec.loader.exec_module(anchor)
-          root=Path(os.environ['RUNNER_TEMP'])/'nexus-stage-d-synthetic-redownload'
+          root=Path(os.environ['RUNNER_TEMP'])/'nexus-stage-d-synthetic-redownload'/'nexus-stage-d-synthetic-transfer-test'
           assert root.is_dir() and not root.is_symlink()
           expected={anchor.CIPHERTEXT,anchor.RECEIPT}
           observed=set()
