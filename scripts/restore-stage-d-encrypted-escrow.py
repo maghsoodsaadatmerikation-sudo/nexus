@@ -92,13 +92,16 @@ def require_receipt(raw, ciphertext_bytes):
     for k, v in fixed.items():
         require(type(data[k]) is type(v) and data[k] == v)
 
-def decrypt_authenticated(ciphertext, key, private_home):
-    """Only return plaintext AFTER successful AES-GCM tag verification."""
+def decrypt_authenticated(verified_ciphertext, key, private_home):
+    """Authenticate the EXACT ciphertext bytes already hashed and checked.
+
+    Pass immutable bytes on stdin: reopening a pathname after its SHA check
+    would permit a file-swap race between receipt validation and AES-GCM.
+    """
     process = subprocess.run(
         ["openssl", "cms", "-decrypt", "-inform", "DER",
-         "-in", str(ciphertext), "-recip", str(escrow.CERT),
-         "-inkey", str(key)],
-        stdin=subprocess.DEVNULL,
+         "-recip", str(escrow.CERT), "-inkey", str(key)],
+        input=verified_ciphertext,
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         timeout=90, check=False,
         env=child_env(railway_download=False, private_home=private_home),
@@ -216,7 +219,7 @@ def recover(ciphertext, receipt, key, destination):
     require(hashlib.sha256(private_regular(escrow.CERT, 16384)).hexdigest()
             == escrow.CERT_SHA256)
     # Never write partial or unauthenticated decryption output to disk.
-    plaintext = decrypt_authenticated(ciphertext, key, destination.parent)
+    plaintext = decrypt_authenticated(encrypted, key, destination.parent)
     files = parse_three_files(plaintext)
     digest = hashlib.sha256(files["nexus-private-data-snapshot.json"]).hexdigest()
     # Validate exact independently reported non-authority claims before stage.
