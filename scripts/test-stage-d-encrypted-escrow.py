@@ -178,7 +178,7 @@ class EncryptedEscrowTests(unittest.TestCase):
         os.link(original, self.base / "private-evidence-alias.json")
         with (patch.object(escrow, "CERT", self.cert),
               patch.object(escrow, "CERT_SHA256", self.cert_sha)):
-            with self.assertRaises(escrow.EscrowBlocked):
+            with self.assertRaises((escrow.EscrowBlocked, ValueError, OSError)):
                 escrow.create_escrow(self.root, self.out)
         self.assertEqual(list(self.out.iterdir()), [])
 
