@@ -7,6 +7,8 @@ on:
       - 'scripts/verify-offhost-volume-export.py'
       - 'scripts/capture-railway-volume-readonly.py'
       - 'scripts/test-capture-railway-volume-readonly.py'
+      - 'scripts/test-stage-d-credential-choice.py'
+      - 'docs/STAGE-D-RAILWAY-AUTH-SCOPE.md'
       - 'scripts/private_subprocess_env.py'
       - 'scripts/test-private-subprocess-env.py'
       - '.github/workflows/stage-d-encrypted-volume-capture.yml'
@@ -59,6 +61,7 @@ jobs:
           test -z "${RAILWAY_TOKEN:-}"
           test -z "${RAILWAY_API_TOKEN:-}"
           python3 scripts/test-capture-railway-volume-readonly.py
+          python3 scripts/test-stage-d-credential-choice.py
 
   real-cli-parser-conformance:
     name: real-railway-cli-readonly-grammar
