@@ -152,6 +152,98 @@ mod tests {
         process::{Command, Stdio},
     };
 
+    fn isolated_ledger(label: &str) -> PathBuf {
+        let root = std::env::temp_dir()
+            .join(format!("nexus-ledger-{}-{}", label, uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn all_crash_prefixes_remain_indeterminate_but_only_full_marker_pending() {
+        for length in 0..=8 {
+            let root = isolated_ledger("torn");
+            fs::write(root.join("61"), &b"pending\n"[..length]).unwrap();
+            let (_, statuses) = RequestStore::open(&root).unwrap();
+            let expected = if length == 8 {
+                RequestStatus::Pending
+            } else {
+                RequestStatus::Indeterminate
+            };
+            assert_eq!(statuses.get("a"), Some(&expected));
+            fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[test]
+    fn rejects_nonprefix_or_overlong_marker_bytes() {
+        for bytes in [
+            b"pendinX".as_slice(),
+            b"pending\nx",
+            b"p\0",
+            b"accepted",
+            b"\xff",
+        ] {
+            let root = isolated_ledger("invalid-marker");
+            fs::write(root.join("61"), bytes).unwrap();
+            assert!(RequestStore::open(&root).is_err());
+            fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[test]
+    fn rejects_hardlinked_external_marker_during_startup() {
+        let root = isolated_ledger("external-link");
+        let outside = root.with_extension("external");
+        fs::write(&outside, b"pending\n").unwrap();
+        fs::hard_link(&outside, root.join("61")).unwrap();
+        assert!(RequestStore::open(&root).is_err());
+        assert_eq!(fs::read(&outside).unwrap(), b"pending\n");
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_file(outside).unwrap();
+    }
+
+    #[test]
+    fn pending_rejects_hardlinked_external_marker_without_mutating_it() {
+        let root = isolated_ledger("pending-link");
+        let (store, _) = RequestStore::open(&root).unwrap();
+        store.reserve("a").unwrap();
+        let outside = root.with_extension("external");
+        fs::hard_link(store.path("a"), &outside).unwrap();
+        assert!(store.pending("a").is_err());
+        assert_eq!(fs::read(&outside).unwrap(), b"p");
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_file(outside).unwrap();
+    }
+
+    #[test]
+    fn pending_rejects_replaced_symlink_without_mutating_target() {
+        use std::os::unix::fs::symlink;
+        let root = isolated_ledger("pending-symlink");
+        let (store, _) = RequestStore::open(&root).unwrap();
+        store.reserve("a").unwrap();
+        let outside = root.with_extension("external");
+        fs::rename(store.path("a"), &outside).unwrap();
+        symlink(&outside, store.path("a")).unwrap();
+        assert!(store.pending("a").is_err());
+        assert_eq!(fs::read(&outside).unwrap(), b"p");
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_file(outside).unwrap();
+    }
+
+    #[test]
+    fn normal_reservation_transitions_from_indeterminate_to_pending() {
+        let root = isolated_ledger("normal-transition");
+        let (store, _) = RequestStore::open(&root).unwrap();
+        store.reserve("a").unwrap();
+        let (_, recovered) = RequestStore::open(&root).unwrap();
+        assert_eq!(recovered.get("a"), Some(&RequestStatus::Indeterminate));
+        store.pending("a").unwrap();
+        let (_, recovered) = RequestStore::open(&root).unwrap();
+        assert_eq!(recovered.get("a"), Some(&RequestStatus::Pending));
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn crash_writer() {
         let Some(root) = std::env::var_os("NEXUS_TEST_CRASH_STORE") else {
