@@ -49,7 +49,10 @@ directory names/inodes/metadata stayed stable over the scan. Snapshot
 file reads reject hard links (`st_nlink != 1`), symlinks, special files,
 unexpected paths and in-flight per-file metadata changes. An
 operator-supplied private copy is checked by the *same* scanner on each
-pre/post-archive pass, not by an independent path-string walker.
+pre/post-archive pass, not by an independent path-string walker. The first
+scan now runs **before creating any private evidence directory**; malformed
+or externally hard-linked source data must leave no output tree or PASS
+receipt. Later scans detect source drift before any success.
 
 **Why it matters:** the exact-target Railway CLI wrapper already rejected
 hard links on its initial downloaded directory; the standalone
