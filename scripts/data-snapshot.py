@@ -103,7 +103,7 @@ def read_regular(path, limit):
 def _read_from_directory(dir_fd, name, limit):
     """Open a basename relative to a *pinned* directory, not a path string."""
     require(isinstance(name, str) and name not in (".", "..") and
-            "/" not in name and "\\x00" not in name, "invalid data filename")
+            "/" not in name and "\x00" not in name, "invalid data filename")
     fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
                  dir_fd=dir_fd)
     try:
@@ -188,7 +188,7 @@ def backup(source, output):
                         "data": base64.b64encode(data).decode("ascii")})
     document = {"schema": SCHEMA, "authority": "none",
                 "consistency": "offline-caller-asserted", "files": records}
-    encoded = json.dumps(document, sort_keys=True, separators=(",", ":")).encode() + b"\\n"
+    encoded = json.dumps(document, sort_keys=True, separators=(",", ":")).encode() + b"\n"
     require(len(encoded) <= MAX_BYTES, "snapshot size limit exceeded")
     fd, temporary = tempfile.mkstemp(prefix=".nexus-snapshot-", dir=output.parent)
     try:
