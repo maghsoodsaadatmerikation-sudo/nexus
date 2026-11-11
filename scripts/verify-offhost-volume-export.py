@@ -16,6 +16,7 @@ import stat
 import subprocess
 import sys
 import os
+from private_subprocess_env import child_env
 
 SCRIPT = Path(__file__).with_name("data-snapshot.py")
 spec = importlib.util.spec_from_file_location("nexus_data_snapshot", SCRIPT)
@@ -162,6 +163,9 @@ def run(args):
                 cwd=output,
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, timeout=90, check=False,
+                # An operator-supplied validator is not entitled to provider
+                # tokens, CI secrets, PYTHONPATH, or ambient user environment.
+                env=child_env(railway_download=False, private_home=output),
             )
         except (OSError, subprocess.TimeoutExpired):
             raise ValueError("private Rust core audit failed") from None
