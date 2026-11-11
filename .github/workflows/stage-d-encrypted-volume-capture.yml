@@ -1,0 +1,138 @@
+name: NEXUS Stage D — Manual Encrypted Volume Capture
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_volume:
+        description: "Enter exact original Volume UUID to authorize a READ-ONLY download"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexus-stage-d-private-encrypted-capture
+  cancel-in-progress: false
+
+jobs:
+  encrypted-private-capture:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 27
+    steps:
+      - name: Checkout exact trusted main without persisted credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Fail-closed target and recipient check (no secret)
+        shell: bash
+        env:
+          CONFIRM_VOLUME: ${{ inputs.confirm_volume }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRM_VOLUME" = 'cc47a350-6c7e-4487-89d9-c4b390f94884' || {
+            echo 'BLOCKED: the exact original Railway volume was not confirmed'
+            exit 1
+          }
+          printf '%s  %s\n' \
+            'b27cc7a84e333fce78f790dce20335258b11e724bac1a91b3b7c886ac3812091' \
+            docs/keys/stage-d-recovery-public-cert.pem | sha256sum --check --status
+          python3 -m py_compile \
+            scripts/capture-railway-volume-readonly.py \
+            scripts/verify-offhost-volume-export.py \
+            scripts/stage-d-encrypted-escrow.py
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+
+      - name: Download genuine pinned Railway CLI (no Railway credential)
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/railway-v5.71.0.tar.gz"
+          curl --fail --location --silent --show-error --retry 2 --max-time 90 \
+            'https://github.com/railwayapp/cli/releases/download/v5.71.0/railway-v5.71.0-x86_64-unknown-linux-musl.tar.gz' \
+            --output "$archive"
+          printf '%s  %s\n' \
+            '2e682fd2ddf8d6fdf9e46d9d99d99646ff0022a6abb0c2bca93011348a269fb9' \
+            "$archive" | sha256sum --check --status
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import tarfile
+          archive=Path(os.environ['RUNNER_TEMP'])/'railway-v5.71.0.tar.gz'
+          binary=Path(os.environ['RUNNER_TEMP'])/'railway-v5.71.0'
+          with tarfile.open(archive, 'r:gz') as package:
+              matches=[m for m in package.getmembers()
+                       if m.name in ('railway','./railway') and m.isfile()]
+              assert len(matches)==1 and 0 < matches[0].size < 40*1024*1024
+              source=package.extractfile(matches[0])
+              assert source is not None
+              with binary.open('xb') as dest:
+                  while True:
+                      chunk=source.read(65536)
+                      if not chunk: break
+                      dest.write(chunk)
+          binary.chmod(0o700)
+          PY
+
+      - name: Require dedicated operator-authorized Railway secret
+        shell: bash
+        env:
+          RAILWAY_TOKEN: ${{ secrets.NEXUS_STAGE_D_RAILWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo 'BLOCKED: NEXUS_STAGE_D_RAILWAY_TOKEN must be added privately in GitHub Settings'
+            exit 1
+          fi
+
+      - name: Exact-target READ-ONLY download + private quarantine rehearsal
+        shell: bash
+        env:
+          RAILWAY_TOKEN: ${{ secrets.NEXUS_STAGE_D_RAILWAY_TOKEN }}
+          RAILWAY_NO_AUTO_UPDATE: '1'
+        run: |
+          set -euo pipefail
+          umask 077
+          # No Railway upload/delete/restore/redeploy commands are invoked.
+          python3 scripts/capture-railway-volume-readonly.py \
+            --execute \
+            --private-root "$RUNNER_TEMP/nexus-stage-d-private-copy" \
+            --railway-bin "$RUNNER_TEMP/railway-v5.71.0"
+
+      - name: Encrypt only three validated private evidence files
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -m 0700 "$RUNNER_TEMP/nexus-stage-d-encrypted"
+          # Private recovery key never enters the runner or this repo.
+          python3 scripts/stage-d-encrypted-escrow.py \
+            --private-root "$RUNNER_TEMP/nexus-stage-d-private-copy" \
+            --encrypted-output-dir "$RUNNER_TEMP/nexus-stage-d-encrypted"
+
+      - name: Upload ciphertext and sanitized receipt ONLY
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-stage-d-encrypted-offsite-copy
+          path: |
+            ${{ runner.temp }}/nexus-stage-d-encrypted/nexus-stage-d-private-capture.cms
+            ${{ runner.temp }}/nexus-stage-d-encrypted/nexus-stage-d-ciphertext-receipt.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Cleanup temporary plaintext on all outcomes
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          rm -rf -- \
+            "$RUNNER_TEMP/nexus-stage-d-private-copy" \
+            "$RUNNER_TEMP/nexus-stage-d-encrypted" \
+            "$RUNNER_TEMP/railway-v5.71.0.tar.gz" \
+            "$RUNNER_TEMP/railway-v5.71.0"
+          echo 'Ephemeral runner scratch cleanup attempted; no raw data intentionally uploaded.'

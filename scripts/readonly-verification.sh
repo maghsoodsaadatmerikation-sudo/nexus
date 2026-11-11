@@ -32,6 +32,7 @@ esac
 # This does NOT change release gates, classify an actual run from CI, or
 # grant publication. Unit fixtures only guard against false green reports.
 python3 scripts/test-release-intent-triage.py
+python3 scripts/test-stage-d-encrypted-escrow.py
 python3 scripts/verify_test_matrix.py
 python3 scripts/test-data-snapshot.py
 node scripts/test-workspace-ui.mjs
