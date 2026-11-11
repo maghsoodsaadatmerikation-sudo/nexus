@@ -97,7 +97,8 @@ class IndependentDownloadTests(unittest.TestCase):
 
     def test_bad_or_uncanonical_anchor_base64_blocks(self):
         values = ["", "\n", "not_base64!", self.encoded + "!", "A" * 8200,
-                  self.encoded.replace("=", "A"), base64.b64encode(b"fake").decode()]
+                  self.encoded[:-1] + ("A" if self.encoded[-1] != "A" else "B"),
+                  base64.b64encode(b"fake").decode()]
         for value in values:
             with self.subTest(encoded=value[:24]), self.assertRaises(ValueError):
                 self.check(transfer=value)
