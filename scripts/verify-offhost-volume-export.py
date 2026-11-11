@@ -107,13 +107,15 @@ def run(args):
             raise ValueError("private Rust source parity unavailable") from None
         source_parity = "pass_selected_pinned_git_blobs"
 
+    # Validate the entire private source *before* creating an evidence
+    # directory. Untrusted hardlinks, symlinks, unsupported paths or
+    # directory swaps leave no private output tree or PASS receipt behind.
+    # This is a bounded local scan, not a consistent Railway snapshot.
+    before = local_copy_manifest(source)
     output.mkdir(mode=0o700)
     archive = output / "nexus-private-data-snapshot.json"
-    # Distinguish a stable *local* copy from an internally consistent
-    # archive made from a copy that was still being changed. Three
-    # independent reads (before, snapshot, after) must agree by exact
-    # name, size and SHA-256, including request markers.
-    before = local_copy_manifest(source)
+    # The second read/backup must agree with the first, and another read
+    # follows the isolated restoration before success can be reported.
     snapshot.backup(source, archive)
     archive_records = snapshot.validated_records(archive)
     archive_sha_before_audit = hashlib.sha256(archive.read_bytes()).hexdigest()
