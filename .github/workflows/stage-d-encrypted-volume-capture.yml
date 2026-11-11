@@ -33,6 +33,9 @@ concurrency:
 
 jobs:
   encrypted-private-capture:
+    outputs:
+      anchor_b64: ${{ steps.capture_anchor.outputs.anchor_b64 }}
+      artifact_id: ${{ steps.upload_ciphertext.outputs.artifact-id }}
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 27
@@ -151,6 +154,7 @@ jobs:
             --encrypted-output-dir "$RUNNER_TEMP/nexus-stage-d-encrypted"
 
       - name: Anchor non-secret ciphertext digest to this GitHub run log
+        id: capture_anchor
         shell: bash
         run: |
           set -euo pipefail
@@ -161,9 +165,12 @@ jobs:
           test -z "${RAILWAY_API_TOKEN:-}"
           test -z "${NEXUS_API_TOKEN:-}"
           python3 scripts/stage-d-run-log-anchor.py emit \
-            --encrypted-dir "$RUNNER_TEMP/nexus-stage-d-encrypted"
+            --encrypted-dir "$RUNNER_TEMP/nexus-stage-d-encrypted" | tee "$RUNNER_TEMP/nexus-stage-d-anchor.txt"
+          # This carries ONLY already logged hashes and run metadata; no secret or plaintext.
+          printf 'anchor_b64=%s\n' "$(base64 -w0 < "$RUNNER_TEMP/nexus-stage-d-anchor.txt")" >> "$GITHUB_OUTPUT"
 
       - name: Upload ciphertext and sanitized receipt ONLY
+        id: upload_ciphertext
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: nexus-stage-d-encrypted-offsite-copy
@@ -183,5 +190,54 @@ jobs:
             "$RUNNER_TEMP/nexus-stage-d-private-copy" \
             "$RUNNER_TEMP/nexus-stage-d-encrypted" \
             "$RUNNER_TEMP/railway-v5.71.0.tar.gz" \
-            "$RUNNER_TEMP/railway-v5.71.0"
+            "$RUNNER_TEMP/railway-v5.71.0" \
+            "$RUNNER_TEMP/nexus-stage-d-anchor.txt"
           echo 'Ephemeral runner scratch cleanup attempted; no raw data intentionally uploaded.'
+
+  recheck-uploaded-ciphertext:
+    # This fresh GitHub runner sees only already-encrypted artifact bytes.
+    # No production Railway credential, private recovery key or plaintext.
+    needs: encrypted-private-capture
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact immutable capture source without saved credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Fail closed on missing exact artifact identity and any provider credentials
+        shell: bash
+        env:
+          TRANSFER_ARTIFACT_ID: ${{ needs.encrypted-private-capture.outputs.artifact_id }}
+          TRANSFER_ANCHOR_B64: ${{ needs.encrypted-private-capture.outputs.anchor_b64 }}
+        run: |
+          set -euo pipefail
+          test -n "$TRANSFER_ARTIFACT_ID"
+          test -n "$TRANSFER_ANCHOR_B64"
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+
+      - name: Re-download exact uploaded artifact ID from this same run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ needs.encrypted-private-capture.outputs.artifact_id }}
+          path: ${{ runner.temp }}/nexus-stage-d-redownloaded
+
+      - name: Compare downloaded ciphertext and receipt with original run log digest
+        shell: bash
+        env:
+          TRANSFER_ANCHOR_B64: ${{ needs.encrypted-private-capture.outputs.anchor_b64 }}
+          TRANSFER_ARTIFACT_ID: ${{ needs.encrypted-private-capture.outputs.artifact_id }}
+          EXPECTED_SHA: ${{ github.sha }}
+          RETRIEVED_ARTIFACT_DIR: ${{ runner.temp }}/nexus-stage-d-redownloaded
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-stage-d-uploaded-artifact.py
+          echo 'Second-runner ciphertext transfer verified; private-key recovery and Railway provenance NOT verified.'
