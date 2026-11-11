@@ -277,6 +277,7 @@ name = "nexus-artifact-05-gateway"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "libc",
  "http-body-util",
  "nexus-constitutional-core",
  "serde",
