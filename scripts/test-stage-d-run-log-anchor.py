@@ -143,7 +143,9 @@ class LogAnchorTests(unittest.TestCase):
 
     def test_hardlinked_ciphertext_refused(self):
         os.link(self.blob_file, self.outdir / "cipher-hardlink")
-        with self.assertRaises((anchor.AnchorBlocked, OSError)):
+        # Shared no-hardlink reader raises SnapshotError(ValueError).
+        # That is the intended fail-closed behavior.
+        with self.assertRaises(ValueError):
             anchor.make_anchor(self.outdir, RUN_ENV)
 
     def test_symlink_receipt_refused(self):
