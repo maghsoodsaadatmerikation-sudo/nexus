@@ -38,6 +38,48 @@ installed CLI version before choosing a destination.
    application is active. Verify consistency using a maintenance/offline
    capture or a provider-supported atomic snapshot before relying on it.
 
+## Directory-fd scope and external hard-link rejection (2026-11-11)
+
+The offline `data-snapshot.py` backup and direct private copy intake now use
+a **single bounded source scanner**. It opens the copied data root and its
+`requests/` ledger as Linux directory file descriptors with
+`O_DIRECTORY | O_NOFOLLOW`, reads each workspace or marker with a
+dirfd-relative `O_NOFOLLOW` open, and checks that its source and ledger
+directory names/inodes/metadata stayed stable over the scan. Snapshot
+file reads reject hard links (`st_nlink != 1`), symlinks, special files,
+unexpected paths and in-flight per-file metadata changes. An
+operator-supplied private copy is checked by the *same* scanner on each
+pre/post-archive pass, not by an independent path-string walker. The first
+scan now runs **before creating any private evidence directory**; malformed
+or externally hard-linked source data must leave no output tree or PASS
+receipt. Later scans detect source drift before any success.
+
+**Why it matters:** the exact-target Railway CLI wrapper already rejected
+hard links on its initial downloaded directory; the standalone
+`verify-offhost-volume-export.py` entry point previously trusted any
+regular-looking file with a valid NEXUS filename, including a hard link to
+a file outside the intended export. A replacement of `requests/` between
+the initial path check and a subsequent pathname open could also redirect
+a weak source scanner. The current scanner binds opens to anchored
+directory descriptors and rejects directory replacement.
+
+Disposable regression tests explicitly attempt a hard-linked external
+workspace, a hard-linked external request marker, a hard-linked archive,
+a `requests/` symlink swap after scanning starts, and a source file
+created during the scan; all must refuse a successful snapshot or private
+receipt. The standalone private intake tests independently require
+rejection before a receipt directory is published.
+
+**Self-critique and limits:** a clean scan is still **not** a
+point-in-time-consistent snapshot of a live Railway writer; a file could
+change after its individual read. Directory metadata checks are bounded
+observations, not an adversary-resistant filesystem snapshot. Linux
+directory-descriptor semantics are required. This restriction may reject
+operator copies prepared using intentional hard links; they must be
+re-exported as distinct regular files, not accepted by relaxing the rule.
+Neither the original Railway data nor a provider-native backup was read,
+altered or independently recovered. No release authority or Seal follows.
+
 ## Private intake of a copied directory
 
 From the repository checkout, with the copied data directory stored

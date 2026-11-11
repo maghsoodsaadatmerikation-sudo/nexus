@@ -71,22 +71,107 @@ def sync_directory(path):
         os.close(fd)
 
 
+def _checked_regular_fd(fd, limit):
+    """Read one already-opened descriptor, rejecting hard links and torn reads."""
+    before = os.fstat(fd)
+    require(stat.S_ISREG(before.st_mode) and before.st_nlink == 1,
+            "only private unlinked-to-others regular files are supported")
+    require(before.st_size <= limit, "snapshot size limit exceeded")
+    with os.fdopen(fd, "rb", closefd=False) as handle:
+        data = handle.read(limit + 1)
+    after = os.fstat(fd)
+    require(len(data) <= limit, "snapshot size limit exceeded")
+    require(stat.S_ISREG(after.st_mode) and after.st_nlink == 1,
+            "hard link or non-regular file in snapshot")
+    require((before.st_dev, before.st_ino, before.st_nlink, before.st_size,
+             before.st_mtime_ns, before.st_ctime_ns) ==
+            (after.st_dev, after.st_ino, after.st_nlink, after.st_size,
+             after.st_mtime_ns, after.st_ctime_ns),
+            "data changed during snapshot")
+    return data
+
+
 def read_regular(path, limit):
+    """No-follow read for standalone private snapshot/receipt files."""
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
-        before = os.fstat(fd)
-        require(stat.S_ISREG(before.st_mode), "only regular files are supported")
-        require(before.st_size <= limit, "snapshot size limit exceeded")
-        with os.fdopen(fd, "rb", closefd=False) as handle:
-            data = handle.read(limit + 1)
-        after = os.fstat(fd)
-        require(len(data) <= limit, "snapshot size limit exceeded")
-        require((before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) ==
-                (after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns),
-                "data changed during snapshot")
-        return data
+        return _checked_regular_fd(fd, limit)
     finally:
         os.close(fd)
+
+
+def _read_from_directory(dir_fd, name, limit):
+    """Open a basename relative to a *pinned* directory, not a path string."""
+    require(isinstance(name, str) and name not in (".", "..") and
+            "/" not in name and "\x00" not in name, "invalid data filename")
+    fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                 dir_fd=dir_fd)
+    try:
+        return _checked_regular_fd(fd, limit)
+    finally:
+        os.close(fd)
+
+
+def _directory_identity(fd):
+    info = os.fstat(fd)
+    require(stat.S_ISDIR(info.st_mode), "snapshot source directory changed type")
+    return (info.st_dev, info.st_ino, info.st_mtime_ns, info.st_ctime_ns)
+
+
+def read_source_records(source):
+    """Read only root workspaces and requests/ markers via anchored dirfds.
+
+    Every observed filename comes from the open root or requests directory.
+    A concurrent swap of requests/ to a symlink cannot redirect openat to
+    another tree; directory mutation during the scan blocks completion.
+    A clean scan is NOT an atomic snapshot of concurrently changing bytes.
+    """
+    root_fd = os.open(source, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        root_before = _directory_identity(root_fd)
+        root_names = os.listdir(root_fd)
+        require("requests" in root_names, "request ledger is required")
+        req_fd = os.open("requests", os.O_RDONLY | os.O_DIRECTORY |
+                         os.O_NOFOLLOW, dir_fd=root_fd)
+        try:
+            req_before = _directory_identity(req_fd)
+            req_names = os.listdir(req_fd)
+            total_files = len(root_names) - 1 + len(req_names)
+            require(total_files <= MAX_FILES, "snapshot file limit exceeded")
+            entries = ([(root_fd, name, name) for name in root_names
+                        if name != "requests"] +
+                       [(req_fd, name, "requests/" + name)
+                        for name in req_names])
+            records = []
+            total = 0
+            for dir_fd, basename, relative in sorted(entries, key=lambda x: x[2]):
+                data = _read_from_directory(dir_fd, basename, MAX_BYTES - total)
+                total += len(data)
+                validate_file(relative, data)
+                records.append((relative, data))
+
+            require(os.listdir(root_fd) == root_names and
+                    os.listdir(req_fd) == req_names,
+                    "snapshot directory entries changed during scan")
+            require(_directory_identity(root_fd) == root_before and
+                    _directory_identity(req_fd) == req_before,
+                    "snapshot directory changed during scan")
+            # Ensure the root still links to the very requests inode scanned:
+            # replacing it with a symlink, even temporarily, is not success.
+            request_at_end = os.stat("requests", dir_fd=root_fd,
+                                     follow_symlinks=False)
+            require(stat.S_ISDIR(request_at_end.st_mode) and
+                    (request_at_end.st_dev, request_at_end.st_ino) ==
+                    req_before[:2], "request ledger replaced during snapshot")
+            source_at_end = os.stat(source, follow_symlinks=False)
+            require(stat.S_ISDIR(source_at_end.st_mode) and
+                    (source_at_end.st_dev, source_at_end.st_ino) ==
+                    root_before[:2], "source directory replaced during snapshot")
+            return records
+        finally:
+            os.close(req_fd)
+    finally:
+        os.close(root_fd)
 
 
 def backup(source, output):
@@ -96,22 +181,8 @@ def backup(source, output):
     require(not output.resolve().is_relative_to(source), "backup must be outside the data directory")
     require(output.parent.is_dir(), "backup parent directory must exist")
     require(not output.exists() and not output.is_symlink(), "backup output already exists")
-    request_dir = source / "requests"
-    require(request_dir.is_dir() and not request_dir.is_symlink(), "request ledger is required")
-    candidates = []
-    for entry in source.iterdir():
-        if entry.name == "requests":
-            candidates.extend(entry.iterdir())
-        else:
-            candidates.append(entry)
-    require(len(candidates) <= MAX_FILES, "snapshot file limit exceeded")
     records = []
-    total = 0
-    for path in sorted(candidates):
-        data = read_regular(path, MAX_BYTES - total)
-        total += len(data)
-        name = path.relative_to(source).as_posix()
-        validate_file(name, data)
+    for name, data in read_source_records(source):
         records.append({"path": name, "size": len(data),
                         "sha256": hashlib.sha256(data).hexdigest(),
                         "data": base64.b64encode(data).decode("ascii")})
@@ -131,7 +202,6 @@ def backup(source, output):
     finally:
         os.unlink(temporary)
     return len(records)
-
 
 def validated_records(archive):
     raw = read_regular(archive, MAX_BYTES)
