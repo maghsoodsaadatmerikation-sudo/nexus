@@ -17,10 +17,12 @@ class BrowserRunnerFailures(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.profile = self.root / 'private-profile'
 
-    def run_driver(self, browser, timeout=8):
-        return subprocess.run(['node', str(RUNNER), str(browser),
-            'file:///synthetic-private-page', str(self.profile), '500,1100'],
-            capture_output=True, text=True, timeout=timeout)
+    def run_driver(self, browser, timeout=8, startup_ms=None):
+        args = ['node', str(RUNNER), str(browser),
+                'file:///synthetic-private-page', str(self.profile), '500,1100']
+        if startup_ms is not None:
+            args.extend(['15000', str(startup_ms)])
+        return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
 
     def diagnostic(self, result):
         self.assertNotEqual(result.returncode, 0)
@@ -50,6 +52,38 @@ class BrowserRunnerFailures(unittest.TestCase):
             'not-a-number'], capture_output=True, text=True, timeout=2)
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(self.profile.exists())
+
+    def test_startup_deadline_out_of_bounds_or_invalid_is_denied_before_launch(self):
+        for deadline in ('9999', '30001', '-1', 'NaN', '1.5', 'Infinity'):
+            with self.subTest(deadline=deadline):
+                result = subprocess.run(
+                    ['node', str(RUNNER), str(self.root / 'must-not-launch'),
+                     'file:///synthetic-private-page', str(self.profile),
+                     '500,1100', '15000', deadline],
+                    capture_output=True, text=True, timeout=3)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, '')
+                self.assertFalse(self.profile.exists())
+                self.assertIn('bounded private inputs', result.stderr)
+
+    def test_extra_arguments_are_refused_before_profile_creation(self):
+        result = subprocess.run(
+            ['node', str(RUNNER), str(self.root / 'must-not-launch'),
+             'file:///synthetic-private-page', str(self.profile),
+             '500,1100', '15000', '25000', 'unexpected-extra'],
+            capture_output=True, text=True, timeout=3)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.profile.exists())
+        self.assertEqual(result.stdout, '')
+
+    def test_valid_opted_in_grace_cannot_turn_browser_exit_into_pass(self):
+        browser = self.root / 'exit-opted-in'
+        browser.write_text('#!/bin/sh\\necho SECRET_BROWSER_STDERR >&2\\nexit 0\\n')
+        browser.chmod(0o700)
+        result = self.run_driver(browser, startup_ms=25000)
+        value = self.diagnostic(result)
+        self.assertIs(value['process_exited'], True)
+        self.assertIs(value['launch_failed'], False)
 
     def test_missing_executable_finishes_without_waiting_for_exit(self):
         # The old cleanup always waited three seconds for a nonexistent child.
