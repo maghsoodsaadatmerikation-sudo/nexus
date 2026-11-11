@@ -877,31 +877,27 @@ async fn durable_store_io_failure_never_delegates() {
         StatusCode::CONFLICT
     );
     assert!(delegate.requests.lock().unwrap().is_empty());
+    // Recreating a directory with the same pathname does NOT restore the
+    // original durable ledger. An already-running process must fail closed,
+    // not silently begin delegating into the replacement inode.
     assert_eq!(
         app.oneshot(submit_request("repaired", Some("secret"), "opaque"))
             .await
             .unwrap()
             .status(),
-        StatusCode::ACCEPTED
+        StatusCode::SERVICE_UNAVAILABLE
     );
-    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+    assert!(delegate.requests.lock().unwrap().is_empty());
+
+    // A fresh process cannot infer that a replacement empty directory lost
+    // earlier marker history. Do not treat a new startup as proof of safe
+    // replay: that requires independently verified recovery evidence.
     let reopened = AppState::authenticated(delegate.clone(), "secret")
         .with_request_store(&root)
         .unwrap();
     assert!(!reopened.statuses.read().unwrap().contains_key("no-store"));
-    assert_eq!(
-        reopened.statuses.read().unwrap()["repaired"],
-        RequestStatus::Pending
-    );
-    assert_eq!(
-        router(reopened)
-            .oneshot(submit_request("no-store", Some("secret"), "opaque"))
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::ACCEPTED
-    );
-    assert_eq!(delegate.requests.lock().unwrap().len(), 2);
+    assert!(!reopened.statuses.read().unwrap().contains_key("repaired"));
+    assert!(delegate.requests.lock().unwrap().is_empty());
     std::fs::remove_dir_all(root).unwrap();
 }
 
