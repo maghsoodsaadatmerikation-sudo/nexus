@@ -93,11 +93,21 @@ class CaptureTests(unittest.TestCase):
         self.bin.chmod(0o700)
         self.root = self.base / "private-capture"
 
-    def run_capture(self, execute=False, token=True, mode=None, path=None):
+    def run_capture(self, execute=False, token=True, mode=None, path=None,
+                    token_scope="project", both=False):
         env = os.environ.copy()
         env.pop("RAILWAY_TOKEN", None)
         env.pop("RAILWAY_API_TOKEN", None)
-        if token: env["RAILWAY_TOKEN"] = "synthetic-token-do-not-use"
+        if token:
+            if token_scope == "project":
+                env["RAILWAY_TOKEN"] = "synthetic-project-token-do-not-use"
+            elif token_scope == "workspace":
+                env["RAILWAY_API_TOKEN"] = "synthetic-workspace-token-do-not-use"
+            else:
+                raise ValueError("unknown synthetic credential scope")
+        if both:
+            env["RAILWAY_TOKEN"] = "synthetic-project-token-do-not-use"
+            env["RAILWAY_API_TOKEN"] = "synthetic-workspace-token-do-not-use"
         self.bin.write_text(FAKE_CLI.replace("__TEST_ONLY_MODE__", mode or "normal"),
                             encoding="utf-8")
         # Inject intentionally high-value env vars into the parent. The fake
@@ -124,6 +134,21 @@ class CaptureTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(self.root.exists())
         self.assertNotIn("synthetic-token", result.stderr)
+
+    def test_workspace_token_only_can_execute_exact_readonly_fake_cli(self):
+        result = self.run_capture(execute=True, token_scope="workspace")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.root / "isolated-intake" /
+                         "capture-receipt.json").is_file())
+        self.assertNotIn("synthetic-workspace-token", result.stdout + result.stderr)
+
+    def test_project_and_workspace_tokens_together_block_before_cli_or_copy(self):
+        result = self.run_capture(execute=True, both=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.root.exists())
+        self.assertIn("exactly one Railway credential scope", result.stderr)
+        self.assertNotIn("synthetic-project-token", result.stdout + result.stderr)
+        self.assertNotIn("synthetic-workspace-token", result.stdout + result.stderr)
 
     def test_readonly_cli_synthetic_capture_and_quarantined_roundtrip(self):
         result=self.run_capture(execute=True)
