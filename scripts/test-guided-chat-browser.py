@@ -16,6 +16,11 @@ window.addEventListener('load',async()=>{
  const submit=id=>$(id).dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
  const labels=()=>Array.from(document.querySelectorAll('#chat-messages .chat-entry')).map(x=>x.textContent);
  let consent=true,prompts=0,downloads=[],network=0,spoken=[],cancelled=0;
+ let diagnosticStage='initial',witnessComplete=false;
+ window.setTimeout(()=>{
+   if(!witnessComplete)$('nexus-browser-result').textContent=JSON.stringify({
+      status:'FAIL',reason:'watchdog-'+diagnosticStage});
+ },15000);
  window.confirm=()=>{prompts++;return consent};
  window.fetch=()=>{network++;throw Error('app-network-forbidden')};
  const nativeCreate=URL.createObjectURL,blobs=new Map();
@@ -145,6 +150,7 @@ window.addEventListener('load',async()=>{
   assert($('chat-input').value==='retained draft','cancelled-replacement-retains-unsent-chat-draft');
   consent=true;$('new').click();
   assert($('chat-input').value==='','confirmed-replacement-clears-unsent-chat-draft');
+  diagnosticStage='local-microphone';
   // Existing explicit-consent Voice tool can now insert local dictation into a chat draft.
   let recognition=null,dictationStarts=0;
   class LocalSpeech{
@@ -164,6 +170,7 @@ window.addEventListener('load',async()=>{
   recognition.onresult?.({resultIndex:0,results:[transcript]});
   assert($('voice-transcript').value==='A dictated chat message'&&
     !$('voice-insert').disabled,'microphone-output-stays-in-unregistered-preview');
+  diagnosticStage='insert-local-dictation';
   $('voice-insert').click();
   assert($('chat-input').value==='A dictated chat message'&&
     $('chat-messages').querySelectorAll('.chat-entry').length===0,
@@ -173,7 +180,8 @@ window.addEventListener('load',async()=>{
     'human-must-send-dictated-message-separately');
   $('chat-clear').click();
   assert(labels().length===0,'dictation-dialogue-erased-before-cap-test');
-    for(let i=0;i<40;i++)send('safe local message '+i);
+    diagnosticStage='forty-turn-cap';
+  for(let i=0;i<40;i++)send('safe local message '+i);
   assert(labels().length===80,'bounded-forty-exchanges-cap-enforced');
   send('should be rejected');
   assert(labels().length===80&&$('chat-state').textContent.includes('reached its limit'),
@@ -181,11 +189,12 @@ window.addEventListener('load',async()=>{
   assert(network===0&&localStorage.length===0,
     'conversation-uses-no-app-network-or-plaintext-persistent-storage');
   assert(spoken.length===1,'no-automatic-audio-or-remote-speech');
+  witnessComplete=true;
   $('nexus-browser-result').textContent=JSON.stringify({
     status:'PASS',checks,width:innerWidth,network_requests:network,authority:'none',
     real_person_peer:false,generative_model_used:false,autonomous_judgment:false,production_mutation:false,
     synthetic_local_voice_verified:true});
- }catch(e){$('nexus-browser-result').textContent=JSON.stringify({
+ }catch(e){witnessComplete=true;$('nexus-browser-result').textContent=JSON.stringify({
     status:'FAIL',reason:String(e.message).replace(/[^a-z0-9-_]/gi,'')})}
 });
 """
