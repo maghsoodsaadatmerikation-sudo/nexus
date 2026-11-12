@@ -2,7 +2,7 @@
 
 ## Why this step
 
-Pilot 11 is actually hosted at https://nexus-offline-pilot.onrender.com/ .
+Pilot 12 is reported live at https://nexus-offline-pilot.onrender.com/ .
 Prior `scripts/verify-public-static-pilot.py` established only **public HTML identity**;
 `scripts/test-offline-pilot-browser.py` exercised **file://** under Chrome.
 Those are independent proofs, but neither alone demonstrates that **real Chromium
@@ -17,7 +17,7 @@ script changes and a once-weekly read-only schedule (Monday 06:23 UTC).
 The workflow:
 
 1. Requires checked-out standalone HTML to match exact previously published
-   source `ed13887699b49a8494a3178e426ad9192e14d57e`.
+   source `736e7b25819064722675505c86efa09e7e79e2df`.
    **Source candidate != deployed code** must fail, never be silently promoted.
 2. Independently GETs the exact public URL without redirects or credentials,
    checks HTTP 200 and `text/html`, then requires byte-for-byte SHA-256 match
