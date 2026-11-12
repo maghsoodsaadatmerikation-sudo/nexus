@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod connections;
 mod request_store;
 pub mod research_chat;
 mod workspace_api;
@@ -215,6 +216,7 @@ pub struct AppState<D> {
     safety_config: SafetyConfig,
     safety_state: Arc<Mutex<SafetyState>>,
     research_chat: Arc<research_chat::ResearchChat>,
+    connections: Arc<connections::Connections>,
     body_read_timeout: Duration,
     execution_slots: Arc<tokio::sync::Semaphore>,
 }
@@ -230,6 +232,7 @@ impl<D> Clone for AppState<D> {
             safety_config: self.safety_config,
             safety_state: Arc::clone(&self.safety_state),
             research_chat: Arc::clone(&self.research_chat),
+            connections: Arc::clone(&self.connections),
             body_read_timeout: self.body_read_timeout,
             execution_slots: Arc::clone(&self.execution_slots),
         }
@@ -247,6 +250,7 @@ impl<D: ConstitutionalDelegate> AppState<D> {
             safety_config: SafetyConfig::default(),
             safety_state: Arc::new(Mutex::new(SafetyState::default())),
             research_chat: Arc::new(research_chat::ResearchChat::default()),
+            connections: Arc::new(connections::Connections::disabled()),
             body_read_timeout: Duration::from_secs(15),
             execution_slots: Arc::new(tokio::sync::Semaphore::new(32)),
         }
@@ -267,6 +271,7 @@ impl<D: ConstitutionalDelegate> AppState<D> {
             safety_config: SafetyConfig::default(),
             safety_state: Arc::new(Mutex::new(SafetyState::default())),
             research_chat: Arc::new(research_chat::ResearchChat::default()),
+            connections: Arc::new(connections::Connections::disabled()),
             body_read_timeout: Duration::from_secs(15),
             execution_slots: Arc::new(tokio::sync::Semaphore::new(32)),
         }
@@ -316,6 +321,11 @@ impl<D: ConstitutionalDelegate> AppState<D> {
         Ok(self)
     }
 
+    pub fn with_connections(mut self, service: connections::Connections) -> Self {
+        self.connections = Arc::new(service);
+        self
+    }
+
     pub fn with_research_chat(mut self, service: research_chat::ResearchChat) -> Self {
         self.research_chat = Arc::new(service);
         self
@@ -346,6 +356,9 @@ where
 {
     Router::new()
         .route("/", get(web_workspace))
+        .route("/connections", get(connections::page))
+        .route("/v1/connections", get(connections::catalog::<D>))
+        .route("/v1/connections/invoke", post(connections::invoke::<D>))
         .route("/research-chat", get(research_chat::page))
         .route(
             "/research-chat-history.js",
@@ -392,7 +405,9 @@ where
 
 async fn private_api_cache_boundary(request: Request, next: Next) -> Response {
     let path = request.uri().path();
-    let private_api = path == "/v1/research-chat"
+    let private_api = path == "/v1/connections"
+        || path == "/v1/connections/invoke"
+        || path == "/v1/research-chat"
         || path == "/v1/requests"
         || path.starts_with("/v1/requests/")
         || path == "/v1/workspaces"
@@ -417,7 +432,9 @@ async fn recovery_boundary<D: ConstitutionalDelegate>(
     // Authenticate workspace transport before Axum extracts or polls its body.
     // Handler checks remain as defense in depth; this grants no core authority.
     let path = request.uri().path();
-    if (path == "/v1/research-chat"
+    if (path == "/v1/connections"
+        || path == "/v1/connections/invoke"
+        || path == "/v1/research-chat"
         || path == "/v1/workspaces"
         || path.starts_with("/v1/workspaces/"))
         && !transport_authorized(&state, request.headers())
@@ -441,7 +458,9 @@ async fn recovery_boundary<D: ConstitutionalDelegate>(
     // Workspace mutations must obey the same ingestion and rate boundaries as
     // request admission, before JSON extractors or a delegate can run.
     if request.method() == Method::POST
-        && (path == "/v1/research-chat"
+        && (path == "/v1/connections"
+            || path == "/v1/connections/invoke"
+            || path == "/v1/research-chat"
             || path == "/v1/workspaces"
             || path.starts_with("/v1/workspaces/"))
     {

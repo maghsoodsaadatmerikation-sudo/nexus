@@ -2058,3 +2058,98 @@ async fn research_chat_auth_limits_and_reply_do_not_execute_or_mutate_workspace(
         StatusCode::PAYLOAD_TOO_LARGE
     );
 }
+
+#[tokio::test]
+async fn connections_authenticate_before_body_and_never_delegate_or_persist() {
+    use http_body_util::BodyExt;
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::authenticated(delegate.clone(), "secret"));
+    let poison = http_body_util::Full::new(axum::body::Bytes::from_static(b"private"))
+        .map_frame(|_| panic!("unauthorized connection body polled"));
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/connections/invoke")
+                .body(Body::new(poison))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/v1/connections")
+                .header("authorization", "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    let bytes = axum::body::to_bytes(response.into_body(), 16384)
+        .await
+        .unwrap();
+    let catalog: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(catalog["apps"], serde_json::json!([]));
+    let response=app.oneshot(workspace_post("/v1/connections/invoke",serde_json::json!({"app_id":"unconfigured","tool":"delete","arguments":{},"consent":true}))).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert!(delegate.requests.lock().unwrap().is_empty());
+    assert!(delegate
+        .workspaces
+        .lock()
+        .unwrap()
+        .load("anything")
+        .is_none());
+}
+
+#[tokio::test]
+async fn connection_ingestion_obeys_body_rate_and_quarantine_limits() {
+    let app = router(
+        AppState::authenticated(RecordingDelegate::default(), "secret")
+            .with_safety(safety(32, 1, 100)),
+    );
+    let response = app
+        .clone()
+        .oneshot(workspace_post(
+            "/v1/connections/invoke",
+            serde_json::json!({"oversized":"x".repeat(200)}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let response = app
+        .oneshot(workspace_post(
+            "/v1/connections/invoke",
+            serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    let path = std::env::temp_dir().join(format!(
+        "nexus-connection-quarantine-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&path).unwrap();
+    std::fs::write(path.join(".nexus-recovery-required"), b"hold").unwrap();
+    let app = router(
+        AppState::authenticated(RecordingDelegate::default(), "secret")
+            .with_recovery_gate(&path)
+            .unwrap(),
+    );
+    let response = app
+        .oneshot(workspace_post(
+            "/v1/connections/invoke",
+            serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    std::fs::remove_dir_all(path).unwrap();
+}

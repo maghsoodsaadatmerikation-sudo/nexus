@@ -65,9 +65,9 @@ try{
 });
 """
 
-def main():
+def main(page_path="web/research-chat.html"):
     root=Path(__file__).resolve().parents[1]
-    html=(root/'web/research-chat.html').read_text()
+    html=(root/page_path).read_text()
     page=html.replace('</body>','<pre id="nexus-browser-result" hidden></pre><script>'+WITNESS+'</script></body>').encode()
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
