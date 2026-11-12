@@ -45,7 +45,7 @@ code{direction:ltr;unicode-bidi:embed}
 <main>
   <div class="banner">
     <strong>بدون حساب، توکن یا اینترنت پس از دریافت فایل</strong>
-    <small>اطلاعات فقط در حافظهٔ همین صفحه است؛ برای حفظ آن خروجی رمزدار بگیرید. این نسخه هیچ اتصالی به Railway ندارد. فایل آفلاین مستقیماً با هستهٔ Rust سازگار نیست؛ انتقال اختیاری فقط با خروجی جداگانهٔ «فایل انتقال به هستهٔ Rust» انجام می‌شود.</small>
+    <small>اطلاعات به‌طور پیش‌فرض فقط در حافظهٔ همین صفحه است؛ ادامهٔ رمزدار محلی تنها با فعال‌سازی صریح انجام می‌شود. برای حفظ مستقل داده‌ها خروجی رمزدار بگیرید. این نسخه هیچ اتصالی به Railway ندارد. فایل آفلاین مستقیماً با هستهٔ Rust سازگار نیست؛ انتقال اختیاری فقط با خروجی جداگانهٔ «فایل انتقال به هستهٔ Rust» انجام می‌شود.</small>
   </div>
   <div class="toolbar">
     <button type="button" id="encrypt-export">دریافت نسخهٔ رمزگذاری‌شده</button>
@@ -587,12 +587,12 @@ code{direction:ltr;unicode-bidi:embed}
     if(!protectedContext())return status('این مرورگر رمزگذاری محلی امن را پشتیبانی نمی‌کند.',true);
     try{window.localStorage.getItem(VAULT_SLOT)}catch{return status('حافظهٔ محلی این مرورگر در دسترس نیست.',true)}
     if(vaultExists()&&!window.confirm('یک نسخهٔ رمزدار از قبل در این مرورگر وجود دارد. فعال‌سازی تازه ممکن است آن را جایگزین کند. نسخهٔ مستقل آن را نگه داشته‌اید؟'))return;
-    const originalId=state.workspace.id,originalState=JSON.stringify(state);
+    const originalId=state.workspace.id,originalState=JSON.stringify(state),originalEpoch=vaultEpoch;
     vaultBusy=true;$('vault-enable').disabled=true;
     try{
       const salt=crypto.getRandomValues(new Uint8Array(16));
       const key=await deriveAesKey(pw,salt,['encrypt','decrypt']);
-      if(state.workspace.id!==originalId||JSON.stringify(state)!==originalState)
+      if(vaultEpoch!==originalEpoch||state.workspace.id!==originalId||JSON.stringify(state)!==originalState)
         throw Error('changed-during-activation');
       vaultEpoch++;vaultKey=key;vaultSalt=salt;
       scheduleVaultSave();
@@ -609,7 +609,7 @@ code{direction:ltr;unicode-bidi:embed}
     const pw=$('vault-open-password').value;
     if(!pw)return status('برای بازکردن نسخهٔ محلی گذرواژه را وارد کنید.',true);
     if(!protectedContext())return status('WebCrypto در این مرورگر موجود نیست.',true);
-    const originalState=JSON.stringify(state);
+    const originalState=JSON.stringify(state),originalEpoch=vaultEpoch;
     if(state.events.length&&!window.confirm('بازکردن نسخهٔ محلی، کارگاه باز فعلی را جایگزین می‌کند. ادامه می‌دهید؟'))return;
     vaultBusy=true;$('vault-restore').disabled=true;
     try{
@@ -628,7 +628,7 @@ code{direction:ltr;unicode-bidi:embed}
       const plaintext=await crypto.subtle.decrypt(
         {name:'AES-GCM',iv,additionalData:encoder.encode(VAULT_SCHEMA),tagLength:128},
         key,ciphertext);
-      if(plaintext.byteLength>MAX_FILE||JSON.stringify(state)!==originalState)
+      if(plaintext.byteLength>MAX_FILE||vaultEpoch!==originalEpoch||JSON.stringify(state)!==originalState)
         throw Error('stale-or-overlarge-vault');
       const restored=validate(JSON.parse(decoder.decode(plaintext)));
       vaultEpoch++;vaultKey=key;vaultSalt=salt;state=restored;
