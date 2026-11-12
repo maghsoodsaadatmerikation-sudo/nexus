@@ -118,7 +118,10 @@ try{
  stage='real-network-offline';
  await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
  await rpc('Page.reload',{ignoreCache:true});
- await poll(()=>retryJs("document.getElementById('offline-install') && navigator.onLine===false"),15000,'offline-navigation-not-served');
+ // A DOM node can exist in the old document while Page.reload is in flight.
+ // Wait for a *new complete reload document*, the consented application listener,
+ // and the expected language before clicking. Never turn a failed assertion to PASS.
+ await poll(()=>retryJs("document.readyState==='complete' && performance.getEntriesByType('navigation').some(e=>e.type==='reload') && document.documentElement.lang==='fa' && Boolean(document.getElementById('offline-install')) && Boolean(document.getElementById('load-demo')) && navigator.onLine===false"),15000,'offline-navigation-not-served');
  checks.push('real-chrome-network-offline-reload-served-cached-app');
  const offline=await js("(()=>{document.getElementById('load-demo').click();return {question:document.getElementById('question-view').textContent,claims:document.getElementById('claims').querySelectorAll('.entry').length,options:document.getElementById('alternatives').querySelectorAll('.entry').length,decision:document.getElementById('decision-view').textContent,net:navigator.onLine}})()");
  assert(offline.question.includes('ساختگی')&&offline.claims===2&&offline.options===2&&
