@@ -15,7 +15,9 @@ pub const fn leq(input: Authority, output: Authority) -> bool {
     (output as u8) <= (input as u8)
 }
 
-pub const fn authority_out(input: Authority) -> Authority { input }
+pub const fn authority_out(input: Authority) -> Authority {
+    input
+}
 
 #[cfg(test)]
 mod tests {

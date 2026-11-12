@@ -44,11 +44,19 @@ fn audit(root: &Path) -> Result<(usize, usize), ()> {
     if original != canonical {
         return Err(());
     }
-    if !fs::symlink_metadata(root).map_err(|_| ())?.file_type().is_dir() {
+    if !fs::symlink_metadata(root)
+        .map_err(|_| ())?
+        .file_type()
+        .is_dir()
+    {
         return Err(());
     }
     let ledger = root.join("requests");
-    if !fs::symlink_metadata(&ledger).map_err(|_| ())?.file_type().is_dir() {
+    if !fs::symlink_metadata(&ledger)
+        .map_err(|_| ())?
+        .file_type()
+        .is_dir()
+    {
         return Err(());
     }
     let mut count = 0usize;
@@ -57,8 +65,13 @@ fn audit(root: &Path) -> Result<(usize, usize), ()> {
     for item in fs::read_dir(&ledger).map_err(|_| ())? {
         let entry = item.map_err(|_| ())?;
         let file_name = entry.file_name().into_string().map_err(|_| ())?;
-        if file_name.is_empty() || file_name.len() > 200 || file_name.len() % 2 != 0
-            || !file_name.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()) {
+        if file_name.is_empty()
+            || file_name.len() > 200
+            || file_name.len() % 2 != 0
+            || !file_name
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        {
             return Err(());
         }
         let len = regular_file_len(&entry.path())?;
