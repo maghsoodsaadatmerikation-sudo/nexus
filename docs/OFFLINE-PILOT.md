@@ -28,8 +28,7 @@ not an authenticated Rust service.
    authenticated encrypted envelope can be opened; corrupt files and wrong
    passphrases leave existing data unchanged. See
    [Pilot 03 private exports](PILOT-03-PRIVATE-EXPORTS.md) for the exact
-   format, threats and limitations. There is still **no autosave**;
-   unsaved state disappears on reload or tab close.
+   format, threats and limitations. In the Pilot 08 code candidate, an **explicit opt-in encrypted browser checkpoint** can preserve committed work across reloads on the same browser, if local storage is available. It is distinct from and less portable than the downloadable protected file; it has no server backup. The currently deployed public revision may not include it until exact-byte promotion. See [Pilot 08](PILOT-08-ENCRYPTED-LOCAL-RESUME.md).
 
 The original offline JSON files are not Rust gateway-compatible
 `nexus.data-snapshot.v1` or server `DecisionWorkspace` backup; do
