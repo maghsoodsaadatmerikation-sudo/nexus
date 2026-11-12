@@ -17,24 +17,23 @@ A_out <= A_in
 ## Try NEXUS on the web (static, no account)
 
 The standalone Persian/RTL mobile pilot is hosted at
-**https://nexus-offline-pilot.onrender.com/** (Render static site, with automatic
-releases disabled). **The publicly observed deployment is currently the
-previous Pilot 06 revision**, while [`web/offline-pilot.html`](web/offline-pilot.html)
-includes the newer Pilot 08 encrypted-local-resume candidate. The two MUST NOT
-be claimed identical until a separate reviewed deployment and exact HTTPS
-source-byte check. Neither version sends workspaces to Render or the Rust
-gateway; neither issues machine decisions. Always download and keep a separate
-password-protected JSON export in private storage.
+**https://nexus-offline-pilot.onrender.com/**. Render reported LIVE for
+manual deployment `dep-dbqo0pei0phs73d8rrb0` of the exact Pilot 09
+source commit `8e3fd8789d82db4559a9cb77cd2f82578271df4b`.
+The independent static HTTPS identity workflow pins the actually deployed
+source; provider status alone is not byte-level proof. The app does not
+connect to the Rust gateway, send workspace content to Render, or issue
+machine decisions. Export a separate password-protected file to preserve
+work beyond one browser.
 See [Pilot 02 hosting and independent HTTPS evidence](docs/STATIC-PILOT-HOST.md)
 for what has and has not been verified. The full authenticated online pilot
 remains a separate open milestone.
 
 ## Try NEXUS now — free offline decision pilot
 
-The latest **source candidate** provides a one-click, visibly fictional
-first-run exercise that creates evidence and alternatives but **no human
-decision**, and never asks for personal information. It is strictly a
-browser-only demonstration, not the already-hosted Pilot 06 version.
+The deployed Pilot 09 adds a one-click, visibly fictional first-run exercise
+that creates evidence and alternatives but **no human decision**, and never
+asks for personal information. This is strictly a browser-only demonstration.
 See [Pilot 09 contract](docs/PILOT-09-GUIDED-FIRST-RUN.md).
 
 A [standalone Persian mobile decision workshop](web/offline-pilot.html)
@@ -45,8 +44,8 @@ GitHub's source preview is not the running app. See the
 
 This is a local, explicitly exported/imported demo with **no network requests**.
 The current source adds **optional, explicit-consent encrypted browser-local
-checkpoints**, off by default; they are not remote backups or proof that the
-older public Render deployment has upgraded. This is not the sealed Rust gateway,
+checkpoints**, off by default; they are not remote backups or proof of original
+Railway data recoverability. This is not the sealed Rust gateway,
 a live production instance or an attested audit. The optional Pilot 06 plaintext Rust v1 export reconstructs an explicitly unattested event stream for a separate authenticated import; it never connects to the server. See [bridge contract](docs/PILOT-06-OFFLINE-RUST-BRIDGE.md).
 A real authenticated online user pilot is tracked separately in [Issue #70](
 https://github.com/maghsoodsaadatmerikation-sudo/nexus/issues/70).
