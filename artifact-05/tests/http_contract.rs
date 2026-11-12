@@ -1765,7 +1765,7 @@ async fn execution_workspace_unknown_fields_cannot_be_silently_ignored() {
 #[tokio::test]
 async fn execution_slow_bodies_time_out_before_delegation_on_both_apis() {
     use http_body_util::BodyExt;
-    for path in ["/v1/requests", "/v1/workspaces"] {
+    for path in ["/v1/requests", "/v1/workspaces", "/v1/research-chat"] {
         let delegate = RecordingDelegate::default();
         let state = AppState::authenticated(delegate.clone(), "secret")
             .with_body_read_timeout(Duration::from_millis(10));
@@ -1796,7 +1796,7 @@ async fn execution_slow_bodies_time_out_before_delegation_on_both_apis() {
 #[tokio::test]
 async fn execution_exhausted_budget_does_not_poll_a_new_body() {
     use http_body_util::BodyExt;
-    for path in ["/v1/requests", "/v1/workspaces"] {
+    for path in ["/v1/requests", "/v1/workspaces", "/v1/research-chat"] {
         let delegate = RecordingDelegate::default();
         let app =
             router(AppState::authenticated(delegate, "secret").with_safety(safety(4096, 1, 100)));
@@ -2005,4 +2005,56 @@ async fn execution_client_disconnect_does_not_cancel_started_reservation_or_repl
         StatusCode::CONFLICT
     );
     assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn research_chat_auth_limits_and_reply_do_not_execute_or_mutate_workspace() {
+    use http_body_util::BodyExt;
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret").with_safety(safety(4096, 10, 100)),
+    );
+    let poison = http_body_util::Full::new(axum::body::Bytes::from_static(b"private"))
+        .map_frame(|_| panic!("unauthenticated research body polled"));
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/research-chat")
+                .body(Body::new(poison))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    let response=app.clone().oneshot(workspace_post("/v1/research-chat",serde_json::json!({
+        "language":"fa","messages":[{"role":"human","content":"ظرفیت آلفا چقدر است؟"}],
+        "reviewed_sources":[{"title":"منبع آزمایشی","url":"https://example.org/alpha","excerpt":"ظرفیت آلفا هفت واحد است. این متن آزمایشی است."}]
+    }))).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    let bytes = axum::body::to_bytes(response.into_body(), 16384)
+        .await
+        .unwrap();
+    let reply: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(reply["authority"], "none");
+    assert_eq!(reply["judgment_changed"], false);
+    assert_eq!(reply["claims"][0]["citation_ids"][0], "S1");
+    assert!(delegate.requests.lock().unwrap().is_empty());
+    assert!(delegate.workspaces.lock().unwrap().load("alpha").is_none());
+    let limited =
+        router(AppState::authenticated(delegate, "secret").with_safety(safety(32, 10, 100)));
+    assert_eq!(
+        limited
+            .oneshot(workspace_post(
+                "/v1/research-chat",
+                serde_json::json!({"private":"x".repeat(128)})
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::PAYLOAD_TOO_LARGE
+    );
 }
