@@ -41,3 +41,16 @@ Deploy only to the existing free static service after required checks pass.
 No new provider resource, original Railway volume operation or release Seal.
 Independent original-volume recovery (#104) and authenticated real-human
 server acceptance (#70) remain separate open milestones. A_out <= A_in.
+
+## Public static promotion — 2026-11-12
+
+All eight candidate workflows succeeded for PR #115 head
+`b1378fd4ea133fcd6265d2d257793fc8709deebc`, including 21 draft-guard
+checks on each viewport. Source was merged as
+`9c977ad58ef40c5b9d4fa3f8865ac84f17e291e4`; the existing static site
+reported LIVE for cache-cleared deploy `dep-dbqqq5jbc2fs73e5s9cg`.
+Public observers pin this exact source and separately exercise the 21-check
+draft guard, the 17-check report, the 46-check workshop, and actual offline
+navigation in disposable public-origin Chromium. They test synthetic data only,
+not a real personal Android phone, native exit-dialog visibility or OS kills.
+Provider LIVE does not substitute for these independent checks.
