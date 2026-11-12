@@ -8,6 +8,9 @@ on:
       - 'scripts/test-offline-pilot-browser.py'
       - 'scripts/test-decision-report-browser.py'
       - 'scripts/test-draft-guard-browser.py'
+      - 'scripts/test-ui-languages-browser.py'
+      - 'scripts/build-ui-languages.py'
+      - 'web/locales/**'
       - 'scripts/test-offline-to-rust-http.py'
       - 'docs/PILOT-06-OFFLINE-RUST-BRIDGE.md'
       - 'scripts/workspace-browser-runner.mjs'
@@ -23,6 +26,9 @@ on:
       - 'scripts/test-offline-pilot-browser.py'
       - 'scripts/test-decision-report-browser.py'
       - 'scripts/test-draft-guard-browser.py'
+      - 'scripts/test-ui-languages-browser.py'
+      - 'scripts/build-ui-languages.py'
+      - 'web/locales/**'
       - 'scripts/test-offline-to-rust-http.py'
       - 'docs/PILOT-06-OFFLINE-RUST-BRIDGE.md'
       - 'scripts/workspace-browser-runner.mjs'
@@ -70,6 +76,10 @@ jobs:
         run: python3 scripts/test-decision-report-browser.py > decision-report-browser.json
       - name: Verify uncommitted input guard and encrypted restore race
         run: python3 scripts/test-draft-guard-browser.py > draft-guard-browser.json
+      - name: Verify complete embedded catalogs and English-first private language switching
+        run: |
+          python3 scripts/build-ui-languages.py --check
+          python3 scripts/test-ui-languages-browser.py > ui-languages-browser.json
       - name: Verify exported synthetic bridge against live disposable Rust API
         shell: bash
         env:
@@ -125,5 +135,6 @@ jobs:
             offline-pilot-ci-report.json
             decision-report-browser.json
             draft-guard-browser.json
+            ui-languages-browser.json
           if-no-files-found: ignore
           retention-days: 30

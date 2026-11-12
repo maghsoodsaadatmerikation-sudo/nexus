@@ -26,7 +26,7 @@ assert(shell.includes("const EXPECTED_SHA256='"+sourceDigest+"'"),
  'service-worker-pinned-html-mismatch');
 const manifest=JSON.parse(await readFile(new URL('../public/manifest.json',import.meta.url),'utf8'));
 assert(manifest.start_url==='/'&&manifest.scope==='/'&&manifest.display==='standalone'&&
- manifest.lang==='fa'&&manifest.icons.length===2,'unsafe-pwa-manifest');
+ manifest.lang===sourceHtml.toString().match(/<html[^>]*lang="([^"]+)"/)[1]&&manifest.icons.length===2,'unsafe-pwa-manifest');
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const profile=await mkdtemp(path.join(tmpdir(),'nexus-pwa-private-'));
 const child=spawn(browser,[
@@ -93,6 +93,7 @@ try{
   msg.error?p.reject(Error('cdp-failure')):p.resolve(msg.result);
  });
  await rpc('Page.enable');await rpc('Network.enable');
+ await rpc('Page.addScriptToEvaluateOnNewDocument',{source:"window.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('ui-language');if(el){el.value='fa';el.dispatchEvent(new Event('change',{bubbles:true}));}},{once:true});"});
  await rpc('Network.setCacheDisabled',{cacheDisabled:true});
  stage='online-bootstrap';
  const initial=await rpc('Page.navigate',{url:ORIGIN});

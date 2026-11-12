@@ -12,6 +12,11 @@ import subprocess
 import tempfile
 
 WITNESS = r"""
+// Legacy behavior witnesses explicitly select Persian; English default has its own witness.
+window.addEventListener('DOMContentLoaded',()=>{
+ const language=document.getElementById('ui-language');
+ if(language){language.value='fa';language.dispatchEvent(new Event('change',{bubbles:true}));}
+},{once:true});
 window.addEventListener('load', async () => {
   const output = document.getElementById('nexus-browser-result');
   const byId = id => document.getElementById(id);

@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#155e64">
 <link rel="manifest" href="/manifest.json">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; form-action 'none'; base-uri 'none'">
-<title>NEXUS — کارگاه آفلاین تصمیم</title>
+<title data-i18n="m000">NEXUS — Offline Decision Workshop</title>
 <style>
 :root{color-scheme:light;font-family:system-ui,"Segoe UI",Tahoma,sans-serif;background:#f4f7f6;color:#17313d}
 *{box-sizing:border-box}body{margin:0}
@@ -30,7 +30,7 @@ textarea{min-height:85px;resize:vertical}
 .flex{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
 .flex>*{flex:1;min-width:155px}.inline-action{margin-top:12px}
 .empty{color:#789095;font-size:13px;padding:10px 0}.entry{border-top:1px solid #e5eded;padding:11px 0;line-height:1.8;overflow-wrap:anywhere}.entry b{color:#17313d}.entry small{display:block;color:#5c7b80}
-#decision-view .entry{border-right:3px solid #116969;padding-right:12px}
+#decision-view .entry{border-inline-start:3px solid #116969;padding-inline-start:12px}
 .audit{max-height:225px;overflow:auto}.audit .entry{font-size:13px}
 footer{max-width:1060px;margin:auto;padding:0 18px 34px;color:#577078;font-size:12px;line-height:1.9}
 code{direction:ltr;unicode-bidi:embed}
@@ -50,173 +50,257 @@ code{direction:ltr;unicode-bidi:embed}
 <body>
 <header>
   <div class="eyebrow" dir="ltr">NEXUS / OFFLINE PILOT</div>
-  <h1>کارگاه آفلاین تصمیم</h1>
-  <p>از پرسش به شواهد، از شواهد به گزینه‌ها، و از گزینه‌ها به تصمیم خودتان. این نسخه هیچ تصمیمی را به‌جای شما نمی‌گیرد.</p>
+  <h1 data-i18n="m001">Offline Decision Workshop</h1>
+  <p data-i18n="m002">From a question to evidence, from evidence to alternatives, and from alternatives to your own judgment. This application never decides for you.</p>
 </header>
 <main>
-  <div class="banner">
-    <strong>بدون حساب، توکن یا اینترنت پس از دریافت فایل</strong>
-    <small>اطلاعات به‌طور پیش‌فرض فقط در حافظهٔ همین صفحه است؛ ادامهٔ رمزدار محلی تنها با فعال‌سازی صریح انجام می‌شود. برای حفظ مستقل داده‌ها خروجی رمزدار بگیرید. این نسخه هیچ اتصالی به Railway ندارد. فایل آفلاین مستقیماً با هستهٔ Rust سازگار نیست؛ انتقال اختیاری فقط با خروجی جداگانهٔ «فایل انتقال به هستهٔ Rust» انجام می‌شود.</small>
+  <section class="panel full" id="language-panel" aria-labelledby="language-title" style="margin-bottom:16px">
+<h2 id="language-title" data-i18n="m264">Language</h2>
+<label for="ui-language" data-i18n="m265">Interface language</label>
+<select id="ui-language" translate="no"><option value="en">English</option><option value="fa">فارسی</option></select>
+<p class="help" data-i18n="m268">Interface text only. Workspace text is never translated or sent anywhere. English and Persian are built in. Other languages require a complete local translation file.</p>
+<div class="toolbar"><button type="button" class="secondary" id="language-import" data-i18n="m266">Load a translation</button><button type="button" class="secondary" id="language-template" data-i18n="m267">Download English translation template</button></div>
+<input type="file" id="language-file" accept=".json,application/json" aria-label="Language pack file" data-i18n-aria-label="m269" hidden>
+<p class="status" id="language-state" role="status" aria-live="polite" data-i18n="m274">English is the default language. Loaded language files apply only to this tab.</p>
+<p id="language-review" class="help" translate="no" hidden>Custom translation; its accuracy has not been reviewed by NEXUS.</p>
+</section><div class="banner">
+    <strong data-i18n="m003">No account, token or internet needed after downloading the file</strong>
+    <small data-i18n="m004">By default, your work stays in this page's memory. Encrypted local resume requires explicit activation. Export an independent encrypted file to keep your work. This app does not connect to Railway. Its offline file is not a direct Rust snapshot; use the separate optional Rust transfer export.</small>
   </div>
   <div class="banner" id="draft-notice" hidden>
     <strong id="draft-state" role="status" aria-live="polite"></strong>
-    <small>این نوشته‌ها هنوز جزو کارگاه نیستند و در فایل خروجی، گزارش یا ذخیرهٔ رمزدار محلی قرار نمی‌گیرند. برای نگهداری، دکمهٔ ثبت همان بخش را بزنید. هشدار بستن صفحه به پشتیبانی مرورگر بستگی دارد و جلوی بسته‌شدن اجباری برنامه را نمی‌گیرد.</small>
-    <button type="button" class="secondary" id="draft-focus">رفتن به نخستین نوشتهٔ ثبت‌نشده</button>
+    <small data-i18n="m005">These drafts are not yet part of the workspace and are excluded from exports, reports and the encrypted local checkpoint. Use the corresponding section's Register button to retain them. Exit warnings depend on the browser and cannot prevent forced app termination.</small>
+    <button type="button" class="secondary" id="draft-focus" data-i18n="m006">Go to the first unregistered section</button>
   </div>
   <section class="panel full" aria-labelledby="offline-install-title" style="margin-bottom:16px">
-    <h2 id="offline-install-title">نصب و بازکردن آفلاین روی گوشی (اختیاری)</h2>
-    <p class="help">فقط اگر خودتان «آماده‌سازی حالت آفلاین» را بزنید، یک <strong>نسخهٔ ثابت و تأییدشده از برنامه</strong> در کش همین مرورگر قرار می‌گیرد تا پس از نصب یا بازشدن دوباره، بدون اینترنت اجرا شود. اطلاعات کارگاه، گذرواژه‌ها و خروجی‌های شما وارد کش برنامه نمی‌شوند. ذخیرهٔ کارگاه همچنان جداگانه و اختیاری است؛ برای جلوگیری از ازدست‌رفتن داده‌ها فایل رمزدار بگیرید.</p>
+    <h2 id="offline-install-title" data-i18n="m007">Install and reopen offline on your device (optional)</h2>
+    <p class="help"><span data-i18n="m008">Only when you choose Prepare offline mode, a </span><strong data-i18n="m009">fixed, verified copy of the application</strong> <span data-i18n="m010">is cached in this browser for offline reopening. Workspace information, passwords and exports never enter the application cache. Saving your workspace remains separate and optional; export an encrypted file to retain it independently.</span>
+</p>
     <div class="toolbar">
-      <button type="button" id="offline-install" class="secondary">آماده‌سازی حالت آفلاین</button>
-      <button type="button" id="offline-home" class="secondary">افزودن به صفحهٔ اصلی</button>
-      <button type="button" id="offline-remove" class="secondary">حذف نسخهٔ آفلاین برنامه</button>
+      <button type="button" id="offline-install" class="secondary" data-i18n="m011">Prepare offline mode</button>
+      <button type="button" id="offline-home" class="secondary" data-i18n="m012">Add to home screen</button>
+      <button type="button" id="offline-remove" class="secondary" data-i18n="m013">Remove offline application copy</button>
     </div>
-    <p id="offline-install-state" class="status" role="status" aria-live="polite">حالت آفلاین برنامه هنوز بررسی نشده است.</p>
-    <p class="help">نصب به پشتیبانی مرورگر بستگی دارد. در برخی گوشی‌ها از منوی مرورگر «افزودن به صفحهٔ اصلی» یا «نصب برنامه» را انتخاب کنید. بازشدن برنامه بدون اینترنت جایگزین ذخیرهٔ اطلاعات کارگاه نیست. پاک‌شدن کش مرورگر می‌تواند برنامهٔ آفلاین را حذف کند.</p>
+    <p id="offline-install-state" class="status" role="status" aria-live="polite" data-i18n="m014">Offline application status has not been checked yet.</p>
+    <p class="help" data-i18n="m015">Installation depends on browser support. Some devices use the browser's Install app or Add to home screen menu. Offline application access does not save workspace data. Clearing browser caches may remove the offline application.</p>
   </section>
   <section class="panel full" aria-labelledby="demo-title" style="margin-bottom:16px">
-    <h2 id="demo-title">شروع فوری، بدون اطلاعات شخصی</h2>
-    <p class="help">با یک لمس، یک پرسش و دو شاهد و دو گزینهٔ <strong>کاملاً ساختگی</strong> را مشاهده کنید. هیچ تصمیم انسانی ثبت نمی‌شود، هیچ اتصال یا حسابی لازم نیست و داده‌ای به سرور فرستاده نمی‌شود. برای کار واقعی، «کارگاه جدید» را بزنید.</p>
-    <button type="button" id="load-demo" class="secondary">آزمایش با نمونهٔ ساختگی</button>
+    <h2 id="demo-title" data-i18n="m016">Quick start without personal information</h2>
+    <p class="help"><span data-i18n="m017">With one action, explore a question, two claims and two alternatives that are </span><strong data-i18n="m018">entirely fictional</strong> <span data-i18n="m019">. No human judgment is recorded, no connection or account is required, and no data is sent to a server. Choose New workspace for your own work.</span>
+</p>
+    <button type="button" id="load-demo" class="secondary" data-i18n="m020">Try a fictional example</button>
   </section>
   <div class="toolbar">
-    <button type="button" id="encrypt-export">دریافت نسخهٔ رمزگذاری‌شده</button>
-    <button type="button" id="core-export" class="secondary">فایل انتقال به هستهٔ Rust (بدون رمز)</button>
-    <button type="button" id="export" class="secondary">خروجی JSON بدون رمز</button>
-    <button type="button" id="import" class="secondary">بازکردن فایل قبلی</button>
-    <button type="button" id="new" class="secondary">کارگاه جدید</button>
-    <input type="file" accept=".json,application/json" id="file" hidden aria-label="فایل کارگاه آفلاین">
+    <button type="button" id="encrypt-export" data-i18n="m021">Download encrypted copy</button>
+    <button type="button" id="core-export" class="secondary" data-i18n="m022">Rust transfer file (unencrypted)</button>
+    <button type="button" id="export" class="secondary" data-i18n="m023">Export unencrypted JSON</button>
+    <button type="button" id="import" class="secondary" data-i18n="m024">Open an existing file</button>
+    <button type="button" id="new" class="secondary" data-i18n="m025">New workspace</button>
+    <input type="file" accept=".json,application/json" id="file" hidden aria-label="Offline workspace file" data-i18n-aria-label="m026" translate="no" dir="auto">
   </div>
   <section class="panel full" aria-labelledby="crypto-title" style="margin-bottom:16px">
-    <h2 id="crypto-title">نگهداری امن‌تر فایل خروجی</h2>
-    <p class="help">برای فایل رمزگذاری‌شده یک گذرواژهٔ بلند (حداقل ۱۲ نویسه) انتخاب کنید. گذرواژه فقط روی همین دستگاه هنگام ساخت یا بازکردن فایل استفاده می‌شود و به سرور ارسال یا در فایل ذخیره نمی‌شود. در صورت فراموشی، بازیابی فایل ممکن نیست. خروجی JSON معمولی **بدون رمز** است.</p>
+    <h2 id="crypto-title" data-i18n="m027">Safer export storage</h2>
+    <p class="help" data-i18n="m028">Choose a long passphrase of at least 12 characters for the encrypted file. It is used only on this device when creating or opening the file and is not sent to a server or stored in the file. A forgotten passphrase cannot be recovered. Ordinary JSON exports are unencrypted.</p>
     <div class="flex">
-      <div><label for="export-passphrase">گذرواژهٔ فایل جدید</label><input type="password" id="export-passphrase" autocomplete="new-password" minlength="12" maxlength="256" placeholder="حداقل ۱۲ نویسه"></div>
-      <div><label for="confirm-passphrase">تکرار گذرواژه</label><input type="password" id="confirm-passphrase" autocomplete="new-password" minlength="12" maxlength="256"></div>
-      <div><label for="restore-passphrase">گذرواژهٔ بازکردن فایل رمزدار</label><input type="password" id="restore-passphrase" autocomplete="off" maxlength="256" placeholder="پیش از بازکردن فایل وارد کنید"></div>
+      <div><label for="export-passphrase" data-i18n="m029">Passphrase for the new file</label><input type="password" id="export-passphrase" autocomplete="new-password" minlength="12" maxlength="256" placeholder="At least 12 characters" data-i18n-placeholder="m030" translate="no" dir="ltr"></div>
+      <div><label for="confirm-passphrase" data-i18n="m031">Repeat passphrase</label><input type="password" id="confirm-passphrase" autocomplete="new-password" minlength="12" maxlength="256" translate="no" dir="ltr"></div>
+      <div><label for="restore-passphrase" data-i18n="m032">Passphrase for opening an encrypted file</label><input type="password" id="restore-passphrase" autocomplete="off" maxlength="256" placeholder="Enter before opening the file" data-i18n-placeholder="m033" translate="no" dir="ltr"></div>
     </div>
-    <p class="help">رمزگذاری: AES-256-GCM با کلید ساخته‌شده از PBKDF2-SHA-256 و نمک تصادفی. این روش در برابر گذرواژهٔ ضعیف، دستگاه آلوده یا ازدست‌رفتن فایل و گذرواژه تضمین مطلق ندارد. فقط فایل رمزگذاری‌شده را در جای امن نگه دارید.</p>
+    <p class="help" data-i18n="m034">Encryption: AES-256-GCM with a key derived through PBKDF2-SHA-256 and a random salt. This does not guarantee protection against weak passphrases, a compromised device, or loss of both file and passphrase. Keep the encrypted file somewhere safe.</p>
     <div class="entry" style="margin-top:12px">
-      <h3>آزمایش بازیابی فایل دانلودشده</h3>
-      <p class="help">فایل رمزدار را پس از دانلود از بخش فایل‌های دستگاه انتخاب کنید. این آزمون فایل انتخاب‌شده را واقعاً با گذرواژه باز می‌کند و اعتبار ساختار آن را می‌سنجد، اما کارگاه فعلی را جایگزین نمی‌کند. اگر یکسان باشد، تطابق با <strong>اطلاعات ثبت‌شدهٔ فعلی</strong> اعلام می‌شود؛ تغییرات نوشته‌شده ولی ثبت‌نشده جزو مقایسه نیستند. نتیجه فقط برای همین بررسی معتبر است، نه تضمین ماندگاری فایل در آینده.</p>
+      <h3 data-i18n="m035">Test recovery of a downloaded file</h3>
+      <p class="help"><span data-i18n="m036">After downloading, select the encrypted file from your device. This test actually opens the selected file with its passphrase and validates its structure without replacing the current workspace. If equal, it reports a match with the </span><strong data-i18n="m037">current committed information</strong> <span data-i18n="m038">. Unregistered form edits are excluded. The result applies only to this check and does not guarantee future file retention.</span>
+</p>
       <div class="flex">
-        <div><label for="backup-proof-password">گذرواژهٔ همان فایل دانلودشده</label><input type="password" id="backup-proof-password" autocomplete="off" maxlength="256" placeholder="گذرواژهٔ فایل رمزدار"></div>
+        <div><label for="backup-proof-password" data-i18n="m039">Passphrase for that downloaded file</label><input type="password" id="backup-proof-password" autocomplete="off" maxlength="256" placeholder="Encrypted file passphrase" data-i18n-placeholder="m040" translate="no" dir="ltr"></div>
       </div>
-      <button type="button" id="backup-proof" class="secondary">انتخاب فایل و آزمایش بازیابی</button>
-      <input type="file" accept=".json,application/json" id="backup-proof-file" hidden aria-label="انتخاب فایل رمزدار جهت آزمایش بازیابی">
-      <p id="backup-proof-state" class="status" role="status" aria-live="polite">هنوز هیچ فایل دانلودشده‌ای آزمایش نشده است.</p>
+      <button type="button" id="backup-proof" class="secondary" data-i18n="m041">Select file and test recovery</button>
+      <input type="file" accept=".json,application/json" id="backup-proof-file" hidden aria-label="Choose an encrypted file for recovery testing" data-i18n-aria-label="m042" translate="no" dir="auto">
+      <p id="backup-proof-state" class="status" role="status" aria-live="polite" data-i18n="m043">No downloaded file has been tested yet.</p>
     </div>
   </section>
   <section class="panel full" aria-labelledby="vault-title" style="margin-bottom:16px">
-    <h2 id="vault-title">ادامهٔ امن‌تر در همین مرورگر (اختیاری)</h2>
-    <p class="help">با فعال‌سازی صریح، فقط متن رمزگذاری‌شدهٔ کارگاه در حافظهٔ محلی همین مرورگر ذخیره می‌شود؛ برای بازکردن آن پس از بارگذاری مجدد، گذرواژه لازم است. هیچ گذرواژه یا متنِ خوانا در ذخیره‌سازی مرورگر قرار نمی‌گیرد. پاک‌کردن داده‌های مرورگر، تغییر دستگاه، حالت ناشناس یا محدودیت حافظه می‌تواند این نسخه را از بین ببرد. <strong>فایل خروجی رمزدار مستقل بگیرید.</strong></p>
+    <h2 id="vault-title" data-i18n="m044">Safer resume in this browser (optional)</h2>
+    <p class="help"><span data-i18n="m045">Explicit activation stores only an encrypted workspace checkpoint in this browser. A passphrase is required after reloading. No passphrase or readable workspace is stored. Browser data clearing, another device, private browsing, or storage limits may remove this checkpoint. </span><strong data-i18n="m046">Keep a separate encrypted export file.</strong></p>
     <div class="flex">
-      <div><label for="vault-new-password">گذرواژهٔ ادامهٔ محلی</label><input id="vault-new-password" type="password" autocomplete="new-password" maxlength="256" placeholder="حداقل ۱۲ نویسه"></div>
-      <div><label for="vault-new-confirm">تکرار گذرواژهٔ محلی</label><input id="vault-new-confirm" type="password" autocomplete="new-password" maxlength="256"></div>
-      <div><label for="vault-open-password">گذرواژهٔ بازکردن نسخهٔ محلی</label><input id="vault-open-password" type="password" autocomplete="off" maxlength="256"></div>
+      <div><label for="vault-new-password" data-i18n="m047">Local resume passphrase</label><input id="vault-new-password" type="password" autocomplete="new-password" maxlength="256" placeholder="At least 12 characters" data-i18n-placeholder="m030" translate="no" dir="ltr"></div>
+      <div><label for="vault-new-confirm" data-i18n="m048">Repeat local passphrase</label><input id="vault-new-confirm" type="password" autocomplete="new-password" maxlength="256" translate="no" dir="ltr"></div>
+      <div><label for="vault-open-password" data-i18n="m049">Passphrase for opening the local copy</label><input id="vault-open-password" type="password" autocomplete="off" maxlength="256" translate="no" dir="ltr"></div>
     </div>
     <div class="toolbar" style="margin-top:12px">
-      <button id="vault-enable" type="button">فعال‌سازی ذخیرهٔ رمزدار محلی</button>
-      <button id="vault-restore" type="button" class="secondary">بازکردن نسخهٔ محلی</button>
-      <button id="vault-pause" type="button" class="secondary">توقف ذخیرهٔ خودکار</button>
-      <button id="vault-delete" type="button" class="secondary">حذف نسخهٔ محلی</button>
+      <button id="vault-enable" type="button" data-i18n="m050">Enable encrypted local storage</button>
+      <button id="vault-restore" type="button" class="secondary" data-i18n="m051">Open local copy</button>
+      <button id="vault-pause" type="button" class="secondary" data-i18n="m052">Pause automatic saving</button>
+      <button id="vault-delete" type="button" class="secondary" data-i18n="m053">Delete local copy</button>
     </div>
-    <p id="vault-state" class="status" role="status" aria-live="polite">وضعیت ذخیرهٔ محلی در حال بررسی است.</p>
-    <p class="help">گذرواژه بعد از فعال‌سازی در کادر باقی نمی‌ماند؛ کلید غیرقابل‌استخراج فقط تا بسته‌شدن این صفحه در حافظه می‌ماند. نسخهٔ محلی بکاپ مستقل، شاهد حسابرسی یا ذخیره‌سازی سرور نیست.</p>
+    <p id="vault-state" class="status" role="status" aria-live="polite" data-i18n="m054">Checking local storage status.</p>
+    <p class="help" data-i18n="m055">The passphrase field is cleared after activation. A non-extractable key stays in memory only until this page closes. A local copy is not an independent backup, an audit attestation or server storage.</p>
   </section>
-  <p id="status" class="status" role="status" aria-live="polite">فضای جدید آماده است. یک پرسش بنویسید.</p>
+  <p id="status" class="status" role="status" aria-live="polite" data-i18n="m056">A new workspace is ready. Write a question.</p>
   <div class="grid">
     <section class="panel full" aria-labelledby="ask-title">
-      <h2 id="ask-title">۱. پرسش، هدف و محدودیت‌ها</h2>
-      <p class="help">اول مسئله را توصیف کنید. پاسخ نهایی در این مرحله ثبت نمی‌شود.</p>
+      <h2 id="ask-title" data-i18n="m057">1. Question, goal and constraints</h2>
+      <p class="help" data-i18n="m058">Describe the problem first. No final judgment is recorded at this stage.</p>
       <form id="ask-form">
-        <label for="question">پرسش اصلی</label>
-        <textarea id="question" maxlength="2000" required placeholder="برای بررسی این تصمیم چه چیزهایی را باید بدانم؟"></textarea>
+        <label for="question" data-i18n="m059">Main question</label>
+        <textarea id="question" maxlength="2000" required placeholder="What do I need to know to examine this decision?" data-i18n-placeholder="m060" translate="no" dir="auto"></textarea>
         <div class="flex">
-          <div><label for="goal">هدف</label><input id="goal" maxlength="1000" placeholder="چه نتیجه‌ای برایم مهم است؟"></div>
-          <div><label for="constraints">محدودیت‌ها (هر مورد در یک خط یا با ویرگول)</label><textarea id="constraints" maxlength="2000" placeholder="بودجه، زمان، تعهدات ..."></textarea></div>
-          <div><label for="values">ارزش‌ها (هر مورد در یک خط یا با ویرگول)</label><textarea id="values" maxlength="2000" placeholder="استقلال، امنیت، شفافیت ..."></textarea></div>
+          <div><label for="goal" data-i18n="m061">Goal</label><input id="goal" maxlength="1000" placeholder="What outcome matters to me?" data-i18n-placeholder="m062" translate="no" dir="auto"></div>
+          <div><label for="constraints" data-i18n="m063">Constraints (one per line or separated by commas)</label><textarea id="constraints" maxlength="2000" placeholder="Budget, time, commitments ..." data-i18n-placeholder="m064" translate="no" dir="auto"></textarea></div>
+          <div><label for="values" data-i18n="m065">Values (one per line or separated by commas)</label><textarea id="values" maxlength="2000" placeholder="Independence, safety, transparency ..." data-i18n-placeholder="m066" translate="no" dir="auto"></textarea></div>
         </div>
-        <button type="submit" class="inline-action">ثبت مسئله</button>
+        <button type="submit" class="inline-action" data-i18n="m067">Register question</button>
       </form>
-      <div id="question-view" class="empty">هنوز پرسشی ثبت نشده است.</div>
+      <div id="question-view" class="empty" data-i18n="m068" translate="no">No question has been registered yet.</div>
     </section>
     <section class="panel" aria-labelledby="evidence-title">
-      <h2 id="evidence-title">۲. ادعاها و شواهد</h2>
-      <p class="help">منبع هر ادعای بیرونی را مشخص کنید. ادعا به‌خودی‌خود مجوز تصمیم نیست.</p>
+      <h2 id="evidence-title" data-i18n="m069">2. Claims and evidence</h2>
+      <p class="help" data-i18n="m070">Identify the source of each external claim. A claim does not itself authorize a decision.</p>
       <form id="claim-form">
-        <label for="claim">متن ادعا / شاهد</label>
-        <textarea id="claim" maxlength="2000" required></textarea>
+        <label for="claim" data-i18n="m071">Claim / evidence text</label>
+        <textarea id="claim" maxlength="2000" required translate="no" dir="auto"></textarea>
         <div class="flex">
-          <div><label for="origin">نوع منشأ</label><select id="origin"><option value="human">گفتهٔ انسان</option><option value="external_evidence">شاهد بیرونی</option><option value="machine_analysis">تحلیل ماشینی (واردشده توسط کاربر)</option></select></div>
-          <div><label for="uncertainty">میزان عدم‌قطعیت</label><select id="uncertainty"><option value="unknown">نامشخص</option><option value="high">زیاد</option><option value="medium">متوسط</option><option value="low">کم</option></select></div>
+          <div><label for="origin" data-i18n="m072">Provenance type</label><select id="origin"><option value="human" data-i18n="m073">Human statement</option><option value="external_evidence" data-i18n="m074">External evidence</option><option value="machine_analysis" data-i18n="m075">Machine analysis (entered by the user)</option></select></div>
+          <div><label for="uncertainty" data-i18n="m076">Uncertainty</label><select id="uncertainty"><option value="unknown" data-i18n="m077">Unknown</option><option value="high" data-i18n="m078">High</option><option value="medium" data-i18n="m079">Medium</option><option value="low" data-i18n="m080">Low</option></select></div>
         </div>
-        <label for="source">منبع / شناسهٔ منشأ</label>
-        <input id="source" maxlength="600" placeholder="پیوند یا شناسهٔ دقیق شاهد؛ صحت آن خودکار بررسی نمی‌شود">
-        <button type="submit" class="inline-action">افزودن شاهد</button>
+        <label for="source" data-i18n="m081">Source / provenance identifier</label>
+        <input id="source" maxlength="600" placeholder="Link or exact source identifier; accuracy is not checked automatically" data-i18n-placeholder="m082" translate="no" dir="auto">
+        <button type="submit" class="inline-action" data-i18n="m083">Add claim</button>
       </form>
-      <div id="claims" class="empty">شاهدی ثبت نشده است.</div>
+      <div id="claims" class="empty" data-i18n="m084" translate="no">No evidence has been registered.</div>
     </section>
     <section class="panel" aria-labelledby="option-title">
-      <h2 id="option-title">۳. گزینه‌ها و پیامدها</h2>
-      <p class="help">گزینه‌ها رتبه‌بندی خودکار نمی‌شوند؛ پیامدهای احتمالی را بنویسید.</p>
+      <h2 id="option-title" data-i18n="m085">3. Alternatives and consequences</h2>
+      <p class="help" data-i18n="m086">Alternatives are not ranked automatically. Write their possible consequences.</p>
       <form id="option-form">
-        <label for="option">عنوان گزینه</label>
-        <input id="option" maxlength="500" required placeholder="مثلاً گزینهٔ A — انتشار محدود">
-        <label for="consequences">پیامدها (هر مورد در یک خط؛ دست‌کم یک مورد)</label>
-        <textarea id="consequences" maxlength="2000" placeholder="مثلاً دریافت بازخورد زودهنگام یا محدودیت ذخیره‌سازی"></textarea>
-        <button type="submit" class="inline-action">افزودن گزینه</button>
+        <label for="option" data-i18n="m087">Alternative title</label>
+        <input id="option" maxlength="500" required placeholder="For example, Alternative A — limited publication" data-i18n-placeholder="m088" translate="no" dir="auto">
+        <label for="consequences" data-i18n="m089">Consequences (one per line; at least one)</label>
+        <textarea id="consequences" maxlength="2000" placeholder="For example, early feedback or storage limitations" data-i18n-placeholder="m090" translate="no" dir="auto"></textarea>
+        <button type="submit" class="inline-action" data-i18n="m091">Add alternative</button>
       </form>
-      <div id="alternatives" class="empty">گزینه‌ای ثبت نشده است.</div>
+      <div id="alternatives" class="empty" data-i18n="m092" translate="no">No alternatives have been registered.</div>
     </section>
     <section class="panel full" aria-labelledby="decision-title">
-      <h2 id="decision-title">۴. تصمیم انسانی</h2>
-      <p class="help">تصمیم باید روشن کند کدام گزینه را انتخاب می‌کنید یا چرا تصمیم را به تعویق می‌اندازید. هدف آزمایش، خودِ تصمیم نیست. ثبت فقط با اقدام شما انجام می‌شود.</p>
+      <h2 id="decision-title" data-i18n="m093">4. Human judgment</h2>
+      <p class="help" data-i18n="m094">Your judgment should identify your chosen alternative or explain a deferral. Testing the application is not itself a decision. A judgment is recorded only through your explicit action.</p>
       <form id="decision-form">
-        <label for="decision">تصمیم شما</label>
-        <textarea id="decision" maxlength="2000" required placeholder="مثلاً گزینهٔ C را فعلاً انتخاب می‌کنم؛ یا تصمیم را تا تکمیل شواهد به تعویق می‌اندازم."></textarea>
-        <label for="rationale">دلیل تصمیم (الزامی برای تصمیم‌های تازه)</label>
-        <textarea id="rationale" maxlength="2000" required placeholder="دلیل انتخاب و مهم‌ترین عدم‌قطعیت باقی‌مانده"></textarea>
-        <button type="submit" class="inline-action">ثبت تصمیم من</button>
+        <label for="decision" data-i18n="m095">Your judgment</label>
+        <textarea id="decision" maxlength="2000" required placeholder="For example, I currently choose C; or I defer until the evidence is more complete." data-i18n-placeholder="m096" translate="no" dir="auto"></textarea>
+        <label for="rationale" data-i18n="m097">Rationale (required for a new judgment)</label>
+        <textarea id="rationale" maxlength="2000" required placeholder="Reason for your choice and the most important remaining uncertainty" data-i18n-placeholder="m098" translate="no" dir="auto"></textarea>
+        <button type="submit" class="inline-action" data-i18n="m099">Record my judgment</button>
       </form>
-      <div id="decision-view" class="empty">هیچ تصمیم انسانی ثبت نشده است.</div>
+      <div id="decision-view" class="empty" data-i18n="m100" translate="no">No human judgment has been recorded.</div>
     </section>
     <section class="panel full" id="decision-report-panel" aria-labelledby="report-title">
-      <h2 id="report-title">گزارش خوانای کارگاه</h2>
-      <p class="help">گزارش فقط اطلاعات ثبت‌شده را نشان می‌دهد؛ نوشته‌های ثبت‌نشدهٔ فرم‌ها و گذرواژه‌ها در آن نیستند. این گزارش تأیید صحت شواهد یا توصیهٔ ماشینی نیست و جای فایل رمزدار بازیابی را نمی‌گیرد.</p>
+      <h2 id="report-title" data-i18n="m101">Readable workspace report</h2>
+      <p class="help" data-i18n="m102">The report contains committed information only. Unsubmitted form text and passwords are excluded. It does not certify evidence or recommend a choice, and does not replace an encrypted recovery file.</p>
       <div class="toolbar report-actions">
-        <button type="button" id="report-build" class="secondary">نمایش گزارش ثبت‌شده</button>
-        <button type="button" id="report-download" class="secondary" disabled>دریافت گزارش متنی (بدون رمز)</button>
-        <button type="button" id="report-print" class="secondary" disabled>چاپ یا ذخیرهٔ PDF</button>
-        <button type="button" id="report-hide" class="secondary" disabled>بستن گزارش</button>
+        <button type="button" id="report-build" class="secondary" data-i18n="m103">Preview committed report</button>
+        <button type="button" id="report-download" class="secondary" disabled data-i18n="m104">Download text report (unencrypted)</button>
+        <button type="button" id="report-print" class="secondary" disabled data-i18n="m105">Print or save as PDF</button>
+        <button type="button" id="report-hide" class="secondary" disabled data-i18n="m106">Close report</button>
       </div>
-      <p id="report-state" class="status report-actions" role="status" aria-live="polite">برای گزارش، ابتدا مسئله را ثبت کنید.</p>
-      <pre id="decision-report" hidden></pre>
+      <p id="report-state" class="status report-actions" role="status" aria-live="polite" data-i18n="m107">Register a question before creating a report.</p>
+      <pre id="decision-report" hidden translate="no"></pre>
     </section>
     <section class="panel full" aria-labelledby="migration-title">
-      <h2 id="migration-title">۵. انتقال اختیاری به هستهٔ Rust</h2>
-      <p class="help">دکمهٔ انتقال فقط فایل JSON جدید می‌سازد و هیچ چیزی به سرور ارسال نمی‌کند. فایل جدید <strong>بدون رمز</strong> است. NEXUS تاریخچهٔ محلی را قابل‌تأیید نمی‌داند و برای سازگاری، رویدادهای جدید با برچسب «بازسازی‌شده از دادهٔ کاربر» می‌سازد؛ زمان رویدادها و ویرایش‌های قبلیِ پرسش منتقل نمی‌شوند. گزینه‌ها رتبه‌بندی نمی‌شوند و تصمیم فقط اگر قبلاً به‌صورت صریح ثبت شده باشد منتقل خواهد شد. فایل رمزدار اصلی را همچنان جداگانه نگه دارید.</p>
+      <h2 id="migration-title" data-i18n="m108">5. Optional transfer to the Rust core</h2>
+      <p class="help"><span data-i18n="m109">The transfer button creates a new JSON file without sending anything to a server. The new file is </span><strong data-i18n="m110">unencrypted</strong> <span data-i18n="m111">. NEXUS treats local history as unattested and reconstructs new events labelled as user-provided data. Previous timestamps and question revisions are not transferred. Alternatives are not ranked, and a judgment is transferred only if already explicitly recorded. Keep the original encrypted file separately.</span>
+</p>
     </section>
     <section class="panel full" aria-labelledby="quality-title">
-      <h2 id="quality-title">۶. مرور تکمیل‌بودن اطلاعات</h2>
-      <p class="help">این بررسی فقط خالی‌بودن یا ساختار برخی فیلدها را نشان می‌دهد، نه درست‌بودن شواهد یا کیفیت واقعی تصمیم.</p>
+      <h2 id="quality-title" data-i18n="m112">6. Information completeness review</h2>
+      <p class="help" data-i18n="m113">This checks empty fields and some structural requirements only. It does not establish evidence accuracy or the actual quality of a judgment.</p>
       <div id="quality" role="status" aria-live="polite" class="entry"></div>
     </section>
     <section class="panel full" aria-labelledby="audit-title">
-      <h2 id="audit-title">۷. تاریخچهٔ اقدامات</h2>
-      <p class="help">این تاریخچه محلی و قابل‌ویرایش است؛ شاهد حسابرسی رمزنگاری‌شده یا تأیید مستقل محسوب نمی‌شود.</p>
-      <div id="audit" class="audit empty">هنوز رویدادی ثبت نشده است.</div>
+      <h2 id="audit-title" data-i18n="m114">7. Action history</h2>
+      <p class="help" data-i18n="m115">This local history can be edited. It is not cryptographically attested or independently verified audit evidence.</p>
+      <div id="audit" class="audit empty" data-i18n="m116" translate="no">No events have been registered yet.</div>
     </section>
   </div>
 </main>
 <footer>
-  <b>NEXUS Offline Pilot v1</b> — فقط ابزار تمرین تصمیم‌گیری انسان. بدون اتصال شبکه یا ذخیره‌سازی سروری. تنها در صورت فعال‌سازی صریح، نسخهٔ رمزدار در همین مرورگر ذخیره می‌شود؛ بدون آن داده‌ها پس از بستن صفحه باقی نمی‌مانند. همیشه فایل خروجی رمزدار جداگانه بگیرید. این فایل، بکاپ Volume سرور NEXUS نیست. اصل پروژه: <code>A_out ≤ A_in</code>.
+  <b>NEXUS Offline Pilot v1</b> <span data-i18n="m117">— A tool for human judgment practice. No network connection or server storage. An encrypted copy is stored in this browser only after explicit activation; otherwise, work will not survive closing this page. Keep an independent encrypted export. This file is not a backup of the NEXUS server volume. Project principle:</span>
+<code>A_out ≤ A_in</code>.
 </footer>
 <script>
 (function(){
   'use strict';
   const SCHEMA='nexus.offline-pilot.v1';
   const $=id=>document.getElementById(id);
+  // UI catalogs contain application text only; workspace values never enter t().
+  const LANGUAGE_PACKS=/* NEXUS_LOCALES_BEGIN */{"en":{"schema":"nexus.ui-language.v1","source_sha256":"9941cabfd63d04f04013d4248fb28de58da7d471e736fec1d871afc9cd9a220f","locale":"en","name":"English","direction":"ltr","messages":{"m000":"NEXUS — Offline Decision Workshop","m001":"Offline Decision Workshop","m002":"From a question to evidence, from evidence to alternatives, and from alternatives to your own judgment. This application never decides for you.","m003":"No account, token or internet needed after downloading the file","m004":"By default, your work stays in this page's memory. Encrypted local resume requires explicit activation. Export an independent encrypted file to keep your work. This app does not connect to Railway. Its offline file is not a direct Rust snapshot; use the separate optional Rust transfer export.","m005":"These drafts are not yet part of the workspace and are excluded from exports, reports and the encrypted local checkpoint. Use the corresponding section's Register button to retain them. Exit warnings depend on the browser and cannot prevent forced app termination.","m006":"Go to the first unregistered section","m007":"Install and reopen offline on your device (optional)","m008":"Only when you choose Prepare offline mode, a","m009":"fixed, verified copy of the application","m010":"is cached in this browser for offline reopening. Workspace information, passwords and exports never enter the application cache. Saving your workspace remains separate and optional; export an encrypted file to retain it independently.","m011":"Prepare offline mode","m012":"Add to home screen","m013":"Remove offline application copy","m014":"Offline application status has not been checked yet.","m015":"Installation depends on browser support. Some devices use the browser's Install app or Add to home screen menu. Offline application access does not save workspace data. Clearing browser caches may remove the offline application.","m016":"Quick start without personal information","m017":"With one action, explore a question, two claims and two alternatives that are","m018":"entirely fictional","m019":". No human judgment is recorded, no connection or account is required, and no data is sent to a server. Choose New workspace for your own work.","m020":"Try a fictional example","m021":"Download encrypted copy","m022":"Rust transfer file (unencrypted)","m023":"Export unencrypted JSON","m024":"Open an existing file","m025":"New workspace","m026":"Offline workspace file","m027":"Safer export storage","m028":"Choose a long passphrase of at least 12 characters for the encrypted file. It is used only on this device when creating or opening the file and is not sent to a server or stored in the file. A forgotten passphrase cannot be recovered. Ordinary JSON exports are unencrypted.","m029":"Passphrase for the new file","m030":"At least 12 characters","m031":"Repeat passphrase","m032":"Passphrase for opening an encrypted file","m033":"Enter before opening the file","m034":"Encryption: AES-256-GCM with a key derived through PBKDF2-SHA-256 and a random salt. This does not guarantee protection against weak passphrases, a compromised device, or loss of both file and passphrase. Keep the encrypted file somewhere safe.","m035":"Test recovery of a downloaded file","m036":"After downloading, select the encrypted file from your device. This test actually opens the selected file with its passphrase and validates its structure without replacing the current workspace. If equal, it reports a match with the","m037":"current committed information","m038":". Unregistered form edits are excluded. The result applies only to this check and does not guarantee future file retention.","m039":"Passphrase for that downloaded file","m040":"Encrypted file passphrase","m041":"Select file and test recovery","m042":"Choose an encrypted file for recovery testing","m043":"No downloaded file has been tested yet.","m044":"Safer resume in this browser (optional)","m045":"Explicit activation stores only an encrypted workspace checkpoint in this browser. A passphrase is required after reloading. No passphrase or readable workspace is stored. Browser data clearing, another device, private browsing, or storage limits may remove this checkpoint.","m046":"Keep a separate encrypted export file.","m047":"Local resume passphrase","m048":"Repeat local passphrase","m049":"Passphrase for opening the local copy","m050":"Enable encrypted local storage","m051":"Open local copy","m052":"Pause automatic saving","m053":"Delete local copy","m054":"Checking local storage status.","m055":"The passphrase field is cleared after activation. A non-extractable key stays in memory only until this page closes. A local copy is not an independent backup, an audit attestation or server storage.","m056":"A new workspace is ready. Write a question.","m057":"1. Question, goal and constraints","m058":"Describe the problem first. No final judgment is recorded at this stage.","m059":"Main question","m060":"What do I need to know to examine this decision?","m061":"Goal","m062":"What outcome matters to me?","m063":"Constraints (one per line or separated by commas)","m064":"Budget, time, commitments ...","m065":"Values (one per line or separated by commas)","m066":"Independence, safety, transparency ...","m067":"Register question","m068":"No question has been registered yet.","m069":"2. Claims and evidence","m070":"Identify the source of each external claim. A claim does not itself authorize a decision.","m071":"Claim / evidence text","m072":"Provenance type","m073":"Human statement","m074":"External evidence","m075":"Machine analysis (entered by the user)","m076":"Uncertainty","m077":"Unknown","m078":"High","m079":"Medium","m080":"Low","m081":"Source / provenance identifier","m082":"Link or exact source identifier; accuracy is not checked automatically","m083":"Add claim","m084":"No evidence has been registered.","m085":"3. Alternatives and consequences","m086":"Alternatives are not ranked automatically. Write their possible consequences.","m087":"Alternative title","m088":"For example, Alternative A — limited publication","m089":"Consequences (one per line; at least one)","m090":"For example, early feedback or storage limitations","m091":"Add alternative","m092":"No alternatives have been registered.","m093":"4. Human judgment","m094":"Your judgment should identify your chosen alternative or explain a deferral. Testing the application is not itself a decision. A judgment is recorded only through your explicit action.","m095":"Your judgment","m096":"For example, I currently choose C; or I defer until the evidence is more complete.","m097":"Rationale (required for a new judgment)","m098":"Reason for your choice and the most important remaining uncertainty","m099":"Record my judgment","m100":"No human judgment has been recorded.","m101":"Readable workspace report","m102":"The report contains committed information only. Unsubmitted form text and passwords are excluded. It does not certify evidence or recommend a choice, and does not replace an encrypted recovery file.","m103":"Preview committed report","m104":"Download text report (unencrypted)","m105":"Print or save as PDF","m106":"Close report","m107":"Register a question before creating a report.","m108":"5. Optional transfer to the Rust core","m109":"The transfer button creates a new JSON file without sending anything to a server. The new file is","m110":"unencrypted","m111":". NEXUS treats local history as unattested and reconstructs new events labelled as user-provided data. Previous timestamps and question revisions are not transferred. Alternatives are not ranked, and a judgment is transferred only if already explicitly recorded. Keep the original encrypted file separately.","m112":"6. Information completeness review","m113":"This checks empty fields and some structural requirements only. It does not establish evidence accuracy or the actual quality of a judgment.","m114":"7. Action history","m115":"This local history can be edited. It is not cryptographically attested or independently verified audit evidence.","m116":"No events have been registered yet.","m117":"— A tool for human judgment practice. No network connection or server storage. An encrypted copy is stored in this browser only after explicit activation; otherwise, work will not survive closing this page. Keep an independent encrypted export. This file is not a backup of the NEXUS server volume. Project principle:","m118":"Question and goal","m119":"Evidence","m120":"Alternatives","m121":"Human judgment","m122":" Unregistered drafts are excluded from this export; use the section's Register button first.","m123":" Unregistered drafts will also be discarded.","m124":"Unregistered text in: ","m125":", ","m126":"Machine analysis entered by the user","m127":"NEXUS — Committed workspace report","m128":"This report is unencrypted. Retain or share it only through your own choice.","m129":"This is not a machine recommendation or certification; source accuracy has not been independently checked.","m130":"Workspace ID: ","m131":"Question","m132":"Not registered","m133":"Constraints","m134":"Values","m135":"Claims and evidence","m136":"Provenance: ","m137":"Uncertainty: ","m138":"Source (unverified): ","m139":"Alternatives and consequences — registration order, no ranking","m140":"No consequences have been registered.","m141":"Recorded human judgment","m142":"Rationale: ","m143":"Missing information — structural review, not a quality assessment","m144":"Consequences for some alternatives","m145":"Judgment rationale","m146":"No empty fields were found among those checked. Information sufficiency is not certified.","m147":"This report uses committed information only; unsubmitted form drafts are excluded.","m148":"Local history can be edited and is not independent evidence.","m149":"The committed report is ready. Unsubmitted form drafts are excluded.","m150":"The report could not be created. Current information was not changed.","m151":"The workspace changed. Rebuild the report.","m152":"This text report is unencrypted and contains committed workspace information. Download it to this device?","m153":"The print or PDF copy is unencrypted and contains workspace information. Open the print dialog?","m154":"Report closed. Workspace information was not changed.","m155":"The action history is full. Export a file and start a new workspace before continuing.","m156":"The workspace changed. Rebuild a report for the current information.","m157":"Goal: ","m158":"Constraints: ","m159":"Values: ","m160":" | Uncertainty: ","m161":"Source: ","m162":"Register question and goal","m163":"Explicitly record human judgment","m164":"Re-register or edit the problem","m165":"Fewer than two claims or evidence items are registered. Consider both supporting and opposing evidence.","m166":"A source identifier is present; its relevance and accuracy have not been independently checked.","m167":"At least one alternative has no registered consequences.","m168":"The file contains no judgment rationale.","m169":"Check that the judgment actually states a choice or deferral. This is not determined automatically.","m170":"No structural issue was found among the checks. Evidence accuracy and sufficiency remain unverified.","m171":"The workspace changed since the last file check. Test the file again against the current committed version.","m172":"Enter the main question.","m173":"Problem information did not change. No new event was registered.","m174":"Question registered. Export a JSON file to retain it.","m175":"Register a question first.","m176":"A workspace can contain at most 100 claims.","m177":"Enter the claim text.","m178":"External evidence requires an identified source.","m179":"Claim added. This claim does not itself constitute a judgment.","m180":"A workspace can contain at most 60 alternatives.","m181":"Enter an alternative title.","m182":"Provide at least one possible consequence for each alternative.","m183":"Alternative added. No automatic ranking was performed.","m184":"Enter your judgment text.","m185":"Provide a rationale for recording a new choice or deferral.","m186":"This workspace already has a judgment. Start a new workspace for a new judgment.","m187":"Your human judgment was recorded. Save the JSON file now.","m188":"The fictional example will replace the current workspace. Continue?","m189":"[Fictional example] How could I plan a study session?","m190":"Practice examining evidence and consequences, without an automatic choice","m191":"Limited time","m192":"No cost","m193":"Learning","m194":"Independent judgment","m195":"[Fictional] The first method might make concentration easier.","m196":"[Fictional] An imaginary report about short breaks exists; its accuracy has not been checked.","m197":"[Fictional] One continuous session","m198":"Might be simpler to organize","m199":"Possible fatigue","m200":"[Fictional] Several sessions with breaks","m201":"Opportunity to reassess","m202":"Requires time management","m203":"Fictional practice example opened. No judgment was recorded. Start a new workspace for a real question.","m204":"Starting a new workspace will discard the current workspace information. Continue?","m205":"New workspace created. Previous work remains only in an exported file.","m206":"Enter the downloaded file's passphrase first.","m207":"Opening and checking the selected file in this browser...","m208":"Success: the selected file actually opened with the passphrase and exactly matches the current committed workspace. This proves this file's integrity only at the time of this check.","m209":"The encrypted file is valid and recoverable, but differs from the current committed workspace. It may be older or from another workspace. Current work was not changed.","m210":"Check failed: the encrypted file is invalid, damaged or the passphrase is incorrect. Current work was not changed.","m211":"Register a question before exporting.","m212":"The encrypted file preserves committed information only.","m213":" Export the committed information anyway?","m214":"The passphrase must contain 12 to 256 characters.","m215":"The repeated passphrase does not match.","m216":"This browser does not support secure encryption. Do not treat an unencrypted file as a protected file.","m217":"Encrypting. The passphrase and data are processed only in this browser.","m218":"A new file was created, but download and recovery have not been tested. Select the file from your downloads and check it.","m219":"Encrypted download created. Saving to the device has not been verified. Test the downloaded file separately.","m220":"Encryption did not complete. No new file was saved.","m221":"This JSON file is readable and unencrypted. Create an unencrypted copy?","m222":"Unencrypted JSON prepared. Keep this file private.","m223":"Register the problem first.","m224":"This Rust import file is unencrypted and contains committed workspace information. Its history is unattested and reconstructed as new events. Continue?","m225":"New unencrypted file prepared. Nothing was sent to a server. Import requires separate confirmation and an authenticated server.","m226":"The transfer file could not be created because the workspace structure is invalid. Current work was not changed.","m227":"Loading this file will replace the current workspace. Continue?","m228":"Offline file validated and opened. File authenticity and data provenance are not independently established.","m229":"Enter the encrypted file's passphrase above, then select the file again.","m230":"Invalid file, incorrect passphrase or altered information. The previous workspace was not changed.","m231":"Encrypted local storage is active. Keep an independent export file too.","m232":"An encrypted local copy exists. Enter its passphrase to continue.","m233":"No local copy exists. Automatic saving is off.","m234":"The latest committed workspace change was encrypted in this browser. Keep an independent export.","m235":"Local encrypted saving failed or browser storage is full. Export an encrypted file to retain your work.","m236":"For local storage, enter matching passphrases of 12 to 256 characters.","m237":"This browser does not support secure local encryption.","m238":"Local browser storage is unavailable.","m239":"An encrypted local copy already exists. Activating a new one may replace it. Have you retained an independent copy?","m240":"Encrypted local saving enabled. Wait for confirmation that saving completed.","m241":"Local activation did not complete. Current work was not changed.","m242":"Enter the passphrase to open the local copy.","m243":"WebCrypto is unavailable in this browser.","m244":"Opening the local copy will replace the current workspace. Continue?","m245":"Form text changed while opening the local copy. Replacement was cancelled to preserve the new draft. Try again.","m246":"Local copy decrypted and checked. This information is not backed up on a server or by NEXUS.","m247":"The local copy is absent, altered, or its passphrase is incorrect. Current work was not changed.","m248":"Automatic saving paused. The previous encrypted copy was not deleted. The workspace remains open in this tab.","m249":"There is no local copy to delete.","m250":"Delete the encrypted copy in this browser? Independent exported files will not be deleted.","m251":"Encrypted browser copy deleted. The workspace remains only in this tab.","m252":"The local copy could not be deleted.","m253":"This browser or file-opening method does not support app installation. The standalone HTML file remains usable.","m254":"Downloading and validating the fixed application copy...","m255":"The offline application is ready on this device. Use Add to home screen to install a shortcut. The current workspace has not been saved separately.","m256":"Offline preparation was not verified. Connection, browser restrictions or mismatched site files may be responsible. No workspace backup was created.","m257":"Installation request sent to the browser. The result depends on the device's settings.","m258":"This browser did not complete the installation request.","m259":"Open the browser menu and choose Install app or Add to home screen. Some browsers create a shortcut rather than an installed app.","m260":"This browser does not control an offline application copy.","m261":"Remove the cached application from this browser? Exported files and the encrypted workspace copy will not be deleted.","m262":"Offline application copy removed. Close all application windows to finish. Files and the encrypted workspace were not deleted.","m263":"Full offline application removal was not verified. Check the browser's state.","m264":"Language","m265":"Interface language","m266":"Load a translation","m267":"Download English translation template","m268":"Interface text only. Workspace text is never translated or sent anywhere. English and Persian are built in. Other languages require a complete local translation file.","m269":"Language pack file","m270":"Interface language changed. Workspace contents are unchanged.","m271":"Translation file rejected. Use a complete NEXUS language pack.","m272":"Translation loaded for this session. Reloading removes custom translations.","m273":"No network translation service is used.","m274":"English is the default language. Loaded language files apply only to this tab.","m275":"Custom translation; its accuracy has not been reviewed by NEXUS.","m276":"English template downloaded. It contains interface text only."}},"fa":{"schema":"nexus.ui-language.v1","source_sha256":"9941cabfd63d04f04013d4248fb28de58da7d471e736fec1d871afc9cd9a220f","locale":"fa","name":"فارسی","direction":"rtl","messages":{"m000":"NEXUS — کارگاه آفلاین تصمیم","m001":"کارگاه آفلاین تصمیم","m002":"از پرسش به شواهد، از شواهد به گزینه‌ها، و از گزینه‌ها به تصمیم خودتان. این نسخه هیچ تصمیمی را به‌جای شما نمی‌گیرد.","m003":"بدون حساب، توکن یا اینترنت پس از دریافت فایل","m004":"اطلاعات به‌طور پیش‌فرض فقط در حافظهٔ همین صفحه است؛ ادامهٔ رمزدار محلی تنها با فعال‌سازی صریح انجام می‌شود. برای حفظ مستقل داده‌ها خروجی رمزدار بگیرید. این نسخه هیچ اتصالی به Railway ندارد. فایل آفلاین مستقیماً با هستهٔ Rust سازگار نیست؛ انتقال اختیاری فقط با خروجی جداگانهٔ «فایل انتقال به هستهٔ Rust» انجام می‌شود.","m005":"این نوشته‌ها هنوز جزو کارگاه نیستند و در فایل خروجی، گزارش یا ذخیرهٔ رمزدار محلی قرار نمی‌گیرند. برای نگهداری، دکمهٔ ثبت همان بخش را بزنید. هشدار بستن صفحه به پشتیبانی مرورگر بستگی دارد و جلوی بسته‌شدن اجباری برنامه را نمی‌گیرد.","m006":"رفتن به نخستین نوشتهٔ ثبت‌نشده","m007":"نصب و بازکردن آفلاین روی گوشی (اختیاری)","m008":"فقط اگر خودتان «آماده‌سازی حالت آفلاین» را بزنید، یک","m009":"نسخهٔ ثابت و تأییدشده از برنامه","m010":"در کش همین مرورگر قرار می‌گیرد تا پس از نصب یا بازشدن دوباره، بدون اینترنت اجرا شود. اطلاعات کارگاه، گذرواژه‌ها و خروجی‌های شما وارد کش برنامه نمی‌شوند. ذخیرهٔ کارگاه همچنان جداگانه و اختیاری است؛ برای جلوگیری از ازدست‌رفتن داده‌ها فایل رمزدار بگیرید.","m011":"آماده‌سازی حالت آفلاین","m012":"افزودن به صفحهٔ اصلی","m013":"حذف نسخهٔ آفلاین برنامه","m014":"حالت آفلاین برنامه هنوز بررسی نشده است.","m015":"نصب به پشتیبانی مرورگر بستگی دارد. در برخی گوشی‌ها از منوی مرورگر «افزودن به صفحهٔ اصلی» یا «نصب برنامه» را انتخاب کنید. بازشدن برنامه بدون اینترنت جایگزین ذخیرهٔ اطلاعات کارگاه نیست. پاک‌شدن کش مرورگر می‌تواند برنامهٔ آفلاین را حذف کند.","m016":"شروع فوری، بدون اطلاعات شخصی","m017":"با یک لمس، یک پرسش و دو شاهد و دو گزینهٔ","m018":"کاملاً ساختگی","m019":"را مشاهده کنید. هیچ تصمیم انسانی ثبت نمی‌شود، هیچ اتصال یا حسابی لازم نیست و داده‌ای به سرور فرستاده نمی‌شود. برای کار واقعی، «کارگاه جدید» را بزنید.","m020":"آزمایش با نمونهٔ ساختگی","m021":"دریافت نسخهٔ رمزگذاری‌شده","m022":"فایل انتقال به هستهٔ Rust (بدون رمز)","m023":"خروجی JSON بدون رمز","m024":"بازکردن فایل قبلی","m025":"کارگاه جدید","m026":"فایل کارگاه آفلاین","m027":"نگهداری امن‌تر فایل خروجی","m028":"برای فایل رمزگذاری‌شده یک گذرواژهٔ بلند (حداقل ۱۲ نویسه) انتخاب کنید. گذرواژه فقط روی همین دستگاه هنگام ساخت یا بازکردن فایل استفاده می‌شود و به سرور ارسال یا در فایل ذخیره نمی‌شود. در صورت فراموشی، بازیابی فایل ممکن نیست. خروجی JSON معمولی **بدون رمز** است.","m029":"گذرواژهٔ فایل جدید","m030":"حداقل ۱۲ نویسه","m031":"تکرار گذرواژه","m032":"گذرواژهٔ بازکردن فایل رمزدار","m033":"پیش از بازکردن فایل وارد کنید","m034":"رمزگذاری: AES-256-GCM با کلید ساخته‌شده از PBKDF2-SHA-256 و نمک تصادفی. این روش در برابر گذرواژهٔ ضعیف، دستگاه آلوده یا ازدست‌رفتن فایل و گذرواژه تضمین مطلق ندارد. فقط فایل رمزگذاری‌شده را در جای امن نگه دارید.","m035":"آزمایش بازیابی فایل دانلودشده","m036":"فایل رمزدار را پس از دانلود از بخش فایل‌های دستگاه انتخاب کنید. این آزمون فایل انتخاب‌شده را واقعاً با گذرواژه باز می‌کند و اعتبار ساختار آن را می‌سنجد، اما کارگاه فعلی را جایگزین نمی‌کند. اگر یکسان باشد، تطابق با","m037":"اطلاعات ثبت‌شدهٔ فعلی","m038":"اعلام می‌شود؛ تغییرات نوشته‌شده ولی ثبت‌نشده جزو مقایسه نیستند. نتیجه فقط برای همین بررسی معتبر است، نه تضمین ماندگاری فایل در آینده.","m039":"گذرواژهٔ همان فایل دانلودشده","m040":"گذرواژهٔ فایل رمزدار","m041":"انتخاب فایل و آزمایش بازیابی","m042":"انتخاب فایل رمزدار جهت آزمایش بازیابی","m043":"هنوز هیچ فایل دانلودشده‌ای آزمایش نشده است.","m044":"ادامهٔ امن‌تر در همین مرورگر (اختیاری)","m045":"با فعال‌سازی صریح، فقط متن رمزگذاری‌شدهٔ کارگاه در حافظهٔ محلی همین مرورگر ذخیره می‌شود؛ برای بازکردن آن پس از بارگذاری مجدد، گذرواژه لازم است. هیچ گذرواژه یا متنِ خوانا در ذخیره‌سازی مرورگر قرار نمی‌گیرد. پاک‌کردن داده‌های مرورگر، تغییر دستگاه، حالت ناشناس یا محدودیت حافظه می‌تواند این نسخه را از بین ببرد.","m046":"فایل خروجی رمزدار مستقل بگیرید.","m047":"گذرواژهٔ ادامهٔ محلی","m048":"تکرار گذرواژهٔ محلی","m049":"گذرواژهٔ بازکردن نسخهٔ محلی","m050":"فعال‌سازی ذخیرهٔ رمزدار محلی","m051":"بازکردن نسخهٔ محلی","m052":"توقف ذخیرهٔ خودکار","m053":"حذف نسخهٔ محلی","m054":"وضعیت ذخیرهٔ محلی در حال بررسی است.","m055":"گذرواژه بعد از فعال‌سازی در کادر باقی نمی‌ماند؛ کلید غیرقابل‌استخراج فقط تا بسته‌شدن این صفحه در حافظه می‌ماند. نسخهٔ محلی بکاپ مستقل، شاهد حسابرسی یا ذخیره‌سازی سرور نیست.","m056":"فضای جدید آماده است. یک پرسش بنویسید.","m057":"۱. پرسش، هدف و محدودیت‌ها","m058":"اول مسئله را توصیف کنید. پاسخ نهایی در این مرحله ثبت نمی‌شود.","m059":"پرسش اصلی","m060":"برای بررسی این تصمیم چه چیزهایی را باید بدانم؟","m061":"هدف","m062":"چه نتیجه‌ای برایم مهم است؟","m063":"محدودیت‌ها (هر مورد در یک خط یا با ویرگول)","m064":"بودجه، زمان، تعهدات ...","m065":"ارزش‌ها (هر مورد در یک خط یا با ویرگول)","m066":"استقلال، امنیت، شفافیت ...","m067":"ثبت مسئله","m068":"هنوز پرسشی ثبت نشده است.","m069":"۲. ادعاها و شواهد","m070":"منبع هر ادعای بیرونی را مشخص کنید. ادعا به‌خودی‌خود مجوز تصمیم نیست.","m071":"متن ادعا / شاهد","m072":"نوع منشأ","m073":"گفتهٔ انسان","m074":"شاهد بیرونی","m075":"تحلیل ماشینی (واردشده توسط کاربر)","m076":"میزان عدم‌قطعیت","m077":"نامشخص","m078":"زیاد","m079":"متوسط","m080":"کم","m081":"منبع / شناسهٔ منشأ","m082":"پیوند یا شناسهٔ دقیق شاهد؛ صحت آن خودکار بررسی نمی‌شود","m083":"افزودن شاهد","m084":"شاهدی ثبت نشده است.","m085":"۳. گزینه‌ها و پیامدها","m086":"گزینه‌ها رتبه‌بندی خودکار نمی‌شوند؛ پیامدهای احتمالی را بنویسید.","m087":"عنوان گزینه","m088":"مثلاً گزینهٔ A — انتشار محدود","m089":"پیامدها (هر مورد در یک خط؛ دست‌کم یک مورد)","m090":"مثلاً دریافت بازخورد زودهنگام یا محدودیت ذخیره‌سازی","m091":"افزودن گزینه","m092":"گزینه‌ای ثبت نشده است.","m093":"۴. تصمیم انسانی","m094":"تصمیم باید روشن کند کدام گزینه را انتخاب می‌کنید یا چرا تصمیم را به تعویق می‌اندازید. هدف آزمایش، خودِ تصمیم نیست. ثبت فقط با اقدام شما انجام می‌شود.","m095":"تصمیم شما","m096":"مثلاً گزینهٔ C را فعلاً انتخاب می‌کنم؛ یا تصمیم را تا تکمیل شواهد به تعویق می‌اندازم.","m097":"دلیل تصمیم (الزامی برای تصمیم‌های تازه)","m098":"دلیل انتخاب و مهم‌ترین عدم‌قطعیت باقی‌مانده","m099":"ثبت تصمیم من","m100":"هیچ تصمیم انسانی ثبت نشده است.","m101":"گزارش خوانای کارگاه","m102":"گزارش فقط اطلاعات ثبت‌شده را نشان می‌دهد؛ نوشته‌های ثبت‌نشدهٔ فرم‌ها و گذرواژه‌ها در آن نیستند. این گزارش تأیید صحت شواهد یا توصیهٔ ماشینی نیست و جای فایل رمزدار بازیابی را نمی‌گیرد.","m103":"نمایش گزارش ثبت‌شده","m104":"دریافت گزارش متنی (بدون رمز)","m105":"چاپ یا ذخیرهٔ PDF","m106":"بستن گزارش","m107":"برای گزارش، ابتدا مسئله را ثبت کنید.","m108":"۵. انتقال اختیاری به هستهٔ Rust","m109":"دکمهٔ انتقال فقط فایل JSON جدید می‌سازد و هیچ چیزی به سرور ارسال نمی‌کند. فایل جدید","m110":"بدون رمز","m111":"است. NEXUS تاریخچهٔ محلی را قابل‌تأیید نمی‌داند و برای سازگاری، رویدادهای جدید با برچسب «بازسازی‌شده از دادهٔ کاربر» می‌سازد؛ زمان رویدادها و ویرایش‌های قبلیِ پرسش منتقل نمی‌شوند. گزینه‌ها رتبه‌بندی نمی‌شوند و تصمیم فقط اگر قبلاً به‌صورت صریح ثبت شده باشد منتقل خواهد شد. فایل رمزدار اصلی را همچنان جداگانه نگه دارید.","m112":"۶. مرور تکمیل‌بودن اطلاعات","m113":"این بررسی فقط خالی‌بودن یا ساختار برخی فیلدها را نشان می‌دهد، نه درست‌بودن شواهد یا کیفیت واقعی تصمیم.","m114":"۷. تاریخچهٔ اقدامات","m115":"این تاریخچه محلی و قابل‌ویرایش است؛ شاهد حسابرسی رمزنگاری‌شده یا تأیید مستقل محسوب نمی‌شود.","m116":"هنوز رویدادی ثبت نشده است.","m117":"— فقط ابزار تمرین تصمیم‌گیری انسان. بدون اتصال شبکه یا ذخیره‌سازی سروری. تنها در صورت فعال‌سازی صریح، نسخهٔ رمزدار در همین مرورگر ذخیره می‌شود؛ بدون آن داده‌ها پس از بستن صفحه باقی نمی‌مانند. همیشه فایل خروجی رمزدار جداگانه بگیرید. این فایل، بکاپ Volume سرور NEXUS نیست. اصل پروژه:","m118":"پرسش و هدف","m119":"شواهد","m120":"گزینه‌ها","m121":"تصمیم انسانی","m122":" نوشته‌های ثبت‌نشده در این خروجی نیستند؛ ابتدا دکمهٔ ثبت همان بخش را بزنید.","m123":" نوشته‌های ثبت‌نشده نیز از بین می‌روند.","m124":"نوشتهٔ ثبت‌نشده در بخش: ","m125":"، ","m126":"تحلیل ماشینی واردشده توسط کاربر","m127":"NEXUS — گزارش اطلاعات ثبت‌شدهٔ کارگاه","m128":"این گزارش بدون رمز است؛ فقط آن را با انتخاب خودتان نگه دارید یا به اشتراک بگذارید.","m129":"گزارش توصیه یا تأیید ماشینی نیست؛ صحت منابع مستقلاً بررسی نشده است.","m130":"شناسهٔ کارگاه: ","m131":"پرسش","m132":"ثبت نشده","m133":"محدودیت‌ها","m134":"ارزش‌ها","m135":"ادعاها و شواهد","m136":"منشأ: ","m137":"عدم‌قطعیت: ","m138":"منبع (تأییدنشده): ","m139":"گزینه‌ها و پیامدها — به ترتیب ثبت، بدون رتبه‌بندی","m140":"پیامدی ثبت نشده است.","m141":"تصمیم انسانی ثبت‌شده","m142":"دلیل: ","m143":"موارد ثبت‌نشده — بررسی ساختاری، بدون ارزیابی کیفیت","m144":"پیامد برخی گزینه‌ها","m145":"دلیل تصمیم","m146":"در فیلدهای بررسی‌شده مورد خالی یافت نشد؛ کفایت اطلاعات تأیید نشده است.","m147":"این گزارش فقط از اطلاعات ثبت‌شده ساخته شده؛ پیش‌نویس فرم‌ها در آن نیست.","m148":"تاریخچهٔ محلی قابل‌ویرایش است و شاهد مستقل محسوب نمی‌شود.","m149":"گزارش اطلاعات ثبت‌شده آماده است؛ پیش‌نویس‌های فرم‌ها وارد گزارش نشده‌اند.","m150":"گزارش ساخته نشد؛ اطلاعات فعلی تغییر نکرد.","m151":"کارگاه تغییر کرده است؛ گزارش را دوباره بسازید.","m152":"این گزارش متنی بدون رمز است و اطلاعات ثبت‌شدهٔ کارگاه را دارد. فایل روی دستگاه دریافت شود؟","m153":"نسخهٔ چاپی یا PDF بدون رمز است و اطلاعات کارگاه را دارد. پنجرهٔ چاپ باز شود؟","m154":"گزارش بسته شد؛ اطلاعات کارگاه تغییر نکرد.","m155":"سقف تاریخچه پر شده است؛ پیش از ادامه فایل بگیرید و کارگاه جدید بسازید.","m156":"کارگاه تغییر کرده است؛ برای اطلاعات فعلی گزارش را دوباره بسازید.","m157":"هدف: ","m158":"محدودیت‌ها: ","m159":"ارزش‌ها: ","m160":" | عدم‌قطعیت: ","m161":"منبع: ","m162":"ثبت پرسش و هدف","m163":"ثبت صریح تصمیم انسان","m164":"بازثبت یا ویرایش مسئله","m165":"کمتر از دو ادعا یا شاهد ثبت شده؛ شواهد موافق و مخالف را نیز بررسی کنید.","m166":"نشانی منبع درج شده است؛ ارتباط و صحت آن به‌صورت مستقل بررسی نشده است.","m167":"دست‌کم یک گزینه بدون پیامد ثبت شده است.","m168":"دلیل تصمیم در فایل وجود ندارد.","m169":"بررسی کنید متن تصمیم مشخصاً انتخاب گزینه یا تعویق آن را بیان کند؛ این موضوع خودکار تشخیص داده نمی‌شود.","m170":"بررسی ساختاری موردی یافت نکرد؛ صحت و کفایت شواهد همچنان تأیید نشده است.","m171":"کارگاه پس از آخرین بررسی تغییر کرده است؛ برای سنجش نسخهٔ فعلی دوباره فایل را آزمایش کنید.","m172":"پرسش اصلی را وارد کنید.","m173":"اطلاعات مسئله تغییری نکرده است؛ رویداد تازه ثبت نشد.","m174":"پرسش ثبت شد؛ برای حفظ آن فایل JSON دریافت کنید.","m175":"ابتدا پرسش را ثبت کنید.","m176":"حداکثر ۱۰۰ شاهد در هر کارگاه.","m177":"متن شاهد را وارد کنید.","m178":"شاهد بیرونی باید منبع مشخص داشته باشد.","m179":"شاهد اضافه شد؛ این ادعا به‌خودی‌خود تصمیم نیست.","m180":"حداکثر ۶۰ گزینه در هر کارگاه.","m181":"عنوان گزینه را وارد کنید.","m182":"برای هر گزینه دست‌کم یک پیامد احتمالی بنویسید.","m183":"گزینه اضافه شد. رتبه‌بندی خودکار انجام نشد.","m184":"متن تصمیم خود را وارد کنید.","m185":"برای ثبت تصمیم تازه، دلیل انتخاب یا تعویق را وارد کنید.","m186":"تصمیم این کارگاه قبلاً ثبت شده؛ برای تصمیم تازه کارگاه جدید بسازید.","m187":"تصمیم انسانی شما ثبت شد؛ اکنون فایل JSON را ذخیره کنید.","m188":"نمونهٔ ساختگی جای کارگاه فعلی را می‌گیرد. ادامه می‌دهید؟","m189":"[نمونهٔ ساختگی] برای یک جلسهٔ مطالعه، کدام شیوهٔ برنامه‌ریزی را بررسی کنم؟","m190":"تمرین بررسی شواهد و پیامدها؛ نه انتخاب خودکار","m191":"زمان محدود","m192":"بدون هزینه","m193":"یادگیری","m194":"استقلال تصمیم","m195":"[ساختگی] روش اول ممکن است تمرکز را آسان‌تر کند.","m196":"[ساختگی] یک گزارش فرضی دربارهٔ وقفه‌های کوتاه وجود دارد؛ صحت آن بررسی نشده است.","m197":"[ساختگی] یک بازهٔ پیوسته","m198":"ممکن است کار ساده‌تر پیش برود","m199":"احتمال خستگی","m200":"[ساختگی] چند بازه با استراحت","m201":"امکان بازبینی مسیر","m202":"نیاز به مدیریت زمان","m203":"نمونهٔ ساختگی برای تمرین باز شد؛ هیچ تصمیمی ثبت نشده است. برای مسئلهٔ واقعی، کارگاه جدید بسازید.","m204":"اطلاعات کارگاه فعلی با ساخت کارگاه تازه از بین می‌رود. ادامه می‌دهید؟","m205":"کارگاه جدید ساخته شد. داده‌های قبلی فقط در فایل صادرشده باقی می‌ماند.","m206":"ابتدا گذرواژهٔ فایل دانلودشده را وارد کنید.","m207":"در حال بازکردن و بررسی فایل انتخاب‌شده در همین مرورگر...","m208":"موفق: فایل انتخاب‌شده با گذرواژه واقعاً باز شد و دقیقاً با کارگاه ثبت‌شدهٔ فعلی برابر است. این آزمون فقط سلامت همین فایل در این لحظه را ثابت می‌کند.","m209":"فایل رمزدار قابل‌بازیابی و معتبر است، اما با کارگاه ثبت‌شدهٔ فعلی یکسان نیست؛ ممکن است نسخهٔ قدیمی یا کارگاه دیگری باشد. کارگاه فعلی تغییر نکرد.","m210":"بررسی ناموفق: فایل رمزدار معتبر نبود، آسیب دیده یا گذرواژه نادرست است. کارگاه فعلی تغییر نکرد.","m211":"پیش از خروجی گرفتن، پرسش را ثبت کنید.","m212":"فایل رمزدار فقط اطلاعات ثبت‌شده را نگه می‌دارد.","m213":" با این حال از اطلاعات ثبت‌شده خروجی گرفته شود؟","m214":"گذرواژه باید بین ۱۲ تا ۲۵۶ نویسه باشد.","m215":"تکرار گذرواژه یکسان نیست.","m216":"مرورگر از رمزگذاری امن پشتیبانی نمی‌کند؛ فایل بدون رمز را به‌عنوان فایل امن به کار نبرید.","m217":"در حال رمزگذاری؛ گذرواژه و داده‌ها فقط در همین مرورگر پردازش می‌شوند.","m218":"نسخهٔ تازه ساخته شد اما دریافت و بازیابی آن هنوز آزمایش نشده است. فایل را از بخش دانلودها انتخاب و بررسی کنید.","m219":"فایل رمزگذاری‌شده برای دانلود ساخته شد؛ ذخیره‌شدن روی دستگاه تأیید نشده است. فایل دانلودشده را جداگانه آزمایش کنید.","m220":"رمزگذاری انجام نشد؛ فایل جدیدی ذخیره نشده است.","m221":"این فایل JSON بدون رمز و خواندنی است. آیا با ساخت نسخهٔ بدون رمز موافقید؟","m222":"نسخهٔ JSON بدون رمز آماده شد؛ این فایل را خصوصی نگه دارید.","m223":"ابتدا مسئله را ثبت کنید.","m224":"این فایل برای واردکردن به Rust بدون رمز خواهد بود و اطلاعات ثبت‌شدهٔ کارگاه را دربر دارد. تاریخچهٔ قابل‌تأیید نیست و فقط به‌صورت رویدادهای جدید بازسازی می‌شود. ادامه می‌دهید؟","m225":"فایل جدیدِ بدون رمز آماده شد؛ به هیچ سروری ارسال نشده است. واردکردن آن نیازمند تأیید جداگانه و سرور احرازهویت‌شده است.","m226":"فایل انتقال ساخته نشد؛ ساختار کارگاه معتبر نیست. کارگاه فعلی تغییر نکرد.","m227":"بارگذاری، کارگاه جاری را جایگزین می‌کند. ادامه می‌دهید؟","m228":"فایل آفلاین اعتبارسنجی و باز شد. اصالت فایل و منشأ داده‌ها مستقلاً قابل‌اثبات نیست.","m229":"گذرواژهٔ فایل رمزدار را در بخش بالا وارد کنید و فایل را دوباره انتخاب کنید.","m230":"فایل نامعتبر، گذرواژهٔ نادرست یا اطلاعات دستکاری‌شده است؛ کارگاه قبلی تغییر نکرد.","m231":"ذخیرهٔ رمزدار محلی فعال است. فایل خروجی مستقل را نیز حفظ کنید.","m232":"نسخهٔ رمزدار محلی موجود است؛ برای ادامه باید گذرواژه را وارد کنید.","m233":"نسخهٔ محلی وجود ندارد؛ ذخیرهٔ خودکار غیرفعال است.","m234":"آخرین تغییر ثبت‌شدهٔ کارگاه در همین مرورگر رمزگذاری شد؛ خروجی مستقل را فراموش نکنید.","m235":"ذخیرهٔ رمزدار محلی ناموفق بود یا حافظهٔ مرورگر پر است؛ برای حفظ کارگاه، خروجی فایل رمزدار بگیرید.","m236":"برای ذخیرهٔ محلی، گذرواژهٔ یکسان با ۱۲ تا ۲۵۶ نویسه وارد کنید.","m237":"این مرورگر رمزگذاری محلی امن را پشتیبانی نمی‌کند.","m238":"حافظهٔ محلی این مرورگر در دسترس نیست.","m239":"یک نسخهٔ رمزدار از قبل در این مرورگر وجود دارد. فعال‌سازی تازه ممکن است آن را جایگزین کند. نسخهٔ مستقل آن را نگه داشته‌اید؟","m240":"ذخیرهٔ رمزدار محلی فعال شد؛ منتظر پیام تأیید ذخیره باشید.","m241":"فعال‌سازی ذخیرهٔ محلی کامل نشد؛ کارگاه فعلی تغییر نکرد.","m242":"برای بازکردن نسخهٔ محلی گذرواژه را وارد کنید.","m243":"WebCrypto در این مرورگر موجود نیست.","m244":"بازکردن نسخهٔ محلی، کارگاه باز فعلی را جایگزین می‌کند. ادامه می‌دهید؟","m245":"متن فرم‌ها هنگام بازکردن نسخهٔ محلی تغییر کرد؛ برای حفظ نوشتهٔ تازه، جایگزینی انجام نشد. دوباره تلاش کنید.","m246":"نسخهٔ محلی رمزگشایی و بررسی شد. این داده‌ها در سرور یا نزد NEXUS پشتیبان‌گیری نشده‌اند.","m247":"نسخهٔ محلی موجود نیست، گذرواژه نادرست است یا فایل دستکاری شده؛ کارگاه فعلی تغییر نکرد.","m248":"ذخیرهٔ خودکار متوقف شد؛ نسخهٔ رمزدار قبلی حذف نشده و کارگاه فعلی هنوز در این تب باز است.","m249":"نسخهٔ محلی برای حذف وجود ندارد.","m250":"نسخهٔ رمزدار داخل این مرورگر حذف شود؟ فایل‌های خروجی مستقل حذف نخواهند شد.","m251":"نسخهٔ رمزدار این مرورگر پاک شد؛ کارگاه فعلی فقط در همین تب باقی مانده است.","m252":"حذف نسخهٔ محلی انجام نشد.","m253":"این مرورگر یا روش بازکردن فایل از نصب برنامه پشتیبانی نمی‌کند؛ فایل HTML مستقل همچنان قابل‌استفاده است.","m254":"در حال دریافت و اعتبارسنجی نسخهٔ ثابت برنامه...","m255":"برنامهٔ آفلاین روی همین دستگاه آماده است. برای نصب میان‌بر از «افزودن به صفحهٔ اصلی» استفاده کنید. کارگاه فعلی جداگانه ذخیره نشده است.","m256":"آماده‌سازی آفلاین تأیید نشد؛ احتمال قطعی اتصال، محدودیت مرورگر یا ناسازگاری فایل سایت وجود دارد. هیچ بکاپ کارگاهی ساخته نشد.","m257":"درخواست نصب به مرورگر ارسال شد. نتیجهٔ نصب به تنظیمات همان دستگاه بستگی دارد.","m258":"درخواست نصب در این مرورگر انجام نشد.","m259":"در مرورگر گوشی، منوی سه‌نقطه را باز کنید و «نصب برنامه» یا «افزودن به صفحهٔ اصلی» را بزنید. در برخی مرورگرها میان‌بر به‌جای برنامه نصب می‌شود.","m260":"نسخهٔ آفلاین تحت کنترل این مرورگر نیست.","m261":"نسخهٔ کش‌شدهٔ برنامه از همین مرورگر حذف شود؟ این کار فایل‌های خروجی و نسخهٔ رمزدار کارگاه را پاک نمی‌کند.","m262":"نسخهٔ آفلاین برنامه حذف شد؛ برای اعمال کامل، همهٔ پنجره‌های برنامه را ببندید. فایل‌ها و کارگاه رمزدار پاک نشده‌اند.","m263":"حذف کامل برنامهٔ آفلاین تأیید نشد؛ وضعیت مرورگر را بررسی کنید.","m264":"زبان","m265":"زبان رابط","m266":"افزودن ترجمه","m267":"دریافت الگوی ترجمه از انگلیسی","m268":"فقط زبان رابط تغییر می‌کند. متن کارگاه هرگز ترجمه یا ارسال نمی‌شود. انگلیسی و فارسی آماده‌اند؛ زبان‌های دیگر به فایل ترجمهٔ کامل نیاز دارند.","m269":"فایل بستهٔ ترجمه","m270":"زبان رابط تغییر کرد؛ محتوای کارگاه تغییر نکرد.","m271":"فایل ترجمه پذیرفته نشد؛ از بستهٔ ترجمهٔ کامل نکسوس استفاده کنید.","m272":"ترجمه برای این نشست بارگذاری شد؛ بارگذاری دوبارهٔ صفحه، ترجمهٔ افزوده‌شده را حذف می‌کند.","m273":"از سرویس ترجمهٔ شبکه‌ای استفاده نمی‌شود.","m274":"زبان پیش‌فرض انگلیسی است. فایل‌های زبان فقط در همین پنجره اعمال می‌شوند.","m275":"ترجمهٔ افزوده‌شده؛ صحت آن توسط نکسوس بررسی نشده است.","m276":"الگوی انگلیسی دریافت شد؛ این فایل فقط متن رابط را دربر دارد."}}}/* NEXUS_LOCALES_END */;
+  const languages=new Map(Object.entries(LANGUAGE_PACKS));
+  let interfaceLang='en';
+  const t=key=>languages.get(interfaceLang).messages[key]??LANGUAGE_PACKS.en.messages[key];
+  function applyLocale(locale){
+    const next=languages.get(locale);if(!next)return;
+    const previous=languages.get(interfaceLang);
+    // Translate only explicitly marked application labels, never user text.
+    for(const node of document.querySelectorAll('[data-i18n]')){
+      const key=node.dataset.i18n;
+      if(node.textContent.trim()===(previous.messages[key]||'').trim())
+        node.textContent=next.messages[key]+(node.tagName==='SPAN'?' ':'');
+    }
+    for(const attr of ['placeholder','aria-label','title']){
+      for(const node of document.querySelectorAll('[data-i18n-'+attr+']'))
+        node.setAttribute(attr,next.messages[node.getAttribute('data-i18n-'+attr)]);
+    }
+    for(const id of ['status','vault-state','backup-proof-state','offline-install-state','report-state']){
+      const node=$(id),key=Object.keys(previous.messages).find(k=>previous.messages[k]===node.textContent);
+      if(key)node.textContent=next.messages[key];
+    }
+    interfaceLang=locale;
+    document.documentElement.lang=locale;document.documentElement.dir=next.direction;
+    $('ui-language').value=locale;
+    $('language-review').hidden=Object.hasOwn(LANGUAGE_PACKS,locale);
+    render(false);
+    if(currentReport())$('decision-report').textContent=reportText(state);
+    $('language-state').textContent=t('m270');
+  }
+  $('ui-language').addEventListener('change',()=>applyLocale($('ui-language').value));
+  function validateLanguagePack(raw){
+    const en=LANGUAGE_PACKS.en,root=['schema','source_sha256','locale','name','direction','messages'];
+    if(!raw||typeof raw!=='object'||Array.isArray(raw)||
+       Object.keys(raw).length!==root.length||!root.every(k=>Object.hasOwn(raw,k))||
+       raw.schema!==en.schema||raw.source_sha256!==en.source_sha256||
+       typeof raw.locale!=='string'||raw.locale.length>80||
+       typeof raw.name!=='string'||!raw.name.trim()||raw.name.length>80||
+       !['ltr','rtl'].includes(raw.direction)||
+       !raw.messages||typeof raw.messages!=='object'||Array.isArray(raw.messages))throw Error('invalid-language');
+    const locale=Intl.getCanonicalLocales(raw.locale)[0];
+    if(!locale||Object.hasOwn(LANGUAGE_PACKS,locale))throw Error('reserved-language');
+    const keys=Object.keys(en.messages);
+    if(Object.keys(raw.messages).length!==keys.length||
+       !keys.every(k=>Object.hasOwn(raw.messages,k)&&typeof raw.messages[k]==='string'&&
+         raw.messages[k].trim().length>0&&raw.messages[k].length<=5000))throw Error('incomplete-language');
+    return {schema:en.schema,source_sha256:en.source_sha256,locale,name:raw.name.trim(),direction:raw.direction,
+      messages:Object.fromEntries(keys.map(k=>[k,raw.messages[k]]))};
+  }
+  $('language-import').addEventListener('click',()=>$('language-file').click());
+  $('language-file').addEventListener('change',async()=>{
+    const file=$('language-file').files?.[0];if(!file)return;
+    $('language-import').disabled=true;
+    try{
+      if(file.size===0||file.size>1024*1024)throw Error('language-size');
+      const pack=validateLanguagePack(JSON.parse(await file.text()));
+      languages.set(pack.locale,pack);
+      let option=Array.from($('ui-language').options).find(x=>x.value===pack.locale);
+      if(!option){option=document.createElement('option');option.value=pack.locale;$('ui-language').append(option);}
+      option.textContent=pack.name;
+      applyLocale(pack.locale);$('language-state').textContent=t('m272');
+    }catch{$('language-state').textContent=t('m271');}
+    finally{$('language-file').value='';$('language-import').disabled=false;}
+  });
+  $('language-template').addEventListener('click',()=>{
+    const en=LANGUAGE_PACKS.en;
+    const pack={schema:en.schema,source_sha256:en.source_sha256,locale:'und-x-custom',name:'My language',direction:'ltr',messages:en.messages};
+    downloadJson(JSON.stringify(pack,null,2)+'\n','nexus-language-template-en.json');
+    $('language-state').textContent=t('m276');
+  });
   const MAX_FILE=2*1024*1024,MAX_ENCRYPTED_FILE=3*1024*1024,MAX_CLAIMS=100,MAX_OPTIONS=60,MAX_EVENTS=300;
   const uuid=()=> 'offline-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,11);
   const fresh=()=>({schema:SCHEMA,authority:'none',storage:'memory_only',workspace:{
@@ -229,26 +313,26 @@ code{direction:ltr;unicode-bidi:embed}
     const w=state.workspace,groups=[];
     if(trim($('question').value,2000)!==trim(w.question,2000)||trim($('goal').value,1000)!==trim(w.goal,1000)||
        !sameListDraft($('constraints').value,w.constraints)||!sameListDraft($('values').value,w.values))
-      groups.push({label:'پرسش و هدف',field:'question'});
-    if($('claim').value.trim()||$('source').value.trim())groups.push({label:'شواهد',field:'claim'});
-    if($('option').value.trim()||$('consequences').value.trim())groups.push({label:'گزینه‌ها',field:'option'});
+      groups.push({label:t('m118'),field:'question'});
+    if($('claim').value.trim()||$('source').value.trim())groups.push({label:t('m119'),field:'claim'});
+    if($('option').value.trim()||$('consequences').value.trim())groups.push({label:t('m120'),field:'option'});
     if(trim($('decision').value,2000)!==trim(w.judgment?.decision,2000)||
        trim($('rationale').value,2000)!==trim(w.judgment?.rationale,2000))
-      groups.push({label:'تصمیم انسانی',field:'decision'});
+      groups.push({label:t('m121'),field:'decision'});
     return groups;
   }
   function draftSignature(){return JSON.stringify([...draftFields,'origin','uncertainty'].map(id=>$(id).value));}
-  function draftWarning(){return draftGroups().length?' نوشته‌های ثبت‌نشده در این خروجی نیستند؛ ابتدا دکمهٔ ثبت همان بخش را بزنید.':'';}
+  function draftWarning(){return draftGroups().length?t('m122'):'';}
   function confirmReplacement(message){
     return !(state.events.length||draftGroups().length)||window.confirm(message+
-      (draftGroups().length?' نوشته‌های ثبت‌نشده نیز از بین می‌روند.':''));
+      (draftGroups().length?t('m123'):''));
   }
   function onDraftUnload(e){e.preventDefault();e.returnValue='';}
   let unloadGuard=false;
   function refreshDraftNotice(){
     const groups=draftGroups(),pending=groups.length>0;
     $('draft-notice').hidden=!pending;
-    $('draft-state').textContent=pending?'نوشتهٔ ثبت‌نشده در بخش: '+groups.map(g=>g.label).join('، '):'';
+    $('draft-state').textContent=pending?t('m124')+groups.map(g=>g.label).join(t('m125')):'';
     if(pending!==unloadGuard){
       window[pending?'addEventListener':'removeEventListener']('beforeunload',onDraftUnload);
       unloadGuard=pending;
@@ -269,35 +353,35 @@ code{direction:ltr;unicode-bidi:embed}
   }
   function reportText(raw){
     const w=validate(raw).workspace;
-    const origin={human:'گفتهٔ انسان',external_evidence:'شاهد بیرونی',machine_analysis:'تحلیل ماشینی واردشده توسط کاربر'};
-    const uncertainty={unknown:'نامشخص',high:'زیاد',medium:'متوسط',low:'کم'};
-    const rows=['NEXUS — گزارش اطلاعات ثبت‌شدهٔ کارگاه',
-      'این گزارش بدون رمز است؛ فقط آن را با انتخاب خودتان نگه دارید یا به اشتراک بگذارید.',
-      'گزارش توصیه یا تأیید ماشینی نیست؛ صحت منابع مستقلاً بررسی نشده است.',
-      'شناسهٔ کارگاه: '+w.id,'','پرسش',w.question,'','هدف',w.goal||'ثبت نشده',
-      '','محدودیت‌ها',...w.constraints.map(x=>'• '+x),w.constraints.length?'':'ثبت نشده',
-      'ارزش‌ها',...w.values.map(x=>'• '+x),w.values.length?'':'ثبت نشده','','ادعاها و شواهد'];
-    if(!w.claims.length)rows.push('شاهدی ثبت نشده است.');
-    w.claims.forEach((c,i)=>rows.push((i+1)+'. '+c.text,'منشأ: '+origin[c.origin],
-      'عدم‌قطعیت: '+uncertainty[c.uncertainty],'منبع (تأییدنشده): '+(c.source||'ثبت نشده'),''));
-    rows.push('گزینه‌ها و پیامدها — به ترتیب ثبت، بدون رتبه‌بندی');
-    if(!w.alternatives.length)rows.push('گزینه‌ای ثبت نشده است.');
+    const origin={human:t('m073'),external_evidence:t('m074'),machine_analysis:t('m126')};
+    const uncertainty={unknown:t('m077'),high:t('m078'),medium:t('m079'),low:t('m080')};
+    const rows=[t('m127'),
+      t('m128'),
+      t('m129'),
+      t('m130')+w.id,'',t('m131'),w.question,'',t('m061'),w.goal||t('m132'),
+      '',t('m133'),...w.constraints.map(x=>'• '+x),w.constraints.length?'':t('m132'),
+      t('m134'),...w.values.map(x=>'• '+x),w.values.length?'':t('m132'),'',t('m135')];
+    if(!w.claims.length)rows.push(t('m084'));
+    w.claims.forEach((c,i)=>rows.push((i+1)+'. '+c.text,t('m136')+origin[c.origin],
+      t('m137')+uncertainty[c.uncertainty],t('m138')+(c.source||t('m132')),''));
+    rows.push(t('m139'));
+    if(!w.alternatives.length)rows.push(t('m092'));
     w.alternatives.forEach((a,i)=>rows.push((i+1)+'. '+a.label,
-      ...(a.consequences.length?a.consequences.map(x=>'• '+x):['پیامدی ثبت نشده است.']),''));
-    rows.push('تصمیم انسانی ثبت‌شده');
-    if(w.judgment)rows.push(w.judgment.decision,'دلیل: '+(w.judgment.rationale||'ثبت نشده'));
-    else rows.push('هیچ تصمیم انسانی ثبت نشده است.');
-    rows.push('','موارد ثبت‌نشده — بررسی ساختاری، بدون ارزیابی کیفیت');
+      ...(a.consequences.length?a.consequences.map(x=>'• '+x):[t('m140')]),''));
+    rows.push(t('m141'));
+    if(w.judgment)rows.push(w.judgment.decision,t('m142')+(w.judgment.rationale||t('m132')));
+    else rows.push(t('m100'));
+    rows.push('',t('m143'));
     const gaps=[];
-    if(!w.goal)gaps.push('هدف');
-    if(!w.claims.length)gaps.push('شواهد');
-    if(!w.alternatives.length)gaps.push('گزینه‌ها');
-    if(w.alternatives.some(a=>!a.consequences.length))gaps.push('پیامد برخی گزینه‌ها');
-    if(!w.judgment)gaps.push('تصمیم انسانی');
-    if(w.judgment&&!w.judgment.rationale.trim())gaps.push('دلیل تصمیم');
-    rows.push(gaps.length?gaps.join('، '):'در فیلدهای بررسی‌شده مورد خالی یافت نشد؛ کفایت اطلاعات تأیید نشده است.',
-      '','این گزارش فقط از اطلاعات ثبت‌شده ساخته شده؛ پیش‌نویس فرم‌ها در آن نیست.',
-      'تاریخچهٔ محلی قابل‌ویرایش است و شاهد مستقل محسوب نمی‌شود.');
+    if(!w.goal)gaps.push(t('m061'));
+    if(!w.claims.length)gaps.push(t('m119'));
+    if(!w.alternatives.length)gaps.push(t('m120'));
+    if(w.alternatives.some(a=>!a.consequences.length))gaps.push(t('m144'));
+    if(!w.judgment)gaps.push(t('m121'));
+    if(w.judgment&&!w.judgment.rationale.trim())gaps.push(t('m145'));
+    rows.push(gaps.length?gaps.join(t('m125')):t('m146'),
+      '',t('m147'),
+      t('m148'));
     return rows.join('\n')+'\n';
   }
   $('report-build').addEventListener('click',()=>{
@@ -307,13 +391,13 @@ code{direction:ltr;unicode-bidi:embed}
       reportSnapshot=JSON.stringify(state);
       $('decision-report').textContent=text;$('decision-report').hidden=false;
       for(const id of ['report-download','report-print','report-hide'])$(id).disabled=false;
-      $('report-state').textContent='گزارش اطلاعات ثبت‌شده آماده است؛ پیش‌نویس‌های فرم‌ها وارد گزارش نشده‌اند.';
-    }catch{clearReport('گزارش ساخته نشد؛ اطلاعات فعلی تغییر نکرد.');}
+      $('report-state').textContent=t('m149');
+    }catch{clearReport(t('m150'));}
   });
   function currentReport(){return reportSnapshot!==null&&reportSnapshot===JSON.stringify(state);}
   $('report-download').addEventListener('click',()=>{
-    if(!currentReport())return clearReport('کارگاه تغییر کرده است؛ گزارش را دوباره بسازید.');
-    if(!window.confirm('این گزارش متنی بدون رمز است و اطلاعات ثبت‌شدهٔ کارگاه را دارد. فایل روی دستگاه دریافت شود؟'))return;
+    if(!currentReport())return clearReport(t('m151'));
+    if(!window.confirm(t('m152')))return;
     const blob=new Blob([$('decision-report').textContent],{type:'text/plain;charset=utf-8'});
     const url=URL.createObjectURL(blob),a=document.createElement('a');
     a.href=url;a.download='nexus-report-'+state.workspace.id+'.txt';
@@ -321,10 +405,10 @@ code{direction:ltr;unicode-bidi:embed}
     window.setTimeout(()=>URL.revokeObjectURL(url),5000);
   });
   $('report-print').addEventListener('click',()=>{
-    if(!currentReport())return clearReport('کارگاه تغییر کرده است؛ گزارش را دوباره بسازید.');
-    if(window.confirm('نسخهٔ چاپی یا PDF بدون رمز است و اطلاعات کارگاه را دارد. پنجرهٔ چاپ باز شود؟'))window.print();
+    if(!currentReport())return clearReport(t('m151'));
+    if(window.confirm(t('m153')))window.print();
   });
-  $('report-hide').addEventListener('click',()=>clearReport('گزارش بسته شد؛ اطلاعات کارگاه تغییر نکرد.'));
+  $('report-hide').addEventListener('click',()=>clearReport(t('m154')));
   function status(message,bad=false){
     $('status').textContent=message;
     $('status').classList.toggle('error',bad);
@@ -333,13 +417,14 @@ code{direction:ltr;unicode-bidi:embed}
   const lines=(x,maxItems)=>String(x||'').split('\n').map(x=>trim(x,300)).filter(Boolean).slice(0,maxItems);
   const commaItems=(x,maxItems)=>String(x||'').split(/[\n،,]+/).map(x=>trim(x,300)).filter(Boolean).slice(0,maxItems);
   function event(kind){
-    if(state.events.length>=MAX_EVENTS){status('سقف تاریخچه پر شده است؛ پیش از ادامه فایل بگیرید و کارگاه جدید بسازید.',true);return false;}
+    if(state.events.length>=MAX_EVENTS){status(t('m155'),true);return false;}
     state.events.push({sequence:state.events.length+1,kind,at:new Date().toISOString()});
     return true;
   }
   function part(tag,content,className){
     const el=document.createElement(tag);
     el.textContent=content;
+    el.dir='auto';
     if(className)el.className=className;
     return el;
   }
@@ -352,131 +437,131 @@ code{direction:ltr;unicode-bidi:embed}
       container.append(row);
     });
   }
-  function render(){
+  function render(persist=true){
     const w=state.workspace;
     refreshDraftNotice();
     $('report-build').disabled=!w.question;
     if(reportSnapshot!==null&&reportSnapshot!==JSON.stringify(state))
-      clearReport('کارگاه تغییر کرده است؛ برای اطلاعات فعلی گزارش را دوباره بسازید.');
-    entries($('question-view'),w.question?[w]:[],'هنوز پرسشی ثبت نشده است.',(row,item)=>{
+      clearReport(t('m156'));
+    entries($('question-view'),w.question?[w]:[],t('m068'),(row,item)=>{
       row.append(part('b',item.question));
-      if(item.goal)row.append(part('small','هدف: '+item.goal));
-      if(item.constraints.length)row.append(part('small','محدودیت‌ها: '+item.constraints.join(' • ')));
-      if(item.values.length)row.append(part('small','ارزش‌ها: '+item.values.join(' • ')));
+      if(item.goal)row.append(part('small',t('m157')+item.goal));
+      if(item.constraints.length)row.append(part('small',t('m158')+item.constraints.join(' • ')));
+      if(item.values.length)row.append(part('small',t('m159')+item.values.join(' • ')));
     });
-    entries($('claims'),w.claims,'شاهدی ثبت نشده است.',(row,item)=>{
+    entries($('claims'),w.claims,t('m084'),(row,item)=>{
       row.append(part('b',(w.claims.indexOf(item)+1)+'. '+item.text));
-      row.append(part('small','منشأ: '+item.origin+' | عدم‌قطعیت: '+item.uncertainty));
-      if(item.source)row.append(part('small','منبع: '+item.source));
+      row.append(part('small',t('m136')+({human:t('m073'),external_evidence:t('m074'),machine_analysis:t('m126')}[item.origin])+t('m160')+({unknown:t('m077'),high:t('m078'),medium:t('m079'),low:t('m080')}[item.uncertainty])));
+      if(item.source)row.append(part('small',t('m161')+item.source));
     });
-    entries($('alternatives'),w.alternatives,'گزینه‌ای ثبت نشده است.',(row,item)=>{
+    entries($('alternatives'),w.alternatives,t('m092'),(row,item)=>{
       row.append(part('b',(w.alternatives.indexOf(item)+1)+'. '+item.label));
       if(item.consequences.length)row.append(part('small',item.consequences.join(' • ')));
     });
-    entries($('decision-view'),w.judgment?[w.judgment]:[],'هیچ تصمیم انسانی ثبت نشده است.',(row,item)=>{
+    entries($('decision-view'),w.judgment?[w.judgment]:[],t('m100'),(row,item)=>{
       row.append(part('b',item.decision));
-      if(item.rationale)row.append(part('small','دلیل: '+item.rationale));
+      if(item.rationale)row.append(part('small',t('m142')+item.rationale));
     });
-    const names={question:'ثبت پرسش و هدف',claim:'افزودن شاهد',alternative:'افزودن گزینه',judgment:'ثبت صریح تصمیم انسان'};
+    const names={question:t('m162'),claim:t('m083'),alternative:t('m091'),judgment:t('m163')};
     let seenQuestion=false;
-    entries($('audit'),state.events,'هنوز رویدادی ثبت نشده است.',(row,item)=>{
-      const label=item.kind==='question'&&seenQuestion?'بازثبت یا ویرایش مسئله':names[item.kind];
+    entries($('audit'),state.events,t('m116'),(row,item)=>{
+      const label=item.kind==='question'&&seenQuestion?t('m164'):names[item.kind];
       if(item.kind==='question')seenQuestion=true;
       row.append(part('span','#'+item.sequence+' — '+label));
       row.append(part('small',item.at));
     });
     const notes=[];
-    if(!w.question)notes.push('هنوز پرسشی ثبت نشده است.');
-    if(w.question&&w.claims.length<2)notes.push('کمتر از دو ادعا یا شاهد ثبت شده؛ شواهد موافق و مخالف را نیز بررسی کنید.');
-    if(w.claims.some(c=>c.origin==='external_evidence'))notes.push('نشانی منبع درج شده است؛ ارتباط و صحت آن به‌صورت مستقل بررسی نشده است.');
-    if(w.alternatives.some(a=>!a.consequences.length))notes.push('دست‌کم یک گزینه بدون پیامد ثبت شده است.');
-    if(w.judgment&&!w.judgment.rationale.trim())notes.push('دلیل تصمیم در فایل وجود ندارد.');
-    if(w.judgment)notes.push('بررسی کنید متن تصمیم مشخصاً انتخاب گزینه یا تعویق آن را بیان کند؛ این موضوع خودکار تشخیص داده نمی‌شود.');
+    if(!w.question)notes.push(t('m068'));
+    if(w.question&&w.claims.length<2)notes.push(t('m165'));
+    if(w.claims.some(c=>c.origin==='external_evidence'))notes.push(t('m166'));
+    if(w.alternatives.some(a=>!a.consequences.length))notes.push(t('m167'));
+    if(w.judgment&&!w.judgment.rationale.trim())notes.push(t('m168'));
+    if(w.judgment)notes.push(t('m169'));
     const quality=$('quality');quality.replaceChildren();
-    if(!notes.length)quality.append(part('span','بررسی ساختاری موردی یافت نکرد؛ صحت و کفایت شواهد همچنان تأیید نشده است.'));
+    if(!notes.length)quality.append(part('span',t('m170')));
     else notes.forEach(note=>quality.append(part('p','• '+note)));
     $('export').disabled=!w.question;
     $('core-export').disabled=!w.question;
     $('encrypt-export').disabled=!w.question||encryptBusy;
     if(proofVerifiedSnapshot!==null&&JSON.stringify(state)!==proofVerifiedSnapshot){
-      $('backup-proof-state').textContent='کارگاه پس از آخرین بررسی تغییر کرده است؛ برای سنجش نسخهٔ فعلی دوباره فایل را آزمایش کنید.';
+      $('backup-proof-state').textContent=t('m171');
       proofVerifiedSnapshot=null;
     }
-    scheduleVaultSave();
+    if(persist)scheduleVaultSave();
   }
   $('ask-form').addEventListener('submit',e=>{
     e.preventDefault();
     const q=trim($('question').value,2000);
-    if(!q)return status('پرسش اصلی را وارد کنید.',true);
+    if(!q)return status(t('m172'),true);
     const draft={question:q,goal:trim($('goal').value,1000),
       constraints:commaItems($('constraints').value,25),values:commaItems($('values').value,25)};
     const old=state.workspace;
     if(old.question===draft.question&&old.goal===draft.goal&&
        JSON.stringify(old.constraints)===JSON.stringify(draft.constraints)&&
-       JSON.stringify(old.values)===JSON.stringify(draft.values))return status('اطلاعات مسئله تغییری نکرده است؛ رویداد تازه ثبت نشد.');
+       JSON.stringify(old.values)===JSON.stringify(draft.values))return status(t('m173'));
     if(!event('question'))return;
     Object.assign(state.workspace,draft);
-    status('پرسش ثبت شد؛ برای حفظ آن فایل JSON دریافت کنید.');
+    status(t('m174'));
     render();
   });
   $('claim-form').addEventListener('submit',e=>{
     e.preventDefault();
-    if(!state.workspace.question)return status('ابتدا پرسش را ثبت کنید.',true);
-    if(state.workspace.claims.length>=MAX_CLAIMS)return status('حداکثر ۱۰۰ شاهد در هر کارگاه.',true);
+    if(!state.workspace.question)return status(t('m175'),true);
+    if(state.workspace.claims.length>=MAX_CLAIMS)return status(t('m176'),true);
     const txt=trim($('claim').value,2000),source=trim($('source').value,600),origin=$('origin').value;
-    if(!txt)return status('متن شاهد را وارد کنید.',true);
-    if(origin==='external_evidence'&&!source)return status('شاهد بیرونی باید منبع مشخص داشته باشد.',true);
+    if(!txt)return status(t('m177'),true);
+    if(origin==='external_evidence'&&!source)return status(t('m178'),true);
     if(!event('claim'))return;
     state.workspace.claims.push({id:uuid(),text:txt,origin,source,uncertainty:$('uncertainty').value});
     $('claim').value='';$('source').value='';
-    status('شاهد اضافه شد؛ این ادعا به‌خودی‌خود تصمیم نیست.');render();
+    status(t('m179'));render();
   });
   $('option-form').addEventListener('submit',e=>{
     e.preventDefault();
-    if(!state.workspace.question)return status('ابتدا پرسش را ثبت کنید.',true);
-    if(state.workspace.alternatives.length>=MAX_OPTIONS)return status('حداکثر ۶۰ گزینه در هر کارگاه.',true);
+    if(!state.workspace.question)return status(t('m175'),true);
+    if(state.workspace.alternatives.length>=MAX_OPTIONS)return status(t('m180'),true);
     const label=trim($('option').value,500);
-    if(!label)return status('عنوان گزینه را وارد کنید.',true);
+    if(!label)return status(t('m181'),true);
     const consequences=lines($('consequences').value,30);
-    if(!consequences.length)return status('برای هر گزینه دست‌کم یک پیامد احتمالی بنویسید.',true);
+    if(!consequences.length)return status(t('m182'),true);
     if(!event('alternative'))return;
     state.workspace.alternatives.push({id:uuid(),label,consequences});
     $('option').value='';$('consequences').value='';
-    status('گزینه اضافه شد. رتبه‌بندی خودکار انجام نشد.');render();
+    status(t('m183'));render();
   });
   $('decision-form').addEventListener('submit',e=>{
     e.preventDefault();
-    if(!state.workspace.question)return status('ابتدا پرسش را ثبت کنید.',true);
+    if(!state.workspace.question)return status(t('m175'),true);
     const decision=trim($('decision').value,2000);
-    if(!decision)return status('متن تصمیم خود را وارد کنید.',true);
+    if(!decision)return status(t('m184'),true);
     const rationale=trim($('rationale').value,2000);
-    if(!rationale)return status('برای ثبت تصمیم تازه، دلیل انتخاب یا تعویق را وارد کنید.',true);
-    if(state.workspace.judgment!==null)return status('تصمیم این کارگاه قبلاً ثبت شده؛ برای تصمیم تازه کارگاه جدید بسازید.',true);
+    if(!rationale)return status(t('m185'),true);
+    if(state.workspace.judgment!==null)return status(t('m186'),true);
     if(!event('judgment'))return;
     state.workspace.judgment={decision,rationale};
-    status('تصمیم انسانی شما ثبت شد؛ اکنون فایل JSON را ذخیره کنید.');render();
+    status(t('m187'));render();
   });
   // Pilot 09: demo is entirely synthetic and carries NO authority.
   // It demonstrates structure, never records a human decision or
   // misrepresents a demo source as independently verified evidence.
   $('load-demo').addEventListener('click',()=>{
-    if(!confirmReplacement('نمونهٔ ساختگی جای کارگاه فعلی را می‌گیرد. ادامه می‌دهید؟'))return;
+    if(!confirmReplacement(t('m188')))return;
     pauseVault(); // Preserve any prior encrypted slot without overwriting it.
     const sample=fresh(),w=sample.workspace;
-    w.question='[نمونهٔ ساختگی] برای یک جلسهٔ مطالعه، کدام شیوهٔ برنامه‌ریزی را بررسی کنم؟';
-    w.goal='تمرین بررسی شواهد و پیامدها؛ نه انتخاب خودکار';
-    w.constraints=['زمان محدود','بدون هزینه'];
-    w.values=['یادگیری','استقلال تصمیم'];
+    w.question=t('m189');
+    w.goal=t('m190');
+    w.constraints=[t('m191'),t('m192')];
+    w.values=[t('m193'),t('m194')];
     w.claims=[
-      {id:uuid(),text:'[ساختگی] روش اول ممکن است تمرکز را آسان‌تر کند.',
+      {id:uuid(),text:t('m195'),
         origin:'human',source:'',uncertainty:'high'},
-      {id:uuid(),text:'[ساختگی] یک گزارش فرضی دربارهٔ وقفه‌های کوتاه وجود دارد؛ صحت آن بررسی نشده است.',
+      {id:uuid(),text:t('m196'),
         origin:'external_evidence',source:'demo:synthetic-unverified-not-a-real-source',uncertainty:'unknown'}];
     w.alternatives=[
-      {id:uuid(),label:'[ساختگی] یک بازهٔ پیوسته',
-        consequences:['ممکن است کار ساده‌تر پیش برود','احتمال خستگی']},
-      {id:uuid(),label:'[ساختگی] چند بازه با استراحت',
-        consequences:['امکان بازبینی مسیر','نیاز به مدیریت زمان']}];
+      {id:uuid(),label:t('m197'),
+        consequences:[t('m198'),t('m199')]},
+      {id:uuid(),label:t('m200'),
+        consequences:[t('m201'),t('m202')]}];
     // Exactly the five local, unattested mock events needed by the
     // current import contract. NO judgment event or judgment payload.
     const at=new Date().toISOString();
@@ -488,14 +573,14 @@ code{direction:ltr;unicode-bidi:embed}
     $('values').value=w.values.join('\n');
     for(const id of ['claim','source','option','consequences','decision','rationale'])$(id).value='';
     render();
-    status('نمونهٔ ساختگی برای تمرین باز شد؛ هیچ تصمیمی ثبت نشده است. برای مسئلهٔ واقعی، کارگاه جدید بسازید.');
+    status(t('m203'));
   });
   $('new').addEventListener('click',()=>{
-    if(!confirmReplacement('اطلاعات کارگاه فعلی با ساخت کارگاه تازه از بین می‌رود. ادامه می‌دهید؟'))return;
+    if(!confirmReplacement(t('m204')))return;
     pauseVault();
     state=fresh();
     for(const id of ['question','goal','constraints','values','claim','source','option','consequences','decision','rationale'])$(id).value='';
-    status('کارگاه جدید ساخته شد. داده‌های قبلی فقط در فایل صادرشده باقی می‌ماند.');render();
+    status(t('m205'));render();
   });
   const ENCRYPTED_SCHEMA='nexus.offline-pilot.encrypted.v1';
   const PBKDF2_ITERATIONS=310000;
@@ -563,7 +648,7 @@ code{direction:ltr;unicode-bidi:embed}
   $('backup-proof').addEventListener('click',()=>{
     if(proofBusy)return;
     if(!$('backup-proof-password').value)return $('backup-proof-state').textContent=
-      'ابتدا گذرواژهٔ فایل دانلودشده را وارد کنید.';
+      t('m206');
     $('backup-proof-file').click();
   });
   $('backup-proof-file').addEventListener('change',async()=>{
@@ -572,7 +657,7 @@ code{direction:ltr;unicode-bidi:embed}
     proofBusy=true;$('backup-proof').disabled=true;
     const pw=$('backup-proof-password').value;
     proofVerifiedSnapshot=null;
-    $('backup-proof-state').textContent='در حال بازکردن و بررسی فایل انتخاب‌شده در همین مرورگر...';
+    $('backup-proof-state').textContent=t('m207');
     try{
       if(!protectedContext()||f.size>MAX_ENCRYPTED_FILE||f.size===0)throw Error('unsafe-file');
       const envelope=JSON.parse(await f.text());
@@ -585,12 +670,12 @@ code{direction:ltr;unicode-bidi:embed}
         JSON.stringify(incoming)===JSON.stringify(validate(state));
       if(matches){
         proofVerifiedSnapshot=JSON.stringify(state);
-        $('backup-proof-state').textContent='موفق: فایل انتخاب‌شده با گذرواژه واقعاً باز شد و دقیقاً با کارگاه ثبت‌شدهٔ فعلی برابر است. این آزمون فقط سلامت همین فایل در این لحظه را ثابت می‌کند.';
+        $('backup-proof-state').textContent=t('m208');
       }else{
-        $('backup-proof-state').textContent='فایل رمزدار قابل‌بازیابی و معتبر است، اما با کارگاه ثبت‌شدهٔ فعلی یکسان نیست؛ ممکن است نسخهٔ قدیمی یا کارگاه دیگری باشد. کارگاه فعلی تغییر نکرد.';
+        $('backup-proof-state').textContent=t('m209');
       }
     }catch{
-      $('backup-proof-state').textContent='بررسی ناموفق: فایل رمزدار معتبر نبود، آسیب دیده یا گذرواژه نادرست است. کارگاه فعلی تغییر نکرد.';
+      $('backup-proof-state').textContent=t('m210');
     }finally{
       $('backup-proof-password').value='';$('backup-proof-file').value='';
       proofBusy=false;$('backup-proof').disabled=false;
@@ -605,32 +690,32 @@ code{direction:ltr;unicode-bidi:embed}
   }
   $('encrypt-export').addEventListener('click',async()=>{
     if(encryptBusy)return;
-    if(!state.workspace.question)return status('پیش از خروجی گرفتن، پرسش را ثبت کنید.',true);
-    if(draftGroups().length&&!window.confirm('فایل رمزدار فقط اطلاعات ثبت‌شده را نگه می‌دارد.'+draftWarning()+' با این حال از اطلاعات ثبت‌شده خروجی گرفته شود؟'))return;
+    if(!state.workspace.question)return status(t('m211'),true);
+    if(draftGroups().length&&!window.confirm(t('m212')+draftWarning()+t('m213')))return;
     const pw=$('export-passphrase').value,confirm=$('confirm-passphrase').value;
     if(Array.from(pw).length<12||Array.from(pw).length>256)
-      return status('گذرواژه باید بین ۱۲ تا ۲۵۶ نویسه باشد.',true);
-    if(pw!==confirm)return status('تکرار گذرواژه یکسان نیست.',true);
-    if(!protectedContext())return status('مرورگر از رمزگذاری امن پشتیبانی نمی‌کند؛ فایل بدون رمز را به‌عنوان فایل امن به کار نبرید.',true);
+      return status(t('m214'),true);
+    if(pw!==confirm)return status(t('m215'),true);
+    if(!protectedContext())return status(t('m216'),true);
     // Atomic workspace bytes and file identity: UI edits during KDF cannot
     // change the exported payload or its filename.
     const snapshot=JSON.stringify(state),snapshotId=state.workspace.id;
     const button=$('encrypt-export');encryptBusy=true;button.disabled=true;
-    status('در حال رمزگذاری؛ گذرواژه و داده‌ها فقط در همین مرورگر پردازش می‌شوند.');
+    status(t('m217'));
     try {
       const envelope=await seal(snapshot,pw);
       downloadJson(JSON.stringify(envelope,null,2)+'\n','nexus-protected-'+snapshotId+'.json');
       proofVerifiedSnapshot=null;
-      $('backup-proof-state').textContent='نسخهٔ تازه ساخته شد اما دریافت و بازیابی آن هنوز آزمایش نشده است. فایل را از بخش دانلودها انتخاب و بررسی کنید.';
-      status('فایل رمزگذاری‌شده برای دانلود ساخته شد؛ ذخیره‌شدن روی دستگاه تأیید نشده است. فایل دانلودشده را جداگانه آزمایش کنید.');
-    } catch {status('رمزگذاری انجام نشد؛ فایل جدیدی ذخیره نشده است.',true)}
+      $('backup-proof-state').textContent=t('m218');
+      status(t('m219'));
+    } catch {status(t('m220'),true)}
     finally{$('export-passphrase').value='';$('confirm-passphrase').value='';encryptBusy=false;button.disabled=!state.workspace.question}
   });
   $('export').addEventListener('click',()=>{
-    if(!state.workspace.question)return status('پیش از خروجی گرفتن، پرسش را ثبت کنید.',true);
-    if(!window.confirm('این فایل JSON بدون رمز و خواندنی است. آیا با ساخت نسخهٔ بدون رمز موافقید؟'+draftWarning()))return;
+    if(!state.workspace.question)return status(t('m211'),true);
+    if(!window.confirm(t('m221')+draftWarning()))return;
     downloadJson(JSON.stringify(state,null,2)+'\n','nexus-offline-'+state.workspace.id+'.json');
-    status('نسخهٔ JSON بدون رمز آماده شد؛ این فایل را خصوصی نگه دارید.');
+    status(t('m222'));
   });
 
   // This is a new, explicitly reconstructed Rust audit trail, NOT a claim
@@ -679,15 +764,15 @@ code{direction:ltr;unicode-bidi:embed}
     };
   }
   $('core-export').addEventListener('click',()=>{
-    if(!state.workspace.question)return status('ابتدا مسئله را ثبت کنید.',true);
-    if(!window.confirm('این فایل برای واردکردن به Rust بدون رمز خواهد بود و اطلاعات ثبت‌شدهٔ کارگاه را دربر دارد. تاریخچهٔ قابل‌تأیید نیست و فقط به‌صورت رویدادهای جدید بازسازی می‌شود. ادامه می‌دهید؟'+draftWarning()))return;
+    if(!state.workspace.question)return status(t('m223'),true);
+    if(!window.confirm(t('m224')+draftWarning()))return;
     try{
       const compatible=toCoreSnapshot(state);
       downloadJson(JSON.stringify(compatible,null,2)+'\n',
         'nexus-core-reconstructed-'+state.workspace.id+'.json');
-      status('فایل جدیدِ بدون رمز آماده شد؛ به هیچ سروری ارسال نشده است. واردکردن آن نیازمند تأیید جداگانه و سرور احرازهویت‌شده است.');
+      status(t('m225'));
     }catch{
-      status('فایل انتقال ساخته نشد؛ ساختار کارگاه معتبر نیست. کارگاه فعلی تغییر نکرد.',true);
+      status(t('m226'),true);
     }
   });
   function typeString(x,max,required=false){
@@ -756,7 +841,7 @@ code{direction:ltr;unicode-bidi:embed}
         data=await unseal(raw,pw);
       } else if(f.size>MAX_FILE)throw Error('plaintext-too-large');
       const incoming=validate(data);
-      if(!confirmReplacement('بارگذاری، کارگاه جاری را جایگزین می‌کند. ادامه می‌دهید؟'))return;
+      if(!confirmReplacement(t('m227')))return;
       state=incoming;
       $('question').value=state.workspace.question;
       $('goal').value=state.workspace.goal;
@@ -765,11 +850,11 @@ code{direction:ltr;unicode-bidi:embed}
       $('decision').value=state.workspace.judgment?.decision||'';
       $('rationale').value=state.workspace.judgment?.rationale||'';
       for(const id of ['claim','source','option','consequences'])$(id).value='';
-      status('فایل آفلاین اعتبارسنجی و باز شد. اصالت فایل و منشأ داده‌ها مستقلاً قابل‌اثبات نیست.');
+      status(t('m228'));
       render();
     }catch(err){
-      status(err?.message==='password-needed'?'گذرواژهٔ فایل رمزدار را در بخش بالا وارد کنید و فایل را دوباره انتخاب کنید.':
-        'فایل نامعتبر، گذرواژهٔ نادرست یا اطلاعات دستکاری‌شده است؛ کارگاه قبلی تغییر نکرد.',true);
+      status(err?.message==='password-needed'?t('m229'):
+        t('m230'),true);
     }
     finally{$('file').value='';$('restore-passphrase').value=''}
   });
@@ -783,9 +868,9 @@ code{direction:ltr;unicode-bidi:embed}
   }
   function vaultLabel(note=''){
     $('vault-state').textContent=note||(vaultKey?
-      'ذخیرهٔ رمزدار محلی فعال است. فایل خروجی مستقل را نیز حفظ کنید.':
-      vaultExists()?'نسخهٔ رمزدار محلی موجود است؛ برای ادامه باید گذرواژه را وارد کنید.':
-      'نسخهٔ محلی وجود ندارد؛ ذخیرهٔ خودکار غیرفعال است.');
+      t('m231'):
+      vaultExists()?t('m232'):
+      t('m233'));
   }
   function pauseVault(){
     vaultEpoch++;
@@ -809,24 +894,24 @@ code{direction:ltr;unicode-bidi:embed}
           cipher:{name:'AES-GCM',iv:toB64(iv),tagLength:128},
           ciphertext:toB64(encrypted)};
         window.localStorage.setItem(VAULT_SLOT,JSON.stringify(payload));
-        if(vaultEpoch===epoch)vaultLabel('آخرین تغییر ثبت‌شدهٔ کارگاه در همین مرورگر رمزگذاری شد؛ خروجی مستقل را فراموش نکنید.');
+        if(vaultEpoch===epoch)vaultLabel(t('m234'));
       }catch{
         if(vaultEpoch===epoch){
           pauseVault();
-          status('ذخیرهٔ رمزدار محلی ناموفق بود یا حافظهٔ مرورگر پر است؛ برای حفظ کارگاه، خروجی فایل رمزدار بگیرید.',true);
+          status(t('m235'),true);
         }
       }
     });
   }
   $('vault-enable').addEventListener('click',async()=>{
     if(vaultBusy)return;
-    if(!state.workspace.question)return status('ابتدا مسئله را ثبت کنید.',true);
+    if(!state.workspace.question)return status(t('m223'),true);
     const pw=$('vault-new-password').value,again=$('vault-new-confirm').value;
     if(Array.from(pw).length<12||Array.from(pw).length>256||pw!==again)
-      return status('برای ذخیرهٔ محلی، گذرواژهٔ یکسان با ۱۲ تا ۲۵۶ نویسه وارد کنید.',true);
-    if(!protectedContext())return status('این مرورگر رمزگذاری محلی امن را پشتیبانی نمی‌کند.',true);
-    try{window.localStorage.getItem(VAULT_SLOT)}catch{return status('حافظهٔ محلی این مرورگر در دسترس نیست.',true)}
-    if(vaultExists()&&!window.confirm('یک نسخهٔ رمزدار از قبل در این مرورگر وجود دارد. فعال‌سازی تازه ممکن است آن را جایگزین کند. نسخهٔ مستقل آن را نگه داشته‌اید؟'))return;
+      return status(t('m236'),true);
+    if(!protectedContext())return status(t('m237'),true);
+    try{window.localStorage.getItem(VAULT_SLOT)}catch{return status(t('m238'),true)}
+    if(vaultExists()&&!window.confirm(t('m239')))return;
     const originalId=state.workspace.id,originalState=JSON.stringify(state),originalEpoch=vaultEpoch;
     vaultBusy=true;$('vault-enable').disabled=true;
     try{
@@ -836,9 +921,9 @@ code{direction:ltr;unicode-bidi:embed}
         throw Error('changed-during-activation');
       vaultEpoch++;vaultKey=key;vaultSalt=salt;
       scheduleVaultSave();
-      status('ذخیرهٔ رمزدار محلی فعال شد؛ منتظر پیام تأیید ذخیره باشید.');
+      status(t('m240'));
       vaultLabel();
-    }catch{status('فعال‌سازی ذخیرهٔ محلی کامل نشد؛ کارگاه فعلی تغییر نکرد.',true)}
+    }catch{status(t('m241'),true)}
     finally{
       vaultBusy=false;$('vault-enable').disabled=false;
       $('vault-new-password').value='';$('vault-new-confirm').value='';
@@ -847,10 +932,10 @@ code{direction:ltr;unicode-bidi:embed}
   $('vault-restore').addEventListener('click',async()=>{
     if(vaultBusy)return;
     const pw=$('vault-open-password').value;
-    if(!pw)return status('برای بازکردن نسخهٔ محلی گذرواژه را وارد کنید.',true);
-    if(!protectedContext())return status('WebCrypto در این مرورگر موجود نیست.',true);
+    if(!pw)return status(t('m242'),true);
+    if(!protectedContext())return status(t('m243'),true);
     const originalState=JSON.stringify(state),originalEpoch=vaultEpoch,originalDraft=draftSignature();
-    if(!confirmReplacement('بازکردن نسخهٔ محلی، کارگاه باز فعلی را جایگزین می‌کند. ادامه می‌دهید؟'))return;
+    if(!confirmReplacement(t('m244')))return;
     vaultBusy=true;$('vault-restore').disabled=true;
     try{
       const encoded=window.localStorage.getItem(VAULT_SLOT);
@@ -872,7 +957,7 @@ code{direction:ltr;unicode-bidi:embed}
         throw Error('stale-or-overlarge-vault');
       const restored=validate(JSON.parse(decoder.decode(plaintext)));
       if(draftSignature()!==originalDraft)
-        return status('متن فرم‌ها هنگام بازکردن نسخهٔ محلی تغییر کرد؛ برای حفظ نوشتهٔ تازه، جایگزینی انجام نشد. دوباره تلاش کنید.',true);
+        return status(t('m245'),true);
       vaultEpoch++;vaultKey=key;vaultSalt=salt;state=restored;
       $('question').value=state.workspace.question;
       $('goal').value=state.workspace.goal;
@@ -882,9 +967,9 @@ code{direction:ltr;unicode-bidi:embed}
       $('rationale').value=state.workspace.judgment?.rationale||'';
       for(const id of ['claim','source','option','consequences'])$(id).value='';
       render();
-      status('نسخهٔ محلی رمزگشایی و بررسی شد. این داده‌ها در سرور یا نزد NEXUS پشتیبان‌گیری نشده‌اند.');
+      status(t('m246'));
     }catch{
-      status('نسخهٔ محلی موجود نیست، گذرواژه نادرست است یا فایل دستکاری شده؛ کارگاه فعلی تغییر نکرد.',true);
+      status(t('m247'),true);
     }finally{
       vaultBusy=false;$('vault-restore').disabled=false;$('vault-open-password').value='';
       vaultLabel();
@@ -892,17 +977,17 @@ code{direction:ltr;unicode-bidi:embed}
   });
   $('vault-pause').addEventListener('click',()=>{
     pauseVault();
-    status('ذخیرهٔ خودکار متوقف شد؛ نسخهٔ رمزدار قبلی حذف نشده و کارگاه فعلی هنوز در این تب باز است.');
+    status(t('m248'));
   });
   $('vault-delete').addEventListener('click',()=>{
-    if(!vaultExists())return status('نسخهٔ محلی برای حذف وجود ندارد.');
-    if(!window.confirm('نسخهٔ رمزدار داخل این مرورگر حذف شود؟ فایل‌های خروجی مستقل حذف نخواهند شد.'))return;
+    if(!vaultExists())return status(t('m249'));
+    if(!window.confirm(t('m250')))return;
     try{
       pauseVault();
       window.localStorage.removeItem(VAULT_SLOT);
       vaultLabel();
-      status('نسخهٔ رمزدار این مرورگر پاک شد؛ کارگاه فعلی فقط در همین تب باقی مانده است.');
-    }catch{status('حذف نسخهٔ محلی انجام نشد.',true)}
+      status(t('m251'));
+    }catch{status(t('m252'),true)}
   });
   // Pilot 12: a user gesture is required before any worker registration.
   // A file:// copy keeps its original single-file offline behavior; the
@@ -922,9 +1007,9 @@ code{direction:ltr;unicode-bidi:embed}
   }
   $('offline-install').addEventListener('click',async()=>{
     if(!canInstallShell())return offlineStatus.textContent=
-      'این مرورگر یا روش بازکردن فایل از نصب برنامه پشتیبانی نمی‌کند؛ فایل HTML مستقل همچنان قابل‌استفاده است.';
+      t('m253');
     const button=$('offline-install');button.disabled=true;
-    offlineStatus.textContent='در حال دریافت و اعتبارسنجی نسخهٔ ثابت برنامه...';
+    offlineStatus.textContent=t('m254');
     try{
       const reg=await navigator.serviceWorker.register('/service-worker.js',{
         scope:'/',updateViaCache:'none'});
@@ -934,32 +1019,32 @@ code{direction:ltr;unicode-bidi:embed}
       const shell=await caches.keys();
       if(!shell.some(name=>name.startsWith('nexus-app-shell-v12-')))
         throw Error('offline-shell-not-installed');
-      offlineStatus.textContent='برنامهٔ آفلاین روی همین دستگاه آماده است. برای نصب میان‌بر از «افزودن به صفحهٔ اصلی» استفاده کنید. کارگاه فعلی جداگانه ذخیره نشده است.';
+      offlineStatus.textContent=t('m255');
     }catch{
-      offlineStatus.textContent='آماده‌سازی آفلاین تأیید نشد؛ احتمال قطعی اتصال، محدودیت مرورگر یا ناسازگاری فایل سایت وجود دارد. هیچ بکاپ کارگاهی ساخته نشد.';
+      offlineStatus.textContent=t('m256');
     }finally{button.disabled=false}
   });
   $('offline-home').addEventListener('click',async()=>{
     if(installPrompt){
       const prompt=installPrompt;installPrompt=null;
       try{await prompt.prompt();await prompt.userChoice;
-        offlineStatus.textContent='درخواست نصب به مرورگر ارسال شد. نتیجهٔ نصب به تنظیمات همان دستگاه بستگی دارد.';}
-      catch{offlineStatus.textContent='درخواست نصب در این مرورگر انجام نشد.';}
+        offlineStatus.textContent=t('m257');}
+      catch{offlineStatus.textContent=t('m258');}
     }else offlineStatus.textContent=
-      'در مرورگر گوشی، منوی سه‌نقطه را باز کنید و «نصب برنامه» یا «افزودن به صفحهٔ اصلی» را بزنید. در برخی مرورگرها میان‌بر به‌جای برنامه نصب می‌شود.';
+      t('m259');
   });
   $('offline-remove').addEventListener('click',async()=>{
-    if(!canInstallShell())return offlineStatus.textContent='نسخهٔ آفلاین تحت کنترل این مرورگر نیست.';
-    if(!window.confirm('نسخهٔ کش‌شدهٔ برنامه از همین مرورگر حذف شود؟ این کار فایل‌های خروجی و نسخهٔ رمزدار کارگاه را پاک نمی‌کند.'))return;
+    if(!canInstallShell())return offlineStatus.textContent=t('m260');
+    if(!window.confirm(t('m261')))return;
     try{
       const reg=await navigator.serviceWorker.getRegistration('/');
       if(reg&&!await reg.unregister())throw Error('unregister-refused');
       const names=await caches.keys();
       for(const name of names.filter(x=>x.startsWith('nexus-app-shell-')))
         if(!await caches.delete(name))throw Error('cache-not-removed');
-      offlineStatus.textContent='نسخهٔ آفلاین برنامه حذف شد؛ برای اعمال کامل، همهٔ پنجره‌های برنامه را ببندید. فایل‌ها و کارگاه رمزدار پاک نشده‌اند.';
+      offlineStatus.textContent=t('m262');
     }catch{
-      offlineStatus.textContent='حذف کامل برنامهٔ آفلاین تأیید نشد؛ وضعیت مرورگر را بررسی کنید.';
+      offlineStatus.textContent=t('m263');
     }
   });
   if(!canInstallShell())$('offline-install').disabled=true;

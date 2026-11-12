@@ -6,6 +6,8 @@ on:
       - '.github/workflows/pilot-12-installable-offline.yml'
       - 'scripts/test-pwa-offline-browser.mjs'
       - 'web/offline-pilot.html'
+      - 'web/locales/**'
+      - 'scripts/build-ui-languages.py'
       - 'public/service-worker.js'
       - 'public/manifest.json'
       - 'public/icons/**'
@@ -16,6 +18,8 @@ on:
       - '.github/workflows/pilot-12-installable-offline.yml'
       - 'scripts/test-pwa-offline-browser.mjs'
       - 'web/offline-pilot.html'
+      - 'web/locales/**'
+      - 'scripts/build-ui-languages.py'
       - 'public/service-worker.js'
       - 'public/manifest.json'
       - 'public/icons/**'
@@ -39,6 +43,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 scripts/build-ui-languages.py --check
           python3 - <<'PY'
           import hashlib, json, struct
           from pathlib import Path
@@ -56,7 +61,7 @@ jobs:
           assert "req.mode!=='navigate'" in worker
           assert "req.method!=='GET'" in worker
           assert manifest['start_url']=='/' and manifest['scope']=='/'
-          assert manifest['display']=='standalone' and manifest['lang']=='fa'
+          assert manifest['display']=='standalone' and manifest['lang']=='en'
           assert {i['sizes'] for i in manifest['icons']}=={'192x192','512x512'}
           for n in (192,512):
               p=Path(f'public/icons/nexus-{n}.png')
