@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 import re
 import struct
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -155,6 +156,10 @@ def main():
     report = public_observation(args.attempts)
     print(json.dumps(report, sort_keys=True))
     if report["status"] != "PASS":
+        # Contains ONLY known public path IDs, HTTP status, MIME, byte counts
+        # and SHA-256 hashes. Never log file bytes, browser state or secrets.
+        print("NEXUS_PUBLIC_PWA_DIAGNOSTIC=" +
+              json.dumps(report, sort_keys=True), file=sys.stderr)
         raise SystemExit("BLOCKED: public static installable asset identity mismatch")
 
 
