@@ -98,10 +98,10 @@ window.addEventListener('load', async () => {
     const sampleId=demoExport.workspace.id;
     window.confirm=()=>false;
     byId('load-demo').click(); await tick();
-    byId('export').click();
+    window.confirm=()=>true;
+    byId('export').click(); // Fresh, user-consented export, not the previous blob.
     assert(JSON.parse(await blob.text()).workspace.id===sampleId,
        'demo-overwrote-current-data-after-denial');
-    window.confirm=()=>true;
     byId('new').click(); await tick();
     assert(byId('export').disabled &&
        byId('decision-view').textContent.includes('هیچ تصمیم انسانی') &&
