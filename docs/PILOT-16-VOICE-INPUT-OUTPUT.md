@@ -66,3 +66,15 @@ Official browser references:
 - https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API/Using_the_Web_Speech_API
 - https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition/processLocally
 - https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesisVoice/localService
+
+## Public source promotion — 2026-11-12
+
+All nine workflows for PR #119 head
+`3bab1b465475409f1ffea8dcef40f463dd61d66d` succeeded before merge.
+The existing static site reports LIVE for cache-cleared Render deploy
+`dep-dbqrjem1egvs73d0hqjg`, source
+`733de2c9e5b29eec966701bcc4888391992fe883`.
+Public observers pin that source and execute the 35 controlled-adapter voice
+checks per viewport separately from the workshop, report, draft, language and
+actual offline-navigation witnesses. The voice report explicitly records
+native_audio_tested=false: no owner's physical microphone/speaker was exercised.
