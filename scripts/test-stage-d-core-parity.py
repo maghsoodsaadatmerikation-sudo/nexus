@@ -5,12 +5,14 @@ These tests copy PUBLIC source files to disposable directories; no provider
 credentials, original volume files, private workspace content or network.
 """
 import importlib.util
+import os
 from pathlib import Path
 import shutil
 import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parent.parent
+REFERENCE = Path(os.environ.get("NEXUS_PARITY_REFERENCE_ROOT", ROOT)).resolve()
 SCRIPT = Path(__file__).with_name("stage-d-core-parity.py")
 spec = importlib.util.spec_from_file_location("nexus_stage_d_core_parity", SCRIPT)
 parity = importlib.util.module_from_spec(spec)
@@ -26,10 +28,10 @@ class CoreSourceParityTests(unittest.TestCase):
         for relative in parity.SOURCE_BLOBS:
             target = self.copy / relative
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(ROOT / relative, target)
+            shutil.copyfile(REFERENCE / relative, target)
 
-    def test_known_original_railway_deployed_sources_match_current_checkout(self):
-        self.assertEqual(parity.check(ROOT, parity.DEPLOYED_COMMIT),
+    def test_known_original_railway_deployed_sources_match_reference_checkout(self):
+        self.assertEqual(parity.check(REFERENCE, parity.DEPLOYED_COMMIT),
                          len(parity.SOURCE_BLOBS))
 
     def test_disposable_valid_source_copy_passes(self):

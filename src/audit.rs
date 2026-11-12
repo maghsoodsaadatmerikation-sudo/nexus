@@ -19,6 +19,10 @@ pub struct AuditLog {
 }
 
 impl AuditLog {
-    pub fn record(&mut self, event: AuditEvent) { self.events.push(event); }
-    pub fn events(&self) -> &[AuditEvent] { &self.events }
+    pub fn record(&mut self, event: AuditEvent) {
+        self.events.push(event);
+    }
+    pub fn events(&self) -> &[AuditEvent] {
+        &self.events
+    }
 }

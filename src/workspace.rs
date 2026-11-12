@@ -166,11 +166,7 @@ impl WorkspaceEngine {
         }
     }
 
-    pub fn record_human_judgment(
-        &mut self,
-        judgment: HumanJudgment,
-        provenance_id: ProvenanceId,
-    ) {
+    pub fn record_human_judgment(&mut self, judgment: HumanJudgment, provenance_id: ProvenanceId) {
         let previous = self.workspace.judgment.clone();
         self.workspace.record_human_judgment(judgment.clone());
         self.append_event(
@@ -249,7 +245,9 @@ fn validate_snapshot(snapshot: &WorkspaceSnapshot) -> Result<(), WorkspaceStoreE
         .events
         .iter()
         .filter_map(|event| match &event.kind {
-            WorkspaceEventKind::AlternativeAdded { alternative_id } => Some(alternative_id.as_str()),
+            WorkspaceEventKind::AlternativeAdded { alternative_id } => {
+                Some(alternative_id.as_str())
+            }
             _ => None,
         })
         .collect();
@@ -283,9 +281,7 @@ fn validate_snapshot(snapshot: &WorkspaceSnapshot) -> Result<(), WorkspaceStoreE
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        AnalysisObservation, AnalysisObservationKind, ClaimOrigin, Uncertainty,
-    };
+    use crate::{AnalysisObservation, AnalysisObservationKind, ClaimOrigin, Uncertainty};
 
     #[test]
     fn audit_events_are_append_only_and_sequenced() {
@@ -332,7 +328,10 @@ mod tests {
         });
 
         assert_eq!(engine.workspace().claims.len(), 1);
-        assert_eq!(engine.workspace().claims[0].origin, ClaimOrigin::MachineAnalysis);
+        assert_eq!(
+            engine.workspace().claims[0].origin,
+            ClaimOrigin::MachineAnalysis
+        );
         assert!(!engine.workspace().has_human_judgment());
         assert!(matches!(
             &engine.events()[1].kind,
