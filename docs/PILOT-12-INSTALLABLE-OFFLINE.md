@@ -104,3 +104,21 @@ Original Railway `/data` independent backup and clean restore remains
 the first actual authenticated human Rust pilot remains
 [Issue #70](https://github.com/maghsoodsaadatmerikation-sudo/nexus/issues/70).
 `A_out <= A_in`.
+
+## Corrected public PWA deployment and independent verification
+
+The first Pilot 12 static deployment served the manifest with
+`binary/octet-stream` MIME and Render losslessly optimized the PNG
+containers. The manifest hotfix in [PR #110](https://github.com/maghsoodsaadatmerikation-sudo/nexus/pull/110)
+published as source `87afc579be8207ab641e645f8aab207384ddd46c`
+and Render deployment `dep-dbqq8u0ae00c73951ju0` (provider LIVE).
+It uses `/manifest.json`, preserving the exact worker SHA256 pin.
+
+The independent [five-asset public observer](../scripts/verify-public-pwa-assets.py)
+checks exact bytes for HTML, JSON manifest and Service Worker;
+for CDN-recompressed PNG icons it compares **decoded canonical RGBA
+pixel SHA256**, never falsely claiming identical compressed bytes.
+The [public-origin offline Chromium workflow](../.github/workflows/pilot-12-public-installability.yml)
+proves offline navigation from a *real* HTTPS site in synthetic
+Chromium; it does not establish Android hardware acceptance, actual
+user workspace recoverability or Rust production launch.
