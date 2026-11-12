@@ -152,8 +152,11 @@ async function layoutWitness(layout){
     assert((layout==='narrow')===(report.width<=760),'live-browser-viewport-invalid');
     assert(documents.length>=2&&network.length>=2,'not-two-real-public-document-loads');
     for(const x of network)verifyRequest(x.url,x.method);
-    for(const x of documents)assert(x.status===200 && x.mimeType==='text/html',
-      'public-browser-document-not-200-html');
+    for(const x of documents){
+      assert(x.status===200,'public-browser-document-http-status');
+      assert(/^text\/html(?:\s*;|$)/i.test(x.mime||''),
+        'public-browser-document-content-type');
+    }
     const last=documents[documents.length-1];
     const body=await rpc('Network.getResponseBody',{requestId:last.requestId});
     const downloaded=Buffer.from(body.body,body.base64Encoded?'base64':'utf8');
