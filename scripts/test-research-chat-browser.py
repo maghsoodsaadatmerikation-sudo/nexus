@@ -54,8 +54,9 @@ try{
  release=null;send();await wait(()=>!!release);$('clear').click();release({ok:true,json:async()=>fixture()});await new Promise(r=>setTimeout(r,30));
  assert($('conversation').children.length===0&&!$('send').disabled,'clear-discards-late-reply-and-sensitive-context');
  change('language','fa');assert(document.documentElement.dir==='rtl'&&$('send').textContent==='ارسال','persian-interface-and-reading-direction');
- reply=async()=>{const r=fixture();r.answer='نمونه '.repeat(250);r.sources[0].excerpt='زمینه '.repeat(300);return {ok:true,json:async()=>r}};
+ reply=async()=>{const r=fixture();r.answer='نمونه '.repeat(250);r.sources=Array.from({length:4},(_,i)=>({...r.sources[0],id:'S'+(i+1),url:'https://example.org/source'+i,excerpt:'🧭'.repeat(2000)}));return {ok:true,json:async()=>r}};
  for(let i=0;i<10;i++){fill('message','پرسش '.repeat(280));send();await wait(()=>!$('send').disabled)}
+ assert(calls.at(-1).payload.messages.length<15,'oversized-context-actually-trims-oldest-pairs');
  assert(new TextEncoder().encode(JSON.stringify(calls.at(-1).payload)).length<=60000,'long-persian-context-respects-byte-budget');
  assert(calls.at(-1).payload.messages.at(-1).content==='پرسش '.repeat(280).trim(),'byte-budget-keeps-latest-human-message');
  assert(localStorage.length===0&&sessionStorage.length===0,'no-persistent-chat-or-token-storage');
