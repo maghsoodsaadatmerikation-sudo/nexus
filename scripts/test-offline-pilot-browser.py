@@ -38,6 +38,14 @@ window.addEventListener('load', async () => {
     input.dispatchEvent(new Event('change', {bubbles:true}));
     await tick();
   };
+  const proofSelect = async text => {
+    const file = new File([text], 'nexus-selected-download.json', {type:'application/json'});
+    const input = byId('backup-proof-file'), dt = new DataTransfer();
+    dt.items.add(file);input.files=dt.files;
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+    await waitFor(()=>!byId('backup-proof').disabled &&
+      byId('backup-proof-password').value==='','proof-file-validation-timeout');
+  };
   let requests = 0, blob, blobCount=0;
   window.fetch = () => { requests++; throw new Error('network-disallowed'); };
   window.XMLHttpRequest = class { constructor(){ requests++; throw Error('network-disallowed'); } };
@@ -256,6 +264,41 @@ window.addEventListener('load', async () => {
       'weak-or-plaintext-encrypted-envelope');
     await waitFor(()=>byId('export-passphrase').value==='','export-password-not-cleared');
     checks.push('aes256-gcm-encrypted-no-plaintext-or-password');
+    // Pilot 11: independently SELECT the downloaded ciphertext bytes;
+    // inspecting the original in-memory export Blob would be a false proof.
+    const proofPrior=byId('decision-view').textContent;
+    const auditPrior=byId('audit').textContent;
+    byId('backup-proof').click();
+    assert(byId('backup-proof-state').textContent.includes('ابتدا'),
+      'proof-without-password-not-blocked');
+    checks.push('selected-backup-check-requires-password');
+    fill('backup-proof-password','a-long-synthetic-passphrase-2026');
+    await proofSelect(JSON.stringify(encrypted));
+    assert(byId('backup-proof-state').textContent.includes('دقیقاً') &&
+      byId('backup-proof-state').textContent.includes('موفق') &&
+      byId('decision-view').textContent===proofPrior &&
+      byId('audit').textContent===auditPrior,
+      'selected-backup-not-verified-or-mutated-workspace');
+    checks.push('independently-selected-encrypted-copy-matches-workspace');
+    fill('backup-proof-password','incorrect-protected-passphrase');
+    await proofSelect(JSON.stringify(encrypted));
+    assert(byId('backup-proof-state').textContent.includes('ناموفق') &&
+      byId('decision-view').textContent===proofPrior &&
+      byId('audit').textContent===auditPrior,
+      'wrong-password-proof-changed-workspace');
+    checks.push('backup-recovery-rehearsal-rejects-wrong-passphrase');
+    const badSelected={...encrypted,ciphertext:
+      (encrypted.ciphertext[0]==='A'?'B':'A')+encrypted.ciphertext.slice(1)};
+    fill('backup-proof-password','a-long-synthetic-passphrase-2026');
+    await proofSelect(JSON.stringify(badSelected));
+    assert(byId('backup-proof-state').textContent.includes('ناموفق') &&
+      byId('decision-view').textContent===proofPrior,'corrupt-proof-accepted');
+    fill('backup-proof-password','a-long-synthetic-passphrase-2026');
+    await proofSelect(JSON.stringify(demoExport));
+    assert(byId('backup-proof-state').textContent.includes('ناموفق') &&
+      byId('backup-proof-password').value==='',
+      'plaintext-export-accepted-as-protected-proof');
+    checks.push('backup-proof-rejects-corruption-and-plaintext');
     oldBlob=blob;
     fill('export-passphrase','a-long-synthetic-passphrase-2026');
     fill('confirm-passphrase','a-long-synthetic-passphrase-2026');
@@ -266,6 +309,9 @@ window.addEventListener('load', async () => {
       encrypted.cipher.iv!==encrypted2.cipher.iv &&
       encrypted.ciphertext!==encrypted2.ciphertext,'reused-salt-or-nonce');
     checks.push('fresh-random-salt-nonce-per-export');
+    assert(!byId('backup-proof-state').textContent.includes('موفق'),
+      'fresh-export-falsely-inherited-prior-proof');
+    checks.push('new-export-invalidates-previous-proof');
     const preserved=byId('decision-view').textContent;
     await upload(JSON.stringify(encrypted2));
     assert(byId('status').classList.contains('error') &&
@@ -288,6 +334,13 @@ window.addEventListener('load', async () => {
     checks.push('tampered-ciphertext-fail-closed');
     byId('new').click(); await tick();
     assert(byId('decision-view').textContent.includes('هیچ تصمیم انسانی'),'new-did-not-clear');
+    fill('backup-proof-password','a-long-synthetic-passphrase-2026');
+    await proofSelect(JSON.stringify(encrypted));
+    assert(byId('backup-proof-state').textContent.includes('یکسان نیست') &&
+      byId('decision-view').textContent.includes('هیچ تصمیم انسانی') &&
+      byId('claims').textContent.includes('شاهدی ثبت نشده'),
+      'different-valid-archive-replaced-active-workspace');
+    checks.push('recoverable-older-file-does-not-match-new-workspace');
     fill('restore-passphrase','a-long-synthetic-passphrase-2026');
     await upload(JSON.stringify(encrypted2));
     await waitFor(()=>byId('decision-view').textContent.includes('انتخاب آگاهانهٔ من'),
@@ -482,7 +535,7 @@ def main():
             if proc.returncode:
                 raise RuntimeError("real browser did not report PASS: exit="+str(proc.returncode)+" stdout="+proc.stdout.strip()[:300]+" stderr="+proc.stderr.strip()[-450:])
             report = json.loads(proc.stdout)
-            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 40 or
+            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 46 or
                 report.get("network_requests") != 0 or
                 (layout == "narrow") != (report["width"] <= 760)):
                 raise RuntimeError("offline real-browser contract did not PASS")
