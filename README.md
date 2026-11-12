@@ -99,6 +99,25 @@ Files are not server uploads or part of the encrypted workspace checkpoint.
 The static site reports LIVE on Pilot 17; independent public-byte and
 file-desk/browser acceptance must pass before stating public verification.
 
+## Local exploratory data analysis (Pilot 18 candidate)
+
+The file tray now offers an explicit **Local data analysis** panel for
+CSV, TSV, flat JSON object arrays and bounded XLSX sheets. It calculates
+descriptive numeric statistics, missingness, categorical frequencies, group
+comparisons and pairwise Pearson correlations in-browser, and offers simple
+distribution bars and an explicitly confirmed aggregate JSON export.
+A selected summary can become only an **unregistered machine-analysis draft**;
+it never automatically establishes truth, a human judgment or an audit event.
+No file or analysis is uploaded to the static Render server. Inputs are limited
+to 1 MiB, 5,000 rows and 40 columns; XLSX formulas are rejected rather than
+executed. Analysis exists in this tab only, and the summary JSON is unencrypted
+and may include private category labels.
+
+[Supported inputs, statistics, limits and acceptance](docs/PILOT-18-LOCAL-DATA-ANALYSIS.md).
+This candidate requires passing real-browser verification, a separate manual
+static deployment and independent public acceptance before it is described as
+published.
+
 ## Recoverability check for private encrypted files (Pilot 11)
 
 Pilot 11 adds **file-picker verification of an actual downloaded encrypted JSON file**, with the original passphrase, against the *committed* workspace. This does not replace the workspace, upload it or claim that the file is safe outside the device. The independent HTTPS observer checks the published source. [Pilot 11 details](docs/PILOT-11-VERIFIED-ENCRYPTED-EXPORT.md).
