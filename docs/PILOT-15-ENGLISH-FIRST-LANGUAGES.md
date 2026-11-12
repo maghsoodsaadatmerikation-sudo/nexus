@@ -61,3 +61,15 @@ The installable app embeds both catalogs, retaining file:// and real offline
 operation. Public identity, public-origin language behavior and offline
 navigation require independent acceptance after deployment. No original
 Railway access, new paid resources, automatic judgment or release Seal.
+
+## Public promotion — 2026-11-12
+
+All nine PR #117 workflows succeeded for exact head
+`706e61de8da191123603a24c24f1302d105a6a64` before merge. Source
+`795e1b3371b0674ee0d3abcdd9fd57ce27813cc1` was published on the existing
+static site, Render deployment `dep-dbqr5nmi0phs73dggik0` reporting LIVE.
+The public observers pin that source and separately check exact public assets,
+English-first language behavior, Persian legacy workflows, and actual offline
+reopening. Public language tests use synthetic Arabic/private-use packs only
+to verify loading and direction; they are not bundled reviewed translations.
+No real Android-device acceptance or real user-data translation is claimed.

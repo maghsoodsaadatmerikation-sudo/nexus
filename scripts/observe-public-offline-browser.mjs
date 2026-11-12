@@ -18,9 +18,10 @@ const PUBLIC_APP_ASSETS=new Set([
 ]);
 const REPORT_MODE=process.env.NEXUS_PUBLIC_REPORT==='true';
 const DRAFT_MODE=process.env.NEXUS_PUBLIC_DRAFT==='true';
-if(REPORT_MODE&&DRAFT_MODE)throw Error('choose-one-public-witness-mode');
-const EXPECTED_CHECKS=DRAFT_MODE?21:REPORT_MODE?17:46;
-const MIN_DOCUMENTS=(DRAFT_MODE||REPORT_MODE)?1:2;
+const LANGUAGE_MODE=process.env.NEXUS_PUBLIC_LANGUAGE==='true';
+if([REPORT_MODE,DRAFT_MODE,LANGUAGE_MODE].filter(Boolean).length>1)throw Error('choose-one-public-witness-mode');
+const EXPECTED_CHECKS=LANGUAGE_MODE?23:DRAFT_MODE?21:REPORT_MODE?17:46;
+const MIN_DOCUMENTS=(LANGUAGE_MODE||DRAFT_MODE||REPORT_MODE)?1:2;
 const REPO_ROOT=new URL('../',import.meta.url);
 const sha256=value=>createHash('sha256').update(value).digest('hex');
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -35,9 +36,9 @@ if(!GITHUB_ONLY || !BROWSER || typeof WebSocket==='undefined' ||
 const expected=await readFile(new URL('../web/offline-pilot.html',import.meta.url));
 assert(expected.length>1000 && expected.length<=300000,'expected-source-size');
 const expectedDigest=sha256(expected);
-const pythonTest=await readFile(new URL(DRAFT_MODE?'./test-draft-guard-browser.py':REPORT_MODE?'./test-decision-report-browser.py':'./test-offline-pilot-browser.py',import.meta.url),'utf8');
+const pythonTest=await readFile(new URL(LANGUAGE_MODE?'./test-ui-languages-browser.py':DRAFT_MODE?'./test-draft-guard-browser.py':REPORT_MODE?'./test-decision-report-browser.py':'./test-offline-pilot-browser.py',import.meta.url),'utf8');
 const match=pythonTest.match(/WITNESS = r"""([\s\S]*?)"""/);
-assert(match && match[1].length>1000 && match[1].includes(DRAFT_MODE?'uncommitted-question-has-visible-and-unload-guard':REPORT_MODE?'report-user-content-is-inert-text':'real-page-reload-requires-passphrase-and-recovers'),
+assert(match && match[1].length>1000 && match[1].includes(LANGUAGE_MODE?'english-is-explicit-default':DRAFT_MODE?'uncommitted-question-has-visible-and-unload-guard':REPORT_MODE?'report-user-content-is-inert-text':'real-page-reload-requires-passphrase-and-recovers'),
   'exact-real-browser-witness-unavailable');
 
 function verifyDocument(status,mime,bytes,redirected=false){
@@ -218,7 +219,7 @@ async function main(){
   const reports=[];
   for(const layout of ['narrow','wide'])reports.push(await layoutWitness(layout));
   process.stdout.write(JSON.stringify({
-    schema:DRAFT_MODE?'nexus.public-pilot.draft-guard-acceptance.v1':REPORT_MODE?'nexus.public-pilot.decision-report-acceptance.v1':'nexus.public-pilot.browser-acceptance.v1',status:'PASS',
+    schema:LANGUAGE_MODE?'nexus.public-pilot.ui-language-acceptance.v1':DRAFT_MODE?'nexus.public-pilot.draft-guard-acceptance.v1':REPORT_MODE?'nexus.public-pilot.decision-report-acceptance.v1':'nexus.public-pilot.browser-acceptance.v1',status:'PASS',
     source_sha256:expectedDigest,independent_get_sha256:getSha,
     origin:ORIGIN,checks_per_layout:EXPECTED_CHECKS,negative_local_fixtures:6,
     report:reports,synthetic_only:true,real_human_tested:false,
