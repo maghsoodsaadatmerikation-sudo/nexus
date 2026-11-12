@@ -18,7 +18,7 @@ A_out <= A_in
 
 The standalone Persian/RTL mobile pilot is hosted at
 **https://nexus-offline-pilot.onrender.com/**. Render reported LIVE for
-manual deployment `dep-dbqolejbc2fs73e0mha0` of Pilot 11
+manual deployment `dep-dbqooirrjlhs73a1cvdg` of Pilot 11
 source commit `ed13887699b49a8494a3178e426ad9192e14d57e`.
 The independent static HTTPS identity workflow pins the actually deployed
 source; provider status alone is not byte-level proof. The app does not
