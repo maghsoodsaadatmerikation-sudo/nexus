@@ -45,7 +45,7 @@ code{direction:ltr;unicode-bidi:embed}
 <main>
   <div class="banner">
     <strong>بدون حساب، توکن یا اینترنت پس از دریافت فایل</strong>
-    <small>اطلاعات فقط در حافظهٔ همین صفحه است؛ برای حفظ آن خروجی رمزدار بگیرید. این نسخه هیچ اتصالی به Railway ندارد. فایل آفلاین مستقیماً با هستهٔ Rust سازگار نیست؛ انتقال اختیاری فقط با خروجی جداگانهٔ «فایل انتقال به هستهٔ Rust» انجام می‌شود.</small>
+    <small>اطلاعات به‌طور پیش‌فرض فقط در حافظهٔ همین صفحه است؛ ادامهٔ رمزدار محلی تنها با فعال‌سازی صریح انجام می‌شود. برای حفظ مستقل داده‌ها خروجی رمزدار بگیرید. این نسخه هیچ اتصالی به Railway ندارد. فایل آفلاین مستقیماً با هستهٔ Rust سازگار نیست؛ انتقال اختیاری فقط با خروجی جداگانهٔ «فایل انتقال به هستهٔ Rust» انجام می‌شود.</small>
   </div>
   <div class="toolbar">
     <button type="button" id="encrypt-export">دریافت نسخهٔ رمزگذاری‌شده</button>
@@ -64,6 +64,23 @@ code{direction:ltr;unicode-bidi:embed}
       <div><label for="restore-passphrase">گذرواژهٔ بازکردن فایل رمزدار</label><input type="password" id="restore-passphrase" autocomplete="off" maxlength="256" placeholder="پیش از بازکردن فایل وارد کنید"></div>
     </div>
     <p class="help">رمزگذاری: AES-256-GCM با کلید ساخته‌شده از PBKDF2-SHA-256 و نمک تصادفی. این روش در برابر گذرواژهٔ ضعیف، دستگاه آلوده یا ازدست‌رفتن فایل و گذرواژه تضمین مطلق ندارد. فقط فایل رمزگذاری‌شده را در جای امن نگه دارید.</p>
+  </section>
+  <section class="panel full" aria-labelledby="vault-title" style="margin-bottom:16px">
+    <h2 id="vault-title">ادامهٔ امن‌تر در همین مرورگر (اختیاری)</h2>
+    <p class="help">با فعال‌سازی صریح، فقط متن رمزگذاری‌شدهٔ کارگاه در حافظهٔ محلی همین مرورگر ذخیره می‌شود؛ برای بازکردن آن پس از بارگذاری مجدد، گذرواژه لازم است. هیچ گذرواژه یا متنِ خوانا در ذخیره‌سازی مرورگر قرار نمی‌گیرد. پاک‌کردن داده‌های مرورگر، تغییر دستگاه، حالت ناشناس یا محدودیت حافظه می‌تواند این نسخه را از بین ببرد. <strong>فایل خروجی رمزدار مستقل بگیرید.</strong></p>
+    <div class="flex">
+      <div><label for="vault-new-password">گذرواژهٔ ادامهٔ محلی</label><input id="vault-new-password" type="password" autocomplete="new-password" maxlength="256" placeholder="حداقل ۱۲ نویسه"></div>
+      <div><label for="vault-new-confirm">تکرار گذرواژهٔ محلی</label><input id="vault-new-confirm" type="password" autocomplete="new-password" maxlength="256"></div>
+      <div><label for="vault-open-password">گذرواژهٔ بازکردن نسخهٔ محلی</label><input id="vault-open-password" type="password" autocomplete="off" maxlength="256"></div>
+    </div>
+    <div class="toolbar" style="margin-top:12px">
+      <button id="vault-enable" type="button">فعال‌سازی ذخیرهٔ رمزدار محلی</button>
+      <button id="vault-restore" type="button" class="secondary">بازکردن نسخهٔ محلی</button>
+      <button id="vault-pause" type="button" class="secondary">توقف ذخیرهٔ خودکار</button>
+      <button id="vault-delete" type="button" class="secondary">حذف نسخهٔ محلی</button>
+    </div>
+    <p id="vault-state" class="status" role="status" aria-live="polite">وضعیت ذخیرهٔ محلی در حال بررسی است.</p>
+    <p class="help">گذرواژه بعد از فعال‌سازی در کادر باقی نمی‌ماند؛ کلید غیرقابل‌استخراج فقط تا بسته‌شدن این صفحه در حافظه می‌ماند. نسخهٔ محلی بکاپ مستقل، شاهد حسابرسی یا ذخیره‌سازی سرور نیست.</p>
   </section>
   <p id="status" class="status" role="status" aria-live="polite">فضای جدید آماده است. یک پرسش بنویسید.</p>
   <div class="grid">
@@ -139,7 +156,7 @@ code{direction:ltr;unicode-bidi:embed}
   </div>
 </main>
 <footer>
-  <b>NEXUS Offline Pilot v1</b> — فقط ابزار تمرین تصمیم‌گیری انسان. بدون اتصال شبکه، ذخیره‌سازی خودکار یا تولید تحلیل هوش مصنوعی. داده‌ها پس از بستن یا بارگذاری مجدد صفحه باقی نمی‌مانند مگر اینکه خودتان فایل JSON بگیرید. این فایل، بکاپ Volume سرور NEXUS نیست. اصل پروژه: <code>A_out ≤ A_in</code>.
+  <b>NEXUS Offline Pilot v1</b> — فقط ابزار تمرین تصمیم‌گیری انسان. بدون اتصال شبکه یا ذخیره‌سازی سروری. تنها در صورت فعال‌سازی صریح، نسخهٔ رمزدار در همین مرورگر ذخیره می‌شود؛ بدون آن داده‌ها پس از بستن صفحه باقی نمی‌مانند. همیشه فایل خروجی رمزدار جداگانه بگیرید. این فایل، بکاپ Volume سرور NEXUS نیست. اصل پروژه: <code>A_out ≤ A_in</code>.
 </footer>
 <script>
 (function(){
@@ -222,6 +239,7 @@ code{direction:ltr;unicode-bidi:embed}
     $('export').disabled=!w.question;
     $('core-export').disabled=!w.question;
     $('encrypt-export').disabled=!w.question||encryptBusy;
+    scheduleVaultSave();
   }
   $('ask-form').addEventListener('submit',e=>{
     e.preventDefault();
@@ -277,6 +295,7 @@ code{direction:ltr;unicode-bidi:embed}
   });
   $('new').addEventListener('click',()=>{
     if(state.events.length&&!window.confirm('اطلاعات ذخیره‌نشده با ساخت کارگاه تازه از بین می‌رود. ادامه می‌دهید؟'))return;
+    pauseVault();
     state=fresh();
     for(const id of ['question','goal','constraints','values','claim','source','option','consequences','decision','rationale'])$(id).value='';
     status('کارگاه جدید ساخته شد. داده‌های قبلی فقط در فایل صادرشده باقی می‌ماند.');render();
@@ -304,7 +323,7 @@ code{direction:ltr;unicode-bidi:embed}
       'raw',encoder.encode(passphrase),'PBKDF2',false,['deriveKey']);
     return crypto.subtle.deriveKey(
       {name:'PBKDF2',salt,iterations:PBKDF2_ITERATIONS,hash:'SHA-256'},
-      material,{name:'AES-GCM',length:256},false,[usage]);
+      material,{name:'AES-GCM',length:256},false,Array.isArray(usage)?usage:[usage]);
   }
   async function seal(payload,passphrase) {
     if(!protectedContext())throw Error('no-secure-context');
@@ -514,7 +533,137 @@ code{direction:ltr;unicode-bidi:embed}
     }
     finally{$('file').value='';$('restore-passphrase').value=''}
   });
+
+  // Pilot 08: explicit opt-in browser checkpoint. Never store plaintext or a key.
+  const VAULT_SCHEMA='nexus.offline-pilot.local-encrypted.v1';
+  const VAULT_SLOT='nexus.offline-pilot.local-encrypted.v1';
+  let vaultKey=null,vaultSalt=null,vaultEpoch=0,vaultQueue=Promise.resolve(),vaultBusy=false;
+  function vaultExists(){
+    try{return window.localStorage.getItem(VAULT_SLOT)!==null}catch{return false}
+  }
+  function vaultLabel(note=''){
+    $('vault-state').textContent=note||(vaultKey?
+      'ذخیرهٔ رمزدار محلی فعال است. فایل خروجی مستقل را نیز حفظ کنید.':
+      vaultExists()?'نسخهٔ رمزدار محلی موجود است؛ برای ادامه باید گذرواژه را وارد کنید.':
+      'نسخهٔ محلی وجود ندارد؛ ذخیرهٔ خودکار غیرفعال است.');
+  }
+  function pauseVault(){
+    vaultEpoch++;
+    vaultKey=null;vaultSalt=null;
+    vaultLabel();
+  }
+  function scheduleVaultSave(){
+    if(!vaultKey||!vaultSalt||!state.workspace.question)return;
+    const snapshot=JSON.stringify(state),key=vaultKey,salt=vaultSalt,epoch=vaultEpoch;
+    vaultQueue=vaultQueue.catch(()=>{}).then(async()=>{
+      if(vaultEpoch!==epoch)return;
+      try{
+        const iv=crypto.getRandomValues(new Uint8Array(12));
+        const encrypted=await crypto.subtle.encrypt(
+          {name:'AES-GCM',iv,additionalData:encoder.encode(VAULT_SCHEMA),tagLength:128},
+          key,encoder.encode(snapshot));
+        if(vaultEpoch!==epoch)return;
+        const payload={
+          schema:VAULT_SCHEMA,
+          kdf:{name:'PBKDF2',hash:'SHA-256',iterations:PBKDF2_ITERATIONS,salt:toB64(salt)},
+          cipher:{name:'AES-GCM',iv:toB64(iv),tagLength:128},
+          ciphertext:toB64(encrypted)};
+        window.localStorage.setItem(VAULT_SLOT,JSON.stringify(payload));
+        if(vaultEpoch===epoch)vaultLabel('آخرین تغییر ثبت‌شدهٔ کارگاه در همین مرورگر رمزگذاری شد؛ خروجی مستقل را فراموش نکنید.');
+      }catch{
+        if(vaultEpoch===epoch){
+          pauseVault();
+          status('ذخیرهٔ رمزدار محلی ناموفق بود یا حافظهٔ مرورگر پر است؛ برای حفظ کارگاه، خروجی فایل رمزدار بگیرید.',true);
+        }
+      }
+    });
+  }
+  $('vault-enable').addEventListener('click',async()=>{
+    if(vaultBusy)return;
+    if(!state.workspace.question)return status('ابتدا مسئله را ثبت کنید.',true);
+    const pw=$('vault-new-password').value,again=$('vault-new-confirm').value;
+    if(Array.from(pw).length<12||Array.from(pw).length>256||pw!==again)
+      return status('برای ذخیرهٔ محلی، گذرواژهٔ یکسان با ۱۲ تا ۲۵۶ نویسه وارد کنید.',true);
+    if(!protectedContext())return status('این مرورگر رمزگذاری محلی امن را پشتیبانی نمی‌کند.',true);
+    try{window.localStorage.getItem(VAULT_SLOT)}catch{return status('حافظهٔ محلی این مرورگر در دسترس نیست.',true)}
+    if(vaultExists()&&!window.confirm('یک نسخهٔ رمزدار از قبل در این مرورگر وجود دارد. فعال‌سازی تازه ممکن است آن را جایگزین کند. نسخهٔ مستقل آن را نگه داشته‌اید؟'))return;
+    const originalId=state.workspace.id,originalState=JSON.stringify(state),originalEpoch=vaultEpoch;
+    vaultBusy=true;$('vault-enable').disabled=true;
+    try{
+      const salt=crypto.getRandomValues(new Uint8Array(16));
+      const key=await deriveAesKey(pw,salt,['encrypt','decrypt']);
+      if(vaultEpoch!==originalEpoch||state.workspace.id!==originalId||JSON.stringify(state)!==originalState)
+        throw Error('changed-during-activation');
+      vaultEpoch++;vaultKey=key;vaultSalt=salt;
+      scheduleVaultSave();
+      status('ذخیرهٔ رمزدار محلی فعال شد؛ منتظر پیام تأیید ذخیره باشید.');
+      vaultLabel();
+    }catch{status('فعال‌سازی ذخیرهٔ محلی کامل نشد؛ کارگاه فعلی تغییر نکرد.',true)}
+    finally{
+      vaultBusy=false;$('vault-enable').disabled=false;
+      $('vault-new-password').value='';$('vault-new-confirm').value='';
+    }
+  });
+  $('vault-restore').addEventListener('click',async()=>{
+    if(vaultBusy)return;
+    const pw=$('vault-open-password').value;
+    if(!pw)return status('برای بازکردن نسخهٔ محلی گذرواژه را وارد کنید.',true);
+    if(!protectedContext())return status('WebCrypto در این مرورگر موجود نیست.',true);
+    const originalState=JSON.stringify(state),originalEpoch=vaultEpoch;
+    if(state.events.length&&!window.confirm('بازکردن نسخهٔ محلی، کارگاه باز فعلی را جایگزین می‌کند. ادامه می‌دهید؟'))return;
+    vaultBusy=true;$('vault-restore').disabled=true;
+    try{
+      const encoded=window.localStorage.getItem(VAULT_SLOT);
+      if(!encoded||encoded.length>MAX_ENCRYPTED_FILE)throw Error('vault-absent');
+      const env=JSON.parse(encoded);
+      if(!env||env.schema!==VAULT_SCHEMA||
+        env.kdf?.name!=='PBKDF2'||env.kdf.hash!=='SHA-256'||
+        env.kdf.iterations!==PBKDF2_ITERATIONS||
+        env.cipher?.name!=='AES-GCM'||env.cipher.tagLength!==128)
+        throw Error('bad-vault');
+      const salt=fromB64(env.kdf.salt,16),iv=fromB64(env.cipher.iv,12),
+        ciphertext=fromB64(env.ciphertext);
+      if(ciphertext.length<17||ciphertext.length>MAX_FILE+10000)throw Error('bad-vault-size');
+      const key=await deriveAesKey(pw,salt,['encrypt','decrypt']);
+      const plaintext=await crypto.subtle.decrypt(
+        {name:'AES-GCM',iv,additionalData:encoder.encode(VAULT_SCHEMA),tagLength:128},
+        key,ciphertext);
+      if(plaintext.byteLength>MAX_FILE||vaultEpoch!==originalEpoch||JSON.stringify(state)!==originalState)
+        throw Error('stale-or-overlarge-vault');
+      const restored=validate(JSON.parse(decoder.decode(plaintext)));
+      vaultEpoch++;vaultKey=key;vaultSalt=salt;state=restored;
+      $('question').value=state.workspace.question;
+      $('goal').value=state.workspace.goal;
+      $('constraints').value=state.workspace.constraints.join('\n');
+      $('values').value=state.workspace.values.join('\n');
+      $('decision').value=state.workspace.judgment?.decision||'';
+      $('rationale').value=state.workspace.judgment?.rationale||'';
+      for(const id of ['claim','source','option','consequences'])$(id).value='';
+      render();
+      status('نسخهٔ محلی رمزگشایی و بررسی شد. این داده‌ها در سرور یا نزد NEXUS پشتیبان‌گیری نشده‌اند.');
+    }catch{
+      status('نسخهٔ محلی موجود نیست، گذرواژه نادرست است یا فایل دستکاری شده؛ کارگاه فعلی تغییر نکرد.',true);
+    }finally{
+      vaultBusy=false;$('vault-restore').disabled=false;$('vault-open-password').value='';
+      vaultLabel();
+    }
+  });
+  $('vault-pause').addEventListener('click',()=>{
+    pauseVault();
+    status('ذخیرهٔ خودکار متوقف شد؛ نسخهٔ رمزدار قبلی حذف نشده و کارگاه فعلی هنوز در این تب باز است.');
+  });
+  $('vault-delete').addEventListener('click',()=>{
+    if(!vaultExists())return status('نسخهٔ محلی برای حذف وجود ندارد.');
+    if(!window.confirm('نسخهٔ رمزدار داخل این مرورگر حذف شود؟ فایل‌های خروجی مستقل حذف نخواهند شد.'))return;
+    try{
+      pauseVault();
+      window.localStorage.removeItem(VAULT_SLOT);
+      vaultLabel();
+      status('نسخهٔ رمزدار این مرورگر پاک شد؛ کارگاه فعلی فقط در همین تب باقی مانده است.');
+    }catch{status('حذف نسخهٔ محلی انجام نشد.',true)}
+  });
   render();
+  vaultLabel();
 })();
 </script>
 </body>

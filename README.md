@@ -18,10 +18,13 @@ A_out <= A_in
 
 The standalone Persian/RTL mobile pilot is hosted at
 **https://nexus-offline-pilot.onrender.com/** (Render static site, with automatic
-releases disabled). This page runs the same memory-only HTML as
-[`web/offline-pilot.html`](web/offline-pilot.html). It does not connect to the
-Rust gateway, store your decisions on Render or issue machine decisions.
-Export your JSON privately to preserve work before closing the tab.
+releases disabled). **The publicly observed deployment is currently the
+previous Pilot 06 revision**, while [`web/offline-pilot.html`](web/offline-pilot.html)
+includes the newer Pilot 08 encrypted-local-resume candidate. The two MUST NOT
+be claimed identical until a separate reviewed deployment and exact HTTPS
+source-byte check. Neither version sends workspaces to Render or the Rust
+gateway; neither issues machine decisions. Always download and keep a separate
+password-protected JSON export in private storage.
 See [Pilot 02 hosting and independent HTTPS evidence](docs/STATIC-PILOT-HOST.md)
 for what has and has not been verified. The full authenticated online pilot
 remains a separate open milestone.
@@ -34,8 +37,10 @@ service. **Download the HTML file and open the downloaded file in your browser**
 GitHub's source preview is not the running app. See the
 [offline-use and privacy guide](docs/OFFLINE-PILOT.md).
 
-This is a browser-memory-only, explicitly exported/imported demo with
-**no network requests and no automatic storage**, not the sealed Rust gateway,
+This is a local, explicitly exported/imported demo with **no network requests**.
+The current source adds **optional, explicit-consent encrypted browser-local
+checkpoints**, off by default; they are not remote backups or proof that the
+older public Render deployment has upgraded. This is not the sealed Rust gateway,
 a live production instance or an attested audit. The optional Pilot 06 plaintext Rust v1 export reconstructs an explicitly unattested event stream for a separate authenticated import; it never connects to the server. See [bridge contract](docs/PILOT-06-OFFLINE-RUST-BRIDGE.md).
 A real authenticated online user pilot is tracked separately in [Issue #70](
 https://github.com/maghsoodsaadatmerikation-sudo/nexus/issues/70).

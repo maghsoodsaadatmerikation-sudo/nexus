@@ -10,9 +10,10 @@ authenticated single-host NEXUS service.
 The file is [web/offline-pilot.html](../web/offline-pilot.html). Download **the
 HTML file itself** from the repository and open it in a browser capable of
 running local HTML. A code preview is not the app; a rendered offline file is.
-The same static page is independently verified at
-https://nexus-offline-pilot.onrender.com/ . This is a browser-only entrypoint,
-not an authenticated Rust service.
+The independently verified public static entrypoint is
+https://nexus-offline-pilot.onrender.com/ . Its deployed Pilot 06 HTML is
+**not yet the same as this Pilot 08 source candidate** until reviewed static
+promotion. Neither is an authenticated Rust service.
 
 1. Enter a question, a goal, constraints and values; press **ثبت مسئله**.
 2. Record externally sourced claims with source identifiers and uncertainty,
@@ -28,8 +29,7 @@ not an authenticated Rust service.
    authenticated encrypted envelope can be opened; corrupt files and wrong
    passphrases leave existing data unchanged. See
    [Pilot 03 private exports](PILOT-03-PRIVATE-EXPORTS.md) for the exact
-   format, threats and limitations. There is still **no autosave**;
-   unsaved state disappears on reload or tab close.
+   format, threats and limitations. In the Pilot 08 code candidate, an **explicit opt-in encrypted browser checkpoint** can preserve committed work across reloads on the same browser, if local storage is available. It is distinct from and less portable than the downloadable protected file; it has no server backup. The currently deployed public revision may not include it until exact-byte promotion. See [Pilot 08](PILOT-08-ENCRYPTED-LOCAL-RESUME.md).
 
 The original offline JSON files are not Rust gateway-compatible
 `nexus.data-snapshot.v1` or server `DecisionWorkspace` backup; do
@@ -40,8 +40,10 @@ gateway authentication, cryptographic audit checks and provider continuity.
 ## What the file can and cannot do
 
 The page is a dependency-free Persian RTL HTML document with a restrictive
-Content Security Policy, no image or network requests, no browser storage, and
-explicit export/import. It displays user-supplied strings as text rather than
+Content Security Policy, no image or network requests, and
+explicit export/import. Pilot 08 source only writes encrypted local browser
+storage after the user's explicit opt-in; without that consent, the app remains
+memory-only. It displays user-supplied strings as text rather than
 injecting HTML, validates source requirements for external evidence, enforces
 bounded form/input limits, and tracks a basic event history. The history is
 **not cryptographically attested** and cannot be treated as independent
@@ -59,7 +61,9 @@ profiles. It checks question/goal/constraints, missing-source rejection,
 escaped evidence, non-authoritative machine analysis, options, explicit
 judgment, plaintext/export compatibility, WebCrypto AES-GCM encryption,
 nonce/salt randomness, wrong passphrase and tamper rejection, encrypted
-restoration, corruption rejection, and zero network calls. The program exercises only synthetic user content; CI never
+restoration, corruption rejection, opt-in encrypted browser checkpoint,
+deliberate deletion, and an **actual document reload** followed by password
+re-entry; zero network calls. The program exercises only synthetic user content; CI never
 receives real personal data, operator tokens, or Railway resources.
 
 The test report means **only a standalone file prototype was exercised**.
