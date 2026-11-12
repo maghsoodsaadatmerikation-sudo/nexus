@@ -538,7 +538,11 @@ def main():
             if (report.get("status") != "PASS" or len(report.get("checks", [])) != 46 or
                 report.get("network_requests") != 0 or
                 (layout == "narrow") != (report["width"] <= 760)):
-                raise RuntimeError("offline real-browser contract did not PASS")
+                # Only the already-sanitized test reason/check count: never dump
+                # file contents, passphrases, downloaded bytes or browser state.
+                raise RuntimeError("offline real-browser contract did not PASS: reason="+
+                    str(report.get("reason", "none"))[:80]+", checks="+
+                    str(len(report.get("checks", []))))
             fixture=report.pop("core_fixture", None)
             assert isinstance(fixture, dict) and fixture.get("schema_version")==1
             if bridge_output and layout=="narrow":
