@@ -18,8 +18,8 @@ A_out <= A_in
 
 The English-first multilingual mobile pilot is hosted at
 **https://nexus-offline-pilot.onrender.com/**. Render reported LIVE for
-manual deployment `dep-dbqtdjqfngtc738mpg20` of Pilot 19
-source commit `d43f783e8c3966625e4cb836a8a2b72cdc70956e`.
+manual deployment `dep-dbqu9o6i0phs738jook0` of Pilot 20
+source commit `1b9f1dbc4544cfc608229cb7a8464e60f08aaf40`.
 The independent static HTTPS identity workflow pins the actually deployed
 source; provider status alone is not byte-level proof. The app does not
 connect to the Rust gateway, send workspace content to Render, or issue
@@ -38,8 +38,8 @@ workspace JSON, password or personal information. Saving work still
 requires the separate encrypted local checkpoint or owner-held file.
 The standalone HTML continues to work when opened from a downloaded file.
 
-Render reported LIVE for static deployment `dep-dbqtdjqfngtc738mpg20`
-from exact source `d43f783e8c3966625e4cb836a8a2b72cdc70956e`.
+Render reported LIVE for static deployment `dep-dbqu9o6i0phs738jook0`
+from exact source `1b9f1dbc4544cfc608229cb7a8464e60f08aaf40`.
 Independent public asset-byte checks and live-origin real Chromium offline
 acceptance must PASS separately; provider LIVE alone does not prove them.
 [Installation and security contract](docs/PILOT-12-INSTALLABLE-OFFLINE.md).
@@ -142,7 +142,7 @@ only passing independent CI evidence permits public verification claims.
 This does not prove every external search provider's availability or return
 an automated search API to the standalone app.
 
-## Talk with NEXUS — human-guided conversation (Pilot 20 candidate)
+## Talk with NEXUS — human-guided conversation (Pilot 20)
 
 The workshop gains a bilingual **Talk with NEXUS** panel. A person can send
 and receive multiple text turns in a deterministic six-stage reflection
@@ -164,8 +164,11 @@ judgment. It requires no paid API and preserves the static app's
 `connect-src 'none'` and `A_out <= A_in` boundary.
 
 [Interaction, speech and privacy contract](docs/PILOT-20-GUIDED-HUMAN-CHAT.md).
-This candidate must pass exact-head browser verification, a separate
-manual Render deployment and public HTTPS acceptance before publication.
+The exact Pilot 20 source was manually deployed to the existing static Render
+site. Local real-Chromium tests passed before merge; independent public HTTPS
+acceptance separately checks the published HTML bytes, browser dialogue,
+synthetic microphone adapters and offline reopening. These checks do not
+prove a generative model, a live remote person or physical device audio.
 
 ## Recoverability check for private encrypted files (Pilot 11)
 
