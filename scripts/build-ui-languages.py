@@ -32,7 +32,7 @@ def build(check=False):
     search_core=(ROOT/'web/web-research-core.js').read_text().rstrip()
     updated,search_count=re.subn(
         r'/\* NEXUS_WEB_RESEARCH_BEGIN \*/.*?/\* NEXUS_WEB_RESEARCH_END \*/',
-        lambda _:'/* NEXUS_WEB_RESEARCH_BEGIN */\n'+search_core+'\n/* NEXUS_WEB_RESEARCH_END */',
+        lambda _:'/* NEXUS_WEB_RESEARCH_BEGIN */\n'+search_core+'\n  /* NEXUS_WEB_RESEARCH_END */',
         updated,flags=re.S)
     assert search_count==1 and len(updated.encode())<300000
     digest=hashlib.sha256(updated.encode()).hexdigest()
