@@ -23,6 +23,7 @@ retained so changes or disagreement are visible rather than overwritten.
 The last 16 conversation messages can provide context; 40 exchanges are kept in
 tab memory only. Changing the token or clearing the session discards that context.
 A separately confirmed transcript download is unencrypted and excludes the token.
+Search approval is consumed at dispatch, including failed or cancelled requests.
 Replies arriving after cancellation, clear, token or language change are discarded.
 Typing a new message while an answer is pending does not lose the unsent text.
 

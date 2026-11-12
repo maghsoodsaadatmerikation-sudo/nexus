@@ -45,7 +45,7 @@ try{
  fill('message','And its capacity?');send();await wait(()=>!$('send').disabled);
  assert(calls.at(-1).payload.context_sources[0].excerpt==='Synthetic alpha has seven units.','followup-reuses-explicit-source-context');
  assert(calls.at(-1).payload.messages[0].content==='What is alpha?','followup-retains-human-conversation-context');
- $('search').checked=true;$('search').dispatchEvent(new Event('change'));fill('query','only approved public query');$('consent').checked=true;fill('message','Private followup');send();await wait(()=>!$('send').disabled);
+ $('search').checked=true;$('search').dispatchEvent(new Event('change'));fill('query','only approved public query');$('consent').checked=true;fill('message','Private followup');send();assert(!$('consent').checked,'consent-is-consumed-at-dispatch');await wait(()=>!$('send').disabled);
  assert(calls.at(-1).payload.query==='only approved public query'&&calls.at(-1).payload.consent===true,'exact-query-is-explicitly-approved');
  assert(!$('consent').checked,'consent-is-reset-after-each-search');
  $('export').click();const transcript=await exported.at(-1).text();assert(transcript.includes('https://example.org/alpha')&&!transcript.includes('SYNTHETIC_PRIVATE_TOKEN'),'transcript-keeps-citations-not-token');
