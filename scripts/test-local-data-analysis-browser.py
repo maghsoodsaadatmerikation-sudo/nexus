@@ -151,7 +151,7 @@ def main():
         page=Path(td)/'index.html';page.write_text(page_html,encoding='utf8')
         for layout,dim in [('narrow','500,980'),('wide','1280,980')]:
             cmd=['node',str(root/'scripts/workspace-browser-runner.mjs'),
-                 browser,page.as_uri(),str(Path(td)/layout),dim,'80000','30000']
+                 browser,page.as_uri(),str(Path(td)/layout),dim,'60000','30000']
             result=subprocess.run(cmd,capture_output=True,text=True,timeout=170)
             if result.returncode:raise RuntimeError('real-browser-runner-failed')
             report=json.loads(result.stdout)
