@@ -42,7 +42,7 @@ jobs:
           # This test intentionally exercises the currently deployed Pilot 09.
           # Future source changes may be merged without promotion: that means
           # this live-use witness must FAIL until public deployment is verified.
-          git show 8e3fd8789d82db4559a9cb77cd2f82578271df4b:web/offline-pilot.html > "$RUNNER_TEMP/deployed-source.html"
+          git show ed13887699b49a8494a3178e426ad9192e14d57e:web/offline-pilot.html > "$RUNNER_TEMP/deployed-source.html"
           cmp -s web/offline-pilot.html "$RUNNER_TEMP/deployed-source.html" || {
             echo "FAIL: checked-out HTML differs from intentionally deployed static version; no live acceptance claim"
             exit 1
@@ -76,10 +76,10 @@ jobs:
           r=json.load(open('pilot-10-public-browser.json'))
           assert r['status']=='PASS'
           assert r['schema']=='nexus.public-pilot.browser-acceptance.v1'
-          assert r['checks_per_layout']==40 and r['negative_local_fixtures']==6
+          assert r['checks_per_layout']==46 and r['negative_local_fixtures']==6
           assert r['source_sha256']==r['independent_get_sha256']
           assert {x['layout'] for x in r['report']}=={'narrow','wide'}
-          assert all(x['status']=='PASS' and x['checks']==40 and
+          assert all(x['status']=='PASS' and x['checks']==46 and
                      x['real_reload_verified'] and x['test_fixture_only'] and
                      x['document_responses']>=2 and
                      x['browser_document_sha256']==r['source_sha256'] and
