@@ -53,7 +53,7 @@ window.addEventListener('load', async()=>{
   assert(await exportState()===after,'completed-report-preserves-workspace-and-audit');
   $('new').click();assert($('decision-report').hidden&&$('report-build').disabled,'new-workspace-clears-old-report');
   assert(network===0,'report-causes-no-network');
-  $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,authority:'none',synthetic_only:true});
+  $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,authority:'none',synthetic_only:true,network_requests:network,production_verified:false});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:String(e.message).replace(/[^a-z-]/g,'')})}
 });
 """

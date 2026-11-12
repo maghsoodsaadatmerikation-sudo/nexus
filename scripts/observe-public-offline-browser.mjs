@@ -16,6 +16,9 @@ const PUBLIC_APP_ASSETS=new Set([
   ORIGIN+'icons/nexus-192.png',
   ORIGIN+'icons/nexus-512.png'
 ]);
+const REPORT_MODE=process.env.NEXUS_PUBLIC_REPORT==='true';
+const EXPECTED_CHECKS=REPORT_MODE?17:46;
+const MIN_DOCUMENTS=REPORT_MODE?1:2;
 const REPO_ROOT=new URL('../',import.meta.url);
 const sha256=value=>createHash('sha256').update(value).digest('hex');
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -30,9 +33,9 @@ if(!GITHUB_ONLY || !BROWSER || typeof WebSocket==='undefined' ||
 const expected=await readFile(new URL('../web/offline-pilot.html',import.meta.url));
 assert(expected.length>1000 && expected.length<=300000,'expected-source-size');
 const expectedDigest=sha256(expected);
-const pythonTest=await readFile(new URL('./test-offline-pilot-browser.py',import.meta.url),'utf8');
+const pythonTest=await readFile(new URL(REPORT_MODE?'./test-decision-report-browser.py':'./test-offline-pilot-browser.py',import.meta.url),'utf8');
 const match=pythonTest.match(/WITNESS = r"""([\s\S]*?)"""/);
-assert(match && match[1].length>1000 && match[1].includes('real-page-reload-requires-passphrase-and-recovers'),
+assert(match && match[1].length>1000 && match[1].includes(REPORT_MODE?'report-user-content-is-inert-text':'real-page-reload-requires-passphrase-and-recovers'),
   'exact-real-browser-witness-unavailable');
 
 function verifyDocument(status,mime,bytes,redirected=false){
@@ -162,11 +165,11 @@ async function layoutWitness(layout){
         throw error;
       }
     },180000,'real-public-browser-did-not-complete');
-    assert(report.checks?.length===46&&report.network_requests===0&&
+    assert(report.checks?.length===EXPECTED_CHECKS&&report.network_requests===0&&
       report.production_verified===false&&report.authority==='none',
       'live-browser-checks-or-authority-invalid');
     assert((layout==='narrow')===(report.width<=760),'live-browser-viewport-invalid');
-    assert(documents.length>=2&&network.length>=2,'not-two-real-public-document-loads');
+    assert(documents.length>=MIN_DOCUMENTS&&network.length>=MIN_DOCUMENTS,'not-two-real-public-document-loads');
     for(const x of network)verifyRequest(x.url,x.method);
     for(const x of documents){
       assert(x.status===200,'public-browser-document-http-status');
@@ -213,9 +216,9 @@ async function main(){
   const reports=[];
   for(const layout of ['narrow','wide'])reports.push(await layoutWitness(layout));
   process.stdout.write(JSON.stringify({
-    schema:'nexus.public-pilot.browser-acceptance.v1',status:'PASS',
+    schema:REPORT_MODE?'nexus.public-pilot.decision-report-acceptance.v1':'nexus.public-pilot.browser-acceptance.v1',status:'PASS',
     source_sha256:expectedDigest,independent_get_sha256:getSha,
-    origin:ORIGIN,checks_per_layout:46,negative_local_fixtures:6,
+    origin:ORIGIN,checks_per_layout:EXPECTED_CHECKS,negative_local_fixtures:6,
     report:reports,synthetic_only:true,real_human_tested:false,
     authenticated_rust_tested:false,production_restore_tested:false,
     authority:'none',production_mutation:false

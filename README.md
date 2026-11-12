@@ -18,8 +18,8 @@ A_out <= A_in
 
 The standalone Persian/RTL mobile pilot is hosted at
 **https://nexus-offline-pilot.onrender.com/**. Render reported LIVE for
-manual deployment `dep-dbqq8u0ae00c73951ju0` of Pilot 12
-source commit `87afc579be8207ab641e645f8aab207384ddd46c`.
+manual deployment `dep-dbqqi42jnfac739fb95g` of Pilot 13
+source commit `343dd0fef059f9c470f65cadfcced693263c2c3d`.
 The independent static HTTPS identity workflow pins the actually deployed
 source; provider status alone is not byte-level proof. The app does not
 connect to the Rust gateway, send workspace content to Render, or issue
@@ -38,20 +38,22 @@ workspace JSON, password or personal information. Saving work still
 requires the separate encrypted local checkpoint or owner-held file.
 The standalone HTML continues to work when opened from a downloaded file.
 
-Render reported LIVE for static deployment `dep-dbqq8u0ae00c73951ju0`
-from exact source `87afc579be8207ab641e645f8aab207384ddd46c`.
+Render reported LIVE for static deployment `dep-dbqqi42jnfac739fb95g`
+from exact source `343dd0fef059f9c470f65cadfcced693263c2c3d`.
 Independent public asset-byte checks and live-origin real Chromium offline
 acceptance must PASS separately; provider LIVE alone does not prove them.
 [Installation and security contract](docs/PILOT-12-INSTALLABLE-OFFLINE.md).
 
-## Readable local decision report (Pilot 13 candidate)
+## Readable local decision report (Pilot 13)
 
-The source candidate adds a Persian read-only report of recorded questions,
+The public static app adds a Persian read-only report of recorded questions,
 evidence, alternatives and human judgment, with explicit plaintext text-download
 and print/PDF actions. Unsubmitted drafts and passwords are excluded; committed
 changes invalidate an older preview. No option ranking, remote transmission or
 new storage. [Report behavior and verification](docs/PILOT-13-READABLE-DECISION-REPORT.md).
-Publication requires separate static deployment and public acceptance.
+Published on the existing static site; independent public browser acceptance
+checks both the workshop and report. Real Android print/PDF behavior still
+depends on the browser and device.
 
 ## Recoverability check for private encrypted files (Pilot 11)
 

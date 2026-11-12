@@ -36,3 +36,15 @@ manual static deployment must become LIVE; public identity, real offline
 navigation and workshop acceptance must succeed against the new pinned source
 before claiming this feature is public. No change to original Railway /data,
 new paid infrastructure or release Seal. Issues #104 and #70 remain open.
+
+## Public static promotion — 2026-11-12
+
+After all nine candidate workflows passed for PR #113 head
+`9452c7ebe301f051b6a3ad660365f573707d3fe2`, source was merged as
+`343dd0fef059f9c470f65cadfcced693263c2c3d`. The existing Render static
+site reported LIVE for cache-cleared deploy `dep-dbqqi42jnfac739fb95g`.
+The read-only public workflows pin that exact source and independently check
+five public assets, actual offline navigation, the 46-check workshop, and the
+17-check readable report on both viewports. Reports contain counts and hashes,
+not synthetic question contents or test secrets. Provider LIVE alone is not
+browser proof. No hardware installation or real human acceptance is claimed.
