@@ -68,17 +68,21 @@ def pixel_digest(data: bytes, width: int, height: int) -> str:
     if not completed or header is None or not compressed:
         raise ValueError("incomplete-png")
     depth, color = header
-    if transparency and color != 3:
-        raise ValueError("unsupported-png-transparency")
+    if (color == 6 and transparency) or (color == 0 and len(transparency) not in (0, 2)) or (color == 2 and len(transparency) not in (0, 6)):
+        raise ValueError("invalid-transparency")
+    if color == 3 and (not palette or len(transparency) > len(palette)//3):
+        raise ValueError("invalid-palette-transparency")
+    transparent = struct.unpack(">" + "H"*(len(transparency)//2), transparency) if color in (0, 2) else ()
     channels = {0: 1, 2: 3, 3: 1, 6: 4}[color]
     row_size = (width * depth * channels + 7) // 8
     byte_stride = max(1, (depth * channels + 7) // 8)
     expected = (row_size + 1) * height
     decompress = zlib.decompressobj()
     raw = decompress.decompress(bytes(compressed), expected + 1)
-    # Never flush unconsumed compressed bytes: that would bypass the output cap.
-    if (len(raw) != expected or decompress.unconsumed_tail
-            or not decompress.eof or decompress.unused_data):
+    # Do not flush an attacker-controlled expansion beyond the output bound.
+    if decompress.unconsumed_tail or len(raw) > expected:
+        raise ValueError("oversized-png-expansion")
+    if len(raw) != expected or not decompress.eof or decompress.unused_data:
         raise ValueError("unexpected-png-uncompressed-length")
     rgba_hash = hashlib.sha256()
     prev = bytes(row_size)
@@ -111,13 +115,14 @@ def pixel_digest(data: bytes, width: int, height: int) -> str:
         line = bytearray()
         if color == 2:
             for x in range(width):
-                line.extend(packed[x*3:x*3+3])
-                line.append(255)
+                rgb = packed[x*3:x*3+3]
+                line.extend(rgb)
+                line.append(0 if tuple(rgb) == transparent else 255)
         elif color == 6:
             line.extend(packed)
         elif color == 0:
             for value in packed:
-                line.extend((value, value, value, 255))
+                line.extend((value, value, value, 0 if (value,) == transparent else 255))
         else:
             if not palette:
                 raise ValueError("palette-missing")
