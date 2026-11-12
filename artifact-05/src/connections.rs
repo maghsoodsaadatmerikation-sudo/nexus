@@ -801,4 +801,73 @@ mod tests {
             .is_none());
         assert!(sse_result(b"data: invalid\n\n", 2).is_err());
     }
+    #[tokio::test]
+    async fn real_http_mcp_exchange_carries_only_app_credentials_and_negotiated_session() {
+        use axum::{http::HeaderMap, routing::post, Router};
+        use std::sync::Mutex;
+        let seen = Arc::new(Mutex::new(Vec::<(HeaderMap, Value)>::new()));
+        let captured = seen.clone();
+        let server=Router::new().route("/mcp",post(move |headers:HeaderMap,Json(body):Json<Value>| {
+            let captured=captured.clone(); async move {
+                captured.lock().unwrap().push((headers,body.clone()));
+                match body["method"].as_str().unwrap() {
+                    "initialize"=>([("MCP-Session-Id","synthetic-session")],Json(json!({"jsonrpc":"2.0","id":1,"result":{"protocolVersion":VERSION,"capabilities":{"tools":{}}}}))).into_response(),
+                    "notifications/initialized"=>StatusCode::ACCEPTED.into_response(),
+                    "tools/call"=>([("content-type","text/event-stream")],"data: {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"Synthetic reply\"}]}}\n\n").into_response(),
+                    _=>StatusCode::BAD_REQUEST.into_response()
+                }
+            }
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move { axum::serve(listener, server).await.unwrap() });
+        // Synthetic HTTP transport is constructed only here. Production config
+        // still requires public pinned HTTPS and cannot select this endpoint.
+        let app = App {
+            view: AppView {
+                id: "synthetic".into(),
+                title: "Synthetic".into(),
+                destination: "synthetic-local-only".into(),
+                tools: vec![],
+            },
+            endpoint: format!("http://{address}/mcp").parse().unwrap(),
+            bearer: Some("SYNTHETIC_APP_CREDENTIAL".into()),
+        };
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .unwrap();
+        let mut session = None;
+        let result = perform(
+            &HttpWire {
+                client: &client,
+                app: &app,
+            },
+            "lookup",
+            &json!({"record":"approved-record"}),
+            &mut session,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["content"][0]["text"], "Synthetic reply");
+        assert_eq!(session.as_deref(), Some("synthetic-session"));
+        let requests = seen.lock().unwrap();
+        assert_eq!(requests.len(), 3);
+        for (headers, _) in requests.iter() {
+            assert_eq!(headers["authorization"], "Bearer SYNTHETIC_APP_CREDENTIAL");
+            assert_eq!(headers["accept"], "application/json, text/event-stream");
+            assert!(!headers.contains_key("cookie"));
+        }
+        assert!(!requests[0].0.contains_key("mcp-protocol-version"));
+        for (headers, _) in &requests[1..] {
+            assert_eq!(headers["mcp-protocol-version"], VERSION);
+            assert_eq!(headers["mcp-session-id"], "synthetic-session");
+        }
+        assert_eq!(
+            requests[2].1["params"],
+            json!({"name":"lookup","arguments":{"record":"approved-record"}})
+        );
+        task.abort();
+    }
 }

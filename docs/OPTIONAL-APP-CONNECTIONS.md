@@ -106,7 +106,9 @@ Gateway/unit tests cover default-off behavior, exact approved arguments, allowli
 capacity, malformed inputs, unknown history/credential fields, credential aliases,
 unsafe destinations, private/reserved addresses, MCP initialization order, version
 rejection, JSON-RPC IDs/errors/server requests, SSE fragmentation and inert data.
-HTTP tests cover authentication-before-body, no-store, body/rate/quarantine and
+An actual synthetic HTTP MCP exchange also checks app-only credentials, protocol
+headers, session continuity and SSE results against a disposable local server.
+HTTP gateway tests cover authentication-before-body, no-store, body/rate/quarantine and
 no core/workspace mutations. Real Chromium acceptance uses synthetic apps on
 narrow/wide layouts, explicit per-call consent, consent revocation, exact data
 sharing, inert markup, export, no retries, late results, disconnect and Persian UI.
