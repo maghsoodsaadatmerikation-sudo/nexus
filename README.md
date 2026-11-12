@@ -18,8 +18,8 @@ A_out <= A_in
 
 The English-first multilingual mobile pilot is hosted at
 **https://nexus-offline-pilot.onrender.com/**. Render reported LIVE for
-manual deployment `dep-dbqt14ff3r2c73drgirg` of Pilot 18
-source commit `ffa41c01a9f0311e7005db7abaef56585591645b`.
+manual deployment `dep-dbqtdjqfngtc738mpg20` of Pilot 19
+source commit `d43f783e8c3966625e4cb836a8a2b72cdc70956e`.
 The independent static HTTPS identity workflow pins the actually deployed
 source; provider status alone is not byte-level proof. The app does not
 connect to the Rust gateway, send workspace content to Render, or issue
@@ -38,8 +38,8 @@ workspace JSON, password or personal information. Saving work still
 requires the separate encrypted local checkpoint or owner-held file.
 The standalone HTML continues to work when opened from a downloaded file.
 
-Render reported LIVE for static deployment `dep-dbqt14ff3r2c73drgirg`
-from exact source `ffa41c01a9f0311e7005db7abaef56585591645b`.
+Render reported LIVE for static deployment `dep-dbqtdjqfngtc738mpg20`
+from exact source `d43f783e8c3966625e4cb836a8a2b72cdc70956e`.
 Independent public asset-byte checks and live-origin real Chromium offline
 acceptance must PASS separately; provider LIVE alone does not prove them.
 [Installation and security contract](docs/PILOT-12-INSTALLABLE-OFFLINE.md).
@@ -120,7 +120,7 @@ merge; the separate public-acceptance workflow verifies the actual published
 HTML, file analysis, language, voice adapters and offline reopening. These
 synthetic tests do not prove real-human operation or physical device support.
 
-## User-directed Internet research (Pilot 19 candidate)
+## User-directed Internet research (Pilot 19)
 
 NEXUS adds a **Web research** panel with 15 built-in public search destinations,
 an optional custom HTTPS query-URL template and direct public HTTPS navigation.
@@ -135,9 +135,12 @@ human verification and registration remain necessary. Custom templates and
 searches stay in the current page session.
 
 [Security, available engines and limits](docs/PILOT-19-WEB-RESEARCH.md).
-The candidate must pass real-browser verification, a separate manual deploy
-to the existing static site and independent public acceptance before it is
-represented as published.
+The existing static Render service reports LIVE on exact Pilot 19 source.
+The separate public acceptance workflow checks actual published HTTPS HTML
+identity, optional external-search browser interactions and offline reopening;
+only passing independent CI evidence permits public verification claims.
+This does not prove every external search provider's availability or return
+an automated search API to the standalone app.
 
 ## Recoverability check for private encrypted files (Pilot 11)
 
