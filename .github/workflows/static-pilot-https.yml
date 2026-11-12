@@ -36,7 +36,7 @@ jobs:
           # Live Render autoDeploy is OFF. Compare *all* events against the
           # last independently verified DEPLOYED source, never silently
           # against a newer unpromoted main-branch candidate.
-          baseline="736e7b25819064722675505c86efa09e7e79e2df"
+          baseline="87afc579be8207ab641e645f8aab207384ddd46c"
           git show "$baseline:web/offline-pilot.html" > /tmp/nexus-current-deployed-pilot.html
           python3 scripts/verify-public-static-pilot.py \
             --expected /tmp/nexus-current-deployed-pilot.html > static-pilot-https-report.json
@@ -47,7 +47,7 @@ jobs:
           report=json.loads(p.read_text())
           candidate_hash=hashlib.sha256(Path("web/offline-pilot.html").read_bytes()).hexdigest()
           report["verified_basis"]="pinned_live_deployment"
-          report["deployed_source_commit"]="736e7b25819064722675505c86efa09e7e79e2df"
+          report["deployed_source_commit"]="87afc579be8207ab641e645f8aab207384ddd46c"
           report["source_candidate_sha256"]=candidate_hash
           report["source_candidate_currently_live"]=(candidate_hash==report.get("observed_sha256"))
           p.write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
@@ -66,7 +66,7 @@ jobs:
           assert report["production_mutation"] is False
           assert report["authenticated_live_user"] is False
           assert report["verified_basis"]=="pinned_live_deployment"
-          assert report["deployed_source_commit"]=="736e7b25819064722675505c86efa09e7e79e2df"
+          assert report["deployed_source_commit"]=="87afc579be8207ab641e645f8aab207384ddd46c"
           print("NEXUS STATIC PILOT: PASS exact currently deployed HTTPS HTML")
           PY
       - name: Upload sanitized read-only report
