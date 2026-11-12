@@ -12,7 +12,7 @@ const ORIGIN='https://nexus-offline-pilot.onrender.com/';
 const FAVICON='https://nexus-offline-pilot.onrender.com/favicon.ico';
 const PUBLIC_APP_ASSETS=new Set([
   ORIGIN,FAVICON,
-  ORIGIN+'manifest.webmanifest',
+  ORIGIN+'manifest.json',
   ORIGIN+'icons/nexus-192.png',
   ORIGIN+'icons/nexus-512.png'
 ]);

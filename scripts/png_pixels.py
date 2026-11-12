@@ -68,14 +68,17 @@ def pixel_digest(data: bytes, width: int, height: int) -> str:
     if not completed or header is None or not compressed:
         raise ValueError("incomplete-png")
     depth, color = header
+    if transparency and color != 3:
+        raise ValueError("unsupported-png-transparency")
     channels = {0: 1, 2: 3, 3: 1, 6: 4}[color]
     row_size = (width * depth * channels + 7) // 8
     byte_stride = max(1, (depth * channels + 7) // 8)
     expected = (row_size + 1) * height
     decompress = zlib.decompressobj()
     raw = decompress.decompress(bytes(compressed), expected + 1)
-    raw += decompress.flush()
-    if len(raw) != expected or not decompress.eof or decompress.unused_data:
+    # Never flush unconsumed compressed bytes: that would bypass the output cap.
+    if (len(raw) != expected or decompress.unconsumed_tail
+            or not decompress.eof or decompress.unused_data):
         raise ValueError("unexpected-png-uncompressed-length")
     rgba_hash = hashlib.sha256()
     prev = bytes(row_size)
