@@ -76,6 +76,7 @@ pub struct ProviderStatus {
 #[derive(Debug, Serialize)]
 pub struct GroundedClaim {
     pub text: String,
+    pub truncated: bool,
     pub citation_ids: Vec<String>,
     pub origin: &'static str,
     pub uncertainty: &'static str,
@@ -207,6 +208,9 @@ impl ResearchChat {
             provider: "manual_review",
             retrieved_at_unix: None,
         }));
+        // Explicitly added evidence must not be crowded out by cached/search
+        // results at the response cap. This priority is not a truth ranking.
+        sources.rotate_right(input.reviewed_sources.len());
         Ok(compose(&input, sources, providers))
     }
 }
@@ -275,7 +279,7 @@ fn normalized(s: &str, max: usize) -> String {
         .take(max)
         .collect()
 }
-fn excerpt(s: &str, query: &str) -> String {
+fn excerpt(s: &str, query: &str) -> (String, bool) {
     let words: Vec<String> = query
         .split_whitespace()
         .filter(|w| w.chars().count() > 2)
@@ -310,7 +314,9 @@ fn excerpt(s: &str, query: &str) -> String {
         }
     }
     let text = best[..end].trim();
-    text.chars().take(300).collect()
+    let quoted: String = text.chars().take(300).collect();
+    let truncated = end < best.len() || quoted.chars().count() < text.chars().count();
+    (quoted, truncated)
 }
 fn localized(lang: Language, en: &str, fa: &str) -> String {
     if lang == Language::Fa {
@@ -354,11 +360,15 @@ fn compose(
     let claims: Vec<GroundedClaim> = sources
         .iter()
         .take(4)
-        .map(|s| GroundedClaim {
-            text: excerpt(&s.excerpt, query),
-            citation_ids: vec![s.id.clone()],
-            origin: s.origin,
-            uncertainty: "not_independently_verified",
+        .map(|s| {
+            let (text, truncated) = excerpt(&s.excerpt, query);
+            GroundedClaim {
+                text,
+                truncated,
+                citation_ids: vec![s.id.clone()],
+                origin: s.origin,
+                uncertainty: "not_independently_verified",
+            }
         })
         .collect();
     let context = input
@@ -376,7 +386,12 @@ fn compose(
             "هنوز شواهد منبع‌دار کافی برای پاسخ ندارم. بخشی از یک منبعِ بررسی‌شده را اضافه کنید یا جست‌وجوی عبارت مشخصی را تأیید کنید.");
     } else {
         for c in &claims {
-            answer.push_str(&format!("\n\n“{}” [{}]", c.text, c.citation_ids[0]));
+            answer.push_str(&format!(
+                "\n\n“{}{}” [{}]",
+                c.text,
+                if c.truncated { "…" } else { "" },
+                c.citation_ids[0]
+            ));
         }
     }
     let values = question.to_lowercase().contains("should")
@@ -620,7 +635,9 @@ mod tests {
         input.consent = true;
         input.query = Some("public alpha".into());
         input.messages[0].content = "PRIVATE_TRANSCRIPT".into();
+        input.reviewed_sources.push(reviewed());
         let reply = service.respond(input).await.unwrap();
+        assert_eq!(reply.sources[0].origin, "user_supplied_excerpt");
         assert_eq!(*fake.queries.lock().unwrap(), vec!["public alpha"]);
         assert_eq!(reply.authority, "none");
         assert!(!reply.judgment_changed);
@@ -718,6 +735,16 @@ mod tests {
         duplicate.url += "#fragment";
         let reply = compose(&input, vec![source.clone(), duplicate], vec![]);
         assert_eq!(reply.sources.len(), 1);
+        assert!(reply.claims[0].truncated);
+        assert!(reply.answer.contains("…"));
+        let mut changed = source.clone();
+        changed.excerpt = "Alpha has changed capacity in this different passage.".into();
+        assert_eq!(
+            compose(&input, vec![source.clone(), changed], vec![])
+                .sources
+                .len(),
+            2
+        );
         assert_eq!(reply.claims[0].text.split_whitespace().count(), 25);
         source.url = "https://127.0.0.1/private".into();
         assert!(compose(&input, vec![source], vec![]).sources.is_empty());

@@ -16,8 +16,8 @@ Each answer contains short selected source passages with server-assigned citatio
 IDs, original URLs, origin labels and retrieval times where available. Retrieval
 time is not publication date. Cached sources on follow-ups are explicitly labeled
 client-supplied prior excerpts, never falsely presented as fresh retrieval. A
-manual passage is user-supplied even when it names a reputable source. Multiple
-passages from one URL are not independent corroboration; different passages are
+manual passage is user-supplied even when it names a reputable source. Explicitly added passages take priority at the response cap; this is not a
+truth ranking. Multiple passages from one URL are not independent corroboration; different passages are
 retained so changes or disagreement are visible rather than overwritten.
 
 The last 16 conversation messages can provide context; 40 exchanges are kept in
@@ -59,7 +59,8 @@ capped at 128 KiB, each call at 10 seconds, both together at 11 seconds, with tw
 concurrent research operations. Requests accept at most 16 messages of 1,500
 characters, a 250-character query, and six combined reviewed/cached passages of
 2,000 characters. Up to eight sources and four 25-word/300-character passages
-are returned. Duplicate identical passages are collapsed.
+are returned. Duplicate identical passages are collapsed. Truncated quotations carry an explicit
+ellipsis and a structured truncation flag; source text itself remains unchanged.
 
 `NEXUS_WEB_RESEARCH_ENABLED=false` disables provider calls while retaining manual
 source responses. The executable enables the capability by default, but makes no
