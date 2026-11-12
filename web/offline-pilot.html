@@ -437,8 +437,12 @@ code{direction:ltr;unicode-bidi:embed}
       const envelope=JSON.parse(await f.text());
       if(!envelope||envelope.schema!==ENCRYPTED_SCHEMA)throw Error('not-protected');
       const incoming=validate(await unseal(envelope,pw));
-      const committed=validate(state);
-      if(JSON.stringify(incoming)===JSON.stringify(committed)){
+      // A brand-new empty workspace is a legitimate *UI state*, but it
+      // cannot be exported/validated as a committed archived workspace.
+      // A valid selected archive must be reported as different, not corrupt.
+      const matches=Boolean(state.workspace.question)&&
+        JSON.stringify(incoming)===JSON.stringify(validate(state));
+      if(matches){
         proofVerifiedSnapshot=JSON.stringify(state);
         $('backup-proof-state').textContent='موفق: فایل انتخاب‌شده با گذرواژه واقعاً باز شد و دقیقاً با کارگاه ثبت‌شدهٔ فعلی برابر است. این آزمون فقط سلامت همین فایل در این لحظه را ثابت می‌کند.';
       }else{
