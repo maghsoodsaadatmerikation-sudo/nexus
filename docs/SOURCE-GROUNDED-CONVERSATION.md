@@ -20,7 +20,8 @@ manual passage is user-supplied even when it names a reputable source. Explicitl
 truth ranking. Multiple passages from one URL are not independent corroboration; different passages are
 retained so changes or disagreement are visible rather than overwritten.
 
-The last 16 conversation messages can provide context; 40 exchanges are kept in
+Up to the last 16 conversation messages can provide context; oldest pairs are
+trimmed from the request at a 60,000-byte client budget, keeping the latest message. 40 exchanges are kept in
 tab memory only. Changing the token or clearing the session discards that context.
 A separately confirmed transcript download is unencrypted and excludes the token.
 Search approval is consumed at dispatch, including failed or cancelled requests.
