@@ -11,11 +11,13 @@ The file is [web/offline-pilot.html](../web/offline-pilot.html). Download **the
 HTML file itself** from the repository and open it in a browser capable of
 running local HTML. A code preview is not the app; a rendered offline file is.
 The independently verified public static entrypoint is
-https://nexus-offline-pilot.onrender.com/ . Its deployed Pilot 06 HTML is
-**not yet the same as this Pilot 08 source candidate** until reviewed static
-promotion. Neither is an authenticated Rust service.
+https://nexus-offline-pilot.onrender.com/ . Render reported LIVE for Pilot 09 deployment
+`dep-dbqo0pei0phs73d8rrb0` on source commit
+`8e3fd8789d82db4559a9cb77cd2f82578271df4b`; the independent
+static HTTPS observer checks exact bytes. This is not an authenticated
+Rust service.
 
-1. In the Pilot 09 source candidate, optionally choose **آزمایش با نمونهٔ ساختگی**
+1. In Pilot 09, optionally choose **آزمایش با نمونهٔ ساختگی**
    for a one-click fictional example with no human judgment, then **کارگاه جدید**
    to clear the demonstration. See [Pilot 09](PILOT-09-GUIDED-FIRST-RUN.md).
    Otherwise, enter a real question, a goal, constraints and values;
@@ -33,7 +35,7 @@ promotion. Neither is an authenticated Rust service.
    authenticated encrypted envelope can be opened; corrupt files and wrong
    passphrases leave existing data unchanged. See
    [Pilot 03 private exports](PILOT-03-PRIVATE-EXPORTS.md) for the exact
-   format, threats and limitations. In the Pilot 08 code candidate, an **explicit opt-in encrypted browser checkpoint** can preserve committed work across reloads on the same browser, if local storage is available. It is distinct from and less portable than the downloadable protected file; it has no server backup. The currently deployed public revision may not include it until exact-byte promotion. See [Pilot 08](PILOT-08-ENCRYPTED-LOCAL-RESUME.md).
+   format, threats and limitations. An **explicit opt-in encrypted browser checkpoint** can preserve committed work across reloads on the same browser, if local storage is available. It is distinct from and less portable than the downloadable protected file; it has no server backup. See [Pilot 08](PILOT-08-ENCRYPTED-LOCAL-RESUME.md).
 
 The original offline JSON files are not Rust gateway-compatible
 `nexus.data-snapshot.v1` or server `DecisionWorkspace` backup; do
