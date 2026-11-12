@@ -11,6 +11,7 @@ on:
       - 'scripts/test-draft-guard-browser.py'
       - 'scripts/test-ui-languages-browser.py'
       - 'scripts/test-voice-browser.py'
+      - 'scripts/test-file-desk-browser.py'
       - 'docs/PILOT-10-PUBLIC-BROWSER-ACCEPTANCE.md'
   push:
     branches: [main]
@@ -23,6 +24,7 @@ on:
       - 'scripts/test-draft-guard-browser.py'
       - 'scripts/test-ui-languages-browser.py'
       - 'scripts/test-voice-browser.py'
+      - 'scripts/test-file-desk-browser.py'
       - 'docs/PILOT-10-PUBLIC-BROWSER-ACCEPTANCE.md'
   workflow_dispatch:
   schedule:
@@ -179,6 +181,29 @@ jobs:
           assert r['authority']=='none' and not r['production_mutation']
           print('PASS: public opt-in voice adapter behavior; physical audio NOT tested')
           PYTEST
+      - name: Exercise published file desk with synthetic files and real download payloads
+        working-directory: ${{ runner.temp }}/nexus-live-pilot
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_PUBLIC_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          NEXUS_PUBLIC_FILES=true node scripts/observe-public-offline-browser.mjs > pilot-17-public-files.json
+          python3 - <<'PYTEST'
+          import json
+          r=json.load(open('pilot-17-public-files.json'))
+          assert r['schema']=='nexus.public-pilot.file-desk-acceptance.v1'
+          assert r['status']=='PASS' and r['checks_per_layout']==33
+          assert r['source_sha256']==r['independent_get_sha256']
+          assert {x['layout'] for x in r['report']}=={'narrow','wide'}
+          assert all(x['status']=='PASS' and x['checks']==33
+                     and x['generated_formats_checked']==8
+                     and x['document_responses']>=1
+                     and x['network_attempts_by_app']==0 for x in r['report'])
+          assert r['synthetic_only'] and not r['real_human_tested']
+          assert r['authority']=='none' and not r['production_mutation']
+          assert 'artifacts' not in str(r)
+          print('PASS: public local file desk; 33 real-browser checks per viewport')
+          PYTEST
       - name: Upload public-only sanitized evidence
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
@@ -191,5 +216,6 @@ jobs:
             ${{ runner.temp }}/nexus-live-pilot/pilot-14-public-drafts.json
             ${{ runner.temp }}/nexus-live-pilot/pilot-15-public-languages.json
             ${{ runner.temp }}/nexus-live-pilot/pilot-16-public-voice.json
+            ${{ runner.temp }}/nexus-live-pilot/pilot-17-public-files.json
           if-no-files-found: ignore
           retention-days: 14
