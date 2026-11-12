@@ -9,7 +9,17 @@
 - Publish path: `public`. Render's `autoDeploy` setting is **off** so unreviewed pushes to main do not silently replace the deployed pilot.
 - The site is a public **entrypoint for an offline, in-browser app**, not a connected server product, with no user account or server data persistence.
 
-Only the self-contained, pre-existing HTML is publicly served. In the browser it does **not** POST workspaces, invoke the Rust gateway, call Railway or store workspace state in remote Render storage. Users must explicitly export JSON and hold it in private storage.
+The independently verified public deployment is pinned to Pilot 06 source
+commit `24644558cfe96f8f1a725986efbe94e1710032f2`, as last verified
+before the Pilot 08 candidate was merged. The **newer main-branch source
+may differ from what Render is currently serving** because autoDeploy is OFF.
+The static observer in `.github/workflows/static-pilot-https.yml` checks
+the pinned deployed revision independently in both PR and main workflows.
+It emits a separate boolean indicating whether current source and observed
+live bytes match. A PASS for the pinned deployed revision is **not** a
+claim that the new source candidate is already live.
+
+Only the self-contained HTML is publicly served. In the browser it does **not** POST workspaces, invoke the Rust gateway, call Railway or store workspace state in remote Render storage. Users must explicitly export JSON and hold it in private storage.
 
 The unrelated pre-existing Render Docker service `nexus` and original Railway NEXUS service/volume were **not** changed by this static deployment. Avoid copying actual personal decision files into GitHub, issue comments, CI or public services.
 
@@ -22,8 +32,8 @@ Render `live` status **alone** is not proof of independent HTTPS reachability. A
 ## Self-critique and restrictions
 
 1. **Not a full NEXUS deployment.** This is a no-account mobile first-touch prototype. Rust server transactions, persistence and authorization are deliberately excluded.
-2. **No unattended release pipeline.** Disabling static autoDeploy prevents drift from unreviewed main commits, but requires manual Render deploy when the HTML intentionally changes; the independent hash gate will then signal the mismatch.
-3. **User-held files are plaintext.** JSON export is not encrypted or automatically backed up. The interface must not imply data survives reload or that any clinical, financial or personally identifying content is safe to share publicly.
+2. **No unattended release pipeline.** Disabling static autoDeploy prevents drift from unreviewed main commits, but requires manual Render deploy when the HTML intentionally changes; the pinned deployed-reference hash gate will intentionally fail when public bytes change until independently checked and the baseline is deliberately updated.
+3. **User-held export privacy depends on the chosen action.** Pilot 06 supports encrypted file exports; its explicitly warned plaintext JSON option is still plaintext. Pilot 08 source adds opt-in encrypted browser-local recovery, but this is **not** a device-independent backup and is not yet claimed deployed. Neither mode is appropriate for entering real sensitive patient/person data into a public/unknown browser.
 4. **Trial input versus verified evidence.** The source label and a local event log cannot independently attest factual accuracy, source availability or authenticity. No automatic judgment or Seal is issued.
 5. **Cost ceiling.** The static-site settings do not request a paid web service. Actual workspace quota, free allowances and billing policies depend on Render account terms; do not promise unlimited free use.
 
