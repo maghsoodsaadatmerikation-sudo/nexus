@@ -46,7 +46,7 @@ window.addEventListener('load',async()=>{
   assert($('analysis-state').textContent.includes('Select a supported file'),'no-file-does-not-analyse');
   const csv='Label,Group,Score,Cost\nalice,A,1,10\nbob,A,2,20\ncarol,B,3,30\ndave,B,4,40\neve,B,,50\n';
   await add([new File([csv],'test-data.csv',{type:'text/csv'}),
-             new File(['<script>alert(1)</script>'],'binary.png',{type:'image/png'})]);
+             new File(['<scr'+'ipt>alert(1)</scr'+'ipt>'],'binary.png',{type:'image/png'})]);
   assert($('analysis-source').options.length===2,'only-supported-data-sources-appear');
   assert($('audit').textContent.includes('No events')||$('audit').textContent.length<90,
     'file-admission-does-not-create-audit-claim');
@@ -153,7 +153,11 @@ def main():
             cmd=['node',str(root/'scripts/workspace-browser-runner.mjs'),
                  browser,page.as_uri(),str(Path(td)/layout),dim,'60000','30000']
             result=subprocess.run(cmd,capture_output=True,text=True,timeout=170)
-            if result.returncode:raise RuntimeError('real-browser-runner-failed')
+            if result.returncode:
+                import re
+                match=re.search(r'"stage":"([a-z-]+)"',result.stderr)
+                stage=match.group(1) if match else 'startup'
+                raise RuntimeError('real-browser-runner-failed-'+stage)
             report=json.loads(result.stdout)
             if report.get('status')!='PASS' or len(report.get('checks',[]))<25:
                 raise RuntimeError('analysis-browser-rejected: '+str(report.get('reason','checks')))
