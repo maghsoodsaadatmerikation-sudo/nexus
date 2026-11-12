@@ -320,9 +320,13 @@ window.addEventListener('load', async () => {
     checks.push('encrypted-import-needs-user-passphrase');
     fill('restore-passphrase','bad-test-password-2026');
     await upload(JSON.stringify(encrypted2));
-    await waitFor(()=>byId('status').classList.contains('error'),'wrong-passphrase-timeout');
+    // The earlier missing-passphrase test also left an error label.
+    // Only the *new* async decryption's password clearing can witness
+    // completion; a pre-existing error class must not short-circuit it.
+    await waitFor(()=>byId('restore-passphrase').value==='' &&
+      byId('status').textContent.includes('نامعتبر'),'wrong-passphrase-timeout');
     assert(byId('decision-view').textContent===preserved &&
-      byId('restore-passphrase').value==='','wrong-passphrase-mutated-state');
+      byId('status').classList.contains('error'),'wrong-passphrase-mutated-state');
     checks.push('wrong-passphrase-fail-closed');
     const corrupted={...encrypted2,ciphertext:
       (encrypted2.ciphertext[0]==='A'?'B':'A')+encrypted2.ciphertext.slice(1)};
