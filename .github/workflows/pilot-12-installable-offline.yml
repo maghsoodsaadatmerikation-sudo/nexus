@@ -97,7 +97,7 @@ jobs:
           r=json.load(open('pilot-12-offline-witness.json'))
           assert r['schema']=='nexus.pilot-12.offline-install-witness.v1'
           assert r['status']=='PASS'
-          assert len(r['checks'])==7
+          assert len(r['checks'])==8
           assert r['actual_offline_navigation'] is True
           assert r['real_android_hardware'] is False
           assert r['private_data_submitted'] is False
