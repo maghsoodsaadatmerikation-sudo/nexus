@@ -2,7 +2,7 @@
 # Current deployed HTML/assets, with reviewed read-only observers from this checkout.
 # Candidate source is tested separately and NEVER silently treated as published.
 set -euo pipefail
-baseline=d43f783e8c3966625e4cb836a8a2b72cdc70956e
+baseline=1b9f1dbc4544cfc608229cb7a8464e60f08aaf40
 test -n "${RUNNER_TEMP:-}"
 target="$RUNNER_TEMP/nexus-live-pilot"
 test ! -e "$target"
