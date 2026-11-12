@@ -22,7 +22,13 @@ def build(check=False):
     payload=json.dumps(packs,ensure_ascii=False,separators=(',',':')).replace('<','\\u003c')
     original=re.sub(r'(<meta name="nexus-ui-messages" content=")[0-9]+(")',lambda m:m[1]+str(len(keys))+m[2],original)
     updated,n=re.subn(r'/\* NEXUS_LOCALES_BEGIN \*/.*?/\* NEXUS_LOCALES_END \*/',lambda _: '/* NEXUS_LOCALES_BEGIN */'+payload+'/* NEXUS_LOCALES_END */',original,flags=re.S)
-    assert n==1 and len(updated.encode())<300000
+    assert n==1
+    core=(ROOT/'web/data-analysis-core.js').read_text().rstrip()
+    updated,core_count=re.subn(
+        r'/\* NEXUS_DATA_ANALYSIS_BEGIN \*/.*?/\* NEXUS_DATA_ANALYSIS_END \*/',
+        lambda _:'/* NEXUS_DATA_ANALYSIS_BEGIN */\n'+core+'\n/* NEXUS_DATA_ANALYSIS_END */',
+        updated,flags=re.S)
+    assert core_count==1 and len(updated.encode())<300000
     digest=hashlib.sha256(updated.encode()).hexdigest()
     worker=ROOT/'public/service-worker.js';old_worker=worker.read_text()
     new_worker,n=re.subn(r"const EXPECTED_SHA256='[a-f0-9]{64}'",f"const EXPECTED_SHA256='{digest}'",old_worker)
