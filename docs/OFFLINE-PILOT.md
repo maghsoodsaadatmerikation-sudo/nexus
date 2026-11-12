@@ -5,6 +5,18 @@ public static HTML only, no authorization, no automated machine decision, no
 provider-backed persistence. This is not a production deployment or an
 authenticated single-host NEXUS service.
 
+## Installable HTTPS offline mode (Pilot 12)
+
+The public static HTTPS version now offers optional **آماده‌سازی حالت
+آفلاین** followed by **افزودن به صفحهٔ اصلی**. This installs/caches
+*only the public application shell* after the exact source digest is
+verified. The browser may subsequently reopen the app with its network
+disconnected. It never caches workspace data or passwords, and the
+user can explicitly remove the app-shell cache. Browser storage can be
+cleared by the device. An existing encrypted local workspace vault or
+an independently downloaded encrypted JSON file is still needed for
+recovering your own work. See [Pilot 12](PILOT-12-INSTALLABLE-OFFLINE.md).
+
 ## Use from an Android phone or desktop
 
 The file is [web/offline-pilot.html](../web/offline-pilot.html). Download **the
