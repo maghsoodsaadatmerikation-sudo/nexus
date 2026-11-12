@@ -19,7 +19,7 @@ const sourceDigest=sha(sourceHtml);
 const assert=(x,reason)=>{if(!x)throw Error(reason)};
 assert(shell.includes("const EXPECTED_SHA256='"+sourceDigest+"'"),
  'service-worker-pinned-html-mismatch');
-const manifest=JSON.parse(await readFile(new URL('../public/manifest.webmanifest',import.meta.url),'utf8'));
+const manifest=JSON.parse(await readFile(new URL('../public/manifest.json',import.meta.url),'utf8'));
 assert(manifest.start_url==='/'&&manifest.scope==='/'&&manifest.display==='standalone'&&
  manifest.lang==='fa'&&manifest.icons.length===2,'unsafe-pwa-manifest');
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
