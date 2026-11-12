@@ -22,7 +22,10 @@ retained so changes or disagreement are visible rather than overwritten.
 
 Up to the last 16 conversation messages can provide context; oldest pairs are
 trimmed from the request at a 60,000-byte client budget, keeping the latest message. 40 exchanges are kept in
-tab memory only. Changing the token or clearing the session discards that context.
+tab memory by default. [Optional encrypted history](OPTIONAL-CHAT-HISTORY.md)
+can retain selected conversations locally and attach selected historical context
+only with separate user consent. Changing the token or clearing the session discards active context; explicitly
+saved history remains until deleted.
 A separately confirmed transcript download is unencrypted and excludes the token.
 Search approval is consumed at dispatch, including failed or cancelled requests.
 Replies arriving after cancellation, clear, token or language change are discarded.
@@ -59,7 +62,7 @@ automatically fetched. Public HTTPS citations exclude credentials, IP literals,
 nonstandard ports and local/internal host suffixes. External response bytes are
 capped at 128 KiB, each call at 10 seconds, both together at 11 seconds, with two
 concurrent research operations. Requests accept at most 16 messages of 1,500
-characters, a 250-character query, and six combined reviewed/cached passages of
+characters, a 250-character query, and six combined reviewed/cached/historical passages of
 2,000 characters. Up to eight sources and four 25-word/300-character passages
 are returned. Duplicate identical passages are collapsed. Truncated quotations carry an explicit
 ellipsis and a structured truncation flag; source text itself remains unchanged.
