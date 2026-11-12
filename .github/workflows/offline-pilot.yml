@@ -12,6 +12,8 @@ on:
       - 'scripts/test-voice-browser.py'
       - 'scripts/test-file-desk-browser.py'
       - 'scripts/test-local-data-analysis-browser.py'
+      - 'scripts/test-web-research-browser.py'
+      - 'web/web-research-core.js'
       - 'web/data-analysis-core.js'
       - 'scripts/build-ui-languages.py'
       - 'web/locales/**'
@@ -34,6 +36,8 @@ on:
       - 'scripts/test-voice-browser.py'
       - 'scripts/test-file-desk-browser.py'
       - 'scripts/test-local-data-analysis-browser.py'
+      - 'scripts/test-web-research-browser.py'
+      - 'web/web-research-core.js'
       - 'web/data-analysis-core.js'
       - 'scripts/build-ui-languages.py'
       - 'web/locales/**'
@@ -109,6 +113,24 @@ jobs:
           assert {p['layout'] for p in r['reports']}=={'narrow','wide'}
           print('PASS: bounded local analytics, no network or authority')
           PY
+      - name: Verify explicit web research consent and no workspace exfiltration
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check web/web-research-core.js
+          python3 scripts/test-web-research-browser.py > web-research-browser.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open('web-research-browser.json'))
+          assert data['schema']=='nexus.pilot-19.web-research-witness.v1'
+          assert data['status']=='PASS' and len(data['reports'])==2
+          assert {p['layout'] for p in data['reports']}=={'narrow','wide'}
+          assert all(len(p['checks'])>=25 and p['network_requests']==0
+                     and p['authority']=='none' and not p['production_mutation']
+                     and p['real_web_results_tested'] is False
+                     for p in data['reports'])
+          print('PASS: consent-gated external engine handoff without app network requests')
+          PY
       - name: Verify exported synthetic bridge against live disposable Rust API
         shell: bash
         env:
@@ -168,5 +190,6 @@ jobs:
             voice-browser.json
             file-desk-browser.json
             data-analysis-browser.json
+            web-research-browser.json
           if-no-files-found: ignore
           retention-days: 30
