@@ -47,6 +47,11 @@ code{direction:ltr;unicode-bidi:embed}
     <strong>بدون حساب، توکن یا اینترنت پس از دریافت فایل</strong>
     <small>اطلاعات به‌طور پیش‌فرض فقط در حافظهٔ همین صفحه است؛ ادامهٔ رمزدار محلی تنها با فعال‌سازی صریح انجام می‌شود. برای حفظ مستقل داده‌ها خروجی رمزدار بگیرید. این نسخه هیچ اتصالی به Railway ندارد. فایل آفلاین مستقیماً با هستهٔ Rust سازگار نیست؛ انتقال اختیاری فقط با خروجی جداگانهٔ «فایل انتقال به هستهٔ Rust» انجام می‌شود.</small>
   </div>
+  <section class="panel full" aria-labelledby="demo-title" style="margin-bottom:16px">
+    <h2 id="demo-title">شروع فوری، بدون اطلاعات شخصی</h2>
+    <p class="help">با یک لمس، یک پرسش و دو شاهد و دو گزینهٔ <strong>کاملاً ساختگی</strong> را مشاهده کنید. هیچ تصمیم انسانی ثبت نمی‌شود، هیچ اتصال یا حسابی لازم نیست و داده‌ای به سرور فرستاده نمی‌شود. برای کار واقعی، «کارگاه جدید» را بزنید.</p>
+    <button type="button" id="load-demo" class="secondary">آزمایش با نمونهٔ ساختگی</button>
+  </section>
   <div class="toolbar">
     <button type="button" id="encrypt-export">دریافت نسخهٔ رمزگذاری‌شده</button>
     <button type="button" id="core-export" class="secondary">فایل انتقال به هستهٔ Rust (بدون رمز)</button>
@@ -292,6 +297,43 @@ code{direction:ltr;unicode-bidi:embed}
     if(!event('judgment'))return;
     state.workspace.judgment={decision,rationale};
     status('تصمیم انسانی شما ثبت شد؛ اکنون فایل JSON را ذخیره کنید.');render();
+  });
+  // Pilot 09: demo is entirely synthetic and carries NO authority.
+  // It demonstrates structure, never records a human decision or
+  // misrepresents a demo source as independently verified evidence.
+  $('load-demo').addEventListener('click',()=>{
+    const formHasDraft=['question','goal','constraints','values','claim','source',
+      'option','consequences','decision','rationale'].some(id=>$(id).value.trim());
+    if((state.events.length||formHasDraft)&&!window.confirm(
+      'نمونهٔ ساختگی جای کارگاه یا متن واردشدهٔ فعلی را می‌گیرد. برای حفظ کار فعلی ابتدا خروجی رمزدار بگیرید. ادامه می‌دهید؟'))return;
+    pauseVault(); // Preserve any prior encrypted slot without overwriting it.
+    const sample=fresh(),w=sample.workspace;
+    w.question='[نمونهٔ ساختگی] برای یک جلسهٔ مطالعه، کدام شیوهٔ برنامه‌ریزی را بررسی کنم؟';
+    w.goal='تمرین بررسی شواهد و پیامدها؛ نه انتخاب خودکار';
+    w.constraints=['زمان محدود','بدون هزینه'];
+    w.values=['یادگیری','استقلال تصمیم'];
+    w.claims=[
+      {id:uuid(),text:'[ساختگی] روش اول ممکن است تمرکز را آسان‌تر کند.',
+        origin:'human',source:'',uncertainty:'high'},
+      {id:uuid(),text:'[ساختگی] یک گزارش فرضی دربارهٔ وقفه‌های کوتاه وجود دارد؛ صحت آن بررسی نشده است.',
+        origin:'external_evidence',source:'demo:synthetic-unverified-not-a-real-source',uncertainty:'unknown'}];
+    w.alternatives=[
+      {id:uuid(),label:'[ساختگی] یک بازهٔ پیوسته',
+        consequences:['ممکن است کار ساده‌تر پیش برود','احتمال خستگی']},
+      {id:uuid(),label:'[ساختگی] چند بازه با استراحت',
+        consequences:['امکان بازبینی مسیر','نیاز به مدیریت زمان']}];
+    // Exactly the five local, unattested mock events needed by the
+    // current import contract. NO judgment event or judgment payload.
+    const at=new Date().toISOString();
+    sample.events=['question','claim','claim','alternative','alternative']
+      .map((kind,index)=>({sequence:index+1,kind,at}));
+    state=sample;
+    $('question').value=w.question;$('goal').value=w.goal;
+    $('constraints').value=w.constraints.join('\n');
+    $('values').value=w.values.join('\n');
+    for(const id of ['claim','source','option','consequences','decision','rationale'])$(id).value='';
+    render();
+    status('نمونهٔ ساختگی برای تمرین باز شد؛ هیچ تصمیمی ثبت نشده است. برای مسئلهٔ واقعی، کارگاه جدید بسازید.');
   });
   $('new').addEventListener('click',()=>{
     if(state.events.length&&!window.confirm('اطلاعات ذخیره‌نشده با ساخت کارگاه تازه از بین می‌رود. ادامه می‌دهید؟'))return;
