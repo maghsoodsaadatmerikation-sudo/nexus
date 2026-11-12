@@ -2,7 +2,7 @@
 
 ## Why this step
 
-Pilot 09 is actually hosted at https://nexus-offline-pilot.onrender.com/ .
+Pilot 11 is actually hosted at https://nexus-offline-pilot.onrender.com/ .
 Prior `scripts/verify-public-static-pilot.py` established only **public HTML identity**;
 `scripts/test-offline-pilot-browser.py` exercised **file://** under Chrome.
 Those are independent proofs, but neither alone demonstrates that **real Chromium
@@ -17,7 +17,7 @@ script changes and a once-weekly read-only schedule (Monday 06:23 UTC).
 The workflow:
 
 1. Requires checked-out standalone HTML to match exact previously published
-   source `8e3fd8789d82db4559a9cb77cd2f82578271df4b`.
+   source `ed13887699b49a8494a3178e426ad9192e14d57e`.
    **Source candidate != deployed code** must fail, never be silently promoted.
 2. Independently GETs the exact public URL without redirects or credentials,
    checks HTTP 200 and `text/html`, then requires byte-for-byte SHA-256 match
@@ -28,7 +28,7 @@ The workflow:
    observes real browser `Document` responses, fetches a genuine Chromium
    network response body, and checks its SHA-256 against source.
 4. Injects the **same synthetic JavaScript witness already used by the
-   isolated 40-check acceptance suite** via DevTools, not by editing the
+   isolated 46-check acceptance suite** via DevTools, not by editing the
    deployed site. Its synthetic exercise includes one-click fictional onboarding,
    refusal to overwrite, external-source validation, optional AES-GCM
    encrypted file/checkpoint, wrong-password and tamper rejection, actual
@@ -49,7 +49,7 @@ to deny external connections. No production API call is issued by this test.
 
 - **PASS means:** an independent CI runner actually loaded the published HTTPS
   page in two real Chromium viewport classes and completed the fully synthetic
-  40-check local workflow (including actual browser document reload), with
+  46-check local workflow (including actual browser document reload), with
   source bytes and network behavior checked.
 - **PASS does not mean:** real Android hardware acceptance; actual person
   acceptance; availability SLA; accessibility audit; multiuser identity;
