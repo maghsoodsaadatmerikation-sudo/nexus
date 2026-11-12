@@ -34,7 +34,13 @@ def build(check=False):
         r'/\* NEXUS_WEB_RESEARCH_BEGIN \*/.*?/\* NEXUS_WEB_RESEARCH_END \*/',
         lambda _:'/* NEXUS_WEB_RESEARCH_BEGIN */\n'+search_core+'\n  /* NEXUS_WEB_RESEARCH_END */',
         updated,flags=re.S)
-    assert search_count==1 and len(updated.encode())<300000
+    assert search_count==1
+    chat_core=(ROOT/'web/guided-chat-core.js').read_text().rstrip()
+    updated,chat_count=re.subn(
+        r'/\* NEXUS_GUIDED_CHAT_BEGIN \*/.*?/\* NEXUS_GUIDED_CHAT_END \*/',
+        lambda _:'/* NEXUS_GUIDED_CHAT_BEGIN */\n'+chat_core+'\n  /* NEXUS_GUIDED_CHAT_END */',
+        updated,flags=re.S)
+    assert chat_count==1 and len(updated.encode())<300000
     digest=hashlib.sha256(updated.encode()).hexdigest()
     worker=ROOT/'public/service-worker.js';old_worker=worker.read_text()
     new_worker,n=re.subn(r"const EXPECTED_SHA256='[a-f0-9]{64}'",f"const EXPECTED_SHA256='{digest}'",old_worker)

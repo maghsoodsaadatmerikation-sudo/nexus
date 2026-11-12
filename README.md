@@ -142,6 +142,31 @@ only passing independent CI evidence permits public verification claims.
 This does not prove every external search provider's availability or return
 an automated search API to the standalone app.
 
+## Talk with NEXUS — human-guided conversation (Pilot 20 candidate)
+
+The workshop gains a bilingual **Talk with NEXUS** panel. A person can send
+and receive multiple text turns in a deterministic six-stage reflection
+dialogue: clarify a question, distinguish evidence from interpretation,
+compare alternatives, map uncertainty, identify values/consequences, and
+reflect before making **their own** decision. An optional opt-in reads only
+the committed workspace question, claim/alternative counts and values;
+no files, passwords or unregistered work are read. Users can manually
+transfer their own latest message into an **unregistered** question/evidence
+draft, or explicitly download an **unencrypted** session transcript.
+Up to 40 exchanges are held only in this browser tab; replacing the
+workspace clears them. On-device voice may read the guide's reply on request.
+Existing Voice tools can dictate into an *unsent* chat message draft, requiring
+separate explicit insertion and sending.
+
+This is **not** a generative AI chatbot or live person-to-person messenger:
+there is no remote model, peer connection, fact verification or autonomous
+judgment. It requires no paid API and preserves the static app's
+`connect-src 'none'` and `A_out <= A_in` boundary.
+
+[Interaction, speech and privacy contract](docs/PILOT-20-GUIDED-HUMAN-CHAT.md).
+This candidate must pass exact-head browser verification, a separate
+manual Render deployment and public HTTPS acceptance before publication.
+
 ## Recoverability check for private encrypted files (Pilot 11)
 
 Pilot 11 adds **file-picker verification of an actual downloaded encrypted JSON file**, with the original passphrase, against the *committed* workspace. This does not replace the workspace, upload it or claim that the file is safe outside the device. The independent HTTPS observer checks the published source. [Pilot 11 details](docs/PILOT-11-VERIFIED-ENCRYPTED-EXPORT.md).
