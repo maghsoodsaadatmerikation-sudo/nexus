@@ -1,3 +1,5 @@
+> Optional Voice tools default to local processing. Browser online speech may send audio or selected text to a provider only after opt-in and confirmation; availability depends on the device. See [Voice tools](PILOT-16-VOICE-INPUT-OUTPUT.md).
+
 > The app now opens in English. To follow the Persian button labels below,
 > choose **فارسی** in **Language / Interface language** at the top of the page.
 > Only English and Persian are bundled; other languages can be added through
