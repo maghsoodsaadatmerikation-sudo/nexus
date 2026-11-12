@@ -15,11 +15,12 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from png_pixels import pixel_digest
 
 ORIGIN = "https://nexus-offline-pilot.onrender.com"
 ASSETS = {
     "/": ("web/offline-pilot.html", "text/html"),
-    "/manifest.webmanifest": ("public/manifest.webmanifest", "manifest"),
+    "/manifest.json": ("public/manifest.json", "manifest"),
     "/service-worker.js": ("public/service-worker.js", "javascript"),
     "/icons/nexus-192.png": ("public/icons/nexus-192.png", "image/png"),
     "/icons/nexus-512.png": ("public/icons/nexus-512.png", "image/png"),
@@ -41,24 +42,43 @@ def allowed_mime(kind: str, value: str) -> bool:
     return mime == kind
 
 
-def compare(status: int, mime: str, body: bytes, expected: bytes, kind: str) -> dict:
-    ok = (status == 200 and 0 < len(body) <= MAX_BYTES
-          and body == expected and allowed_mime(kind, mime))
-    return {
-        "ok": ok,
+def compare(status: int, mime: str, body: bytes, expected: bytes,
+            kind: str, icon_size: int | None = None) -> dict:
+    good_mime = allowed_mime(kind, mime)
+    exact = body == expected
+    result = {
+        "ok": False,
         "http_status": status,
         "mime_type": mime.split(";", 1)[0].strip().lower()[:72],
         "sha256": hashlib.sha256(body).hexdigest(),
         "expected_sha256": hashlib.sha256(expected).hexdigest(),
         "bytes": len(body),
-        "exact_byte_match": body == expected,
+        "exact_byte_match": exact,
     }
+    if icon_size is None:
+        result["ok"] = status == 200 and good_mime and 0 < len(body) <= MAX_BYTES and exact
+    else:
+        # Render may re-compress/strip PNG metadata while leaving every
+        # decoded pixel unchanged. Container byte equality is NOT the
+        # same as image integrity. Decode *both* with bounded stdlib code.
+        try:
+            src_pixels = pixel_digest(expected, icon_size, icon_size)
+            live_pixels = pixel_digest(body, icon_size, icon_size)
+        except ValueError:
+            result["pixel_match"] = False
+        else:
+            result["pixel_match"] = src_pixels == live_pixels
+            result["source_rgba_sha256"] = src_pixels
+            result["observed_rgba_sha256"] = live_pixels
+        result["ok"] = bool(status == 200 and good_mime
+            and 0 < len(body) <= MAX_BYTES and result.get("pixel_match") is True)
+    return result
 
 
 def source_sanity() -> None:
     html = Path("web/offline-pilot.html").read_bytes()
     sw = Path("public/service-worker.js").read_text("utf-8")
-    manifest = json.loads(Path("public/manifest.webmanifest").read_text("utf-8"))
+    manifest = json.loads(Path("public/manifest.json").read_text("utf-8"))
     assert b"connect-src 'none'" in html
     assert b"worker-src 'self'" in html
     assert b"manifest-src 'self'" in html
@@ -72,6 +92,7 @@ def source_sanity() -> None:
         data = Path(f"public/icons/nexus-{size}.png").read_bytes()
         assert data.startswith(b"\x89PNG\r\n\x1a\n")
         assert struct.unpack(">II", data[16:24]) == (size, size)
+        assert len(pixel_digest(data, size, size)) == 64
 
 
 def self_test() -> None:
@@ -107,13 +128,15 @@ def public_observation(attempts: int) -> dict:
                     "Accept": "text/html" if path == "/" else "*/*",
                     "User-Agent": "NEXUS-pilot12-static-readonly-observer/1",
                 })
+            icon_size = (192 if "nexus-192.png" in path else
+                         512 if "nexus-512.png" in path else None)
             try:
                 with opener.open(request, timeout=16) as response:
                     data = response.read(MAX_BYTES + 1)
                     observation = compare(
                         response.status,
                         response.headers.get("Content-Type", ""),
-                        data, expected, kind)
+                        data, expected, kind, icon_size)
             except urllib.error.HTTPError as exc:
                 observation = compare(exc.code, "", b"", expected, kind)
             except (urllib.error.URLError, TimeoutError) as exc:
