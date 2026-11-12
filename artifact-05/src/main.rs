@@ -229,10 +229,25 @@ async fn main() {
     } else {
         nexus_artifact_05_gateway::research_chat::ResearchChat::default()
     };
+    let connections = match std::env::var_os("NEXUS_CONNECTIONS_CONFIG") {
+        None => nexus_artifact_05_gateway::connections::Connections::disabled(),
+        Some(path) => {
+            use std::io::Read;
+            let mut raw = String::new();
+            std::fs::File::open(path)
+                .expect("open connection config")
+                .take(65537)
+                .read_to_string(&mut raw)
+                .expect("read connection config");
+            nexus_artifact_05_gateway::connections::Connections::from_operator_json(&raw)
+                .unwrap_or_else(|_| panic!("invalid operator connection config"))
+        }
+    };
     let app = router(
         AppState::authenticated(CoreDelegate::new(data_root.clone()), token)
             .with_safety(safety)
             .with_research_chat(research)
+            .with_connections(connections)
             .with_body_read_timeout(Duration::from_secs(body_read_seconds))
             .with_max_concurrent_executions(max_concurrent_executions)
             .with_recovery_gate(&data_root)

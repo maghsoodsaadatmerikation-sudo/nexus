@@ -6,6 +6,9 @@ on:
       - 'artifact-05/**'
       - 'web/research-chat.html'
       - 'web/chat-history.js'
+      - 'web/connections.html'
+      - 'scripts/test-connections-browser.py'
+      - 'docs/OPTIONAL-APP-CONNECTIONS.md'
       - 'scripts/test-chat-history.mjs'
       - 'scripts/test-chat-history-browser.py'
       - 'docs/OPTIONAL-CHAT-HISTORY.md'
@@ -20,6 +23,9 @@ on:
       - 'artifact-05/**'
       - 'web/research-chat.html'
       - 'web/chat-history.js'
+      - 'web/connections.html'
+      - 'scripts/test-connections-browser.py'
+      - 'docs/OPTIONAL-APP-CONNECTIONS.md'
       - 'scripts/test-chat-history.mjs'
       - 'scripts/test-chat-history-browser.py'
       - 'docs/OPTIONAL-CHAT-HISTORY.md'
@@ -53,3 +59,5 @@ jobs:
         run: node --test scripts/test-chat-history.mjs
       - name: Exercise opt-in history with real IndexedDB and Web Crypto
         run: python3 scripts/test-chat-history-browser.py
+      - name: Exercise explicit app consent and disconnect in real Chromium
+        run: python3 scripts/test-connections-browser.py
