@@ -11,9 +11,9 @@ The file is [web/offline-pilot.html](../web/offline-pilot.html). Download **the
 HTML file itself** from the repository and open it in a browser capable of
 running local HTML. A code preview is not the app; a rendered offline file is.
 The independently verified public static entrypoint is
-https://nexus-offline-pilot.onrender.com/ . Render reported LIVE for Pilot 09 deployment
-`dep-dbqo0pei0phs73d8rrb0` on source commit
-`8e3fd8789d82db4559a9cb77cd2f82578271df4b`; the independent
+https://nexus-offline-pilot.onrender.com/ . Render reported LIVE for Pilot 11 deployment
+`dep-dbqolejbc2fs73e0mha0` on source commit
+`ed13887699b49a8494a3178e426ad9192e14d57e`; the independent
 static HTTPS observer checks exact bytes. This is not an authenticated
 Rust service.
 
@@ -37,7 +37,7 @@ Rust service.
    [Pilot 03 private exports](PILOT-03-PRIVATE-EXPORTS.md) for the exact
    format, threats and limitations. An **explicit opt-in encrypted browser checkpoint** can preserve committed work across reloads on the same browser, if local storage is available. It is distinct from and less portable than the downloadable protected file; it has no server backup. See [Pilot 08](PILOT-08-ENCRYPTED-LOCAL-RESUME.md).
 
-Before relying on an encrypted export, use **آزمایش بازیابی فایل دانلودشده** (Pilot 11 source, after verified public promotion): select the actual file from Downloads and re-enter its passphrase. The app checks decryptability/structure and reports exact current-state equality, valid-but-different content, or rejection. It does not import or modify the active workspace. This is not a full Railway backup or proof of off-device custody. See [Pilot 11 recovery check](PILOT-11-VERIFIED-ENCRYPTED-EXPORT.md).
+Before relying on an encrypted export, use **آزمایش بازیابی فایل دانلودشده** (Pilot 11): select the actual file from Downloads and re-enter its passphrase. The app checks decryptability/structure and reports exact current-state equality, valid-but-different content, or rejection. It does not import or modify the active workspace. This is not a full Railway backup or proof of off-device custody. See [Pilot 11 recovery check](PILOT-11-VERIFIED-ENCRYPTED-EXPORT.md).
 
 The original offline JSON files are not Rust gateway-compatible
 `nexus.data-snapshot.v1` or server `DecisionWorkspace` backup; do
