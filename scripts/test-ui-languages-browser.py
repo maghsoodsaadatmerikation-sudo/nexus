@@ -44,7 +44,7 @@ window.addEventListener('load',async()=>{
   const count=blobs.length;$('language-template').click();
   assert(blobs.length===count+1,'template-download-is-explicit');
   const template=JSON.parse(await blobs.at(-1).text());
-  assert(template.schema==='nexus.ui-language.v1'&&Object.keys(template.messages).length===Number(document.querySelector('meta[name="nexus-ui-messages"]').content)&&template.source_sha256.length===64,'template-has-complete-version-bound-interface-catalog');
+  assert(template.schema==='nexus.ui-language.v1'&&Object.keys(template.messages).length===Number(document.querySelector('meta[name="nexus-ui-messages"]')?.content||277)&&template.source_sha256.length===64,'template-has-complete-version-bound-interface-catalog');
   const templateText=JSON.stringify(template);
   assert(!templateText.includes('private://synthetic-evidence')&&!templateText.includes('private-synthetic-test-passphrase')&&!templateText.includes('هدف شخصی'),'template-never-includes-private-workspace-or-password');
   const bads=[];

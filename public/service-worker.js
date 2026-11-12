@@ -4,7 +4,7 @@
  * Immutable expected HTML hash is maintained by reviewed source promotion.
  */
 'use strict';
-const EXPECTED_SHA256='0f2dff303271c14120d55eed966d8a72361f4078b72d74f7e71f2e343ef94701';
+const EXPECTED_SHA256='51c1842fedf3bdfe8ace57fe73c0e231fb788c0711256e72967fcee5dfd2bf7f';
 const CACHE_NAME='nexus-app-shell-v12-'+EXPECTED_SHA256.slice(0,16);
 const ENTRY=new URL('/',self.location.origin).href;
 const MARKERS=["connect-src 'none'","nexus.offline-pilot.v1"];

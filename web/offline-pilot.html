@@ -452,7 +452,7 @@ code{direction:ltr;unicode-bidi:embed}
     const active=!!recognition||reading;
     voiceEpoch++;clearTimeout(micTimer);micTimer=null;speechSnapshot=null;
     const rec=recognition;recognition=null;
-    if(rec){rec.onresult=rec.onerror=rec.onend=rec.onstart=null;try{rec.abort()}catch{}}
+    if(rec){rec.onresult=rec.onerror=rec.onend=null;rec.onstart=()=>{try{rec.abort()}catch{}};try{rec.abort()}catch{}}
     if(reading){reading=false;try{window.speechSynthesis.cancel()}catch{}}
     $('voice-mic').disabled=false;$('voice-stop').disabled=true;
     if(clear){voiceContext=null;$('voice-transcript').value='';$('voice-insert').disabled=true;}
@@ -575,7 +575,8 @@ code{direction:ltr;unicode-bidi:embed}
     if(String(voice.lang).split('-')[0].toLowerCase()!==lang.split('-')[0].toLowerCase()){voiceStatus('m310');return;}
     if(voice.localService!==true&&(!$('voice-online').checked||!window.confirm(t('m309'))))return;
     const epoch=voiceEpoch;speechSnapshot=JSON.stringify(state);reading=true;$('voice-stop').disabled=false;
-    const chunks=text.match(/[\s\S]{1,350}(?:\s|$)|[\s\S]{1,350}/g)||[];
+    const characters=Array.from(text),chunks=[];
+    for(let start=0;start<characters.length;start+=350)chunks.push(characters.slice(start,start+350).join(''));
     let index=0;
     function next(){
       if(epoch!==voiceEpoch||!reading)return;

@@ -58,6 +58,7 @@ window.addEventListener('load',async()=>{
   lastRec.emit('duplicate');assert(!$('voice-transcript').value.includes('duplicate'),'duplicate-final-result-is-not-appended-again');
   const beforeStop=aborts,late=lastRec.onresult;$('voice-stop').click();late({resultIndex:0,results:[Object.assign([{transcript:'late'}],{isFinal:true})]});
   assert(aborts===beforeStop+1&&!$('voice-transcript').value.includes('late')&&!$('voice-mic').disabled,'stop-aborts-and-ignores-late-results');
+  const lateStart=aborts;lastRec.onstart();assert(aborts===lateStart+1,'late-permission-start-is-aborted-after-cancellation');
   $('voice-insert').click();
   assert($('question').value==='<img src=x> synthetic question'&&$('question-view').textContent.includes('No question')&&!document.querySelector('#question-view img'),'explicit-insertion-is-a-draft-not-an-event-or-html');
   $('ask-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
@@ -99,6 +100,10 @@ window.addEventListener('load',async()=>{
   assert(aborts===oldAbort+1&&$('voice-mic').textContent==='شروع میکروفن','language-switch-stops-audio-and-localizes-controls');
   change('ui-language','en');$('voice-mic').click();await tick();const onPageHide=aborts;window.dispatchEvent(new Event('pagehide'));
   assert(aborts===onPageHide+1,'leaving-page-stops-active-microphone');
+  change('voice-target','question');fill('question','X'+'😀'.repeat(400));const chunkStart=spoken.length;$('voice-read').click();
+  for(let i=0;i<10&&!$('voice-stop').disabled;i++)spoken.at(-1).onend();
+  const chunks=spoken.slice(chunkStart).map(x=>x.text);
+  assert(chunks.join('')===$('question').value&&chunks.every(x=>Array.from(x).every(c=>c.length!==1||c.charCodeAt(0)<0xD800||c.charCodeAt(0)>0xDFFF)),'read-chunks-preserve-unicode-code-points');
   $('voice-mic').click();await tick();lastRec.emit('preview before workspace replacement');const oldResult=lastRec.onresult;$('new').click();oldResult({resultIndex:0,results:[]});
   assert($('voice-transcript').value===''&&$('question').value===''&&$('voice-stop').disabled,'workspace-replacement-clears-context-and-rejects-late-audio');
   assert(network===0&&localStorage.length===0,'adapters-use-no-app-network-or-new-persistent-audio-store');
@@ -124,7 +129,7 @@ def main():
             if result.returncode:
                 raise RuntimeError('private-browser-did-not-complete')
             report=json.loads(result.stdout)
-            if report.get('status')!='PASS' or len(report.get('checks',[]))!=33:
+            if report.get('status')!='PASS' or len(report.get('checks',[]))!=35:
                 raise RuntimeError('voice-adapter-rejected: '+str(report.get('reason','check-count')))
             assert (layout=='narrow')==(report['width']<=760)
             reports.append({'layout':layout,**report})

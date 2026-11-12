@@ -45,7 +45,7 @@ calls. NEXUS itself adds no API token, provider subscription or paid server.
 
 ## Verification and limits
 
-The voice witness runs 33 DOM/adapter checks per viewport in real disposable
+The voice witness runs 35 DOM/adapter checks per viewport in real disposable
 Chromium with controlled SpeechRecognition/SpeechSynthesis adapters. It verifies
 no auto start, local-only enforcement, consent cancellation, final-only preview,
 length/conflict rejection, explicit registration boundary, stop/error/deadline
