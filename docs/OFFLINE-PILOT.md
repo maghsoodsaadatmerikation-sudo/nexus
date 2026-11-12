@@ -1,3 +1,8 @@
+> The app now opens in English. To follow the Persian button labels below,
+> choose **فارسی** in **Language / Interface language** at the top of the page.
+> Only English and Persian are bundled; other languages can be added through
+> complete local translation packs. See [language support](PILOT-15-ENGLISH-FIRST-LANGUAGES.md).
+
 # NEXUS Offline Pilot — a usable single-file mobile prototype
 
 **Scope:** offline, one-person decision-structuring prototype; no Rust engine,

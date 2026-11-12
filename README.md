@@ -16,10 +16,10 @@ A_out <= A_in
 
 ## Try NEXUS on the web (static, no account)
 
-The standalone Persian/RTL mobile pilot is hosted at
+The English-first multilingual mobile pilot is hosted at
 **https://nexus-offline-pilot.onrender.com/**. Render reported LIVE for
-manual deployment `dep-dbqqq5jbc2fs73e5s9cg` of Pilot 14
-source commit `9c977ad58ef40c5b9d4fa3f8865ac84f17e291e4`.
+manual deployment `dep-dbqr5nmi0phs73dggik0` of Pilot 15
+source commit `795e1b3371b0674ee0d3abcdd9fd57ce27813cc1`.
 The independent static HTTPS identity workflow pins the actually deployed
 source; provider status alone is not byte-level proof. The app does not
 connect to the Rust gateway, send workspace content to Render, or issue
@@ -38,8 +38,8 @@ workspace JSON, password or personal information. Saving work still
 requires the separate encrypted local checkpoint or owner-held file.
 The standalone HTML continues to work when opened from a downloaded file.
 
-Render reported LIVE for static deployment `dep-dbqqq5jbc2fs73e5s9cg`
-from exact source `9c977ad58ef40c5b9d4fa3f8865ac84f17e291e4`.
+Render reported LIVE for static deployment `dep-dbqr5nmi0phs73dggik0`
+from exact source `795e1b3371b0674ee0d3abcdd9fd57ce27813cc1`.
 Independent public asset-byte checks and live-origin real Chromium offline
 acceptance must PASS separately; provider LIVE alone does not prove them.
 [Installation and security contract](docs/PILOT-12-INSTALLABLE-OFFLINE.md).
@@ -66,7 +66,7 @@ Published to the existing static site. Independent public Chromium acceptance
 checks draft protection, the report, the workshop and actual offline navigation.
 Browser exit prompts remain conditional; mobile OS termination is not guarded.
 
-## English-first interface and local translation packs (Pilot 15 candidate)
+## English-first interface and local translation packs (Pilot 15)
 
 English is the default. Complete English and Persian interfaces can be switched
 without changing workspace contents. A full local language pack can add any
@@ -74,7 +74,8 @@ BCP 47 language with LTR/RTL direction. The downloadable English template
 contains only interface text. There is no automatic network translation and
 no claim that every language has a bundled reviewed translation.
 [Language support and pack format](docs/PILOT-15-ENGLISH-FIRST-LANGUAGES.md).
-Separate static deployment and public browser acceptance are required.
+Published on the existing static site. Independent public Chromium checks
+English default, Persian switching, custom packs and unchanged private work.
 
 ## Recoverability check for private encrypted files (Pilot 11)
 
