@@ -257,7 +257,10 @@ cleanup
 docker run --rm --user 0 --entrypoint sh \
   -v "$smoke_data:/data" nexus-ci-smoke \
   -c ': > /data/requests/63692d756e6365727461696e'
-python3 scripts/data-snapshot.py backup "$smoke_data" "$volume_snapshot" --offline
+# Snapshots belong to container UID 10001 and are deliberately mode 0600.
+# Read them as the synthetic CI operator, without weakening live file modes.
+sudo python3 scripts/data-snapshot.py backup "$smoke_data" "$volume_snapshot" --offline
+sudo chown "$(id -u):$(id -g)" "$volume_snapshot"
 # Prove the recovery-point gap: admit an ID after capture, then lose that volume.
 start_container
 code="$(curl -sS -o "$http_body" -w '%{http_code}' -X POST "$base_url/v1/requests" \

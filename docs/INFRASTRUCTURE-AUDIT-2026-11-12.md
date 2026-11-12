@@ -29,6 +29,9 @@ different mutations and verifies that rejected saves preserve the prior snapshot
 - `scripts/run_gates.sh`: formatting, locked build/check/test compilation,
   complete tests, type boundary and lockfile metadata.
 - Snapshot/recovery and durable-state Python contracts run separately.
+- CI's offline full-volume backup runs as the synthetic host operator because
+  mode-0600 snapshots belong to container UID 10001. Only the resulting synthetic
+  archive is returned to the runner's ownership; live file modes stay private.
 
 These are local synthetic checks. They do not simulate physical power loss,
 certify a filesystem/provider's fsync implementation, or prove production recovery.
@@ -63,3 +66,9 @@ modules and current locked dependencies for synthetic intake tests. This is not
 a recreation or attestation of the historical executable. The production intake
 parity guard is unchanged and still blocks the changed candidate sources when
 they are presented as the old deployed revision.
+
+Render read-back also confirmed that the static pilot has automatic deployment
+disabled, while legacy Docker service `nexus` (`srv-dabhmn0u01pc73b1v1og`) deploys
+on every `main` commit. Merging this repair would therefore deploy that backend.
+Integration is held until that boundary is controlled and independent server
+recovery is established. No provider configuration was changed.
