@@ -7,7 +7,12 @@ import {createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 
-const ORIGIN='http://127.0.0.1:8765/';
+const PUBLIC_MODE=process.env.NEXUS_PWA_PUBLIC==='true';
+if(PUBLIC_MODE&&(process.env.GITHUB_ACTIONS!=='true'||
+   !/^[0-9]+$/.test(process.env.GITHUB_RUN_ID||'')))
+  throw Error('public-origin-test-requires-ephemeral-github-runner');
+const ORIGIN=PUBLIC_MODE?'https://nexus-offline-pilot.onrender.com/':
+  'http://127.0.0.1:8765/';
 const browser=process.env.NEXUS_PWA_CHROME;
 if(!browser||typeof WebSocket==='undefined' || process.env.RAILWAY_TOKEN ||
    process.env.NEXUS_API_TOKEN || process.env.RENDER_API_KEY)
@@ -133,7 +138,8 @@ try{
  checks.push('explicit-uninstall-does-not-change-open-workspace');
  const report={schema:'nexus.pilot-12.offline-install-witness.v1',status:'PASS',
    checks,source_sha256:sourceDigest,source_bytes:sourceHtml.length,
-   origin:'local-loopback-test-only',browser:'headless-chromium',
+   origin:PUBLIC_MODE?'public-render-pilot':'local-loopback-test-only',
+   browser:'headless-chromium',
    actual_offline_navigation:true,real_android_hardware:false,
    private_data_submitted:false,authenticated_rust_tested:false,
    volume_recovery_verified:false,production_mutation:false,authority:'none'};
