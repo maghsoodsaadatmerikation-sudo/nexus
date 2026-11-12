@@ -335,6 +335,18 @@ window.addEventListener('load', async () => {
     window.localStorage.setItem(vaultSlot,privateCopy);
     fill('vault-open-password','long-synthetic-local-key-2026');
     byId('vault-restore').click();
+    // Deletion races the intentionally asynchronous PBKDF2; the old
+    // encrypted copy must never reappear after explicit deletion.
+    byId('vault-delete').click();
+    await waitFor(()=>byId('vault-open-password').value==='',
+       'deleted-while-decrypting-timeout');
+    assert(window.localStorage.getItem(vaultSlot)===null &&
+       byId('question-view').textContent.includes('هنوز پرسشی'),
+       'deleted-vault-resurrected-through-inflight-decryption');
+    checks.push('delete-during-decrypt-never-resurrects-workspace');
+    window.localStorage.setItem(vaultSlot,privateCopy);
+    fill('vault-open-password','long-synthetic-local-key-2026');
+    byId('vault-restore').click();
     await waitFor(()=>byId('claims').querySelectorAll('.entry').length===100,
        'local-checkpoint-restore-timeout');
     assert(byId('decision-view').textContent.includes('انتخاب آگاهانهٔ من') &&
@@ -401,7 +413,7 @@ def main():
             if proc.returncode:
                 raise RuntimeError("real browser did not report PASS: exit="+str(proc.returncode)+" stdout="+proc.stdout.strip()[:300]+" stderr="+proc.stderr.strip()[-450:])
             report = json.loads(proc.stdout)
-            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 36 or
+            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 37 or
                 report.get("network_requests") != 0 or
                 (layout == "narrow") != (report["width"] <= 760)):
                 raise RuntimeError("offline real-browser contract did not PASS")
