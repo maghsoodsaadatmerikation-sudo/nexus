@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="theme-color" content="#155e64">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; form-action 'none'; base-uri 'none'">
 <title>NEXUS — کارگاه آفلاین تصمیم</title>
 <style>
 :root{color-scheme:light;font-family:system-ui,"Segoe UI",Tahoma,sans-serif;background:#f4f7f6;color:#17313d}
@@ -47,6 +49,17 @@ code{direction:ltr;unicode-bidi:embed}
     <strong>بدون حساب، توکن یا اینترنت پس از دریافت فایل</strong>
     <small>اطلاعات به‌طور پیش‌فرض فقط در حافظهٔ همین صفحه است؛ ادامهٔ رمزدار محلی تنها با فعال‌سازی صریح انجام می‌شود. برای حفظ مستقل داده‌ها خروجی رمزدار بگیرید. این نسخه هیچ اتصالی به Railway ندارد. فایل آفلاین مستقیماً با هستهٔ Rust سازگار نیست؛ انتقال اختیاری فقط با خروجی جداگانهٔ «فایل انتقال به هستهٔ Rust» انجام می‌شود.</small>
   </div>
+  <section class="panel full" aria-labelledby="offline-install-title" style="margin-bottom:16px">
+    <h2 id="offline-install-title">نصب و بازکردن آفلاین روی گوشی (اختیاری)</h2>
+    <p class="help">فقط اگر خودتان «آماده‌سازی حالت آفلاین» را بزنید، یک <strong>نسخهٔ ثابت و تأییدشده از برنامه</strong> در کش همین مرورگر قرار می‌گیرد تا پس از نصب یا بازشدن دوباره، بدون اینترنت اجرا شود. اطلاعات کارگاه، گذرواژه‌ها و خروجی‌های شما وارد کش برنامه نمی‌شوند. ذخیرهٔ کارگاه همچنان جداگانه و اختیاری است؛ برای جلوگیری از ازدست‌رفتن داده‌ها فایل رمزدار بگیرید.</p>
+    <div class="toolbar">
+      <button type="button" id="offline-install" class="secondary">آماده‌سازی حالت آفلاین</button>
+      <button type="button" id="offline-home" class="secondary">افزودن به صفحهٔ اصلی</button>
+      <button type="button" id="offline-remove" class="secondary">حذف نسخهٔ آفلاین برنامه</button>
+    </div>
+    <p id="offline-install-state" class="status" role="status" aria-live="polite">حالت آفلاین برنامه هنوز بررسی نشده است.</p>
+    <p class="help">نصب به پشتیبانی مرورگر بستگی دارد. در برخی گوشی‌ها از منوی مرورگر «افزودن به صفحهٔ اصلی» یا «نصب برنامه» را انتخاب کنید. بازشدن برنامه بدون اینترنت جایگزین ذخیرهٔ اطلاعات کارگاه نیست. پاک‌شدن کش مرورگر می‌تواند برنامهٔ آفلاین را حذف کند.</p>
+  </section>
   <section class="panel full" aria-labelledby="demo-title" style="margin-bottom:16px">
     <h2 id="demo-title">شروع فوری، بدون اطلاعات شخصی</h2>
     <p class="help">با یک لمس، یک پرسش و دو شاهد و دو گزینهٔ <strong>کاملاً ساختگی</strong> را مشاهده کنید. هیچ تصمیم انسانی ثبت نمی‌شود، هیچ اتصال یا حسابی لازم نیست و داده‌ای به سرور فرستاده نمی‌شود. برای کار واقعی، «کارگاه جدید» را بزنید.</p>
@@ -760,6 +773,65 @@ code{direction:ltr;unicode-bidi:embed}
       status('نسخهٔ رمزدار این مرورگر پاک شد؛ کارگاه فعلی فقط در همین تب باقی مانده است.');
     }catch{status('حذف نسخهٔ محلی انجام نشد.',true)}
   });
+  // Pilot 12: a user gesture is required before any worker registration.
+  // A file:// copy keeps its original single-file offline behavior; the
+  // installed HTTPS app has a distinct *code-only* CacheStorage lifecycle.
+  const offlineStatus=$('offline-install-state');
+  const allowedInstallOrigin=window.isSecureContext&&
+    (location.hostname==='nexus-offline-pilot.onrender.com'||
+     location.hostname==='127.0.0.1'||location.hostname==='localhost')&&
+    (location.protocol==='https:'||
+     (location.protocol==='http:'&&location.hostname!=='nexus-offline-pilot.onrender.com'));
+  let installPrompt=null;
+  window.addEventListener('beforeinstallprompt',event=>{
+    event.preventDefault();installPrompt=event;
+  });
+  function canInstallShell(){
+    return allowedInstallOrigin&&'serviceWorker' in navigator&&'caches' in window;
+  }
+  $('offline-install').addEventListener('click',async()=>{
+    if(!canInstallShell())return offlineStatus.textContent=
+      'این مرورگر یا روش بازکردن فایل از نصب برنامه پشتیبانی نمی‌کند؛ فایل HTML مستقل همچنان قابل‌استفاده است.';
+    const button=$('offline-install');button.disabled=true;
+    offlineStatus.textContent='در حال دریافت و اعتبارسنجی نسخهٔ ثابت برنامه...';
+    try{
+      const reg=await navigator.serviceWorker.register('/service-worker.js',{
+        scope:'/',updateViaCache:'none'});
+      // ready only resolves when an activated worker controls this scope.
+      const ready=await navigator.serviceWorker.ready;
+      if(!ready.active||ready.scope!==location.origin+'/')throw Error('unexpected-install-scope');
+      const shell=await caches.keys();
+      if(!shell.some(name=>name.startsWith('nexus-app-shell-v12-')))
+        throw Error('offline-shell-not-installed');
+      offlineStatus.textContent='برنامهٔ آفلاین روی همین دستگاه آماده است. برای نصب میان‌بر از «افزودن به صفحهٔ اصلی» استفاده کنید. کارگاه فعلی جداگانه ذخیره نشده است.';
+    }catch{
+      offlineStatus.textContent='آماده‌سازی آفلاین تأیید نشد؛ احتمال قطعی اتصال، محدودیت مرورگر یا ناسازگاری فایل سایت وجود دارد. هیچ بکاپ کارگاهی ساخته نشد.';
+    }finally{button.disabled=false}
+  });
+  $('offline-home').addEventListener('click',async()=>{
+    if(installPrompt){
+      const prompt=installPrompt;installPrompt=null;
+      try{await prompt.prompt();await prompt.userChoice;
+        offlineStatus.textContent='درخواست نصب به مرورگر ارسال شد. نتیجهٔ نصب به تنظیمات همان دستگاه بستگی دارد.';}
+      catch{offlineStatus.textContent='درخواست نصب در این مرورگر انجام نشد.';}
+    }else offlineStatus.textContent=
+      'در مرورگر گوشی، منوی سه‌نقطه را باز کنید و «نصب برنامه» یا «افزودن به صفحهٔ اصلی» را بزنید. در برخی مرورگرها میان‌بر به‌جای برنامه نصب می‌شود.';
+  });
+  $('offline-remove').addEventListener('click',async()=>{
+    if(!canInstallShell())return offlineStatus.textContent='نسخهٔ آفلاین تحت کنترل این مرورگر نیست.';
+    if(!window.confirm('نسخهٔ کش‌شدهٔ برنامه از همین مرورگر حذف شود؟ این کار فایل‌های خروجی و نسخهٔ رمزدار کارگاه را پاک نمی‌کند.'))return;
+    try{
+      const reg=await navigator.serviceWorker.getRegistration('/');
+      if(reg&&!await reg.unregister())throw Error('unregister-refused');
+      const names=await caches.keys();
+      for(const name of names.filter(x=>x.startsWith('nexus-app-shell-')))
+        if(!await caches.delete(name))throw Error('cache-not-removed');
+      offlineStatus.textContent='نسخهٔ آفلاین برنامه حذف شد؛ برای اعمال کامل، همهٔ پنجره‌های برنامه را ببندید. فایل‌ها و کارگاه رمزدار پاک نشده‌اند.';
+    }catch{
+      offlineStatus.textContent='حذف کامل برنامهٔ آفلاین تأیید نشد؛ وضعیت مرورگر را بررسی کنید.';
+    }
+  });
+  if(!canInstallShell())$('offline-install').disabled=true;
   render();
   vaultLabel();
 })();
