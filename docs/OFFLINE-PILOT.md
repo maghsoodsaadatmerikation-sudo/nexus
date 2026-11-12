@@ -12,7 +12,7 @@ HTML file itself** from the repository and open it in a browser capable of
 running local HTML. A code preview is not the app; a rendered offline file is.
 The independently verified public static entrypoint is
 https://nexus-offline-pilot.onrender.com/ . Render reported LIVE for Pilot 11 deployment
-`dep-dbqolejbc2fs73e0mha0` on source commit
+`dep-dbqooirrjlhs73a1cvdg` on source commit
 `ed13887699b49a8494a3178e426ad9192e14d57e`; the independent
 static HTTPS observer checks exact bytes. This is not an authenticated
 Rust service.
