@@ -77,3 +77,12 @@ Original Railway recovery remains tracked in
 [Issue #104](https://github.com/maghsoodsaadatmerikation-sudo/nexus/issues/104),
 and first authenticated human pilot remains
 [Issue #70](https://github.com/maghsoodsaadatmerikation-sudo/nexus/issues/70).
+
+## Deployment and exact-source evidence (2026-11-12)
+
+The existing static Render service `nexus-offline-pilot` reported LIVE for
+deployment `dep-dbqolejbc2fs73e0mha0` at source `ed13887699b49a8494a3178e426ad9192e14d57e`,
+after PR #105 merged with six exact-head checks passing. The independent
+pinned HTTPS identity and real-Chromium live-run checks are maintained by the
+following documentation/observer update; a provider LIVE label alone is not
+independent content or Android-device acceptance.
