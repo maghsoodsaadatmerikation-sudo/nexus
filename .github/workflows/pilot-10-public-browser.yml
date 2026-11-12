@@ -14,6 +14,7 @@ on:
       - 'scripts/test-file-desk-browser.py'
       - 'scripts/test-local-data-analysis-browser.py'
       - 'scripts/test-web-research-browser.py'
+      - 'scripts/test-guided-chat-browser.py'
       - 'docs/PILOT-10-PUBLIC-BROWSER-ACCEPTANCE.md'
   push:
     branches: [main]
@@ -29,6 +30,7 @@ on:
       - 'scripts/test-file-desk-browser.py'
       - 'scripts/test-local-data-analysis-browser.py'
       - 'scripts/test-web-research-browser.py'
+      - 'scripts/test-guided-chat-browser.py'
       - 'docs/PILOT-10-PUBLIC-BROWSER-ACCEPTANCE.md'
   workflow_dispatch:
   schedule:
@@ -254,6 +256,30 @@ jobs:
           assert r['authority']=='none' and not r['production_mutation']
           print('PASS: real public HTTPS web research handoff, explicit consent, zero app fetch')
           PYTEST
+      - name: Independently exercise published guided conversation and user-controlled microphone drafts
+        working-directory: ${{ runner.temp }}/nexus-live-pilot
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_PUBLIC_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          NEXUS_PUBLIC_GUIDED_CHAT=true node scripts/observe-public-offline-browser.mjs > pilot-20-public-guided-chat.json
+          python3 - <<'PYTEST'
+          import json
+          r=json.load(open('pilot-20-public-guided-chat.json'))
+          assert r['schema']=='nexus.public-pilot.guided-chat-acceptance.v1'
+          assert r['status']=='PASS' and r['checks_per_layout']>=36
+          assert r['source_sha256']==r['independent_get_sha256']
+          assert {p['layout'] for p in r['report']}=={'narrow','wide'}
+          assert all(p['status']=='PASS' and p['checks']==r['checks_per_layout']
+                     and p['guided_chat_checked'] and p['document_responses']>=1
+                     and p['network_attempts_by_app']==0
+                     and p['browser_document_sha256']==r['source_sha256']
+                     for p in r['report'])
+          assert r['synthetic_only'] and r['real_human_tested'] is False
+          assert r['native_audio_tested'] is False
+          assert r['authority']=='none' and not r['production_mutation']
+          print('PASS: public guided chat, drafts, synthetic microphone adapters, no authority')
+          PYTEST
       - name: Upload public-only sanitized evidence
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
@@ -269,5 +295,6 @@ jobs:
             ${{ runner.temp }}/nexus-live-pilot/pilot-17-public-files.json
             ${{ runner.temp }}/nexus-live-pilot/pilot-18-public-analysis.json
             ${{ runner.temp }}/nexus-live-pilot/pilot-19-public-web.json
+            ${{ runner.temp }}/nexus-live-pilot/pilot-20-public-guided-chat.json
           if-no-files-found: ignore
           retention-days: 14
