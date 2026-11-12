@@ -210,9 +210,29 @@ async fn main() {
         Duration::from_secs(rate_window_seconds),
         max_tracked_requests,
     );
+    let research_enabled: bool = std::env::var("NEXUS_WEB_RESEARCH_ENABLED")
+        .unwrap_or_else(|_| "true".to_owned())
+        .parse()
+        .expect("NEXUS_WEB_RESEARCH_ENABLED must be true or false");
+    let research = if research_enabled {
+        let certificate = std::env::var_os("NEXUS_SEARCH_CA_FILE").map(|path| {
+            let bytes =
+                std::fs::read(path).unwrap_or_else(|_| panic!("read search trust certificate"));
+            reqwest::Certificate::from_pem(&bytes)
+                .unwrap_or_else(|_| panic!("parse search trust certificate"))
+        });
+        nexus_artifact_05_gateway::research_chat::ResearchChat::public_search_with_transport(
+            std::env::var("NEXUS_SEARCH_PROXY_URL").ok().as_deref(),
+            certificate,
+        )
+        .unwrap_or_else(|_| panic!("initialize public search client"))
+    } else {
+        nexus_artifact_05_gateway::research_chat::ResearchChat::default()
+    };
     let app = router(
         AppState::authenticated(CoreDelegate::new(data_root.clone()), token)
             .with_safety(safety)
+            .with_research_chat(research)
             .with_body_read_timeout(Duration::from_secs(body_read_seconds))
             .with_max_concurrent_executions(max_concurrent_executions)
             .with_recovery_gate(&data_root)

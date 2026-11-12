@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod request_store;
+pub mod research_chat;
 mod workspace_api;
 
 use axum::{
@@ -213,6 +214,7 @@ pub struct AppState<D> {
     recovery_required: bool,
     safety_config: SafetyConfig,
     safety_state: Arc<Mutex<SafetyState>>,
+    research_chat: Arc<research_chat::ResearchChat>,
     body_read_timeout: Duration,
     execution_slots: Arc<tokio::sync::Semaphore>,
 }
@@ -227,6 +229,7 @@ impl<D> Clone for AppState<D> {
             recovery_required: self.recovery_required,
             safety_config: self.safety_config,
             safety_state: Arc::clone(&self.safety_state),
+            research_chat: Arc::clone(&self.research_chat),
             body_read_timeout: self.body_read_timeout,
             execution_slots: Arc::clone(&self.execution_slots),
         }
@@ -243,6 +246,7 @@ impl<D: ConstitutionalDelegate> AppState<D> {
             recovery_required: false,
             safety_config: SafetyConfig::default(),
             safety_state: Arc::new(Mutex::new(SafetyState::default())),
+            research_chat: Arc::new(research_chat::ResearchChat::default()),
             body_read_timeout: Duration::from_secs(15),
             execution_slots: Arc::new(tokio::sync::Semaphore::new(32)),
         }
@@ -262,6 +266,7 @@ impl<D: ConstitutionalDelegate> AppState<D> {
             recovery_required: false,
             safety_config: SafetyConfig::default(),
             safety_state: Arc::new(Mutex::new(SafetyState::default())),
+            research_chat: Arc::new(research_chat::ResearchChat::default()),
             body_read_timeout: Duration::from_secs(15),
             execution_slots: Arc::new(tokio::sync::Semaphore::new(32)),
         }
@@ -311,6 +316,11 @@ impl<D: ConstitutionalDelegate> AppState<D> {
         Ok(self)
     }
 
+    pub fn with_research_chat(mut self, service: research_chat::ResearchChat) -> Self {
+        self.research_chat = Arc::new(service);
+        self
+    }
+
     pub fn with_safety(mut self, config: SafetyConfig) -> Self {
         self.safety_config = config;
         self
@@ -336,6 +346,8 @@ where
 {
     Router::new()
         .route("/", get(web_workspace))
+        .route("/research-chat", get(research_chat::page))
+        .route("/v1/research-chat", post(research_chat::respond::<D>))
         .route("/livez", get(liveness))
         .route("/readyz", get(readiness::<D>))
         .route("/v1/requests", post(submit::<D>))
@@ -376,7 +388,8 @@ where
 
 async fn private_api_cache_boundary(request: Request, next: Next) -> Response {
     let path = request.uri().path();
-    let private_api = path == "/v1/requests"
+    let private_api = path == "/v1/research-chat"
+        || path == "/v1/requests"
         || path.starts_with("/v1/requests/")
         || path == "/v1/workspaces"
         || path.starts_with("/v1/workspaces/");
@@ -400,7 +413,9 @@ async fn recovery_boundary<D: ConstitutionalDelegate>(
     // Authenticate workspace transport before Axum extracts or polls its body.
     // Handler checks remain as defense in depth; this grants no core authority.
     let path = request.uri().path();
-    if (path == "/v1/workspaces" || path.starts_with("/v1/workspaces/"))
+    if (path == "/v1/research-chat"
+        || path == "/v1/workspaces"
+        || path.starts_with("/v1/workspaces/"))
         && !transport_authorized(&state, request.headers())
     {
         return transport_unauthorized();
@@ -422,7 +437,9 @@ async fn recovery_boundary<D: ConstitutionalDelegate>(
     // Workspace mutations must obey the same ingestion and rate boundaries as
     // request admission, before JSON extractors or a delegate can run.
     if request.method() == Method::POST
-        && (path == "/v1/workspaces" || path.starts_with("/v1/workspaces/"))
+        && (path == "/v1/research-chat"
+            || path == "/v1/workspaces"
+            || path.starts_with("/v1/workspaces/"))
     {
         if !consume_rate_budget(&state).await {
             return safety_error(StatusCode::TOO_MANY_REQUESTS, "rate_limit_exceeded");
