@@ -55,7 +55,7 @@ window.addEventListener('load',async()=>{
   assert($('files-preview').value===text&&!$('files-preview').querySelector('img'),'utf8-text-and-markup-preview-are-inert');
   $('files-claim').click();
   assert($('claim').value===text&&$('source').value.startsWith('local-file:sha256:')&&$('origin').value==='external_evidence'&&$('claims').textContent.includes('No evidence'),'file-excerpt-enters-only-an-unregistered-source-labelled-draft');
-  const question='=2+2 <script>alert(1)</script> فارسی 😀';fill('question',question);fill('goal','Human-owned synthetic report');submit('ask-form');const beforeClaim=await snapshot();
+  const question='=2+2 <script>alert(1)<\/script> فارسی 😀';fill('question',question);fill('goal','Human-owned synthetic report');submit('ask-form');const beforeClaim=await snapshot();
   consent=false;fill('claim','existing draft');$('files-claim').click();
   assert($('claim').value==='existing draft','cancelled-excerpt-replacement-preserves-existing-draft');
   consent=true;$('files-claim').click();
