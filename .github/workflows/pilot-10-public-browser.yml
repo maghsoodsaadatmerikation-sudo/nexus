@@ -1,0 +1,102 @@
+name: NEXUS Pilot 10 — Real Public Browser Acceptance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pilot-10-public-browser.yml'
+      - 'scripts/observe-public-offline-browser.mjs'
+      - 'docs/PILOT-10-PUBLIC-BROWSER-ACCEPTANCE.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pilot-10-public-browser.yml'
+      - 'scripts/observe-public-offline-browser.mjs'
+      - 'docs/PILOT-10-PUBLIC-BROWSER-ACCEPTANCE.md'
+  workflow_dispatch:
+  schedule:
+    # Weekly read-only public check; avoid minute-zero global cron spikes.
+    - cron: '23 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexus-public-browser-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-public-acceptance:
+    name: independently-test-real-https-on-mobile-and-desktop
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact CI candidate without write credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require reviewed candidate equals intentionally deployed static HTML
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This test intentionally exercises the currently deployed Pilot 09.
+          # Future source changes may be merged without promotion: that means
+          # this live-use witness must FAIL until public deployment is verified.
+          git show 8e3fd8789d82db4559a9cb77cd2f82578271df4b:web/offline-pilot.html > "$RUNNER_TEMP/deployed-source.html"
+          cmp -s web/offline-pilot.html "$RUNNER_TEMP/deployed-source.html" || {
+            echo "FAIL: checked-out HTML differs from intentionally deployed static version; no live acceptance claim"
+            exit 1
+          }
+          python3 scripts/verify-public-static-pilot.py --expected "$RUNNER_TEMP/deployed-source.html" > public-static-identity.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('public-static-identity.json'))
+          assert d['status']=='PASS_STATIC_HTTPS_IDENTITY'
+          assert d['matched_exact_html'] and d['http_status']==200
+          assert d['authority']=='none' and d['production_mutation'] is False
+          print('PASS: independent public HTTPS exact-byte identity')
+          PY
+      - name: Exercise the actual HTTPS site in real Chromium on two viewport classes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_ACTIONS:-}" = "true"
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          node --version
+          test "$(node -p 'Number(process.versions.node.split(".")[0]) >= 22')" = "true"
+          export NEXUS_PUBLIC_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          test -n "$NEXUS_PUBLIC_CHROME"
+          node --check scripts/observe-public-offline-browser.mjs
+          node scripts/observe-public-offline-browser.mjs > pilot-10-public-browser.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open('pilot-10-public-browser.json'))
+          assert r['status']=='PASS'
+          assert r['schema']=='nexus.public-pilot.browser-acceptance.v1'
+          assert r['checks_per_layout']==40 and r['negative_local_fixtures']==6
+          assert r['source_sha256']==r['independent_get_sha256']
+          assert {x['layout'] for x in r['report']}=={'narrow','wide'}
+          assert all(x['status']=='PASS' and x['checks']==40 and
+                     x['real_reload_verified'] and x['test_fixture_only'] and
+                     x['document_responses']>=2 and
+                     x['browser_document_sha256']==r['source_sha256'] and
+                     x['network_attempts_by_app']==0 for x in r['report'])
+          assert r['synthetic_only'] and r['real_human_tested'] is False
+          assert r['authenticated_rust_tested'] is False
+          assert r['production_restore_tested'] is False
+          assert r['authority']=='none' and r['production_mutation'] is False
+          print('PASS: real public HTTPS synthetic mobile and desktop acceptance')
+          PY
+      - name: Upload public-only sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-pilot-10-public-browser-acceptance
+          path: |
+            public-static-identity.json
+            pilot-10-public-browser.json
+          if-no-files-found: ignore
+          retention-days: 14
