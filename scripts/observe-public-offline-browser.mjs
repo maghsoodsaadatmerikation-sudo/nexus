@@ -146,7 +146,7 @@ async function layoutWitness(layout){
         throw error;
       }
     },180000,'real-public-browser-did-not-complete');
-    assert(report.checks?.length===40&&report.network_requests===0&&
+    assert(report.checks?.length===46&&report.network_requests===0&&
       report.production_verified===false&&report.authority==='none',
       'live-browser-checks-or-authority-invalid');
     assert((layout==='narrow')===(report.width<=760),'live-browser-viewport-invalid');
@@ -199,7 +199,7 @@ async function main(){
   process.stdout.write(JSON.stringify({
     schema:'nexus.public-pilot.browser-acceptance.v1',status:'PASS',
     source_sha256:expectedDigest,independent_get_sha256:getSha,
-    origin:ORIGIN,checks_per_layout:40,negative_local_fixtures:6,
+    origin:ORIGIN,checks_per_layout:46,negative_local_fixtures:6,
     report:reports,synthetic_only:true,real_human_tested:false,
     authenticated_rust_tested:false,production_restore_tested:false,
     authority:'none',production_mutation:false
