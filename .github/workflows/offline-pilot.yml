@@ -11,6 +11,8 @@ on:
       - 'scripts/test-ui-languages-browser.py'
       - 'scripts/test-voice-browser.py'
       - 'scripts/test-file-desk-browser.py'
+      - 'scripts/test-local-data-analysis-browser.py'
+      - 'web/data-analysis-core.js'
       - 'scripts/build-ui-languages.py'
       - 'web/locales/**'
       - 'scripts/test-offline-to-rust-http.py'
@@ -31,6 +33,8 @@ on:
       - 'scripts/test-ui-languages-browser.py'
       - 'scripts/test-voice-browser.py'
       - 'scripts/test-file-desk-browser.py'
+      - 'scripts/test-local-data-analysis-browser.py'
+      - 'web/data-analysis-core.js'
       - 'scripts/build-ui-languages.py'
       - 'web/locales/**'
       - 'scripts/test-offline-to-rust-http.py'
@@ -88,6 +92,23 @@ jobs:
         run: python3 scripts/test-voice-browser.py > voice-browser.json
       - name: Verify file admission, bounded previews and independently parsed output packages
         run: python3 scripts/test-file-desk-browser.py > file-desk-browser.json
+      - name: Verify bounded local data analysis and no new decision authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check web/data-analysis-core.js
+          python3 scripts/test-local-data-analysis-browser.py > data-analysis-browser.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open('data-analysis-browser.json'))
+          assert r['schema']=='nexus.pilot-18.local-analysis-witness.v1'
+          assert r['status']=='PASS' and len(r['reports'])==2
+          assert all(len(p['checks'])>=25 and p['network_requests']==0
+                     and p['authority']=='none' and not p['production_mutation']
+                     for p in r['reports'])
+          assert {p['layout'] for p in r['reports']}=={'narrow','wide'}
+          print('PASS: bounded local analytics, no network or authority')
+          PY
       - name: Verify exported synthetic bridge against live disposable Rust API
         shell: bash
         env:
@@ -146,5 +167,6 @@ jobs:
             ui-languages-browser.json
             voice-browser.json
             file-desk-browser.json
+            data-analysis-browser.json
           if-no-files-found: ignore
           retention-days: 30
