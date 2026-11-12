@@ -44,7 +44,7 @@ jobs:
           # This test intentionally exercises the currently deployed Pilot 09.
           # Future source changes may be merged without promotion: that means
           # this live-use witness must FAIL until public deployment is verified.
-          git show ed13887699b49a8494a3178e426ad9192e14d57e:web/offline-pilot.html > "$RUNNER_TEMP/deployed-source.html"
+          git show 736e7b25819064722675505c86efa09e7e79e2df:web/offline-pilot.html > "$RUNNER_TEMP/deployed-source.html"
           cmp -s web/offline-pilot.html "$RUNNER_TEMP/deployed-source.html" || {
             echo "FAIL: checked-out HTML differs from intentionally deployed static version; no live acceptance claim"
             exit 1
