@@ -10,6 +10,7 @@ on:
       - 'scripts/test-decision-report-browser.py'
       - 'scripts/test-draft-guard-browser.py'
       - 'scripts/test-ui-languages-browser.py'
+      - 'scripts/test-voice-browser.py'
       - 'docs/PILOT-10-PUBLIC-BROWSER-ACCEPTANCE.md'
   push:
     branches: [main]
@@ -21,6 +22,7 @@ on:
       - 'scripts/test-decision-report-browser.py'
       - 'scripts/test-draft-guard-browser.py'
       - 'scripts/test-ui-languages-browser.py'
+      - 'scripts/test-voice-browser.py'
       - 'docs/PILOT-10-PUBLIC-BROWSER-ACCEPTANCE.md'
   workflow_dispatch:
   schedule:
@@ -156,6 +158,27 @@ jobs:
           assert r['authority']=='none' and not r['production_mutation']
           print('PASS: public English default and local language packs; 23 checks per viewport')
           PYTEST
+      - name: Exercise public voice controls with controlled native adapters (not hardware audio)
+        working-directory: ${{ runner.temp }}/nexus-live-pilot
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_PUBLIC_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          NEXUS_PUBLIC_VOICE=true node scripts/observe-public-offline-browser.mjs > pilot-16-public-voice.json
+          python3 - <<'PYTEST'
+          import json
+          r=json.load(open('pilot-16-public-voice.json'))
+          assert r['schema']=='nexus.public-pilot.voice-adapter-acceptance.v1'
+          assert r['status']=='PASS' and r['checks_per_layout']==35
+          assert r['source_sha256']==r['independent_get_sha256']
+          assert {x['layout'] for x in r['report']}=={'narrow','wide'}
+          assert all(x['status']=='PASS' and x['checks']==35 and x['document_responses']>=1
+                     and x['network_attempts_by_app']==0 for x in r['report'])
+          assert r['native_audio_tested'] is False and r['voice_engines']=='controlled-test-adapters'
+          assert r['synthetic_only'] and not r['real_human_tested']
+          assert r['authority']=='none' and not r['production_mutation']
+          print('PASS: public opt-in voice adapter behavior; physical audio NOT tested')
+          PYTEST
       - name: Upload public-only sanitized evidence
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
@@ -167,5 +190,6 @@ jobs:
             ${{ runner.temp }}/nexus-live-pilot/pilot-13-public-report.json
             ${{ runner.temp }}/nexus-live-pilot/pilot-14-public-drafts.json
             ${{ runner.temp }}/nexus-live-pilot/pilot-15-public-languages.json
+            ${{ runner.temp }}/nexus-live-pilot/pilot-16-public-voice.json
           if-no-files-found: ignore
           retention-days: 14

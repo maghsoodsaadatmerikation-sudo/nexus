@@ -18,8 +18,8 @@ A_out <= A_in
 
 The English-first multilingual mobile pilot is hosted at
 **https://nexus-offline-pilot.onrender.com/**. Render reported LIVE for
-manual deployment `dep-dbqr5nmi0phs73dggik0` of Pilot 15
-source commit `795e1b3371b0674ee0d3abcdd9fd57ce27813cc1`.
+manual deployment `dep-dbqrjem1egvs73d0hqjg` of Pilot 16
+source commit `733de2c9e5b29eec966701bcc4888391992fe883`.
 The independent static HTTPS identity workflow pins the actually deployed
 source; provider status alone is not byte-level proof. The app does not
 connect to the Rust gateway, send workspace content to Render, or issue
@@ -38,8 +38,8 @@ workspace JSON, password or personal information. Saving work still
 requires the separate encrypted local checkpoint or owner-held file.
 The standalone HTML continues to work when opened from a downloaded file.
 
-Render reported LIVE for static deployment `dep-dbqr5nmi0phs73dggik0`
-from exact source `795e1b3371b0674ee0d3abcdd9fd57ce27813cc1`.
+Render reported LIVE for static deployment `dep-dbqrjem1egvs73d0hqjg`
+from exact source `733de2c9e5b29eec966701bcc4888391992fe883`.
 Independent public asset-byte checks and live-origin real Chromium offline
 acceptance must PASS separately; provider LIVE alone does not prove them.
 [Installation and security contract](docs/PILOT-12-INSTALLABLE-OFFLINE.md).
@@ -77,7 +77,7 @@ no claim that every language has a bundled reviewed translation.
 Published on the existing static site. Independent public Chromium checks
 English default, Persian switching, custom packs and unchanged private work.
 
-## Microphone and read-aloud (Pilot 16 candidate)
+## Microphone and read-aloud (Pilot 16)
 
 An opt-in Voice panel reads a chosen field/report and turns speech into a
 reviewable preview, then an unregistered draft. Passwords are excluded and
@@ -85,7 +85,8 @@ human judgment still requires explicit registration. Local processing is the
 default; browser online speech needs a separate opt-in and per-action consent.
 Support depends on installed device/browser speech capabilities.
 [Voice behavior and verification limits](docs/PILOT-16-VOICE-INPUT-OUTPUT.md).
-Separate static deployment and independent public checks are required.
+Published on the existing static site. Public adapter tests are separate
+from physical device audio; supported voices/languages vary by device/browser.
 
 ## Recoverability check for private encrypted files (Pilot 11)
 
