@@ -76,6 +76,38 @@ window.addEventListener('load', async () => {
     assert(byId('export').disabled, 'blank-workspace-export-enabled');
     assert(byId('decision-view').textContent.includes('هیچ تصمیم انسانی'), 'implicit-judgment');
     checks.push('empty-workspace-no-auto-decision');
+    byId('load-demo').click(); await tick();
+    assert(byId('claims').querySelectorAll('.entry').length===2 &&
+       byId('alternatives').querySelectorAll('.entry').length===2 &&
+       byId('decision-view').textContent.includes('هیچ تصمیم انسانی') &&
+       byId('question-view').textContent.includes('نمونهٔ ساختگی') &&
+       byId('audit').querySelectorAll('.entry').length===5 &&
+       window.localStorage.getItem('nexus.offline-pilot.local-encrypted.v1')===null,
+       'synthetic-demo-has-authority-or-storage-or-invalid-content');
+    byId('export').click();
+    const demoExport=JSON.parse(await blob.text());
+    assert(demoExport.schema==='nexus.offline-pilot.v1' &&
+       demoExport.authority==='none' && demoExport.storage==='memory_only' &&
+       demoExport.workspace.judgment===null &&
+       demoExport.events.length===5 &&
+       demoExport.events.every(e=>e.kind!=='judgment') &&
+       demoExport.workspace.claims[1].source.startsWith('demo:synthetic-') &&
+       demoExport.workspace.alternatives.length===2,
+       'synthetic-demo-misrepresented-as-real-judgment');
+    checks.push('one-click-synthetic-fixture-never-grants-authority');
+    const sampleId=demoExport.workspace.id;
+    window.confirm=()=>false;
+    byId('load-demo').click(); await tick();
+    window.confirm=()=>true;
+    byId('export').click(); // Fresh, user-consented export, not the previous blob.
+    assert(JSON.parse(await blob.text()).workspace.id===sampleId,
+       'demo-overwrote-current-data-after-denial');
+    byId('new').click(); await tick();
+    assert(byId('export').disabled &&
+       byId('decision-view').textContent.includes('هیچ تصمیم انسانی') &&
+       byId('claims').querySelectorAll('.entry').length===0,
+       'synthetic-demo-infected-fresh-real-workspace');
+    checks.push('demo-requires-consent-to-replace-and-clears-for-real-use');
     fill('question','آیا این گزینه برای من مناسب است؟');
     fill('goal','استقلال');
     fill('constraints','زمان، بودجه');
@@ -450,7 +482,7 @@ def main():
             if proc.returncode:
                 raise RuntimeError("real browser did not report PASS: exit="+str(proc.returncode)+" stdout="+proc.stdout.strip()[:300]+" stderr="+proc.stderr.strip()[-450:])
             report = json.loads(proc.stdout)
-            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 38 or
+            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 40 or
                 report.get("network_requests") != 0 or
                 (layout == "narrow") != (report["width"] <= 760)):
                 raise RuntimeError("offline real-browser contract did not PASS")

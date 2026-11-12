@@ -15,7 +15,11 @@ https://nexus-offline-pilot.onrender.com/ . Its deployed Pilot 06 HTML is
 **not yet the same as this Pilot 08 source candidate** until reviewed static
 promotion. Neither is an authenticated Rust service.
 
-1. Enter a question, a goal, constraints and values; press **ثبت مسئله**.
+1. In the Pilot 09 source candidate, optionally choose **آزمایش با نمونهٔ ساختگی**
+   for a one-click fictional example with no human judgment, then **کارگاه جدید**
+   to clear the demonstration. See [Pilot 09](PILOT-09-GUIDED-FIRST-RUN.md).
+   Otherwise, enter a real question, a goal, constraints and values;
+   press **ثبت مسئله**.
 2. Record externally sourced claims with source identifiers and uncertainty,
    options with possible consequences, and review them independently.
 3. Only your click on **ثبت تصمیم من** can create a human judgment.
