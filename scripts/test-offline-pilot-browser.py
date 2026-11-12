@@ -288,6 +288,71 @@ window.addEventListener('load', async () => {
     await waitFor(()=>byId('claims').querySelectorAll('.entry').length===100,
       'large-encrypted-restore-failed');
     checks.push('large-encrypted-workspace-recoverable');
+    // Only explicitly enabled local browser storage may hold encrypted bytes.
+    const vaultSlot='nexus.offline-pilot.local-encrypted.v1';
+    assert(window.localStorage.getItem(vaultSlot)===null,
+      'vault-autosaved-without-consent');
+    fill('vault-new-password','long-synthetic-local-key-2026');
+    fill('vault-new-confirm','long-synthetic-local-key-2026');
+    byId('vault-enable').click();
+    await waitFor(()=>window.localStorage.getItem(vaultSlot)!==null,
+      'encrypted-local-checkpoint-timeout');
+    const privateCopy=window.localStorage.getItem(vaultSlot);
+    const localEnvelope=JSON.parse(privateCopy);
+    assert(localEnvelope.schema==='nexus.offline-pilot.local-encrypted.v1' &&
+       localEnvelope.kdf.iterations===310000 &&
+       localEnvelope.cipher.name==='AES-GCM' &&
+       !privateCopy.includes('انتخاب آگاهانهٔ من') &&
+       !privateCopy.includes('long-synthetic-local-key-2026') &&
+       byId('vault-new-password').value==='' &&
+       byId('vault-new-confirm').value==='',
+       'local-checkpoint-exposed-secret-or-plaintext');
+    checks.push('opt-in-encrypted-local-checkpoint');
+    byId('new').click(); await tick();
+    assert(byId('question-view').textContent.includes('هنوز پرسشی') &&
+       window.localStorage.getItem(vaultSlot)===privateCopy,
+       'new-workspace-erased-or-overwrote-protected-copy');
+    checks.push('new-workspace-pauses-vault-without-losing-checkpoint');
+    fill('vault-open-password','incorrect-synthetic-key-2026');
+    byId('vault-restore').click();
+    await waitFor(()=>byId('vault-open-password').value==='',
+       'wrong-local-passphrase-timeout');
+    assert(byId('status').classList.contains('error') &&
+       byId('question-view').textContent.includes('هنوز پرسشی'),
+       'wrong-local-key-altered-workspace');
+    checks.push('local-checkpoint-wrong-key-fail-closed');
+    const corruptLocal={...localEnvelope,ciphertext:
+       (localEnvelope.ciphertext[0]==='A'?'B':'A')+localEnvelope.ciphertext.slice(1)};
+    window.localStorage.setItem(vaultSlot,JSON.stringify(corruptLocal));
+    fill('vault-open-password','long-synthetic-local-key-2026');
+    byId('vault-restore').click();
+    await waitFor(()=>byId('vault-open-password').value==='',
+       'corrupt-local-checkpoint-timeout');
+    assert(byId('status').classList.contains('error') &&
+       byId('question-view').textContent.includes('هنوز پرسشی'),
+       'tampered-local-vault-altered-workspace');
+    checks.push('local-checkpoint-tamper-fail-closed');
+    window.localStorage.setItem(vaultSlot,privateCopy);
+    fill('vault-open-password','long-synthetic-local-key-2026');
+    byId('vault-restore').click();
+    await waitFor(()=>byId('claims').querySelectorAll('.entry').length===100,
+       'local-checkpoint-restore-timeout');
+    assert(byId('decision-view').textContent.includes('انتخاب آگاهانهٔ من') &&
+       byId('vault-open-password').value==='',
+       'local-checkpoint-restored-incomplete-data');
+    checks.push('local-checkpoint-restores-complete-workspace');
+    await waitFor(()=>window.localStorage.getItem(vaultSlot)!==privateCopy,
+       'restored-vault-was-not-refreshed');
+    byId('vault-pause').click();
+    const pausedCopy=window.localStorage.getItem(vaultSlot);
+    byId('new').click(); await tick();
+    assert(window.localStorage.getItem(vaultSlot)===pausedCopy,
+       'paused-local-vault-was-overwritten');
+    checks.push('paused-vault-never-autosaves');
+    byId('vault-delete').click();
+    assert(window.localStorage.getItem(vaultSlot)===null,
+       'explicit-vault-delete-failed');
+    checks.push('explicit-local-checkpoint-erasure');
     assert(requests === 0, 'network-attempted');
     checks.push('no-external-requests');
     const width = window.innerWidth;
@@ -309,7 +374,7 @@ def main():
     for fragment in ["Content-Security-Policy", "connect-src 'none'", "storage:'memory_only'",
                      "authority:'none'", "function validate(raw)"]:
         assert fragment in html
-    assert "localStorage" not in html and "sessionStorage" not in html
+    assert "localStorage.setItem(VAULT_SLOT" in html and "sessionStorage" not in html
     assert "fetch(" not in html and "XMLHttpRequest" not in html
     browser = next((shutil.which(name) for name in (
         "google-chrome", "google-chrome-stable", "chromium", "chromium-browser")
