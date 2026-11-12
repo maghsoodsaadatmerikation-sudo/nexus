@@ -145,7 +145,35 @@ window.addEventListener('load',async()=>{
   assert($('chat-input').value==='retained draft','cancelled-replacement-retains-unsent-chat-draft');
   consent=true;$('new').click();
   assert($('chat-input').value==='','confirmed-replacement-clears-unsent-chat-draft');
-  for(let i=0;i<40;i++)send('safe local message '+i);
+  // Existing explicit-consent Voice tool can now insert local dictation into a chat draft.
+  let recognition=null,dictationStarts=0;
+  class LocalSpeech{
+    constructor(){this.processLocally=false;recognition=this;}
+    static async available(){return 'available'}
+    start(){dictationStarts++;this.onstart?.();}
+    abort(){this.onend?.();}
+  }
+  window.SpeechRecognition=LocalSpeech;
+  change('voice-target','chat-input');
+  assert($('voice-target').value==='chat-input','chat-input-appears-in-existing-microphone-targets');
+  $('voice-mic').click();
+  await new Promise(resolve=>setTimeout(resolve,70));
+  assert(dictationStarts===1&&recognition.processLocally===true,
+    'user-started-chat-microphone-runs-local-only');
+  const transcript=[{transcript:'A dictated chat message'}];transcript.isFinal=true;
+  recognition.onresult?.({resultIndex:0,results:[transcript]});
+  assert($('voice-transcript').value==='A dictated chat message'&&
+    !$('voice-insert').disabled,'microphone-output-stays-in-unregistered-preview');
+  $('voice-insert').click();
+  assert($('chat-input').value==='A dictated chat message'&&
+    $('chat-messages').querySelectorAll('.chat-entry').length===0,
+    'local-dictation-inserts-chat-input-without-auto-sending');
+  $('chat-send').click();
+  assert(labels().length===2&&labels()[0].includes('A dictated chat message'),
+    'human-must-send-dictated-message-separately');
+  $('chat-clear').click();
+  assert(labels().length===0,'dictation-dialogue-erased-before-cap-test');
+    for(let i=0;i<40;i++)send('safe local message '+i);
   assert(labels().length===80,'bounded-forty-exchanges-cap-enforced');
   send('should be rejected');
   assert(labels().length===80&&$('chat-state').textContent.includes('reached its limit'),
