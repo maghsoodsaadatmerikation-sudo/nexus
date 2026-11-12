@@ -69,6 +69,16 @@ code{direction:ltr;unicode-bidi:embed}
       <div><label for="restore-passphrase">گذرواژهٔ بازکردن فایل رمزدار</label><input type="password" id="restore-passphrase" autocomplete="off" maxlength="256" placeholder="پیش از بازکردن فایل وارد کنید"></div>
     </div>
     <p class="help">رمزگذاری: AES-256-GCM با کلید ساخته‌شده از PBKDF2-SHA-256 و نمک تصادفی. این روش در برابر گذرواژهٔ ضعیف، دستگاه آلوده یا ازدست‌رفتن فایل و گذرواژه تضمین مطلق ندارد. فقط فایل رمزگذاری‌شده را در جای امن نگه دارید.</p>
+    <div class="entry" style="margin-top:12px">
+      <h3>آزمایش بازیابی فایل دانلودشده</h3>
+      <p class="help">فایل رمزدار را پس از دانلود از بخش فایل‌های دستگاه انتخاب کنید. این آزمون فایل انتخاب‌شده را واقعاً با گذرواژه باز می‌کند و اعتبار ساختار آن را می‌سنجد، اما کارگاه فعلی را جایگزین نمی‌کند. اگر یکسان باشد، تطابق با <strong>اطلاعات ثبت‌شدهٔ فعلی</strong> اعلام می‌شود؛ تغییرات نوشته‌شده ولی ثبت‌نشده جزو مقایسه نیستند. نتیجه فقط برای همین بررسی معتبر است، نه تضمین ماندگاری فایل در آینده.</p>
+      <div class="flex">
+        <div><label for="backup-proof-password">گذرواژهٔ همان فایل دانلودشده</label><input type="password" id="backup-proof-password" autocomplete="off" maxlength="256" placeholder="گذرواژهٔ فایل رمزدار"></div>
+      </div>
+      <button type="button" id="backup-proof" class="secondary">انتخاب فایل و آزمایش بازیابی</button>
+      <input type="file" accept=".json,application/json" id="backup-proof-file" hidden aria-label="انتخاب فایل رمزدار جهت آزمایش بازیابی">
+      <p id="backup-proof-state" class="status" role="status" aria-live="polite">هنوز هیچ فایل دانلودشده‌ای آزمایش نشده است.</p>
+    </div>
   </section>
   <section class="panel full" aria-labelledby="vault-title" style="margin-bottom:16px">
     <h2 id="vault-title">ادامهٔ امن‌تر در همین مرورگر (اختیاری)</h2>
@@ -174,7 +184,7 @@ code{direction:ltr;unicode-bidi:embed}
     id:uuid(),question:'',goal:'',constraints:[],values:[],claims:[],alternatives:[],judgment:null
   },events:[]});
   let state=fresh();
-  let encryptBusy=false;
+  let encryptBusy=false,proofBusy=false,proofVerifiedSnapshot=null;
   function status(message,bad=false){
     $('status').textContent=message;
     $('status').classList.toggle('error',bad);
@@ -244,6 +254,10 @@ code{direction:ltr;unicode-bidi:embed}
     $('export').disabled=!w.question;
     $('core-export').disabled=!w.question;
     $('encrypt-export').disabled=!w.question||encryptBusy;
+    if(proofVerifiedSnapshot!==null&&JSON.stringify(state)!==proofVerifiedSnapshot){
+      $('backup-proof-state').textContent='کارگاه پس از آخرین بررسی تغییر کرده است؛ برای سنجش نسخهٔ فعلی دوباره فایل را آزمایش کنید.';
+      proofVerifiedSnapshot=null;
+    }
     scheduleVaultSave();
   }
   $('ask-form').addEventListener('submit',e=>{
@@ -401,6 +415,42 @@ code{direction:ltr;unicode-bidi:embed}
     if(decrypted.byteLength>MAX_FILE)throw Error('plaintext-size');
     return JSON.parse(decoder.decode(decrypted));
   }
+  // Pilot 11: independent file-picker recovery rehearsal. Unlike import, it
+  // must NEVER assign state or run render(), persist a key, or create a local
+  // audit event. Reading the just-created in-memory Blob is not proof that
+  // the operator actually downloaded and retained a recoverable file.
+  $('backup-proof').addEventListener('click',()=>{
+    if(proofBusy)return;
+    if(!$('backup-proof-password').value)return $('backup-proof-state').textContent=
+      'ابتدا گذرواژهٔ فایل دانلودشده را وارد کنید.';
+    $('backup-proof-file').click();
+  });
+  $('backup-proof-file').addEventListener('change',async()=>{
+    const f=$('backup-proof-file').files?.[0];
+    if(!f||proofBusy)return;
+    proofBusy=true;$('backup-proof').disabled=true;
+    const pw=$('backup-proof-password').value;
+    proofVerifiedSnapshot=null;
+    $('backup-proof-state').textContent='در حال بازکردن و بررسی فایل انتخاب‌شده در همین مرورگر...';
+    try{
+      if(!protectedContext()||f.size>MAX_ENCRYPTED_FILE||f.size===0)throw Error('unsafe-file');
+      const envelope=JSON.parse(await f.text());
+      if(!envelope||envelope.schema!==ENCRYPTED_SCHEMA)throw Error('not-protected');
+      const incoming=validate(await unseal(envelope,pw));
+      const committed=validate(state);
+      if(JSON.stringify(incoming)===JSON.stringify(committed)){
+        proofVerifiedSnapshot=JSON.stringify(state);
+        $('backup-proof-state').textContent='موفق: فایل انتخاب‌شده با گذرواژه واقعاً باز شد و دقیقاً با کارگاه ثبت‌شدهٔ فعلی برابر است. این آزمون فقط سلامت همین فایل در این لحظه را ثابت می‌کند.';
+      }else{
+        $('backup-proof-state').textContent='فایل رمزدار قابل‌بازیابی و معتبر است، اما با کارگاه ثبت‌شدهٔ فعلی یکسان نیست؛ ممکن است نسخهٔ قدیمی یا کارگاه دیگری باشد. کارگاه فعلی تغییر نکرد.';
+      }
+    }catch{
+      $('backup-proof-state').textContent='بررسی ناموفق: فایل رمزدار معتبر نبود، آسیب دیده یا گذرواژه نادرست است. کارگاه فعلی تغییر نکرد.';
+    }finally{
+      $('backup-proof-password').value='';$('backup-proof-file').value='';
+      proofBusy=false;$('backup-proof').disabled=false;
+    }
+  });
   function downloadJson(body,filename) {
     const blob=new Blob([body],{type:'application/json;charset=utf-8'});
     const url=URL.createObjectURL(blob),a=document.createElement('a');
@@ -424,7 +474,9 @@ code{direction:ltr;unicode-bidi:embed}
     try {
       const envelope=await seal(snapshot,pw);
       downloadJson(JSON.stringify(envelope,null,2)+'\n','nexus-protected-'+snapshotId+'.json');
-      status('فایل رمزگذاری‌شده آماده شد. گذرواژه را جدا و امن نگه دارید؛ بدون آن امکان بازیابی نیست.');
+      proofVerifiedSnapshot=null;
+      $('backup-proof-state').textContent='نسخهٔ تازه ساخته شد اما دریافت و بازیابی آن هنوز آزمایش نشده است. فایل را از بخش دانلودها انتخاب و بررسی کنید.';
+      status('فایل رمزگذاری‌شده برای دانلود ساخته شد؛ ذخیره‌شدن روی دستگاه تأیید نشده است. فایل دانلودشده را جداگانه آزمایش کنید.');
     } catch {status('رمزگذاری انجام نشد؛ فایل جدیدی ذخیره نشده است.',true)}
     finally{$('export-passphrase').value='';$('confirm-passphrase').value='';encryptBusy=false;button.disabled=!state.workspace.question}
   });
