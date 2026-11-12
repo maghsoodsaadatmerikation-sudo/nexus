@@ -158,28 +158,46 @@ jobs:
           test -z "${RENDER_API_KEY:-}"
           test -z "${NEXUS_API_TOKEN:-}"
           grep -Eq '^channel = "1.85.0"$' rust-toolchain.toml
-      - name: Prove selected workspace sources equal observed pinned Railway revision
+      - name: Checkout historical runtime reference separately from candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: 3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959
+          path: runtime-reference
+          persist-credentials: false
+      - name: Prove historical reference sources equal observed pinned Railway revision
         shell: bash
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/stage-d-core-parity.py scripts/test-stage-d-core-parity.py
+          export NEXUS_PARITY_REFERENCE_ROOT="$PWD/runtime-reference"
           python3 scripts/test-stage-d-core-parity.py
-          python3 scripts/stage-d-core-parity.py --runtime-commit 3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959
+          python3 scripts/stage-d-core-parity.py --repo-root "$NEXUS_PARITY_REFERENCE_ROOT" --runtime-commit 3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959
       - name: Compile current Rust durable workspace semantic validator
         shell: bash
         run: |
           set -euo pipefail
           cargo build --locked --bin nexus-private-core-audit
           cargo test --locked --bin nexus-private-core-audit
+          cargo test --locked --lib workspace_persistence::tests
           # Real Rust gateway recovery semantics, not a Python-only emulation.
           cargo test --locked --manifest-path artifact-05/Cargo.toml request_store::tests
           # Confirm a replaced ledger directory never resumes HTTP delegation.
           cargo test --locked --manifest-path artifact-05/Cargo.toml --test http_contract durable_store_io_failure_never_delegates
-      - name: Run real Rust semantic validation against synthetic copied data
+      - name: Run historical runtime semantic validation against synthetic copied data
         shell: bash
         run: |
           set -euo pipefail
-          export NEXUS_PRIVATE_CORE_AUDIT_BIN="$PWD/target/debug/nexus-private-core-audit"
+          # Production intake retains its exact-source parity guard. Test it
+          # against historical source, never label candidate source as deployed.
+          cp scripts/*.py runtime-reference/scripts/
+          # Audit harness and dependency pins are current; selected workspace
+          # modules remain historical. This is not a historical binary rebuild.
+          mkdir -p runtime-reference/src/bin
+          cp src/bin/nexus-private-core-audit.rs runtime-reference/src/bin/
+          cp Cargo.toml Cargo.lock runtime-reference/
+          cargo build --locked --manifest-path runtime-reference/Cargo.toml --bin nexus-private-core-audit
+          export NEXUS_PRIVATE_CORE_AUDIT_BIN="$PWD/runtime-reference/target/debug/nexus-private-core-audit"
+          export NEXUS_PRIVATE_INTAKE_SCRIPT="$PWD/runtime-reference/scripts/verify-offhost-volume-export.py"
           python3 -m py_compile scripts/test-private-core-audit.py
           python3 scripts/test-private-core-audit.py
           echo 'No Railway access; no user data or recovery archive published.'

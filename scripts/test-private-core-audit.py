@@ -14,7 +14,10 @@ import unittest
 from unittest.mock import patch
 
 VALIDATOR = os.environ.get("NEXUS_PRIVATE_CORE_AUDIT_BIN", "")
-INTAKE = Path(__file__).with_name("verify-offhost-volume-export.py")
+INTAKE = Path(os.environ.get(
+    "NEXUS_PRIVATE_INTAKE_SCRIPT",
+    str(Path(__file__).with_name("verify-offhost-volume-export.py")),
+))
 VOLUME = "cc47a350-6c7e-4487-89d9-c4b390f94884"
 DEPLOYMENT = "db2fd959-918e-49d5-b077-1ac74fac9a82"
 COMMIT = "3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959"

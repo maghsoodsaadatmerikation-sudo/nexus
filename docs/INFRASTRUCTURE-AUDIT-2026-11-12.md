@@ -13,6 +13,7 @@ This is an engineering repair, not a new release seal or production-readiness cl
 | Loaded JSON is not bound to the requested workspace ID | A valid snapshot copied under another filename can be returned as the wrong workspace | Reject a mismatch with `WorkspaceIdentityMismatch` |
 | History validation compares events containing IDs but not previous payloads | Existing question, claims, alternatives or initial metadata can be silently rewritten while preserving events | Require immutable initial metadata and exact existing claim/alternative content prefixes; append operations and explicit judgment transitions remain supported |
 | Pinned Rust 1.85 formatting and compile-failure diagnostic fixture are stale | Local documented verification fails before completing | Apply the pinned formatter and refresh the E0603 fixture; the attempted authority forgery must still fail compilation |
+| Recovery CI assumes candidate workspace source always equals old deployed source | Any persistence repair makes the audit job fail before testing | Check an independently checked-out historical reference against the unchanged blob pins; test candidate persistence separately |
 
 Four regression tests were executed against a scratch copy of the original persistence
 implementation: all four failed, with five pre-existing persistence tests passing.
@@ -56,3 +57,9 @@ The file repository still requires a trusted directory and one coordinated write
 files do not provide cross-process history transactions, protection from hostile
 directory/ancestor replacement, encryption at rest, quotas or a continuous backup.
 Those boundaries must not be described as solved by this change.
+
+Recovery CI now compiles the current audit harness with the historical workspace
+modules and current locked dependencies for synthetic intake tests. This is not
+a recreation or attestation of the historical executable. The production intake
+parity guard is unchanged and still blocks the changed candidate sources when
+they are presented as the old deployed revision.
