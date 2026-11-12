@@ -7,6 +7,7 @@ on:
       - 'web/offline-pilot.html'
       - 'scripts/test-offline-pilot-browser.py'
       - 'scripts/test-decision-report-browser.py'
+      - 'scripts/test-draft-guard-browser.py'
       - 'scripts/test-offline-to-rust-http.py'
       - 'docs/PILOT-06-OFFLINE-RUST-BRIDGE.md'
       - 'scripts/workspace-browser-runner.mjs'
@@ -21,6 +22,7 @@ on:
       - 'web/offline-pilot.html'
       - 'scripts/test-offline-pilot-browser.py'
       - 'scripts/test-decision-report-browser.py'
+      - 'scripts/test-draft-guard-browser.py'
       - 'scripts/test-offline-to-rust-http.py'
       - 'docs/PILOT-06-OFFLINE-RUST-BRIDGE.md'
       - 'scripts/workspace-browser-runner.mjs'
@@ -66,6 +68,8 @@ jobs:
           PY
       - name: Verify readable decision report without workspace mutation
         run: python3 scripts/test-decision-report-browser.py > decision-report-browser.json
+      - name: Verify uncommitted input guard and encrypted restore race
+        run: python3 scripts/test-draft-guard-browser.py > draft-guard-browser.json
       - name: Verify exported synthetic bridge against live disposable Rust API
         shell: bash
         env:
@@ -120,5 +124,6 @@ jobs:
           path: |
             offline-pilot-ci-report.json
             decision-report-browser.json
+            draft-guard-browser.json
           if-no-files-found: ignore
           retention-days: 30

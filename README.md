@@ -55,6 +55,15 @@ Published on the existing static site; independent public browser acceptance
 checks both the workshop and report. Real Android print/PDF behavior still
 depends on the browser and device.
 
+## Uncommitted text protection (Pilot 14 candidate)
+
+A visible indicator distinguishes unregistered form text from committed work.
+New, Demo, import and encrypted local restore require confirmation before
+replacing drafts. Changes during local decryption abort replacement. Export
+warnings explain that drafts are excluded; no draft storage or automatic
+human judgment is introduced. [Behavior and browser limits](docs/PILOT-14-DRAFT-PROTECTION.md).
+Separate static deployment and public acceptance are still required.
+
 ## Recoverability check for private encrypted files (Pilot 11)
 
 Pilot 11 adds **file-picker verification of an actual downloaded encrypted JSON file**, with the original passphrase, against the *committed* workspace. This does not replace the workspace, upload it or claim that the file is safe outside the device. The independent HTTPS observer checks the published source. [Pilot 11 details](docs/PILOT-11-VERIFIED-ENCRYPTED-EXPORT.md).

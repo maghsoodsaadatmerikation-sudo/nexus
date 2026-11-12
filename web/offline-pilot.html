@@ -58,6 +58,11 @@ code{direction:ltr;unicode-bidi:embed}
     <strong>بدون حساب، توکن یا اینترنت پس از دریافت فایل</strong>
     <small>اطلاعات به‌طور پیش‌فرض فقط در حافظهٔ همین صفحه است؛ ادامهٔ رمزدار محلی تنها با فعال‌سازی صریح انجام می‌شود. برای حفظ مستقل داده‌ها خروجی رمزدار بگیرید. این نسخه هیچ اتصالی به Railway ندارد. فایل آفلاین مستقیماً با هستهٔ Rust سازگار نیست؛ انتقال اختیاری فقط با خروجی جداگانهٔ «فایل انتقال به هستهٔ Rust» انجام می‌شود.</small>
   </div>
+  <div class="banner" id="draft-notice" hidden>
+    <strong id="draft-state" role="status" aria-live="polite"></strong>
+    <small>این نوشته‌ها هنوز جزو کارگاه نیستند و در فایل خروجی، گزارش یا ذخیرهٔ رمزدار محلی قرار نمی‌گیرند. برای نگهداری، دکمهٔ ثبت همان بخش را بزنید. هشدار بستن صفحه به پشتیبانی مرورگر بستگی دارد و جلوی بسته‌شدن اجباری برنامه را نمی‌گیرد.</small>
+    <button type="button" class="secondary" id="draft-focus">رفتن به نخستین نوشتهٔ ثبت‌نشده</button>
+  </div>
   <section class="panel full" aria-labelledby="offline-install-title" style="margin-bottom:16px">
     <h2 id="offline-install-title">نصب و بازکردن آفلاین روی گوشی (اختیاری)</h2>
     <p class="help">فقط اگر خودتان «آماده‌سازی حالت آفلاین» را بزنید، یک <strong>نسخهٔ ثابت و تأییدشده از برنامه</strong> در کش همین مرورگر قرار می‌گیرد تا پس از نصب یا بازشدن دوباره، بدون اینترنت اجرا شود. اطلاعات کارگاه، گذرواژه‌ها و خروجی‌های شما وارد کش برنامه نمی‌شوند. ذخیرهٔ کارگاه همچنان جداگانه و اختیاری است؛ برای جلوگیری از ازدست‌رفتن داده‌ها فایل رمزدار بگیرید.</p>
@@ -218,6 +223,42 @@ code{direction:ltr;unicode-bidi:embed}
     id:uuid(),question:'',goal:'',constraints:[],values:[],claims:[],alternatives:[],judgment:null
   },events:[]});
   let state=fresh();
+  const draftFields=['question','goal','constraints','values','claim','source','option','consequences','decision','rationale'];
+  function sameListDraft(raw,items){return raw===items.join('\n')||JSON.stringify(commaItems(raw,25))===JSON.stringify(items);}
+  function draftGroups(){
+    const w=state.workspace,groups=[];
+    if(trim($('question').value,2000)!==trim(w.question,2000)||trim($('goal').value,1000)!==trim(w.goal,1000)||
+       !sameListDraft($('constraints').value,w.constraints)||!sameListDraft($('values').value,w.values))
+      groups.push({label:'پرسش و هدف',field:'question'});
+    if($('claim').value.trim()||$('source').value.trim())groups.push({label:'شواهد',field:'claim'});
+    if($('option').value.trim()||$('consequences').value.trim())groups.push({label:'گزینه‌ها',field:'option'});
+    if(trim($('decision').value,2000)!==trim(w.judgment?.decision,2000)||
+       trim($('rationale').value,2000)!==trim(w.judgment?.rationale,2000))
+      groups.push({label:'تصمیم انسانی',field:'decision'});
+    return groups;
+  }
+  function draftSignature(){return JSON.stringify([...draftFields,'origin','uncertainty'].map(id=>$(id).value));}
+  function draftWarning(){return draftGroups().length?' نوشته‌های ثبت‌نشده در این خروجی نیستند؛ ابتدا دکمهٔ ثبت همان بخش را بزنید.':'';}
+  function confirmReplacement(message){
+    return !(state.events.length||draftGroups().length)||window.confirm(message+
+      (draftGroups().length?' نوشته‌های ثبت‌نشده نیز از بین می‌روند.':''));
+  }
+  function onDraftUnload(e){e.preventDefault();e.returnValue='';}
+  let unloadGuard=false;
+  function refreshDraftNotice(){
+    const groups=draftGroups(),pending=groups.length>0;
+    $('draft-notice').hidden=!pending;
+    $('draft-state').textContent=pending?'نوشتهٔ ثبت‌نشده در بخش: '+groups.map(g=>g.label).join('، '):'';
+    if(pending!==unloadGuard){
+      window[pending?'addEventListener':'removeEventListener']('beforeunload',onDraftUnload);
+      unloadGuard=pending;
+    }
+  }
+  for(const id of draftFields)$(id).addEventListener('input',refreshDraftNotice);
+  $('draft-focus').addEventListener('click',()=>{
+    const first=draftGroups()[0];
+    if(first){$(first.field).focus();$(first.field).scrollIntoView({block:'center'});}
+  });
   let encryptBusy=false,proofBusy=false,proofVerifiedSnapshot=null;
   let reportSnapshot=null;
   function clearReport(message){
@@ -313,6 +354,7 @@ code{direction:ltr;unicode-bidi:embed}
   }
   function render(){
     const w=state.workspace;
+    refreshDraftNotice();
     $('report-build').disabled=!w.question;
     if(reportSnapshot!==null&&reportSnapshot!==JSON.stringify(state))
       clearReport('کارگاه تغییر کرده است؛ برای اطلاعات فعلی گزارش را دوباره بسازید.');
@@ -418,10 +460,7 @@ code{direction:ltr;unicode-bidi:embed}
   // It demonstrates structure, never records a human decision or
   // misrepresents a demo source as independently verified evidence.
   $('load-demo').addEventListener('click',()=>{
-    const formHasDraft=['question','goal','constraints','values','claim','source',
-      'option','consequences','decision','rationale'].some(id=>$(id).value.trim());
-    if((state.events.length||formHasDraft)&&!window.confirm(
-      'نمونهٔ ساختگی جای کارگاه یا متن واردشدهٔ فعلی را می‌گیرد. برای حفظ کار فعلی ابتدا خروجی رمزدار بگیرید. ادامه می‌دهید؟'))return;
+    if(!confirmReplacement('نمونهٔ ساختگی جای کارگاه فعلی را می‌گیرد. ادامه می‌دهید؟'))return;
     pauseVault(); // Preserve any prior encrypted slot without overwriting it.
     const sample=fresh(),w=sample.workspace;
     w.question='[نمونهٔ ساختگی] برای یک جلسهٔ مطالعه، کدام شیوهٔ برنامه‌ریزی را بررسی کنم؟';
@@ -452,7 +491,7 @@ code{direction:ltr;unicode-bidi:embed}
     status('نمونهٔ ساختگی برای تمرین باز شد؛ هیچ تصمیمی ثبت نشده است. برای مسئلهٔ واقعی، کارگاه جدید بسازید.');
   });
   $('new').addEventListener('click',()=>{
-    if(state.events.length&&!window.confirm('اطلاعات ذخیره‌نشده با ساخت کارگاه تازه از بین می‌رود. ادامه می‌دهید؟'))return;
+    if(!confirmReplacement('اطلاعات کارگاه فعلی با ساخت کارگاه تازه از بین می‌رود. ادامه می‌دهید؟'))return;
     pauseVault();
     state=fresh();
     for(const id of ['question','goal','constraints','values','claim','source','option','consequences','decision','rationale'])$(id).value='';
@@ -567,6 +606,7 @@ code{direction:ltr;unicode-bidi:embed}
   $('encrypt-export').addEventListener('click',async()=>{
     if(encryptBusy)return;
     if(!state.workspace.question)return status('پیش از خروجی گرفتن، پرسش را ثبت کنید.',true);
+    if(draftGroups().length&&!window.confirm('فایل رمزدار فقط اطلاعات ثبت‌شده را نگه می‌دارد.'+draftWarning()+' با این حال از اطلاعات ثبت‌شده خروجی گرفته شود؟'))return;
     const pw=$('export-passphrase').value,confirm=$('confirm-passphrase').value;
     if(Array.from(pw).length<12||Array.from(pw).length>256)
       return status('گذرواژه باید بین ۱۲ تا ۲۵۶ نویسه باشد.',true);
@@ -588,7 +628,7 @@ code{direction:ltr;unicode-bidi:embed}
   });
   $('export').addEventListener('click',()=>{
     if(!state.workspace.question)return status('پیش از خروجی گرفتن، پرسش را ثبت کنید.',true);
-    if(!window.confirm('این فایل JSON بدون رمز و خواندنی است. آیا با ساخت نسخهٔ بدون رمز موافقید؟'))return;
+    if(!window.confirm('این فایل JSON بدون رمز و خواندنی است. آیا با ساخت نسخهٔ بدون رمز موافقید؟'+draftWarning()))return;
     downloadJson(JSON.stringify(state,null,2)+'\n','nexus-offline-'+state.workspace.id+'.json');
     status('نسخهٔ JSON بدون رمز آماده شد؛ این فایل را خصوصی نگه دارید.');
   });
@@ -640,7 +680,7 @@ code{direction:ltr;unicode-bidi:embed}
   }
   $('core-export').addEventListener('click',()=>{
     if(!state.workspace.question)return status('ابتدا مسئله را ثبت کنید.',true);
-    if(!window.confirm('این فایل برای واردکردن به Rust بدون رمز خواهد بود و همهٔ متن‌های کارگاه را دربر دارد. تاریخچهٔ قابل‌تأیید نیست و فقط به‌صورت رویدادهای جدید بازسازی می‌شود. ادامه می‌دهید؟'))return;
+    if(!window.confirm('این فایل برای واردکردن به Rust بدون رمز خواهد بود و اطلاعات ثبت‌شدهٔ کارگاه را دربر دارد. تاریخچهٔ قابل‌تأیید نیست و فقط به‌صورت رویدادهای جدید بازسازی می‌شود. ادامه می‌دهید؟'+draftWarning()))return;
     try{
       const compatible=toCoreSnapshot(state);
       downloadJson(JSON.stringify(compatible,null,2)+'\n',
@@ -716,7 +756,7 @@ code{direction:ltr;unicode-bidi:embed}
         data=await unseal(raw,pw);
       } else if(f.size>MAX_FILE)throw Error('plaintext-too-large');
       const incoming=validate(data);
-      if(state.events.length&&!window.confirm('بارگذاری، کارگاه جاری را جایگزین می‌کند. ادامه می‌دهید؟'))return;
+      if(!confirmReplacement('بارگذاری، کارگاه جاری را جایگزین می‌کند. ادامه می‌دهید؟'))return;
       state=incoming;
       $('question').value=state.workspace.question;
       $('goal').value=state.workspace.goal;
@@ -809,8 +849,8 @@ code{direction:ltr;unicode-bidi:embed}
     const pw=$('vault-open-password').value;
     if(!pw)return status('برای بازکردن نسخهٔ محلی گذرواژه را وارد کنید.',true);
     if(!protectedContext())return status('WebCrypto در این مرورگر موجود نیست.',true);
-    const originalState=JSON.stringify(state),originalEpoch=vaultEpoch;
-    if(state.events.length&&!window.confirm('بازکردن نسخهٔ محلی، کارگاه باز فعلی را جایگزین می‌کند. ادامه می‌دهید؟'))return;
+    const originalState=JSON.stringify(state),originalEpoch=vaultEpoch,originalDraft=draftSignature();
+    if(!confirmReplacement('بازکردن نسخهٔ محلی، کارگاه باز فعلی را جایگزین می‌کند. ادامه می‌دهید؟'))return;
     vaultBusy=true;$('vault-restore').disabled=true;
     try{
       const encoded=window.localStorage.getItem(VAULT_SLOT);
@@ -831,6 +871,8 @@ code{direction:ltr;unicode-bidi:embed}
       if(plaintext.byteLength>MAX_FILE||vaultEpoch!==originalEpoch||JSON.stringify(state)!==originalState)
         throw Error('stale-or-overlarge-vault');
       const restored=validate(JSON.parse(decoder.decode(plaintext)));
+      if(draftSignature()!==originalDraft)
+        return status('متن فرم‌ها هنگام بازکردن نسخهٔ محلی تغییر کرد؛ برای حفظ نوشتهٔ تازه، جایگزینی انجام نشد. دوباره تلاش کنید.',true);
       vaultEpoch++;vaultKey=key;vaultSalt=salt;state=restored;
       $('question').value=state.workspace.question;
       $('goal').value=state.workspace.goal;
