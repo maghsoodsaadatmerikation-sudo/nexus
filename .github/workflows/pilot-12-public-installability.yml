@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/pilot-12-public-installability.yml'
       - 'scripts/verify-public-pwa-assets.py'
+      - 'scripts/png_pixels.py'
       - 'scripts/test-pwa-offline-browser.mjs'
       - 'public/**'
       - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
@@ -13,6 +14,7 @@ on:
     paths:
       - '.github/workflows/pilot-12-public-installability.yml'
       - 'scripts/verify-public-pwa-assets.py'
+      - 'scripts/png_pixels.py'
       - 'scripts/test-pwa-offline-browser.mjs'
       - 'public/**'
       - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
@@ -62,12 +64,16 @@ jobs:
           assert r['status']=='PASS' and r['verified_resources']==5
           assert r['schema']=='nexus.pilot-12.public-assets-witness.v1'
           assert set(r['resources'])=={
-            '/','/manifest.webmanifest','/service-worker.js',
+            '/','/manifest.json','/service-worker.js',
             '/icons/nexus-192.png','/icons/nexus-512.png'}
-          assert all(x['ok'] and x['http_status']==200 and
-                     x['exact_byte_match'] for x in r['resources'].values())
+          assert all(x['ok'] and x['http_status']==200
+                     for x in r['resources'].values())
+          assert all(r['resources'][x]['exact_byte_match']
+                     for x in ('/','/manifest.json','/service-worker.js'))
+          assert all(r['resources'][f'/icons/nexus-{size}.png']['pixel_match']
+                     for size in (192,512))
           assert r['authority']=='none' and not r['production_mutation']
-          print('PASS: five exact public static PWA resources by SHA256 and MIME')
+          print('PASS: exact app HTML/manifest/worker bytes and identical decoded PNG icon pixels')
           PY
       - name: Test real PUBLIC HTTPS PWA install and network outage in Chromium
         shell: bash
