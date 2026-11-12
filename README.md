@@ -31,6 +31,12 @@ remains a separate open milestone.
 
 ## Try NEXUS now — free offline decision pilot
 
+The latest **source candidate** provides a one-click, visibly fictional
+first-run exercise that creates evidence and alternatives but **no human
+decision**, and never asks for personal information. It is strictly a
+browser-only demonstration, not the already-hosted Pilot 06 version.
+See [Pilot 09 contract](docs/PILOT-09-GUIDED-FIRST-RUN.md).
+
 A [standalone Persian mobile decision workshop](web/offline-pilot.html)
 is available without a hosting account, device setup, API token or ongoing
 service. **Download the HTML file and open the downloaded file in your browser**;
