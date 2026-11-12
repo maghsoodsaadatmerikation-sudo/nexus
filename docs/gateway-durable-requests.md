@@ -42,8 +42,10 @@ markers, corruption, unavailable storage and synchronized 32-request contention.
 The read-only verification harness also destroys and restarts the HTTP container
 on the same mount, verifies GET and rejects repeated POST with 409.
 
-Self-critique: synchronous filesystem writes block the request worker; filesystem
-loss or removal of this directory removes replay protection. Workspace JSON
+Synchronous filesystem writes and delegates run in bounded blocking workers,
+so they do not occupy the asynchronous network worker. Disconnecting a client
+cannot cancel already-started work or release its execution slot early.
+Filesystem loss or removal of this directory removes replay protection. Workspace JSON
 export/restore does **not** back up request markers and must not be presented as
 full gateway recovery. Use the [offline full-data snapshot](full-data-recovery.md) to preserve captured
 workspace and ledger state together. IDs admitted after that snapshot are not

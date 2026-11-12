@@ -20,6 +20,10 @@ pub(crate) struct RequestStore {
 }
 
 impl RequestStore {
+    pub(crate) fn is_available(&self) -> bool {
+        self.verify_root().is_ok()
+    }
+
     pub(crate) fn open(root: &Path) -> io::Result<(Self, HashMap<String, RequestStatus>)> {
         let root = if root.is_absolute() {
             root.to_owned()

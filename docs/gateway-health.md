@@ -5,8 +5,9 @@ Status: DEVELOPMENT / UNSEALED
 | Probe | HTTP response | Meaning |
 | --- | --- | --- |
 | GET /livez | 200, `{"status":"alive"}` | Listener/router responds |
-| GET /readyz | 200, `{"status":"ready"}` | Startup recovery quarantine is absent |
+| GET /readyz | 200, `{"status":"ready"}` | No recovery quarantine and configured request-ledger directory is still attached |
 | GET /readyz | 503, `{"status":"quarantined"}` | Recovery quarantine still blocks all mutations |
+| GET /readyz | 503, `{"status":"storage_unavailable"}` | Configured ledger directory is missing, replaced or inaccessible |
 
 HEAD preserves the corresponding status and headers with no response body.
 Both routes are public, bounded, and return `Cache-Control: no-store`. They expose
@@ -34,7 +35,11 @@ Blueprint's root health path is a liveness/UI check; it does not establish this 
 admission-readiness condition. Repository verification of these routes does not
 prove a deployed provider's routing configuration.
 
-Readiness is deliberately limited to the recovery gate. A 200 response is not a
+Readiness checks the recovery gate and the configured ledger directory's identity.
+It uses the original open directory descriptor and a metadata read; it creates no
+probe file and does not inspect workspace content. An ephemeral state without a
+configured ledger retains its quarantine-only readiness behavior.
+A 200 response is not a
 promise that a subsequent request will pass auth, policy, rate/capacity limits,
 filesystem operations or execution. It does not probe disk writability, measure
 throughput, establish production availability, validate a recovery point, confer

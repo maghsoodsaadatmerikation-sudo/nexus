@@ -4,8 +4,8 @@ mod request_store;
 mod workspace_api;
 
 use axum::{
-    body::to_bytes,
-    extract::{Path, Request, State},
+    body::{to_bytes, Body, Bytes},
+    extract::{DefaultBodyLimit, Path, Request, State},
     http::{header, HeaderMap, Method, StatusCode},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
@@ -213,6 +213,8 @@ pub struct AppState<D> {
     recovery_required: bool,
     safety_config: SafetyConfig,
     safety_state: Arc<Mutex<SafetyState>>,
+    body_read_timeout: Duration,
+    execution_slots: Arc<tokio::sync::Semaphore>,
 }
 
 impl<D> Clone for AppState<D> {
@@ -225,6 +227,8 @@ impl<D> Clone for AppState<D> {
             recovery_required: self.recovery_required,
             safety_config: self.safety_config,
             safety_state: Arc::clone(&self.safety_state),
+            body_read_timeout: self.body_read_timeout,
+            execution_slots: Arc::clone(&self.execution_slots),
         }
     }
 }
@@ -239,6 +243,8 @@ impl<D: ConstitutionalDelegate> AppState<D> {
             recovery_required: false,
             safety_config: SafetyConfig::default(),
             safety_state: Arc::new(Mutex::new(SafetyState::default())),
+            body_read_timeout: Duration::from_secs(15),
+            execution_slots: Arc::new(tokio::sync::Semaphore::new(32)),
         }
     }
 
@@ -256,6 +262,8 @@ impl<D: ConstitutionalDelegate> AppState<D> {
             recovery_required: false,
             safety_config: SafetyConfig::default(),
             safety_state: Arc::new(Mutex::new(SafetyState::default())),
+            body_read_timeout: Duration::from_secs(15),
+            execution_slots: Arc::new(tokio::sync::Semaphore::new(32)),
         }
     }
 
@@ -307,6 +315,19 @@ impl<D: ConstitutionalDelegate> AppState<D> {
         self.safety_config = config;
         self
     }
+
+    /// Bound body ingestion only; never cancel delegation after it has started.
+    pub fn with_body_read_timeout(mut self, timeout: Duration) -> Self {
+        assert!(!timeout.is_zero(), "body read timeout must be positive");
+        self.body_read_timeout = timeout;
+        self
+    }
+
+    pub fn with_max_concurrent_executions(mut self, maximum: usize) -> Self {
+        assert!(maximum > 0, "execution concurrency must be positive");
+        self.execution_slots = Arc::new(tokio::sync::Semaphore::new(maximum));
+        self
+    }
 }
 
 pub fn router<D>(state: AppState<D>) -> Router
@@ -344,6 +365,7 @@ where
             "/v1/workspaces/{id}/judgment",
             post(workspace_api::record_human_judgment::<D>),
         )
+        .layer(DefaultBodyLimit::max(state.safety_config.max_body_bytes))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             recovery_boundary::<D>,
@@ -397,7 +419,43 @@ async fn recovery_boundary<D: ConstitutionalDelegate>(
             "recovery_acknowledgment_required",
         );
     }
+    // Workspace mutations must obey the same ingestion and rate boundaries as
+    // request admission, before JSON extractors or a delegate can run.
+    if request.method() == Method::POST
+        && (path == "/v1/workspaces" || path.starts_with("/v1/workspaces/"))
+    {
+        if !consume_rate_budget(&state).await {
+            return safety_error(StatusCode::TOO_MANY_REQUESTS, "rate_limit_exceeded");
+        }
+        let (parts, body) = request.into_parts();
+        let bytes = match bounded_body(&state, body).await {
+            Ok(bytes) => bytes,
+            Err(response) => return response,
+        };
+        return next
+            .run(Request::from_parts(parts, Body::from(bytes)))
+            .await;
+    }
     next.run(request).await
+}
+
+async fn bounded_body<D>(state: &AppState<D>, body: Body) -> Result<Bytes, Response> {
+    match tokio::time::timeout(
+        state.body_read_timeout,
+        to_bytes(body, state.safety_config.max_body_bytes),
+    )
+    .await
+    {
+        Ok(Ok(bytes)) => Ok(bytes),
+        Ok(Err(_)) => Err(safety_error(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "payload_too_large",
+        )),
+        Err(_) => Err(safety_error(
+            StatusCode::REQUEST_TIMEOUT,
+            "request_body_timeout",
+        )),
+    }
 }
 
 fn health_response(code: StatusCode, status: &'static str) -> Response {
@@ -417,7 +475,17 @@ async fn readiness<D: ConstitutionalDelegate>(State(state): State<AppState<D>>) 
     if state.recovery_required {
         health_response(StatusCode::SERVICE_UNAVAILABLE, "quarantined")
     } else {
-        health_response(StatusCode::OK, "ready")
+        let available = match state.request_store.clone() {
+            Some(store) => tokio::task::spawn_blocking(move || store.is_available())
+                .await
+                .unwrap_or(false),
+            None => true,
+        };
+        if available {
+            health_response(StatusCode::OK, "ready")
+        } else {
+            health_response(StatusCode::SERVICE_UNAVAILABLE, "storage_unavailable")
+        }
     }
 }
 
@@ -432,18 +500,53 @@ async fn submit<D: ConstitutionalDelegate>(
     if !transport_authorized(&state, request.headers()) {
         return transport_unauthorized();
     }
-    let (_, body) = request.into_parts();
-    let body = match to_bytes(body, state.safety_config.max_body_bytes).await {
-        Ok(body) => body,
-        Err(_) => return safety_error(StatusCode::PAYLOAD_TOO_LARGE, "payload_too_large"),
-    };
-    if !consume_rate_budget(&state) {
+    if !consume_rate_budget(&state).await {
         return safety_error(StatusCode::TOO_MANY_REQUESTS, "rate_limit_exceeded");
     }
+    let (_, body) = request.into_parts();
+    let body = match bounded_body(&state, body).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
     let input = match serde_json::from_slice::<SubmitRequest>(&body) {
         Ok(input) => input,
         Err(_) => return safety_error(StatusCode::UNPROCESSABLE_ENTITY, "invalid_request_shape"),
     };
+    let permit = match execution_permit(&state) {
+        Ok(permit) => permit,
+        Err(response) => return response,
+    };
+    match tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        submit_blocking(state, input)
+    })
+    .await
+    {
+        Ok(response) => response,
+        Err(_) => safety_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "execution_worker_unavailable",
+        ),
+    }
+}
+
+pub(crate) fn execution_permit<D>(
+    state: &AppState<D>,
+) -> Result<tokio::sync::OwnedSemaphorePermit, Response> {
+    Arc::clone(&state.execution_slots)
+        .try_acquire_owned()
+        .map_err(|_| {
+            safety_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "execution_capacity_exhausted",
+            )
+        })
+}
+
+fn submit_blocking<D: ConstitutionalDelegate>(
+    state: AppState<D>,
+    input: SubmitRequest,
+) -> Response {
     let request_id = input
         .request_id
         .unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -496,7 +599,14 @@ async fn submit<D: ConstitutionalDelegate>(
     }
 }
 
-fn consume_rate_budget<D>(state: &AppState<D>) -> bool {
+async fn consume_rate_budget<D: ConstitutionalDelegate>(state: &AppState<D>) -> bool {
+    let state = state.clone();
+    tokio::task::spawn_blocking(move || consume_rate_budget_blocking(&state))
+        .await
+        .unwrap_or(false)
+}
+
+fn consume_rate_budget_blocking<D>(state: &AppState<D>) -> bool {
     let mut safety = state.safety_state.lock().expect("safety lock poisoned");
     if safety.window_started.elapsed() >= state.safety_config.rate_window {
         safety.window_started = Instant::now();
@@ -514,7 +624,7 @@ fn reserve_request<D>(
     request_id: &str,
 ) -> Result<(), axum::response::Response> {
     let mut safety = state.safety_state.lock().expect("safety lock poisoned");
-    if state.request_store.is_some() && (request_id.is_empty() || request_id.len() > 100) {
+    if !valid_identifier(request_id) {
         return Err(safety_error(
             StatusCode::UNPROCESSABLE_ENTITY,
             "invalid_request_id",
@@ -546,6 +656,10 @@ fn reserve_request<D>(
         }
     }
     Ok(())
+}
+
+pub(crate) fn valid_identifier(id: &str) -> bool {
+    !id.trim().is_empty() && id.len() <= 100
 }
 
 fn release_request<D>(state: &AppState<D>, request_id: &str) {

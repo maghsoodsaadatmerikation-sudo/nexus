@@ -71,6 +71,7 @@ pub trait WorkspaceDelegate: Send + Sync + 'static {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateWorkspaceRequest {
     pub workspace_id: Option<String>,
     pub question: String,
@@ -78,7 +79,7 @@ pub struct CreateWorkspaceRequest {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum WireClaimOrigin {
     Human,
     ExternalEvidence { source: String },
@@ -118,6 +119,7 @@ impl From<WireUncertainty> for Uncertainty {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AddClaimRequest {
     pub claim_id: Option<String>,
     pub text: String,
@@ -127,6 +129,7 @@ pub struct AddClaimRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AddAlternativeRequest {
     pub alternative_id: Option<String>,
     pub label: String,
@@ -136,6 +139,7 @@ pub struct AddAlternativeRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RecordJudgmentRequest {
     pub decision: String,
     pub rationale: String,
@@ -156,14 +160,17 @@ where
     let workspace_id = input
         .workspace_id
         .unwrap_or_else(|| Uuid::new_v4().to_string());
-    match state.delegate.create_workspace(
-        workspace_id,
-        input.question,
-        ProvenanceId::new(input.provenance_id),
-    ) {
-        Ok(snapshot) => (StatusCode::CREATED, Json(snapshot)).into_response(),
-        Err(error) => workspace_error_response(error),
+    if !crate::valid_identifier(&workspace_id) {
+        return workspace_error_response(WorkspaceDelegateError::Invalid);
     }
+    delegate_workspace(state, StatusCode::CREATED, move |delegate| {
+        delegate.create_workspace(
+            workspace_id,
+            input.question,
+            ProvenanceId::new(input.provenance_id),
+        )
+    })
+    .await
 }
 
 pub(crate) async fn import_workspace<D>(
@@ -177,10 +184,13 @@ where
     if !workspace_authorized(&state, &headers) {
         return unauthorized();
     }
-    match state.delegate.import_workspace(snapshot) {
-        Ok(snapshot) => (StatusCode::CREATED, Json(snapshot)).into_response(),
-        Err(error) => workspace_error_response(error),
+    if !crate::valid_identifier(&snapshot.workspace.id) {
+        return workspace_error_response(WorkspaceDelegateError::Invalid);
     }
+    delegate_workspace(state, StatusCode::CREATED, move |delegate| {
+        delegate.import_workspace(snapshot)
+    })
+    .await
 }
 
 pub(crate) async fn get_workspace<D>(
@@ -194,10 +204,13 @@ where
     if !workspace_authorized(&state, &headers) {
         return unauthorized();
     }
-    match state.delegate.get_workspace(&id) {
-        Ok(snapshot) => (StatusCode::OK, Json(snapshot)).into_response(),
-        Err(error) => workspace_error_response(error),
+    if !crate::valid_identifier(&id) {
+        return workspace_error_response(WorkspaceDelegateError::Invalid);
     }
+    delegate_workspace(state, StatusCode::OK, move |delegate| {
+        delegate.get_workspace(&id)
+    })
+    .await
 }
 
 pub(crate) async fn add_claim<D>(
@@ -212,19 +225,22 @@ where
     if !workspace_authorized(&state, &headers) {
         return unauthorized();
     }
+    if !crate::valid_identifier(&id) {
+        return workspace_error_response(WorkspaceDelegateError::Invalid);
+    }
     let claim = Claim {
         id: input.claim_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
         text: input.text,
         origin: input.origin.into(),
         uncertainty: input.uncertainty.into(),
     };
-    match state
-        .delegate
-        .add_claim(&id, claim, ProvenanceId::new(input.provenance_id))
-    {
-        Ok(snapshot) => (StatusCode::OK, Json(snapshot)).into_response(),
-        Err(error) => workspace_error_response(error),
+    if !crate::valid_identifier(&claim.id) {
+        return workspace_error_response(WorkspaceDelegateError::Invalid);
     }
+    delegate_workspace(state, StatusCode::OK, move |delegate| {
+        delegate.add_claim(&id, claim, ProvenanceId::new(input.provenance_id))
+    })
+    .await
 }
 
 pub(crate) async fn add_alternative<D>(
@@ -239,6 +255,9 @@ where
     if !workspace_authorized(&state, &headers) {
         return unauthorized();
     }
+    if !crate::valid_identifier(&id) {
+        return workspace_error_response(WorkspaceDelegateError::Invalid);
+    }
     let alternative = Alternative {
         id: input
             .alternative_id
@@ -246,13 +265,13 @@ where
         label: input.label,
         consequences: input.consequences,
     };
-    match state
-        .delegate
-        .add_alternative(&id, alternative, ProvenanceId::new(input.provenance_id))
-    {
-        Ok(snapshot) => (StatusCode::OK, Json(snapshot)).into_response(),
-        Err(error) => workspace_error_response(error),
+    if !crate::valid_identifier(&alternative.id) {
+        return workspace_error_response(WorkspaceDelegateError::Invalid);
     }
+    delegate_workspace(state, StatusCode::OK, move |delegate| {
+        delegate.add_alternative(&id, alternative, ProvenanceId::new(input.provenance_id))
+    })
+    .await
 }
 
 pub(crate) async fn record_analysis_batch<D>(
@@ -267,10 +286,13 @@ where
     if !workspace_authorized(&state, &headers) {
         return unauthorized();
     }
-    match state.delegate.record_analysis_batch(&id, batch) {
-        Ok(snapshot) => (StatusCode::OK, Json(snapshot)).into_response(),
-        Err(error) => workspace_error_response(error),
+    if !crate::valid_identifier(&id) {
+        return workspace_error_response(WorkspaceDelegateError::Invalid);
     }
+    delegate_workspace(state, StatusCode::OK, move |delegate| {
+        delegate.record_analysis_batch(&id, batch)
+    })
+    .await
 }
 
 pub(crate) async fn record_human_judgment<D>(
@@ -285,17 +307,41 @@ where
     if !workspace_authorized(&state, &headers) {
         return unauthorized();
     }
+    if !crate::valid_identifier(&id) {
+        return workspace_error_response(WorkspaceDelegateError::Invalid);
+    }
     let judgment = HumanJudgment {
         decision: input.decision,
         rationale: input.rationale,
     };
-    match state.delegate.record_human_judgment(
-        &id,
-        judgment,
-        ProvenanceId::new(input.provenance_id),
-    ) {
-        Ok(snapshot) => (StatusCode::OK, Json(snapshot)).into_response(),
-        Err(error) => workspace_error_response(error),
+    delegate_workspace(state, StatusCode::OK, move |delegate| {
+        delegate.record_human_judgment(&id, judgment, ProvenanceId::new(input.provenance_id))
+    })
+    .await
+}
+
+async fn delegate_workspace<D, F>(
+    state: AppState<D>,
+    status: StatusCode,
+    operation: F,
+) -> axum::response::Response
+where
+    D: ConstitutionalDelegate + WorkspaceDelegate,
+    F: FnOnce(&D) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> + Send + 'static,
+{
+    let permit = match crate::execution_permit(&state) {
+        Ok(permit) => permit,
+        Err(response) => return response,
+    };
+    match tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        operation(state.delegate.as_ref())
+    })
+    .await
+    {
+        Ok(Ok(snapshot)) => (status, Json(snapshot)).into_response(),
+        Ok(Err(error)) => workspace_error_response(error),
+        Err(_) => workspace_error_response(WorkspaceDelegateError::Unavailable),
     }
 }
 

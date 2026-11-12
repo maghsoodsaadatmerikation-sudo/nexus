@@ -197,6 +197,8 @@ async fn main() {
     let max_requests_per_window = positive_env_u64("NEXUS_RATE_LIMIT_REQUESTS", 120);
     let rate_window_seconds = positive_env_u64("NEXUS_RATE_LIMIT_WINDOW_SECONDS", 60);
     let max_tracked_requests = positive_env_usize("NEXUS_MAX_TRACKED_REQUESTS", 10_000);
+    let body_read_seconds = positive_env_u64("NEXUS_BODY_READ_TIMEOUT_SECONDS", 15);
+    let max_concurrent_executions = positive_env_usize("NEXUS_MAX_CONCURRENT_EXECUTIONS", 32);
     eprintln!(
         "NEXUS_OP event=startup bind_addr={} data_dir={} auth=configured",
         addr,
@@ -211,6 +213,8 @@ async fn main() {
     let app = router(
         AppState::authenticated(CoreDelegate::new(data_root.clone()), token)
             .with_safety(safety)
+            .with_body_read_timeout(Duration::from_secs(body_read_seconds))
+            .with_max_concurrent_executions(max_concurrent_executions)
             .with_recovery_gate(&data_root)
             .expect("inspect recovery quarantine")
             .with_request_store(data_root.join("requests"))
