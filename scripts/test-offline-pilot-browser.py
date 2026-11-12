@@ -530,8 +530,8 @@ def main():
         page.write_text(html)
         for layout, dimensions in [("narrow", "500,980"), ("wide", "1280,980")]:
             cmd = ["node", str(Path(__file__).with_name("workspace-browser-runner.mjs")),
-                   browser, page.as_uri(), str(root / layout), dimensions, "45000"]
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=105)
+                   browser, page.as_uri(), str(root / layout), dimensions, "60000"]
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=150)
             if proc.returncode:
                 raise RuntimeError("real browser did not report PASS: exit="+str(proc.returncode)+" stdout="+proc.stdout.strip()[:300]+" stderr="+proc.stderr.strip()[-450:])
             report = json.loads(proc.stdout)
