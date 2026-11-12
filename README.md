@@ -18,8 +18,8 @@ A_out <= A_in
 
 The English-first multilingual mobile pilot is hosted at
 **https://nexus-offline-pilot.onrender.com/**. Render reported LIVE for
-manual deployment `dep-dbqsacu7bikc73b0d56g` of Pilot 17
-source commit `db0b251f06fc6c27e20185ff6c122823c0d9ca13`.
+manual deployment `dep-dbqt14ff3r2c73drgirg` of Pilot 18
+source commit `ffa41c01a9f0311e7005db7abaef56585591645b`.
 The independent static HTTPS identity workflow pins the actually deployed
 source; provider status alone is not byte-level proof. The app does not
 connect to the Rust gateway, send workspace content to Render, or issue
@@ -38,8 +38,8 @@ workspace JSON, password or personal information. Saving work still
 requires the separate encrypted local checkpoint or owner-held file.
 The standalone HTML continues to work when opened from a downloaded file.
 
-Render reported LIVE for static deployment `dep-dbqsacu7bikc73b0d56g`
-from exact source `db0b251f06fc6c27e20185ff6c122823c0d9ca13`.
+Render reported LIVE for static deployment `dep-dbqt14ff3r2c73drgirg`
+from exact source `ffa41c01a9f0311e7005db7abaef56585591645b`.
 Independent public asset-byte checks and live-origin real Chromium offline
 acceptance must PASS separately; provider LIVE alone does not prove them.
 [Installation and security contract](docs/PILOT-12-INSTALLABLE-OFFLINE.md).
@@ -96,10 +96,10 @@ an unregistered evidence draft. Generate TXT, Markdown, CSV, HTML, genuine
 DOCX/XLSX, XML or a ZIP containing the current originals; PDF uses browser print.
 Files are not server uploads or part of the encrypted workspace checkpoint.
 [File formats, preservation limits and independent validation](docs/PILOT-17-LOCAL-FILE-DESK.md).
-The static site reports LIVE on Pilot 17; independent public-byte and
-file-desk/browser acceptance must pass before stating public verification.
+The file desk was deployed and independently tested on public HTTPS in
+Pilot 17; the Pilot 18 promotion retains the same protections.
 
-## Local exploratory data analysis (Pilot 18 candidate)
+## Local exploratory data analysis (Pilot 18)
 
 The file tray now offers an explicit **Local data analysis** panel for
 CSV, TSV, flat JSON object arrays and bounded XLSX sheets. It calculates
@@ -114,9 +114,11 @@ executed. Analysis exists in this tab only, and the summary JSON is unencrypted
 and may include private category labels.
 
 [Supported inputs, statistics, limits and acceptance](docs/PILOT-18-LOCAL-DATA-ANALYSIS.md).
-This candidate requires passing real-browser verification, a separate manual
-static deployment and independent public acceptance before it is described as
-published.
+Published by a manual deploy of the existing static site at the exact Pilot 18
+source. Source reviews and standalone Chromium analytics tests passed before
+merge; the separate public-acceptance workflow verifies the actual published
+HTML, file analysis, language, voice adapters and offline reopening. These
+synthetic tests do not prove real-human operation or physical device support.
 
 ## Recoverability check for private encrypted files (Pilot 11)
 
