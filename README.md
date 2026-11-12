@@ -18,8 +18,8 @@ A_out <= A_in
 
 The standalone Persian/RTL mobile pilot is hosted at
 **https://nexus-offline-pilot.onrender.com/**. Render reported LIVE for
-manual deployment `dep-dbqqi42jnfac739fb95g` of Pilot 13
-source commit `343dd0fef059f9c470f65cadfcced693263c2c3d`.
+manual deployment `dep-dbqqq5jbc2fs73e5s9cg` of Pilot 14
+source commit `9c977ad58ef40c5b9d4fa3f8865ac84f17e291e4`.
 The independent static HTTPS identity workflow pins the actually deployed
 source; provider status alone is not byte-level proof. The app does not
 connect to the Rust gateway, send workspace content to Render, or issue
@@ -38,8 +38,8 @@ workspace JSON, password or personal information. Saving work still
 requires the separate encrypted local checkpoint or owner-held file.
 The standalone HTML continues to work when opened from a downloaded file.
 
-Render reported LIVE for static deployment `dep-dbqqi42jnfac739fb95g`
-from exact source `343dd0fef059f9c470f65cadfcced693263c2c3d`.
+Render reported LIVE for static deployment `dep-dbqqq5jbc2fs73e5s9cg`
+from exact source `9c977ad58ef40c5b9d4fa3f8865ac84f17e291e4`.
 Independent public asset-byte checks and live-origin real Chromium offline
 acceptance must PASS separately; provider LIVE alone does not prove them.
 [Installation and security contract](docs/PILOT-12-INSTALLABLE-OFFLINE.md).
@@ -55,14 +55,16 @@ Published on the existing static site; independent public browser acceptance
 checks both the workshop and report. Real Android print/PDF behavior still
 depends on the browser and device.
 
-## Uncommitted text protection (Pilot 14 candidate)
+## Uncommitted text protection (Pilot 14)
 
 A visible indicator distinguishes unregistered form text from committed work.
 New, Demo, import and encrypted local restore require confirmation before
 replacing drafts. Changes during local decryption abort replacement. Export
 warnings explain that drafts are excluded; no draft storage or automatic
 human judgment is introduced. [Behavior and browser limits](docs/PILOT-14-DRAFT-PROTECTION.md).
-Separate static deployment and public acceptance are still required.
+Published to the existing static site. Independent public Chromium acceptance
+checks draft protection, the report, the workshop and actual offline navigation.
+Browser exit prompts remain conditional; mobile OS termination is not guarded.
 
 ## Recoverability check for private encrypted files (Pilot 11)
 
