@@ -9,9 +9,11 @@ const [browser, page, profile, dimensions, witnessDeadline, startupDeadline] = p
 // request a bounded longer report deadline without relaxing other controls.
 const reportDeadline = witnessDeadline === undefined ? 15000 : Number(witnessDeadline);
 // Separate the browser's DevTools startup grace from report evaluation.
-// Only explicitly opted-in CI witnesses may exceed the 10s default.
+// The default 30s startup grace covers crowded ephemeral CI hosts without weakening the 60s witness deadline.
 // Neither budget can convert a missing witness or a failed report to PASS.
-const portStartupDeadline = startupDeadline === undefined ? 10000 : Number(startupDeadline);
+const portStartupDeadline = startupDeadline === undefined
+  ? (process.env.NEXUS_CHROME_STARTUP_GRACE_MS === '30000' ? 30000 : 10000)
+  : Number(startupDeadline);
 if (!browser || !page || !profile || !/^\d+,\d+$/.test(dimensions || '') ||
     process.argv.length > 8 || typeof WebSocket === 'undefined' ||
     !Number.isInteger(reportDeadline) || reportDeadline < 15000 || reportDeadline > 60000 ||

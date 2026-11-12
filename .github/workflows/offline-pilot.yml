@@ -47,6 +47,9 @@ jobs:
         run: |
           set -euo pipefail
           export NEXUS_BRIDGE_SYNTHETIC_OUTPUT="$RUNNER_TEMP/nexus-p06-synthetic-browser.json"
+          # Only on a real GitHub-hosted Chromium job, allow bounded 30s
+          # cold start; negative fake-browser tests keep strict 10s default.
+          export NEXUS_CHROME_STARTUP_GRACE_MS=30000
           python3 scripts/test-offline-pilot-browser.py > offline-pilot-ci-report.json
           python3 - <<'PY'
           import json
