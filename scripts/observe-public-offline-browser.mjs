@@ -21,9 +21,10 @@ const DRAFT_MODE=process.env.NEXUS_PUBLIC_DRAFT==='true';
 const LANGUAGE_MODE=process.env.NEXUS_PUBLIC_LANGUAGE==='true';
 const VOICE_MODE=process.env.NEXUS_PUBLIC_VOICE==='true';
 const FILE_MODE=process.env.NEXUS_PUBLIC_FILES==='true';
-if([REPORT_MODE,DRAFT_MODE,LANGUAGE_MODE,VOICE_MODE,FILE_MODE].filter(Boolean).length>1)throw Error('choose-one-public-witness-mode');
-const EXPECTED_CHECKS=FILE_MODE?33:VOICE_MODE?35:LANGUAGE_MODE?23:DRAFT_MODE?21:REPORT_MODE?17:46;
-const MIN_DOCUMENTS=(FILE_MODE||VOICE_MODE||LANGUAGE_MODE||DRAFT_MODE||REPORT_MODE)?1:2;
+const ANALYSIS_MODE=process.env.NEXUS_PUBLIC_ANALYSIS==='true';
+if([REPORT_MODE,DRAFT_MODE,LANGUAGE_MODE,VOICE_MODE,FILE_MODE,ANALYSIS_MODE].filter(Boolean).length>1)throw Error('choose-one-public-witness-mode');
+const EXPECTED_CHECKS=ANALYSIS_MODE?null:FILE_MODE?33:VOICE_MODE?35:LANGUAGE_MODE?23:DRAFT_MODE?21:REPORT_MODE?17:46;
+const MIN_DOCUMENTS=(ANALYSIS_MODE||FILE_MODE||VOICE_MODE||LANGUAGE_MODE||DRAFT_MODE||REPORT_MODE)?1:2;
 const REPO_ROOT=new URL('../',import.meta.url);
 const sha256=value=>createHash('sha256').update(value).digest('hex');
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -38,9 +39,9 @@ if(!GITHUB_ONLY || !BROWSER || typeof WebSocket==='undefined' ||
 const expected=await readFile(new URL('../web/offline-pilot.html',import.meta.url));
 assert(expected.length>1000 && expected.length<=300000,'expected-source-size');
 const expectedDigest=sha256(expected);
-const pythonTest=await readFile(new URL(FILE_MODE?'./test-file-desk-browser.py':VOICE_MODE?'./test-voice-browser.py':LANGUAGE_MODE?'./test-ui-languages-browser.py':DRAFT_MODE?'./test-draft-guard-browser.py':REPORT_MODE?'./test-decision-report-browser.py':'./test-offline-pilot-browser.py',import.meta.url),'utf8');
+const pythonTest=await readFile(new URL(ANALYSIS_MODE?'./test-local-data-analysis-browser.py':FILE_MODE?'./test-file-desk-browser.py':VOICE_MODE?'./test-voice-browser.py':LANGUAGE_MODE?'./test-ui-languages-browser.py':DRAFT_MODE?'./test-draft-guard-browser.py':REPORT_MODE?'./test-decision-report-browser.py':'./test-offline-pilot-browser.py',import.meta.url),'utf8');
 const match=pythonTest.match(/WITNESS = r"""([\s\S]*?)"""/);
-assert(match && match[1].length>1000 && match[1].includes(FILE_MODE?'file-desk-uses-no-app-network-or-persistent-plaintext-storage':VOICE_MODE?'no-automatic-microphone-or-speaker-start':LANGUAGE_MODE?'english-is-explicit-default':DRAFT_MODE?'uncommitted-question-has-visible-and-unload-guard':REPORT_MODE?'report-user-content-is-inert-text':'real-page-reload-requires-passphrase-and-recovers'),
+assert(match && match[1].length>1000 && match[1].includes(ANALYSIS_MODE?'english-first-analysis-panel-exists':FILE_MODE?'file-desk-uses-no-app-network-or-persistent-plaintext-storage':VOICE_MODE?'no-automatic-microphone-or-speaker-start':LANGUAGE_MODE?'english-is-explicit-default':DRAFT_MODE?'uncommitted-question-has-visible-and-unload-guard':REPORT_MODE?'report-user-content-is-inert-text':'real-page-reload-requires-passphrase-and-recovers'),
   'exact-real-browser-witness-unavailable');
 
 function verifyDocument(status,mime,bytes,redirected=false){
@@ -170,8 +171,9 @@ async function layoutWitness(layout){
         throw error;
       }
     },180000,'real-public-browser-did-not-complete');
-    assert(report.checks?.length===EXPECTED_CHECKS&&report.network_requests===0&&
-      report.production_verified===false&&report.authority==='none',
+    assert((ANALYSIS_MODE?report.checks?.length>=25:report.checks?.length===EXPECTED_CHECKS)&&report.network_requests===0&&
+      (ANALYSIS_MODE?report.production_mutation===false&&report.real_user_tested===false&&report.source_rows_exported===false:report.production_verified===false)&&
+      report.authority==='none',
       'live-browser-checks-or-authority-invalid');
     assert((layout==='narrow')===(report.width<=760),'live-browser-viewport-invalid');
     if(FILE_MODE){
@@ -207,6 +209,7 @@ async function layoutWitness(layout){
       'chrome-rendered-document-bytes-differ-from-source');
     return {layout,width:report.width,checks:report.checks.length,
       generated_formats_checked:FILE_MODE?8:0,
+      local_analysis_checked:ANALYSIS_MODE&&report.checks.length>=25,
       real_reload_verified:report.checks.includes('real-page-reload-requires-passphrase-and-recovers'),
       test_fixture_only:true,document_responses:documents.length,
       requested_paths_count:network.length,network_attempts_by_app:report.network_requests,
@@ -240,10 +243,11 @@ async function main(){
   const getSha=await independentPublicGet();
   const reports=[];
   for(const layout of ['narrow','wide'])reports.push(await layoutWitness(layout));
+  if(ANALYSIS_MODE)assert(reports.length===2&&reports[0].checks===reports[1].checks,'public-analysis-layout-check-count-mismatch');
   process.stdout.write(JSON.stringify({
-    schema:FILE_MODE?'nexus.public-pilot.file-desk-acceptance.v1':VOICE_MODE?'nexus.public-pilot.voice-adapter-acceptance.v1':LANGUAGE_MODE?'nexus.public-pilot.ui-language-acceptance.v1':DRAFT_MODE?'nexus.public-pilot.draft-guard-acceptance.v1':REPORT_MODE?'nexus.public-pilot.decision-report-acceptance.v1':'nexus.public-pilot.browser-acceptance.v1',status:'PASS',
+    schema:ANALYSIS_MODE?'nexus.public-pilot.data-analysis-acceptance.v1':FILE_MODE?'nexus.public-pilot.file-desk-acceptance.v1':VOICE_MODE?'nexus.public-pilot.voice-adapter-acceptance.v1':LANGUAGE_MODE?'nexus.public-pilot.ui-language-acceptance.v1':DRAFT_MODE?'nexus.public-pilot.draft-guard-acceptance.v1':REPORT_MODE?'nexus.public-pilot.decision-report-acceptance.v1':'nexus.public-pilot.browser-acceptance.v1',status:'PASS',
     source_sha256:expectedDigest,independent_get_sha256:getSha,
-    origin:ORIGIN,checks_per_layout:EXPECTED_CHECKS,negative_local_fixtures:6,
+    origin:ORIGIN,checks_per_layout:ANALYSIS_MODE?reports[0].checks:EXPECTED_CHECKS,negative_local_fixtures:6,
     report:reports,synthetic_only:true,real_human_tested:false,native_audio_tested:false,
     voice_engines:VOICE_MODE?'controlled-test-adapters':'not-tested',
     authenticated_rust_tested:false,production_restore_tested:false,
