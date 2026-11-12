@@ -47,9 +47,11 @@ contract and separately consented/secured data transfer. It is not claimed here.
 - An optional **Read latest reply** button uses only a browser/device voice
   advertising `localService === true` in the active language. It must never
   start automatically and must not silently choose a provider-hosted voice.
-  Availability and quality vary by device. No live microphone/chat
-  transcription is promised by this stage; existing Voice tools remain
-  separate.
+  Availability and quality vary by device. The existing explicit-consent
+  **Voice input** can now target the chat message box through the **Your
+  message** target. Local transcription produces a preview that the person
+  must separately insert into an unsent chat draft and then explicitly send.
+  Physical microphone and device compatibility are not verified by synthetic tests.
 - Static HTML and browser app preserve `connect-src 'none'`. This component
   makes no application network requests or persistent plaintext writes.
   The separately existing optional encrypted workspace resume continues to
@@ -69,7 +71,7 @@ contract and separately consented/secured data transfer. It is not claimed here.
   viewport classes: initial empty state, six linked conversation phases,
   focused stage switching, XSS-inert messages, separate user-controlled draft
   flows, consent to read committed context, password non-disclosure, no
-  workspace mutation, local-only voice using a *synthetic native adapter*,
+  workspace mutation, local-only voice and microphone dictation-to-chat using *synthetic native adapters*,
   confirmation before transcript export/deletion, English/Persian switching,
   new-workspace cancellation and clearing, 40-turn limit, and zero network
   or plaintext localStorage writes. Native real-device TTS remains untested.
