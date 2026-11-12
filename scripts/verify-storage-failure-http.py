@@ -37,9 +37,11 @@ def main():
         assert call('GET', '/v1/requests/' + request_id) == (
             200, {'request_id': request_id, 'status': expected})
 
-    # Readiness deliberately reports quarantine, not storage health.
+    # Liveness survives a ledger outage; readiness must not falsely advertise
+    # the removed/replaced ledger as available. This does not probe free space.
     assert call('GET', '/livez', auth=False) == (200, {'status': 'alive'})
-    assert call('GET', '/readyz', auth=False) == (200, {'status': 'ready'})
+    expected_ready = (503, {'status': 'storage_unavailable'}) if args.phase == 'unavailable' else (200, {'status': 'ready'})
+    assert call('GET', '/readyz', auth=False) == expected_ready
     failed = args.request_id + '-unavailable'
     repaired = args.request_id + '-repaired'
     if args.phase == 'unavailable':

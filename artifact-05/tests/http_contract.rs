@@ -21,10 +21,20 @@ struct RecordingDelegate {
     requests: Arc<Mutex<Vec<RequestEnvelope>>>,
     workspaces: Arc<Mutex<InMemoryWorkspaceRepository>>,
     fail_requests: bool,
+    execution_gate: Option<Arc<ExecutionGate>>,
+}
+
+#[derive(Default)]
+struct ExecutionGate {
+    entered: std::sync::atomic::AtomicBool,
+    finished: std::sync::atomic::AtomicBool,
+    released: Mutex<bool>,
+    wake: std::sync::Condvar,
 }
 
 impl ConstitutionalDelegate for RecordingDelegate {
     fn submit(&self, envelope: RequestEnvelope) -> Result<Submission, DelegateError> {
+        self.pause_if_configured();
         if self.fail_requests {
             return Err(DelegateError);
         }
@@ -41,6 +51,7 @@ impl WorkspaceDelegate for RecordingDelegate {
         question: String,
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+        self.pause_if_configured();
         let mut repository = self.workspaces.lock().unwrap();
         if repository.load(&workspace_id).is_some() {
             return Err(WorkspaceDelegateError::AlreadyExists);
@@ -106,6 +117,19 @@ impl WorkspaceDelegate for RecordingDelegate {
 }
 
 impl RecordingDelegate {
+    fn pause_if_configured(&self) {
+        if let Some(gate) = &self.execution_gate {
+            use std::sync::atomic::Ordering;
+            gate.entered.store(true, Ordering::SeqCst);
+            let lock = gate.released.lock().unwrap();
+            let _ = gate
+                .wake
+                .wait_timeout_while(lock, Duration::from_secs(2), |released| !*released)
+                .unwrap();
+            gate.finished.store(true, Ordering::SeqCst);
+        }
+    }
+
     fn mutate<F>(
         &self,
         workspace_id: &str,
@@ -1588,4 +1612,397 @@ async fn workspace_transport_rejects_before_polling_or_delegation() {
         .status(),
         StatusCode::UNAUTHORIZED
     );
+}
+
+fn workspace_post(path: &str, value: serde_json::Value) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("authorization", "Bearer secret")
+        .header("content-type", "application/json")
+        .body(Body::from(value.to_string()))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn execution_workspace_body_cap_covers_every_mutation_route() {
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret").with_safety(safety(128, 100, 100)),
+    );
+    for path in [
+        "/v1/workspaces",
+        "/v1/workspaces/import",
+        "/v1/workspaces/w/claims",
+        "/v1/workspaces/w/alternatives",
+        "/v1/workspaces/w/analysis",
+        "/v1/workspaces/w/judgment",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(workspace_post(
+                path,
+                serde_json::json!({"question": "x".repeat(300)}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE, "{path}");
+    }
+    assert!(delegate.workspaces.lock().unwrap().load("w").is_none());
+}
+
+#[tokio::test]
+async fn execution_workspace_and_submission_share_rate_budget() {
+    for workspace_first in [true, false] {
+        let delegate = RecordingDelegate::default();
+        let app = router(
+            AppState::authenticated(delegate.clone(), "secret").with_safety(safety(4096, 1, 100)),
+        );
+        let workspace = workspace_post(
+            "/v1/workspaces",
+            serde_json::json!({
+                "workspace_id":"w", "question":"Question", "provenance_id":"human:p"
+            }),
+        );
+        let submission = submit_request("rate-shared", Some("secret"), "opaque");
+        let (first, second) = if workspace_first {
+            (workspace, submission)
+        } else {
+            (submission, workspace)
+        };
+        assert!(app
+            .clone()
+            .oneshot(first)
+            .await
+            .unwrap()
+            .status()
+            .is_success());
+        assert_eq!(
+            app.oneshot(second).await.unwrap().status(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+        assert_eq!(
+            delegate.requests.lock().unwrap().len(),
+            usize::from(!workspace_first)
+        );
+        assert_eq!(
+            delegate.workspaces.lock().unwrap().load("w").is_some(),
+            workspace_first
+        );
+    }
+}
+
+#[tokio::test]
+async fn execution_request_ids_are_validated_without_durable_storage_too() {
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::authenticated(delegate.clone(), "secret"));
+    for id in [String::new(), " ".into(), "x".repeat(101)] {
+        assert_eq!(
+            app.clone()
+                .oneshot(submit_request(&id, Some("secret"), "opaque"))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+    assert!(delegate.requests.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn execution_readiness_detects_replaced_ledger_without_delegation() {
+    let root = std::env::temp_dir().join(format!("nexus-readiness-{}", uuid::Uuid::new_v4()));
+    let original = root.with_extension("original");
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret")
+            .with_request_store(&root)
+            .unwrap(),
+    );
+    std::fs::rename(&root, &original).unwrap();
+    std::fs::create_dir(&root).unwrap();
+    for (path, expected) in [
+        ("/readyz", StatusCode::SERVICE_UNAVAILABLE),
+        ("/livez", StatusCode::OK),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected);
+    }
+    assert_eq!(
+        app.oneshot(submit_request("outage", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert!(delegate.requests.lock().unwrap().is_empty());
+    std::fs::remove_dir_all(root).unwrap();
+    std::fs::remove_dir_all(original).unwrap();
+}
+
+#[tokio::test]
+async fn execution_workspace_unknown_fields_cannot_be_silently_ignored() {
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::authenticated(delegate.clone(), "secret"));
+    let response = app
+        .oneshot(workspace_post(
+            "/v1/workspaces",
+            serde_json::json!({
+                "workspace_id":"w", "question":"Question", "provenance_id":"human:p",
+                "overwrite":true
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(delegate.workspaces.lock().unwrap().load("w").is_none());
+}
+
+#[tokio::test]
+async fn execution_slow_bodies_time_out_before_delegation_on_both_apis() {
+    use http_body_util::BodyExt;
+    for path in ["/v1/requests", "/v1/workspaces"] {
+        let delegate = RecordingDelegate::default();
+        let state = AppState::authenticated(delegate.clone(), "secret")
+            .with_body_read_timeout(Duration::from_millis(10));
+        let statuses = state.statuses.clone();
+        let app = router(state);
+        let stalled = http_body_util::Empty::<axum::body::Bytes>::new()
+            .with_trailers(std::future::pending::<
+                Option<Result<axum::http::HeaderMap, std::convert::Infallible>>,
+            >());
+        let request = Request::builder()
+            .method("POST")
+            .uri(path)
+            .header("authorization", "Bearer secret")
+            .header("content-type", "application/json")
+            .body(Body::new(stalled))
+            .unwrap();
+        let response = tokio::time::timeout(Duration::from_secs(2), app.oneshot(request))
+            .await
+            .expect("ingestion deadline must finish")
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT, "{path}");
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        assert!(delegate.requests.lock().unwrap().is_empty());
+        assert!(statuses.read().unwrap().is_empty());
+    }
+}
+
+#[tokio::test]
+async fn execution_exhausted_budget_does_not_poll_a_new_body() {
+    use http_body_util::BodyExt;
+    for path in ["/v1/requests", "/v1/workspaces"] {
+        let delegate = RecordingDelegate::default();
+        let app =
+            router(AppState::authenticated(delegate, "secret").with_safety(safety(4096, 1, 100)));
+        assert_eq!(
+            app.clone()
+                .oneshot(submit_request("first", Some("secret"), "opaque"))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::ACCEPTED
+        );
+        let body = http_body_util::Full::new(axum::body::Bytes::from_static(b"private input"))
+            .map_frame(|_| panic!("rate-rejected body must not be polled"));
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(path)
+                    .header("authorization", "Bearer secret")
+                    .header("content-type", "application/json")
+                    .body(Body::new(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+}
+
+#[tokio::test]
+async fn execution_workspace_id_bounds_apply_before_any_delegate_mutation() {
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::authenticated(delegate.clone(), "secret"));
+    for id in [String::new(), " ".into(), "x".repeat(101)] {
+        let response = app
+            .clone()
+            .oneshot(workspace_post(
+                "/v1/workspaces",
+                serde_json::json!({
+                    "workspace_id":id, "question":"Question", "provenance_id":"human:p"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(delegate.workspaces.lock().unwrap().load(&id).is_none());
+    }
+}
+
+#[tokio::test]
+async fn execution_workspace_extractor_honors_explicit_body_limit_above_axum_default() {
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret").with_safety(safety(
+            3 * 1024 * 1024,
+            10,
+            100,
+        )),
+    );
+    let question = "x".repeat(2 * 1024 * 1024 + 1);
+    let response = app
+        .oneshot(workspace_post(
+            "/v1/workspaces",
+            serde_json::json!({
+                "workspace_id":"large-configured", "question":question, "provenance_id":"human:p"
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(
+        delegate
+            .workspaces
+            .lock()
+            .unwrap()
+            .load("large-configured")
+            .unwrap()
+            .workspace
+            .question
+            .len(),
+        question.len()
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn execution_blocked_delegates_do_not_stall_the_network_runtime() {
+    use std::sync::atomic::Ordering;
+    for workspace in [false, true] {
+        let gate = Arc::new(ExecutionGate::default());
+        let delegate = RecordingDelegate {
+            execution_gate: Some(gate.clone()),
+            ..Default::default()
+        };
+        let app = router(AppState::authenticated(delegate, "secret"));
+        let request = if workspace {
+            workspace_post(
+                "/v1/workspaces",
+                serde_json::json!({
+                    "workspace_id":"blocked", "question":"Question", "provenance_id":"human:p"
+                }),
+            )
+        } else {
+            submit_request("blocked", Some("secret"), "opaque")
+        };
+        let task = tokio::spawn(app.clone().oneshot(request));
+        tokio::time::timeout(Duration::from_secs(3), async {
+            while !gate.entered.load(Ordering::SeqCst) {
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/livez")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let remained_blocked = !gate.finished.load(Ordering::SeqCst);
+        *gate.released.lock().unwrap() = true;
+        gate.wake.notify_all();
+        assert!(task.await.unwrap().unwrap().status().is_success());
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            remained_blocked,
+            "liveness must finish while the delegate is still blocked"
+        );
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn execution_client_disconnect_does_not_cancel_started_reservation_or_replay_it() {
+    use std::sync::atomic::Ordering;
+    let gate = Arc::new(ExecutionGate::default());
+    let delegate = RecordingDelegate {
+        execution_gate: Some(gate.clone()),
+        ..Default::default()
+    };
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret").with_max_concurrent_executions(1),
+    );
+    let task = tokio::spawn(app.clone().oneshot(submit_request(
+        "disconnected",
+        Some("secret"),
+        "opaque",
+    )));
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while !gate.entered.load(Ordering::SeqCst) {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+    })
+    .await
+    .unwrap();
+    task.abort();
+    for request in [
+        submit_request("busy", Some("secret"), "opaque"),
+        workspace_post(
+            "/v1/workspaces",
+            serde_json::json!({
+                "workspace_id":"busy", "question":"Question", "provenance_id":"human:p"
+            }),
+        ),
+    ] {
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let bytes = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()["error"],
+            "execution_capacity_exhausted"
+        );
+    }
+    assert!(delegate.workspaces.lock().unwrap().load("busy").is_none());
+    *gate.released.lock().unwrap() = true;
+    gate.wake.notify_all();
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri("/v1/requests/disconnected")
+                        .header("authorization", "Bearer secret")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            if response.status() == StatusCode::OK {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        app.oneshot(submit_request("disconnected", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
 }

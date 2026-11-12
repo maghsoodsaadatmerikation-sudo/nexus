@@ -16,8 +16,9 @@ failed ID returns 404 and may be admitted afresh. This is not an execution
 retry guarantee. Empty or torn markers have a separate conservative recovery
 contract. GET from process memory is not proof of current disk availability.
 
-`/readyz` remains 200 during this drill: it reports the latched recovery
-quarantine only. It is not a disk health or admission-success promise. The drill
+`/readyz` returns 503 `storage_unavailable` while the original ledger directory
+is missing or replaced, and returns 200 when that same directory is reattached.
+`/livez` remains 200. Readiness is not a disk-capacity or admission-success promise. The drill
 does not simulate ENOSPC, hardware faults, or fsync failures after delegation,
 and does not establish exactly-once execution or production availability.
 
