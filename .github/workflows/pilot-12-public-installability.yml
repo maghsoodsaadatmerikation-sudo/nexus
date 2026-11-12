@@ -10,6 +10,7 @@ on:
       - 'scripts/test-pwa-offline-browser.mjs'
       - 'public/**'
       - 'web/offline-pilot.html'
+      - 'scripts/prepare-public-pilot-witness.sh'
       - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
   push:
     branches: [main]
@@ -21,6 +22,7 @@ on:
       - 'scripts/test-pwa-offline-browser.mjs'
       - 'public/**'
       - 'web/offline-pilot.html'
+      - 'scripts/prepare-public-pilot-witness.sh'
       - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
   workflow_dispatch:
   schedule:
@@ -45,20 +47,17 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Require current code equals intentionally deployed source
+      - name: Prepare pinned published assets; never substitute an unpublished candidate
         shell: bash
         run: |
           set -euo pipefail
-          git show 87afc579be8207ab641e645f8aab207384ddd46c:web/offline-pilot.html \
-            > "$RUNNER_TEMP/nexus-deployed-pwa.html"
-          cmp web/offline-pilot.html "$RUNNER_TEMP/nexus-deployed-pwa.html" || {
-            echo "BLOCKED: code changed after last independently authorized static deployment"
-            exit 1
-          }
+          bash scripts/prepare-public-pilot-witness.sh
+          cd "$RUNNER_TEMP/nexus-live-pilot"
           python3 -m py_compile scripts/verify-public-pwa-assets.py
           python3 scripts/test-public-pwa-assets.py
           python3 scripts/verify-public-pwa-assets.py --self-test
       - name: Independently verify five exact public HTTPS installation resources
+        working-directory: ${{ runner.temp }}/nexus-live-pilot
         shell: bash
         run: |
           set -euo pipefail
@@ -81,6 +80,7 @@ jobs:
           print('PASS: exact app HTML/manifest/worker bytes and identical decoded PNG icon pixels')
           PY
       - name: Test real PUBLIC HTTPS PWA install and network outage in Chromium
+        working-directory: ${{ runner.temp }}/nexus-live-pilot
         shell: bash
         run: |
           set -euo pipefail
@@ -108,7 +108,7 @@ jobs:
         with:
           name: nexus-pilot-12-live-installability
           path: |
-            pilot-12-public-assets.json
-            pilot-12-public-offline.json
+            ${{ runner.temp }}/nexus-live-pilot/pilot-12-public-assets.json
+            ${{ runner.temp }}/nexus-live-pilot/pilot-12-public-offline.json
           if-no-files-found: ignore
           retention-days: 14

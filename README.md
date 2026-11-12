@@ -44,6 +44,15 @@ Independent public asset-byte checks and live-origin real Chromium offline
 acceptance must PASS separately; provider LIVE alone does not prove them.
 [Installation and security contract](docs/PILOT-12-INSTALLABLE-OFFLINE.md).
 
+## Readable local decision report (Pilot 13 candidate)
+
+The source candidate adds a Persian read-only report of recorded questions,
+evidence, alternatives and human judgment, with explicit plaintext text-download
+and print/PDF actions. Unsubmitted drafts and passwords are excluded; committed
+changes invalidate an older preview. No option ranking, remote transmission or
+new storage. [Report behavior and verification](docs/PILOT-13-READABLE-DECISION-REPORT.md).
+Publication requires separate static deployment and public acceptance.
+
 ## Recoverability check for private encrypted files (Pilot 11)
 
 Pilot 11 adds **file-picker verification of an actual downloaded encrypted JSON file**, with the original passphrase, against the *committed* workspace. This does not replace the workspace, upload it or claim that the file is safe outside the device. The independent HTTPS observer checks the published source. [Pilot 11 details](docs/PILOT-11-VERIFIED-ENCRYPTED-EXPORT.md).
