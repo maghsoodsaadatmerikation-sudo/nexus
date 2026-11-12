@@ -166,8 +166,8 @@ window.addEventListener('load',async()=>{
   await new Promise(resolve=>setTimeout(resolve,70));
   assert(dictationStarts===1&&recognition.processLocally===true,
     'user-started-chat-microphone-runs-local-only');
-  const transcript=[{transcript:'A dictated chat message'}];transcript.isFinal=true;
-  recognition.onresult?.({resultIndex:0,results:[transcript]});
+  const spokenResult=[{transcript:'A dictated chat message'}];spokenResult.isFinal=true;
+  recognition.onresult?.({resultIndex:0,results:[spokenResult]});
   assert($('voice-transcript').value==='A dictated chat message'&&
     !$('voice-insert').disabled,'microphone-output-stays-in-unregistered-preview');
   diagnosticStage='insert-local-dictation';
@@ -209,6 +209,10 @@ def main():
     page=html.replace('</body>','<pre id="nexus-browser-result" hidden></pre><script>'+WITNESS+'</script></body>')
     reports=[]
     with tempfile.TemporaryDirectory(prefix='nexus-guided-chat-') as td:
+        witness=Path(td)/'witness.js'
+        witness.write_text(WITNESS,encoding='utf8')
+        syntax=subprocess.run(['node','--check',str(witness)],capture_output=True,text=True,timeout=15)
+        if syntax.returncode:raise RuntimeError('synthetic-chat-witness-syntax-invalid')
         source=Path(td)/'index.html';source.write_text(page,encoding='utf8')
         for name,size in [('narrow','500,980'),('wide','1280,980')]:
             result=subprocess.run(['node',str(root/'scripts/workspace-browser-runner.mjs'),
