@@ -85,10 +85,20 @@ async function layoutWitness(layout){
         const n=text.split('\n')[0];return /^\d+$/.test(n)?n:null}catch{return null}
     },25000,'chrome-no-private-debugger');
     const target=await poll(async()=>{
-      const resp=await fetch('http://127.0.0.1:'+port+'/json/list',{signal:AbortSignal.timeout(2000)});
-      if(!resp.ok)return null;
-      const list=await resp.json();
-      return list.find(x=>x.type==='page'&&x.url==='about:blank');
+      try{
+        const resp=await fetch('http://127.0.0.1:'+port+'/json/list',
+          {signal:AbortSignal.timeout(2000)});
+        if(!resp.ok)return null;
+        const list=await resp.json();
+        return list.find(x=>x.type==='page'&&x.url==='about:blank');
+      }catch(error){
+        // Chromium can publish DevToolsActivePort before the *local*
+        // debugger HTTP server is ready. Retry only transient connection
+        // and timeout errors inside the existing bounded 15-second poll;
+        // never retry a failed witness, public HTTPS check or data assertion.
+        if(error?.name==='TimeoutError'||error instanceof TypeError)return null;
+        throw error;
+      }
     },15000,'chrome-no-private-target');
     const endpoint=new URL(target.webSocketDebuggerUrl);
     assert(endpoint.hostname==='127.0.0.1'&&endpoint.port===port,'external-debugger-refused');
@@ -146,7 +156,7 @@ async function layoutWitness(layout){
         throw error;
       }
     },180000,'real-public-browser-did-not-complete');
-    assert(report.checks?.length===40&&report.network_requests===0&&
+    assert(report.checks?.length===46&&report.network_requests===0&&
       report.production_verified===false&&report.authority==='none',
       'live-browser-checks-or-authority-invalid');
     assert((layout==='narrow')===(report.width<=760),'live-browser-viewport-invalid');
@@ -199,7 +209,7 @@ async function main(){
   process.stdout.write(JSON.stringify({
     schema:'nexus.public-pilot.browser-acceptance.v1',status:'PASS',
     source_sha256:expectedDigest,independent_get_sha256:getSha,
-    origin:ORIGIN,checks_per_layout:40,negative_local_fixtures:6,
+    origin:ORIGIN,checks_per_layout:46,negative_local_fixtures:6,
     report:reports,synthetic_only:true,real_human_tested:false,
     authenticated_rust_tested:false,production_restore_tested:false,
     authority:'none',production_mutation:false

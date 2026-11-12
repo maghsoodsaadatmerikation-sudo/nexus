@@ -9,9 +9,20 @@
 - Publish path: `public`. Render's `autoDeploy` setting is **off** so unreviewed pushes to main do not silently replace the deployed pilot.
 - The site is a public **entrypoint for an offline, in-browser app**, not a connected server product, with no user account or server data persistence.
 
-A manual static-site deploy on 2026-11-12 (Render ID
-`dep-dbqo0pei0phs73d8rrb0`) reported **LIVE**, on exact Git source
-`8e3fd8789d82db4559a9cb77cd2f82578271df4b` (Pilot 09).
+A subsequent manual static-site deploy on 2026-11-12 (Render ID
+`dep-dbqooirrjlhs73a1cvdg`) reported **LIVE**, on exact Git source
+`ed13887699b49a8494a3178e426ad9192e14d57e` (Pilot 11, user-selected encrypted-download recovery check).
+The first attempted Pilot 11 deployment (`dep-dbqolejbc2fs73e0mha0`)
+reported provider LIVE but **failed independent exact-HTTPS-byte identity**:
+HTTP 200, wrong content SHA-256. The exact same source was deployed
+again to the existing static service with the build cache cleared as
+`dep-dbqooirrjlhs73a1cvdg`; only after this independent HTTPS identity
+PASS can we claim Pilot 11's public code was actually promoted.
+Neither provider-reported LIVE result is proof of a Rust workspace backup.
+
+The prior Pilot 09 deployment `dep-dbqo0pei0phs73d8rrb0` was
+sourced from `8e3fd8789d82db4559a9cb77cd2f82578271df4b`.
+
 The earlier independently verified Pilot 06 deployment
 `dep-dbplrjon74is738rrrng` was sourced from
 `24644558cfe96f8f1a725986efbe94e1710032f2`.

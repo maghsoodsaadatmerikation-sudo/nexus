@@ -103,6 +103,13 @@ def main():
     assert report is not None
     print(json.dumps(report, indent=2, sort_keys=True))
     if report["status"] != "PASS_STATIC_HTTPS_IDENTITY":
+        # Public status and hashes only, never HTML, user content or secrets.
+        keys = ("status", "http_status", "observed_sha256",
+                "expected_sha256", "observed_bytes",
+                "matched_exact_html", "content_type", "error_type")
+        print("NEXUS_PUBLIC_STATIC_DIAGNOSTIC=" +
+              json.dumps({key: report.get(key) for key in keys},
+                         sort_keys=True), file=sys.stderr)
         sys.exit(1)
 
 
