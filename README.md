@@ -29,6 +29,10 @@ See [Pilot 02 hosting and independent HTTPS evidence](docs/STATIC-PILOT-HOST.md)
 for what has and has not been verified. The full authenticated online pilot
 remains a separate open milestone.
 
+## Recoverability check for private encrypted files (Pilot 11)
+
+The current source candidate adds **file-picker verification of an actual downloaded encrypted JSON file**, with the original passphrase, against the *committed* workspace. This does not replace the workspace, upload it or claim that the file is safe outside the device. It is not publicly live until independently observed after promotion. [Pilot 11 details](docs/PILOT-11-VERIFIED-ENCRYPTED-EXPORT.md).
+
 ## Try NEXUS now — free offline decision pilot
 
 The deployed Pilot 09 adds a one-click, visibly fictional first-run exercise
