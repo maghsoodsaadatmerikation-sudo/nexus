@@ -77,6 +77,16 @@ no claim that every language has a bundled reviewed translation.
 Published on the existing static site. Independent public Chromium checks
 English default, Persian switching, custom packs and unchanged private work.
 
+## Microphone and read-aloud (Pilot 16 candidate)
+
+An opt-in Voice panel reads a chosen field/report and turns speech into a
+reviewable preview, then an unregistered draft. Passwords are excluded and
+human judgment still requires explicit registration. Local processing is the
+default; browser online speech needs a separate opt-in and per-action consent.
+Support depends on installed device/browser speech capabilities.
+[Voice behavior and verification limits](docs/PILOT-16-VOICE-INPUT-OUTPUT.md).
+Separate static deployment and independent public checks are required.
+
 ## Recoverability check for private encrypted files (Pilot 11)
 
 Pilot 11 adds **file-picker verification of an actual downloaded encrypted JSON file**, with the original passphrase, against the *committed* workspace. This does not replace the workspace, upload it or claim that the file is safe outside the device. The independent HTTPS observer checks the published source. [Pilot 11 details](docs/PILOT-11-VERIFIED-ENCRYPTED-EXPORT.md).
@@ -94,7 +104,7 @@ service. **Download the HTML file and open the downloaded file in your browser**
 GitHub's source preview is not the running app. See the
 [offline-use and privacy guide](docs/OFFLINE-PILOT.md).
 
-This is a local, explicitly exported/imported demo with **no network requests**.
+This is a local, explicitly exported/imported demo whose **core editing makes no application network requests**. Optional browser speech services may use provider networks only after explicit choice and confirmation.
 The current source adds **optional, explicit-consent encrypted browser-local
 checkpoints**, off by default; they are not remote backups or proof of original
 Railway data recoverability. This is not the sealed Rust gateway,

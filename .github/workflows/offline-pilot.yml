@@ -9,6 +9,7 @@ on:
       - 'scripts/test-decision-report-browser.py'
       - 'scripts/test-draft-guard-browser.py'
       - 'scripts/test-ui-languages-browser.py'
+      - 'scripts/test-voice-browser.py'
       - 'scripts/build-ui-languages.py'
       - 'web/locales/**'
       - 'scripts/test-offline-to-rust-http.py'
@@ -27,6 +28,7 @@ on:
       - 'scripts/test-decision-report-browser.py'
       - 'scripts/test-draft-guard-browser.py'
       - 'scripts/test-ui-languages-browser.py'
+      - 'scripts/test-voice-browser.py'
       - 'scripts/build-ui-languages.py'
       - 'web/locales/**'
       - 'scripts/test-offline-to-rust-http.py'
@@ -80,6 +82,8 @@ jobs:
         run: |
           python3 scripts/build-ui-languages.py --check
           python3 scripts/test-ui-languages-browser.py > ui-languages-browser.json
+      - name: Verify opt-in voice lifecycle with controlled native adapters
+        run: python3 scripts/test-voice-browser.py > voice-browser.json
       - name: Verify exported synthetic bridge against live disposable Rust API
         shell: bash
         env:
@@ -136,5 +140,6 @@ jobs:
             decision-report-browser.json
             draft-guard-browser.json
             ui-languages-browser.json
+            voice-browser.json
           if-no-files-found: ignore
           retention-days: 30
