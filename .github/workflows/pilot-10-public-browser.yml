@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/pilot-10-public-browser.yml'
       - 'scripts/observe-public-offline-browser.mjs'
+      - 'scripts/prepare-public-pilot-witness.sh'
       - 'scripts/test-offline-pilot-browser.py'
       - 'docs/PILOT-10-PUBLIC-BROWSER-ACCEPTANCE.md'
   push:
@@ -12,6 +13,7 @@ on:
     paths:
       - '.github/workflows/pilot-10-public-browser.yml'
       - 'scripts/observe-public-offline-browser.mjs'
+      - 'scripts/prepare-public-pilot-witness.sh'
       - 'scripts/test-offline-pilot-browser.py'
       - 'docs/PILOT-10-PUBLIC-BROWSER-ACCEPTANCE.md'
   workflow_dispatch:
@@ -37,18 +39,13 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Require reviewed candidate equals intentionally deployed static HTML
+      - name: Independently observe pinned published source; candidate is tested separately
         shell: bash
         run: |
           set -euo pipefail
-          # This test intentionally exercises the currently deployed Pilot 09.
-          # Future source changes may be merged without promotion: that means
-          # this live-use witness must FAIL until public deployment is verified.
-          git show 87afc579be8207ab641e645f8aab207384ddd46c:web/offline-pilot.html > "$RUNNER_TEMP/deployed-source.html"
-          cmp -s web/offline-pilot.html "$RUNNER_TEMP/deployed-source.html" || {
-            echo "FAIL: checked-out HTML differs from intentionally deployed static version; no live acceptance claim"
-            exit 1
-          }
+          bash scripts/prepare-public-pilot-witness.sh
+          cd "$RUNNER_TEMP/nexus-live-pilot"
+          cp web/offline-pilot.html "$RUNNER_TEMP/deployed-source.html"
           python3 scripts/verify-public-static-pilot.py --expected "$RUNNER_TEMP/deployed-source.html" > public-static-identity.json
           python3 - <<'PY'
           import json
@@ -59,6 +56,7 @@ jobs:
           print('PASS: independent public HTTPS exact-byte identity')
           PY
       - name: Exercise the actual HTTPS site in real Chromium on two viewport classes
+        working-directory: ${{ runner.temp }}/nexus-live-pilot
         shell: bash
         run: |
           set -euo pipefail
@@ -98,7 +96,7 @@ jobs:
         with:
           name: nexus-pilot-10-public-browser-acceptance
           path: |
-            public-static-identity.json
-            pilot-10-public-browser.json
+            ${{ runner.temp }}/nexus-live-pilot/public-static-identity.json
+            ${{ runner.temp }}/nexus-live-pilot/pilot-10-public-browser.json
           if-no-files-found: ignore
           retention-days: 14

@@ -6,6 +6,7 @@ on:
       - '.github/workflows/offline-pilot.yml'
       - 'web/offline-pilot.html'
       - 'scripts/test-offline-pilot-browser.py'
+      - 'scripts/test-decision-report-browser.py'
       - 'scripts/test-offline-to-rust-http.py'
       - 'docs/PILOT-06-OFFLINE-RUST-BRIDGE.md'
       - 'scripts/workspace-browser-runner.mjs'
@@ -19,6 +20,7 @@ on:
       - '.github/workflows/offline-pilot.yml'
       - 'web/offline-pilot.html'
       - 'scripts/test-offline-pilot-browser.py'
+      - 'scripts/test-decision-report-browser.py'
       - 'scripts/test-offline-to-rust-http.py'
       - 'docs/PILOT-06-OFFLINE-RUST-BRIDGE.md'
       - 'scripts/workspace-browser-runner.mjs'
@@ -62,6 +64,8 @@ jobs:
                      len(x['checks'])==46 for x in report['reports'])
           print('NEXUS PILOT 11: SELECTED ENCRYPTED BACKUP RECOVERY + PILOT 09 + RUST BRIDGE PASS')
           PY
+      - name: Verify readable decision report without workspace mutation
+        run: python3 scripts/test-decision-report-browser.py > decision-report-browser.json
       - name: Verify exported synthetic bridge against live disposable Rust API
         shell: bash
         env:

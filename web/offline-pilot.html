@@ -34,6 +34,15 @@ textarea{min-height:85px;resize:vertical}
 .audit{max-height:225px;overflow:auto}.audit .entry{font-size:13px}
 footer{max-width:1060px;margin:auto;padding:0 18px 34px;color:#577078;font-size:12px;line-height:1.9}
 code{direction:ltr;unicode-bidi:embed}
+#decision-report{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.9;margin:16px 0}
+@media print{
+  body>header,body>footer,main>*,.report-actions{display:none!important}
+  main,main>.grid,.grid>#decision-report-panel{display:block!important;padding:0;max-width:none}
+  .grid>section:not(#decision-report-panel){display:none!important}
+  #decision-report-panel{border:0;box-shadow:none;color:#000}
+  #decision-report-panel[hidden]{display:none!important}
+  #decision-report{font-size:11pt}
+}
 @media(max-width:760px){.grid{grid-template-columns:1fr}section.full{grid-column:auto}section.panel{padding:15px}header{padding:23px 18px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
 </style>
@@ -167,6 +176,18 @@ code{direction:ltr;unicode-bidi:embed}
       </form>
       <div id="decision-view" class="empty">هیچ تصمیم انسانی ثبت نشده است.</div>
     </section>
+    <section class="panel full" id="decision-report-panel" aria-labelledby="report-title">
+      <h2 id="report-title">گزارش خوانای کارگاه</h2>
+      <p class="help">گزارش فقط اطلاعات ثبت‌شده را نشان می‌دهد؛ نوشته‌های ثبت‌نشدهٔ فرم‌ها و گذرواژه‌ها در آن نیستند. این گزارش تأیید صحت شواهد یا توصیهٔ ماشینی نیست و جای فایل رمزدار بازیابی را نمی‌گیرد.</p>
+      <div class="toolbar report-actions">
+        <button type="button" id="report-build" class="secondary">نمایش گزارش ثبت‌شده</button>
+        <button type="button" id="report-download" class="secondary" disabled>دریافت گزارش متنی (بدون رمز)</button>
+        <button type="button" id="report-print" class="secondary" disabled>چاپ یا ذخیرهٔ PDF</button>
+        <button type="button" id="report-hide" class="secondary" disabled>بستن گزارش</button>
+      </div>
+      <p id="report-state" class="status report-actions" role="status" aria-live="polite">برای گزارش، ابتدا مسئله را ثبت کنید.</p>
+      <pre id="decision-report" hidden></pre>
+    </section>
     <section class="panel full" aria-labelledby="migration-title">
       <h2 id="migration-title">۵. انتقال اختیاری به هستهٔ Rust</h2>
       <p class="help">دکمهٔ انتقال فقط فایل JSON جدید می‌سازد و هیچ چیزی به سرور ارسال نمی‌کند. فایل جدید <strong>بدون رمز</strong> است. NEXUS تاریخچهٔ محلی را قابل‌تأیید نمی‌داند و برای سازگاری، رویدادهای جدید با برچسب «بازسازی‌شده از دادهٔ کاربر» می‌سازد؛ زمان رویدادها و ویرایش‌های قبلیِ پرسش منتقل نمی‌شوند. گزینه‌ها رتبه‌بندی نمی‌شوند و تصمیم فقط اگر قبلاً به‌صورت صریح ثبت شده باشد منتقل خواهد شد. فایل رمزدار اصلی را همچنان جداگانه نگه دارید.</p>
@@ -198,6 +219,71 @@ code{direction:ltr;unicode-bidi:embed}
   },events:[]});
   let state=fresh();
   let encryptBusy=false,proofBusy=false,proofVerifiedSnapshot=null;
+  let reportSnapshot=null;
+  function clearReport(message){
+    reportSnapshot=null;
+    $('decision-report').textContent='';$('decision-report').hidden=true;
+    for(const id of ['report-download','report-print','report-hide'])$(id).disabled=true;
+    $('report-state').textContent=message;
+  }
+  function reportText(raw){
+    const w=validate(raw).workspace;
+    const origin={human:'گفتهٔ انسان',external_evidence:'شاهد بیرونی',machine_analysis:'تحلیل ماشینی واردشده توسط کاربر'};
+    const uncertainty={unknown:'نامشخص',high:'زیاد',medium:'متوسط',low:'کم'};
+    const rows=['NEXUS — گزارش اطلاعات ثبت‌شدهٔ کارگاه',
+      'این گزارش بدون رمز است؛ فقط آن را با انتخاب خودتان نگه دارید یا به اشتراک بگذارید.',
+      'گزارش توصیه یا تأیید ماشینی نیست؛ صحت منابع مستقلاً بررسی نشده است.',
+      'شناسهٔ کارگاه: '+w.id,'','پرسش',w.question,'','هدف',w.goal||'ثبت نشده',
+      '','محدودیت‌ها',...w.constraints.map(x=>'• '+x),w.constraints.length?'':'ثبت نشده',
+      'ارزش‌ها',...w.values.map(x=>'• '+x),w.values.length?'':'ثبت نشده','','ادعاها و شواهد'];
+    if(!w.claims.length)rows.push('شاهدی ثبت نشده است.');
+    w.claims.forEach((c,i)=>rows.push((i+1)+'. '+c.text,'منشأ: '+origin[c.origin],
+      'عدم‌قطعیت: '+uncertainty[c.uncertainty],'منبع (تأییدنشده): '+(c.source||'ثبت نشده'),''));
+    rows.push('گزینه‌ها و پیامدها — به ترتیب ثبت، بدون رتبه‌بندی');
+    if(!w.alternatives.length)rows.push('گزینه‌ای ثبت نشده است.');
+    w.alternatives.forEach((a,i)=>rows.push((i+1)+'. '+a.label,
+      ...(a.consequences.length?a.consequences.map(x=>'• '+x):['پیامدی ثبت نشده است.']),''));
+    rows.push('تصمیم انسانی ثبت‌شده');
+    if(w.judgment)rows.push(w.judgment.decision,'دلیل: '+(w.judgment.rationale||'ثبت نشده'));
+    else rows.push('هیچ تصمیم انسانی ثبت نشده است.');
+    rows.push('','موارد ثبت‌نشده — بررسی ساختاری، بدون ارزیابی کیفیت');
+    const gaps=[];
+    if(!w.goal)gaps.push('هدف');
+    if(!w.claims.length)gaps.push('شواهد');
+    if(!w.alternatives.length)gaps.push('گزینه‌ها');
+    if(w.alternatives.some(a=>!a.consequences.length))gaps.push('پیامد برخی گزینه‌ها');
+    if(!w.judgment)gaps.push('تصمیم انسانی');
+    if(w.judgment&&!w.judgment.rationale.trim())gaps.push('دلیل تصمیم');
+    rows.push(gaps.length?gaps.join('، '):'در فیلدهای بررسی‌شده مورد خالی یافت نشد؛ کفایت اطلاعات تأیید نشده است.',
+      '','این گزارش فقط از اطلاعات ثبت‌شده ساخته شده؛ پیش‌نویس فرم‌ها در آن نیست.',
+      'تاریخچهٔ محلی قابل‌ویرایش است و شاهد مستقل محسوب نمی‌شود.');
+    return rows.join('\n')+'\n';
+  }
+  $('report-build').addEventListener('click',()=>{
+    if(!state.workspace.question)return;
+    try{
+      const text=reportText(state);
+      reportSnapshot=JSON.stringify(state);
+      $('decision-report').textContent=text;$('decision-report').hidden=false;
+      for(const id of ['report-download','report-print','report-hide'])$(id).disabled=false;
+      $('report-state').textContent='گزارش اطلاعات ثبت‌شده آماده است؛ پیش‌نویس‌های فرم‌ها وارد گزارش نشده‌اند.';
+    }catch{clearReport('گزارش ساخته نشد؛ اطلاعات فعلی تغییر نکرد.');}
+  });
+  function currentReport(){return reportSnapshot!==null&&reportSnapshot===JSON.stringify(state);}
+  $('report-download').addEventListener('click',()=>{
+    if(!currentReport())return clearReport('کارگاه تغییر کرده است؛ گزارش را دوباره بسازید.');
+    if(!window.confirm('این گزارش متنی بدون رمز است و اطلاعات ثبت‌شدهٔ کارگاه را دارد. فایل روی دستگاه دریافت شود؟'))return;
+    const blob=new Blob([$('decision-report').textContent],{type:'text/plain;charset=utf-8'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='nexus-report-'+state.workspace.id+'.txt';
+    document.body.append(a);a.click();a.remove();
+    window.setTimeout(()=>URL.revokeObjectURL(url),5000);
+  });
+  $('report-print').addEventListener('click',()=>{
+    if(!currentReport())return clearReport('کارگاه تغییر کرده است؛ گزارش را دوباره بسازید.');
+    if(window.confirm('نسخهٔ چاپی یا PDF بدون رمز است و اطلاعات کارگاه را دارد. پنجرهٔ چاپ باز شود؟'))window.print();
+  });
+  $('report-hide').addEventListener('click',()=>clearReport('گزارش بسته شد؛ اطلاعات کارگاه تغییر نکرد.'));
   function status(message,bad=false){
     $('status').textContent=message;
     $('status').classList.toggle('error',bad);
@@ -227,6 +313,9 @@ code{direction:ltr;unicode-bidi:embed}
   }
   function render(){
     const w=state.workspace;
+    $('report-build').disabled=!w.question;
+    if(reportSnapshot!==null&&reportSnapshot!==JSON.stringify(state))
+      clearReport('کارگاه تغییر کرده است؛ برای اطلاعات فعلی گزارش را دوباره بسازید.');
     entries($('question-view'),w.question?[w]:[],'هنوز پرسشی ثبت نشده است.',(row,item)=>{
       row.append(part('b',item.question));
       if(item.goal)row.append(part('small','هدف: '+item.goal));
