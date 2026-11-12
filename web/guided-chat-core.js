@@ -119,7 +119,7 @@
       'nexus-guided-conversation.txt');
     chatStatus('m470');
   });
-  $('chat-clear').addEventListener('click',()=>chatClear(false));
+  $('chat-clear').addEventListener('click',()=>{if(window.confirm(t('m491')))chatClear(false);});
   $('chat-speak').addEventListener('click',()=>{
     stopChatSpeech();
     const reply=chatTurns.filter(m=>m.role==='guide').at(-1);
