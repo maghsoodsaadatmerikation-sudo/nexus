@@ -28,7 +28,13 @@ def build(check=False):
         r'/\* NEXUS_DATA_ANALYSIS_BEGIN \*/.*?/\* NEXUS_DATA_ANALYSIS_END \*/',
         lambda _:'/* NEXUS_DATA_ANALYSIS_BEGIN */\n'+core+'\n/* NEXUS_DATA_ANALYSIS_END */',
         updated,flags=re.S)
-    assert core_count==1 and len(updated.encode())<300000
+    assert core_count==1
+    search_core=(ROOT/'web/web-research-core.js').read_text().rstrip()
+    updated,search_count=re.subn(
+        r'/\* NEXUS_WEB_RESEARCH_BEGIN \*/.*?/\* NEXUS_WEB_RESEARCH_END \*/',
+        lambda _:'/* NEXUS_WEB_RESEARCH_BEGIN */\n'+search_core+'\n  /* NEXUS_WEB_RESEARCH_END */',
+        updated,flags=re.S)
+    assert search_count==1 and len(updated.encode())<300000
     digest=hashlib.sha256(updated.encode()).hexdigest()
     worker=ROOT/'public/service-worker.js';old_worker=worker.read_text()
     new_worker,n=re.subn(r"const EXPECTED_SHA256='[a-f0-9]{64}'",f"const EXPECTED_SHA256='{digest}'",old_worker)

@@ -120,6 +120,25 @@ merge; the separate public-acceptance workflow verifies the actual published
 HTML, file analysis, language, voice adapters and offline reopening. These
 synthetic tests do not prove real-human operation or physical device support.
 
+## User-directed Internet research (Pilot 19 candidate)
+
+NEXUS adds a **Web research** panel with 15 built-in public search destinations,
+an optional custom HTTPS query-URL template and direct public HTTPS navigation.
+Only a user-confirmed browser link opens an external provider in a separate
+no-opener/no-referrer tab; the provider, not NEXUS, processes the search.
+NEXUS does not scrape result pages, access third-party search APIs, automatically
+verify results or independently support every engine on Earth. The static
+application retains CSP `connect-src 'none'`, and manually typed queries
+are never copied from workspaces, files or passwords. Users may paste a short
+reviewed passage and public HTTPS source into an **unregistered evidence draft**;
+human verification and registration remain necessary. Custom templates and
+searches stay in the current page session.
+
+[Security, available engines and limits](docs/PILOT-19-WEB-RESEARCH.md).
+The candidate must pass real-browser verification, a separate manual deploy
+to the existing static site and independent public acceptance before it is
+represented as published.
+
 ## Recoverability check for private encrypted files (Pilot 11)
 
 Pilot 11 adds **file-picker verification of an actual downloaded encrypted JSON file**, with the original passphrase, against the *committed* workspace. This does not replace the workspace, upload it or claim that the file is safe outside the device. The independent HTTPS observer checks the published source. [Pilot 11 details](docs/PILOT-11-VERIFIED-ENCRYPTED-EXPORT.md).
