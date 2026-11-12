@@ -155,6 +155,8 @@ transfer their own latest message into an **unregistered** question/evidence
 draft, or explicitly download an **unencrypted** session transcript.
 Up to 40 exchanges are held only in this browser tab; replacing the
 workspace clears them. On-device voice may read the guide's reply on request.
+Existing Voice tools can dictate into an *unsent* chat message draft, requiring
+separate explicit insertion and sending.
 
 This is **not** a generative AI chatbot or live person-to-person messenger:
 there is no remote model, peer connection, fact verification or autonomous
