@@ -85,10 +85,20 @@ async function layoutWitness(layout){
         const n=text.split('\n')[0];return /^\d+$/.test(n)?n:null}catch{return null}
     },25000,'chrome-no-private-debugger');
     const target=await poll(async()=>{
-      const resp=await fetch('http://127.0.0.1:'+port+'/json/list',{signal:AbortSignal.timeout(2000)});
-      if(!resp.ok)return null;
-      const list=await resp.json();
-      return list.find(x=>x.type==='page'&&x.url==='about:blank');
+      try{
+        const resp=await fetch('http://127.0.0.1:'+port+'/json/list',
+          {signal:AbortSignal.timeout(2000)});
+        if(!resp.ok)return null;
+        const list=await resp.json();
+        return list.find(x=>x.type==='page'&&x.url==='about:blank');
+      }catch(error){
+        // Chromium can publish DevToolsActivePort before the *local*
+        // debugger HTTP server is ready. Retry only transient connection
+        // and timeout errors inside the existing bounded 15-second poll;
+        // never retry a failed witness, public HTTPS check or data assertion.
+        if(error?.name==='TimeoutError'||error instanceof TypeError)return null;
+        throw error;
+      }
     },15000,'chrome-no-private-target');
     const endpoint=new URL(target.webSocketDebuggerUrl);
     assert(endpoint.hostname==='127.0.0.1'&&endpoint.port===port,'external-debugger-refused');
