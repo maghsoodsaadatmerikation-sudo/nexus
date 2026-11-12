@@ -104,3 +104,19 @@ Original Railway `/data` independent backup and clean restore remains
 the first actual authenticated human Rust pilot remains
 [Issue #70](https://github.com/maghsoodsaadatmerikation-sudo/nexus/issues/70).
 `A_out <= A_in`.
+
+## Observed static deployment (2026-11-12)
+
+The existing Render static service `nexus-offline-pilot`, with autoDeploy
+OFF, reported LIVE on build-cache-cleared deployment
+`dep-dbqq8u0ae00c73951ju0`, source
+`87afc579be8207ab641e645f8aab207384ddd46c`.
+Provider metadata is **not** independent proof of public bytes or
+successful Android installation. The separate [public read-only five-asset
+observer](../scripts/verify-public-pwa-assets.py) and
+[actual public-origin Chrome network-outage workflow](../.github/workflows/pilot-12-public-installability.yml)
+must each PASS before public installability can be claimed.
+
+The previous independently verified static Pilot 11 deployment was
+`dep-dbqooirrjlhs73a1cvdg` at source
+`ed13887699b49a8494a3178e426ad9192e14d57e`.

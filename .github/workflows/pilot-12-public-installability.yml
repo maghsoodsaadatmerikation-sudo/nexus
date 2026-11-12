@@ -1,0 +1,109 @@
+name: NEXUS Pilot 12 — Independent Public Installability
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pilot-12-public-installability.yml'
+      - 'scripts/verify-public-pwa-assets.py'
+      - 'scripts/png_pixels.py'
+      - 'scripts/test-pwa-offline-browser.mjs'
+      - 'public/**'
+      - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pilot-12-public-installability.yml'
+      - 'scripts/verify-public-pwa-assets.py'
+      - 'scripts/png_pixels.py'
+      - 'scripts/test-pwa-offline-browser.mjs'
+      - 'public/**'
+      - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
+  workflow_dispatch:
+  schedule:
+    # Weekly, read-only; no actual user account, Rust service or paid hosting.
+    - cron: '47 6 * * 2'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexus-public-installability
+  cancel-in-progress: false
+
+jobs:
+  public-installability:
+    name: exact-public-assets-and-real-browser-network-disconnect
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Read-only exact candidate checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require current code equals intentionally deployed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 87afc579be8207ab641e645f8aab207384ddd46c:web/offline-pilot.html \
+            > "$RUNNER_TEMP/nexus-deployed-pwa.html"
+          cmp web/offline-pilot.html "$RUNNER_TEMP/nexus-deployed-pwa.html" || {
+            echo "BLOCKED: code changed after last independently authorized static deployment"
+            exit 1
+          }
+          python3 -m py_compile scripts/verify-public-pwa-assets.py
+          python3 scripts/verify-public-pwa-assets.py --self-test
+      - name: Independently verify five exact public HTTPS installation resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-public-pwa-assets.py > pilot-12-public-assets.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open('pilot-12-public-assets.json'))
+          assert r['status']=='PASS' and r['verified_resources']==5
+          assert r['schema']=='nexus.pilot-12.public-assets-witness.v1'
+          assert set(r['resources'])=={
+            '/','/manifest.json','/service-worker.js',
+            '/icons/nexus-192.png','/icons/nexus-512.png'}
+          assert all(x['ok'] and x['http_status']==200
+                     for x in r['resources'].values())
+          assert all(r['resources'][x]['exact_byte_match']
+                     for x in ('/','/manifest.json','/service-worker.js'))
+          assert all(r['resources'][f'/icons/nexus-{size}.png']['pixel_match']
+                     for size in (192,512))
+          assert r['authority']=='none' and not r['production_mutation']
+          print('PASS: exact app HTML/manifest/worker bytes and identical decoded PNG icon pixels')
+          PY
+      - name: Test real PUBLIC HTTPS PWA install and network outage in Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_PWA_PUBLIC=true
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          test -n "$NEXUS_PWA_CHROME"
+          node --check scripts/test-pwa-offline-browser.mjs
+          node scripts/test-pwa-offline-browser.mjs > pilot-12-public-offline.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open('pilot-12-public-offline.json'))
+          assert r['status']=='PASS' and len(r['checks'])==8
+          assert r['origin']=='public-render-pilot'
+          assert r['actual_offline_navigation'] is True
+          assert r['real_android_hardware'] is False
+          assert r['private_data_submitted'] is False
+          assert r['authenticated_rust_tested'] is False
+          assert r['volume_recovery_verified'] is False
+          assert r['production_mutation'] is False and r['authority']=='none'
+          print('PASS: actual public origin PWA reloaded offline in independent real Chromium')
+          PY
+      - name: Upload sanitized public-only receipts
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-pilot-12-live-installability
+          path: |
+            pilot-12-public-assets.json
+            pilot-12-public-offline.json
+          if-no-files-found: ignore
+          retention-days: 14

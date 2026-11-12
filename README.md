@@ -18,8 +18,8 @@ A_out <= A_in
 
 The standalone Persian/RTL mobile pilot is hosted at
 **https://nexus-offline-pilot.onrender.com/**. Render reported LIVE for
-manual deployment `dep-dbqooirrjlhs73a1cvdg` of Pilot 11
-source commit `ed13887699b49a8494a3178e426ad9192e14d57e`.
+manual deployment `dep-dbqq8u0ae00c73951ju0` of Pilot 12
+source commit `87afc579be8207ab641e645f8aab207384ddd46c`.
 The independent static HTTPS identity workflow pins the actually deployed
 source; provider status alone is not byte-level proof. The app does not
 connect to the Rust gateway, send workspace content to Render, or issue
@@ -31,16 +31,17 @@ remains a separate open milestone.
 
 ## Installable offline on Android and supported browsers (Pilot 12 candidate)
 
-The latest **unpublished source candidate** can opt-in to a locally cached,
-SHA-256-verified program shell: **آماده‌سازی حالت آفلاین**, followed by
-**افزودن به صفحهٔ اصلی** in a supporting browser. The cached app should
-reopen after network loss; no workspace, password or personal data is put
-in the app-shell cache. Saving work still requires the separate encrypted
-local checkpoint or a privately held file. The standalone HTML continues
-to work when opened directly from a downloaded file.
+Pilot 12 now adds **آماده‌سازی حالت آفلاین** and
+**افزودن به صفحهٔ اصلی**. The user can explicitly cache an integrity-pinned
+app shell and reopen it after network loss; the app shell never caches
+workspace JSON, password or personal information. Saving work still
+requires the separate encrypted local checkpoint or owner-held file.
+The standalone HTML continues to work when opened from a downloaded file.
 
-This is not publicly promoted until a separate Render static deployment
-and independently verified HTTPS asset/browser checks.
+Render reported LIVE for static deployment `dep-dbqq8u0ae00c73951ju0`
+from exact source `87afc579be8207ab641e645f8aab207384ddd46c`.
+Independent public asset-byte checks and live-origin real Chromium offline
+acceptance must PASS separately; provider LIVE alone does not prove them.
 [Installation and security contract](docs/PILOT-12-INSTALLABLE-OFFLINE.md).
 
 ## Recoverability check for private encrypted files (Pilot 11)

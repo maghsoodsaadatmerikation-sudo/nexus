@@ -35,7 +35,18 @@ at observation time only; it does not prove authenticated Rust service,
 human acceptance, original data recoverability, or future uptime.
 AutoDeploy remains OFF.
 
-Only the self-contained HTML is publicly served. In the browser it does **not** POST workspaces, invoke the Rust gateway, call Railway or store workspace state in remote Render storage. Optional encrypted local checkpoints stay inside the user's browser; a separate password-protected JSON download is still needed for off-browser recovery.
+Pilot 12 extended the existing public static site with **public,
+non-sensitive installation assets** (manifest, scoped service worker and
+192×192/512×512 icons), while retaining the original build command and
+browser-only decision authority. The cache-cleared manual Render deploy
+`dep-dbqq8u0ae00c73951ju0` reports LIVE from exact source
+`87afc579be8207ab641e645f8aab207384ddd46c`.
+Only the independent public asset observer and real Chromium offline
+test can prove exact public bytes and working browser offline fallback;
+a Render LIVE status alone does not prove either. The older Pilot 11
+source/deployment above remains the rollback reference.
+
+The application shell and icons are publicly served. In the browser it does **not** POST workspaces, invoke the Rust gateway, call Railway or store workspace state in remote Render storage. Optional encrypted local checkpoints stay inside the user's browser; a separate password-protected JSON download is still needed for off-browser recovery.
 
 The unrelated pre-existing Render Docker service `nexus` and original Railway NEXUS service/volume were **not** changed by this static deployment. Avoid copying actual personal decision files into GitHub, issue comments, CI or public services.
 
