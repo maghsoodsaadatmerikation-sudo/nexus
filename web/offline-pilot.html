@@ -274,7 +274,7 @@ code{direction:ltr;unicode-bidi:embed}
       for(const node of document.querySelectorAll('[data-i18n-'+attr+']'))
         node.setAttribute(attr,next.messages[node.getAttribute('data-i18n-'+attr)]);
     }
-    for(const id of ['status','vault-state','backup-proof-state','offline-install-state','report-state','voice-state']){
+    for(const id of ['status','vault-state','backup-proof-state','offline-install-state','report-state','voice-state','analysis-state']){
       const node=$(id),key=Object.keys(previous.messages).find(k=>previous.messages[k]===node.textContent);
       if(key)node.textContent=next.messages[key];
     }
@@ -287,7 +287,11 @@ code{direction:ltr;unicode-bidi:embed}
     $('language-state').textContent=t('m270');
     refreshVoices();
     renderFileTray();
-    if(analysisData)renderAnalysisResults();
+    if(analysisData){
+      if($('analysis-group').options.length)$('analysis-group').options[0].textContent=t('m378');
+      if($('analysis-metric').options.length)$('analysis-metric').options[0].textContent=t('m379');
+      renderAnalysisResults();
+    }
   }
   $('ui-language').addEventListener('change',()=>applyLocale($('ui-language').value));
   function validateLanguagePack(raw){
@@ -880,6 +884,7 @@ code{direction:ltr;unicode-bidi:embed}
   function analysisStatus(key){$('analysis-state').textContent=t(key);}
   function clearAnalysis(){
     analysisJob++;analysisData=null;analysisContext=null;
+    $('analysis-run').disabled=false;
     $('analysis-summary').textContent='';$('analysis-bars').replaceChildren();
     $('analysis-group').replaceChildren();$('analysis-metric').replaceChildren();
     $('analysis-download').disabled=true;$('analysis-claim').disabled=true;
