@@ -112,6 +112,7 @@ window.addEventListener('load',async()=>{
   verify($('web-search-query').value===''&&$('web-source-excerpt').value===''&&
     $('web-search-link').children.length===0,'private-research-fields-can-be-cleared');
   verify($('claim').value===content,'clear-does-not-delete-unregistered-draft');
+  consent=true;
   verify(await snap()===savedBefore,'clear-does-not-alter-committed-workspace');
   verify(appFetches===0&&localStorage.length===0,'no-background-fetch-or-plaintext-local-storage');
   verify(!document.querySelector('iframe')&&external.every(x=>x.target==='_blank'&&
