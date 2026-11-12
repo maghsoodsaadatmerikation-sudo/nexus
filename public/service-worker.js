@@ -1,5 +1,5 @@
 /* NEXUS Pilot 12 — installed, user-opt-in, read-only public app shell.
- * This worker never sees/stores workspace JSON, passwords or personal data.
+ * This worker never sees/stores workspace JSON or private user content.
  * It handles ONLY same-origin GET navigation to / or /index.html.
  * Immutable expected HTML hash is maintained by reviewed source promotion.
  */
