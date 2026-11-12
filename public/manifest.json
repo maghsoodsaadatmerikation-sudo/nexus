@@ -1,9 +1,9 @@
 {
-  "name": "NEXUS — کارگاه آفلاین تصمیم",
+  "name": "NEXUS — Offline Decision Workshop",
   "short_name": "NEXUS",
-  "description": "کارگاه شخصی بررسی شواهد و گزینه‌ها؛ تصمیم نهایی فقط با انسان.",
-  "lang": "fa",
-  "dir": "rtl",
+  "description": "A private workshop for evidence and alternatives. Final judgment remains human.",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

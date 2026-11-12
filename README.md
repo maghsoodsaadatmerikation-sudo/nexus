@@ -66,6 +66,16 @@ Published to the existing static site. Independent public Chromium acceptance
 checks draft protection, the report, the workshop and actual offline navigation.
 Browser exit prompts remain conditional; mobile OS termination is not guarded.
 
+## English-first interface and local translation packs (Pilot 15 candidate)
+
+English is the default. Complete English and Persian interfaces can be switched
+without changing workspace contents. A full local language pack can add any
+BCP 47 language with LTR/RTL direction. The downloadable English template
+contains only interface text. There is no automatic network translation and
+no claim that every language has a bundled reviewed translation.
+[Language support and pack format](docs/PILOT-15-ENGLISH-FIRST-LANGUAGES.md).
+Separate static deployment and public browser acceptance are required.
+
 ## Recoverability check for private encrypted files (Pilot 11)
 
 Pilot 11 adds **file-picker verification of an actual downloaded encrypted JSON file**, with the original passphrase, against the *committed* workspace. This does not replace the workspace, upload it or claim that the file is safe outside the device. The independent HTTPS observer checks the published source. [Pilot 11 details](docs/PILOT-11-VERIFIED-ENCRYPTED-EXPORT.md).
