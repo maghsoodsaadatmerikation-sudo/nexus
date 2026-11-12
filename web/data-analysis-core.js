@@ -5,6 +5,7 @@
   function analysisStatus(key){$('analysis-state').textContent=t(key);}
   function clearAnalysis(){
     analysisJob++;analysisData=null;analysisContext=null;
+    $('analysis-run').disabled=false;
     $('analysis-summary').textContent='';$('analysis-bars').replaceChildren();
     $('analysis-group').replaceChildren();$('analysis-metric').replaceChildren();
     $('analysis-download').disabled=true;$('analysis-claim').disabled=true;
