@@ -40,7 +40,7 @@
   function chatClear(switchWorkspace=false){
     stopChatSpeech();
     chatTurns=[];chatSequence=0;$('chat-input').value='';
-    $('chat-use-workspace').checked=false;
+    $('chat-use-workspace').checked=false;$('chat-focus').value='auto';
     renderChatMessages();chatStatus(switchWorkspace?'m474':'m468');
     refreshDraftNotice();
   }
