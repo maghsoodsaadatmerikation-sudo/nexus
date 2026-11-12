@@ -18,8 +18,8 @@ A_out <= A_in
 
 The standalone Persian/RTL mobile pilot is hosted at
 **https://nexus-offline-pilot.onrender.com/**. Render reported LIVE for
-manual deployment `dep-dbqo0pei0phs73d8rrb0` of the exact Pilot 09
-source commit `8e3fd8789d82db4559a9cb77cd2f82578271df4b`.
+manual deployment `dep-dbqolejbc2fs73e0mha0` of Pilot 11
+source commit `ed13887699b49a8494a3178e426ad9192e14d57e`.
 The independent static HTTPS identity workflow pins the actually deployed
 source; provider status alone is not byte-level proof. The app does not
 connect to the Rust gateway, send workspace content to Render, or issue
@@ -31,7 +31,7 @@ remains a separate open milestone.
 
 ## Recoverability check for private encrypted files (Pilot 11)
 
-The current source candidate adds **file-picker verification of an actual downloaded encrypted JSON file**, with the original passphrase, against the *committed* workspace. This does not replace the workspace, upload it or claim that the file is safe outside the device. It is not publicly live until independently observed after promotion. [Pilot 11 details](docs/PILOT-11-VERIFIED-ENCRYPTED-EXPORT.md).
+Pilot 11 adds **file-picker verification of an actual downloaded encrypted JSON file**, with the original passphrase, against the *committed* workspace. This does not replace the workspace, upload it or claim that the file is safe outside the device. The independent HTTPS observer checks the published source. [Pilot 11 details](docs/PILOT-11-VERIFIED-ENCRYPTED-EXPORT.md).
 
 ## Try NEXUS now — free offline decision pilot
 
