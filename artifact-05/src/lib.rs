@@ -347,6 +347,10 @@ where
     Router::new()
         .route("/", get(web_workspace))
         .route("/research-chat", get(research_chat::page))
+        .route(
+            "/research-chat-history.js",
+            get(research_chat::history_script),
+        )
         .route("/v1/research-chat", post(research_chat::respond::<D>))
         .route("/livez", get(liveness))
         .route("/readyz", get(readiness::<D>))
