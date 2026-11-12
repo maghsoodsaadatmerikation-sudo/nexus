@@ -37,6 +37,8 @@ Rust service.
    [Pilot 03 private exports](PILOT-03-PRIVATE-EXPORTS.md) for the exact
    format, threats and limitations. An **explicit opt-in encrypted browser checkpoint** can preserve committed work across reloads on the same browser, if local storage is available. It is distinct from and less portable than the downloadable protected file; it has no server backup. See [Pilot 08](PILOT-08-ENCRYPTED-LOCAL-RESUME.md).
 
+Before relying on an encrypted export, use **آزمایش بازیابی فایل دانلودشده** (Pilot 11 source, after verified public promotion): select the actual file from Downloads and re-enter its passphrase. The app checks decryptability/structure and reports exact current-state equality, valid-but-different content, or rejection. It does not import or modify the active workspace. This is not a full Railway backup or proof of off-device custody. See [Pilot 11 recovery check](PILOT-11-VERIFIED-ENCRYPTED-EXPORT.md).
+
 The original offline JSON files are not Rust gateway-compatible
 `nexus.data-snapshot.v1` or server `DecisionWorkspace` backup; do
 not import it through the production workspace restore endpoint or represent it
