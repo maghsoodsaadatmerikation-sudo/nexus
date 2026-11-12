@@ -88,6 +88,16 @@ Support depends on installed device/browser speech capabilities.
 Published on the existing static site. Public adapter tests are separate
 from physical device audio; supported voices/languages vary by device/browser.
 
+## Local files and document generation (Pilot 17 candidate)
+
+Add any file type to this open tab (10 MiB each, 20 MiB/20 files total), preview
+text/source and bounded Office XML text, and explicitly copy an excerpt into
+an unregistered evidence draft. Generate TXT, Markdown, CSV, HTML, genuine
+DOCX/XLSX, XML or a ZIP containing the current originals; PDF uses browser print.
+Files are not server uploads or part of the encrypted workspace checkpoint.
+[File formats, preservation limits and independent validation](docs/PILOT-17-LOCAL-FILE-DESK.md).
+Separate static deployment and public acceptance are required.
+
 ## Recoverability check for private encrypted files (Pilot 11)
 
 Pilot 11 adds **file-picker verification of an actual downloaded encrypted JSON file**, with the original passphrase, against the *committed* workspace. This does not replace the workspace, upload it or claim that the file is safe outside the device. The independent HTTPS observer checks the published source. [Pilot 11 details](docs/PILOT-11-VERIFIED-ENCRYPTED-EXPORT.md).
