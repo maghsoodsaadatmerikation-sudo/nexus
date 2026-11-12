@@ -47,6 +47,31 @@ window.addEventListener('load', async () => {
   const checks = [];
   let coreFixture = null;
   try {
+    // The marker exists in test-only window.name, not the app or its vault.
+    // Reload creates new app state and discards the in-page WebCrypto key.
+    const reloadMarker='nexus-p08-real-reload:';
+    if(window.name.startsWith(reloadMarker)){
+      const prior=JSON.parse(window.name.slice(reloadMarker.length));
+      window.name='';
+      const slot='nexus.offline-pilot.local-encrypted.v1';
+      assert(byId('decision-view').textContent.includes('هیچ تصمیم انسانی') &&
+        byId('question-view').textContent.includes('هنوز پرسشی') &&
+        window.localStorage.getItem(slot)!==null,
+        'reloaded-page-inherited-plaintext-or-lost-ciphertext');
+      fill('vault-open-password','synthetic-reload-secret-2026');
+      byId('vault-restore').click();
+      await waitFor(()=>byId('question-view').textContent.includes('پرسش پس از بارگذاری مجدد'),
+        'real-page-reload-vault-restore-failed');
+      assert(byId('vault-open-password').value==='' &&
+        !window.localStorage.getItem(slot).includes('پرسش پس از بارگذاری مجدد'),
+        'reloaded-page-exposed-plaintext');
+      byId('vault-delete').click();
+      assert(window.localStorage.getItem(slot)===null,
+        'reload-cleanup-checkpoint-failed');
+      prior.checks.push('real-page-reload-requires-passphrase-and-recovers');
+      output.textContent=JSON.stringify({...prior,network_requests:requests});
+      return;
+    }
     const narrow = window.innerWidth <= 760;
     assert(byId('export').disabled, 'blank-workspace-export-enabled');
     assert(byId('decision-view').textContent.includes('هیچ تصمیم انسانی'), 'implicit-judgment');
@@ -370,9 +395,21 @@ window.addEventListener('load', async () => {
     const width = window.innerWidth;
     assert(narrow === (width <= 760), 'viewport-mismatch');
     checks.push(narrow?'narrow-mobile-layout':'wide-desktop-layout');
-    output.textContent = JSON.stringify({status:'PASS',width,checks,
-      scope:'standalone-browser-file-only',network_requests:requests,
-      production_verified:false,authority:'none',core_fixture:coreFixture});
+    // Real page lifecycle, not merely clearing forms in the same JS heap.
+    // Only a synthetic local vault and a test-runner window.name marker survive.
+    fill('question','پرسش پس از بارگذاری مجدد');
+    await submit('ask-form');
+    fill('vault-new-password','synthetic-reload-secret-2026');
+    fill('vault-new-confirm','synthetic-reload-secret-2026');
+    byId('vault-enable').click();
+    await waitFor(()=>window.localStorage.getItem('nexus.offline-pilot.local-encrypted.v1')!==null,
+      'real-reload-checkpoint-not-written');
+    window.name=reloadMarker+JSON.stringify({status:'PASS',width,checks,
+      scope:'standalone-browser-file-only',production_verified:false,
+      authority:'none',core_fixture:coreFixture});
+    window.location.reload();
+    return;
+
   } catch (e) {
     const code=String(e?.message||'offline-pilot-contract').replace(/[^A-Za-z0-9-]/g,'').slice(0,120);
     output.textContent = JSON.stringify({status:'FAIL',reason:code});
@@ -413,7 +450,7 @@ def main():
             if proc.returncode:
                 raise RuntimeError("real browser did not report PASS: exit="+str(proc.returncode)+" stdout="+proc.stdout.strip()[:300]+" stderr="+proc.stderr.strip()[-450:])
             report = json.loads(proc.stdout)
-            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 37 or
+            if (report.get("status") != "PASS" or len(report.get("checks", [])) != 38 or
                 report.get("network_requests") != 0 or
                 (layout == "narrow") != (report["width"] <= 760)):
                 raise RuntimeError("offline real-browser contract did not PASS")
