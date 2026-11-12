@@ -18,8 +18,8 @@ A_out <= A_in
 
 The English-first multilingual mobile pilot is hosted at
 **https://nexus-offline-pilot.onrender.com/**. Render reported LIVE for
-manual deployment `dep-dbqrjem1egvs73d0hqjg` of Pilot 16
-source commit `733de2c9e5b29eec966701bcc4888391992fe883`.
+manual deployment `dep-dbqsacu7bikc73b0d56g` of Pilot 17
+source commit `db0b251f06fc6c27e20185ff6c122823c0d9ca13`.
 The independent static HTTPS identity workflow pins the actually deployed
 source; provider status alone is not byte-level proof. The app does not
 connect to the Rust gateway, send workspace content to Render, or issue
@@ -38,8 +38,8 @@ workspace JSON, password or personal information. Saving work still
 requires the separate encrypted local checkpoint or owner-held file.
 The standalone HTML continues to work when opened from a downloaded file.
 
-Render reported LIVE for static deployment `dep-dbqrjem1egvs73d0hqjg`
-from exact source `733de2c9e5b29eec966701bcc4888391992fe883`.
+Render reported LIVE for static deployment `dep-dbqsacu7bikc73b0d56g`
+from exact source `db0b251f06fc6c27e20185ff6c122823c0d9ca13`.
 Independent public asset-byte checks and live-origin real Chromium offline
 acceptance must PASS separately; provider LIVE alone does not prove them.
 [Installation and security contract](docs/PILOT-12-INSTALLABLE-OFFLINE.md).
@@ -88,7 +88,7 @@ Support depends on installed device/browser speech capabilities.
 Published on the existing static site. Public adapter tests are separate
 from physical device audio; supported voices/languages vary by device/browser.
 
-## Local files and document generation (Pilot 17 candidate)
+## Local files and document generation (Pilot 17)
 
 Add any file type to this open tab (10 MiB each, 20 MiB/20 files total), preview
 text/source and bounded Office XML text, and explicitly copy an excerpt into
@@ -96,7 +96,8 @@ an unregistered evidence draft. Generate TXT, Markdown, CSV, HTML, genuine
 DOCX/XLSX, XML or a ZIP containing the current originals; PDF uses browser print.
 Files are not server uploads or part of the encrypted workspace checkpoint.
 [File formats, preservation limits and independent validation](docs/PILOT-17-LOCAL-FILE-DESK.md).
-Separate static deployment and public acceptance are required.
+The static site reports LIVE on Pilot 17; independent public-byte and
+file-desk/browser acceptance must pass before stating public verification.
 
 ## Recoverability check for private encrypted files (Pilot 11)
 

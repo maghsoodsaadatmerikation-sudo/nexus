@@ -20,9 +20,10 @@ const REPORT_MODE=process.env.NEXUS_PUBLIC_REPORT==='true';
 const DRAFT_MODE=process.env.NEXUS_PUBLIC_DRAFT==='true';
 const LANGUAGE_MODE=process.env.NEXUS_PUBLIC_LANGUAGE==='true';
 const VOICE_MODE=process.env.NEXUS_PUBLIC_VOICE==='true';
-if([REPORT_MODE,DRAFT_MODE,LANGUAGE_MODE,VOICE_MODE].filter(Boolean).length>1)throw Error('choose-one-public-witness-mode');
-const EXPECTED_CHECKS=VOICE_MODE?35:LANGUAGE_MODE?23:DRAFT_MODE?21:REPORT_MODE?17:46;
-const MIN_DOCUMENTS=(VOICE_MODE||LANGUAGE_MODE||DRAFT_MODE||REPORT_MODE)?1:2;
+const FILE_MODE=process.env.NEXUS_PUBLIC_FILES==='true';
+if([REPORT_MODE,DRAFT_MODE,LANGUAGE_MODE,VOICE_MODE,FILE_MODE].filter(Boolean).length>1)throw Error('choose-one-public-witness-mode');
+const EXPECTED_CHECKS=FILE_MODE?33:VOICE_MODE?35:LANGUAGE_MODE?23:DRAFT_MODE?21:REPORT_MODE?17:46;
+const MIN_DOCUMENTS=(FILE_MODE||VOICE_MODE||LANGUAGE_MODE||DRAFT_MODE||REPORT_MODE)?1:2;
 const REPO_ROOT=new URL('../',import.meta.url);
 const sha256=value=>createHash('sha256').update(value).digest('hex');
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -37,9 +38,9 @@ if(!GITHUB_ONLY || !BROWSER || typeof WebSocket==='undefined' ||
 const expected=await readFile(new URL('../web/offline-pilot.html',import.meta.url));
 assert(expected.length>1000 && expected.length<=300000,'expected-source-size');
 const expectedDigest=sha256(expected);
-const pythonTest=await readFile(new URL(VOICE_MODE?'./test-voice-browser.py':LANGUAGE_MODE?'./test-ui-languages-browser.py':DRAFT_MODE?'./test-draft-guard-browser.py':REPORT_MODE?'./test-decision-report-browser.py':'./test-offline-pilot-browser.py',import.meta.url),'utf8');
+const pythonTest=await readFile(new URL(FILE_MODE?'./test-file-desk-browser.py':VOICE_MODE?'./test-voice-browser.py':LANGUAGE_MODE?'./test-ui-languages-browser.py':DRAFT_MODE?'./test-draft-guard-browser.py':REPORT_MODE?'./test-decision-report-browser.py':'./test-offline-pilot-browser.py',import.meta.url),'utf8');
 const match=pythonTest.match(/WITNESS = r"""([\s\S]*?)"""/);
-assert(match && match[1].length>1000 && match[1].includes(VOICE_MODE?'no-automatic-microphone-or-speaker-start':LANGUAGE_MODE?'english-is-explicit-default':DRAFT_MODE?'uncommitted-question-has-visible-and-unload-guard':REPORT_MODE?'report-user-content-is-inert-text':'real-page-reload-requires-passphrase-and-recovers'),
+assert(match && match[1].length>1000 && match[1].includes(FILE_MODE?'file-desk-uses-no-app-network-or-persistent-plaintext-storage':VOICE_MODE?'no-automatic-microphone-or-speaker-start':LANGUAGE_MODE?'english-is-explicit-default':DRAFT_MODE?'uncommitted-question-has-visible-and-unload-guard':REPORT_MODE?'report-user-content-is-inert-text':'real-page-reload-requires-passphrase-and-recovers'),
   'exact-real-browser-witness-unavailable');
 
 function verifyDocument(status,mime,bytes,redirected=false){
@@ -173,6 +174,25 @@ async function layoutWitness(layout){
       report.production_verified===false&&report.authority==='none',
       'live-browser-checks-or-authority-invalid');
     assert((layout==='narrow')===(report.width<=760),'live-browser-viewport-invalid');
+    if(FILE_MODE){
+      const formats=Object.keys(report.artifacts||{}).sort();
+      assert(formats.join(',')==='csv,docx,html,md,txt,xlsx,xml,zip',
+        'public-file-desk-generated-formats-missing');
+      let total=0;
+      for(const format of formats){
+        const encoded=report.artifacts[format];
+        assert(typeof encoded==='string'&&encoded.length<750000&&
+          /^[A-Za-z0-9+/]*={0,2}$/.test(encoded),'invalid-generated-base64');
+        const bytes=Buffer.from(encoded,'base64');
+        total+=bytes.length;
+        assert(bytes.length>0&&!bytes.includes(Buffer.from('NEVER_EXPORT_FILE_SECRET')),
+          'public-file-desk-output-empty-or-secret-exposed');
+        if(['docx','xlsx','zip'].includes(format))
+          assert(bytes.subarray(0,4).equals(Buffer.from([80,75,3,4])),
+            'public-file-desk-invalid-office-or-bundle-header');
+      }
+      assert(total<1000000,'public-file-desk-output-exceeds-synthetic-budget');
+    }
     assert(documents.length>=MIN_DOCUMENTS&&network.length>=MIN_DOCUMENTS,'not-two-real-public-document-loads');
     for(const x of network)verifyRequest(x.url,x.method);
     for(const x of documents){
@@ -186,6 +206,7 @@ async function layoutWitness(layout){
     assert(downloaded.length===expected.length&&sha256(downloaded)===expectedDigest,
       'chrome-rendered-document-bytes-differ-from-source');
     return {layout,width:report.width,checks:report.checks.length,
+      generated_formats_checked:FILE_MODE?8:0,
       real_reload_verified:report.checks.includes('real-page-reload-requires-passphrase-and-recovers'),
       test_fixture_only:true,document_responses:documents.length,
       requested_paths_count:network.length,network_attempts_by_app:report.network_requests,
@@ -220,7 +241,7 @@ async function main(){
   const reports=[];
   for(const layout of ['narrow','wide'])reports.push(await layoutWitness(layout));
   process.stdout.write(JSON.stringify({
-    schema:VOICE_MODE?'nexus.public-pilot.voice-adapter-acceptance.v1':LANGUAGE_MODE?'nexus.public-pilot.ui-language-acceptance.v1':DRAFT_MODE?'nexus.public-pilot.draft-guard-acceptance.v1':REPORT_MODE?'nexus.public-pilot.decision-report-acceptance.v1':'nexus.public-pilot.browser-acceptance.v1',status:'PASS',
+    schema:FILE_MODE?'nexus.public-pilot.file-desk-acceptance.v1':VOICE_MODE?'nexus.public-pilot.voice-adapter-acceptance.v1':LANGUAGE_MODE?'nexus.public-pilot.ui-language-acceptance.v1':DRAFT_MODE?'nexus.public-pilot.draft-guard-acceptance.v1':REPORT_MODE?'nexus.public-pilot.decision-report-acceptance.v1':'nexus.public-pilot.browser-acceptance.v1',status:'PASS',
     source_sha256:expectedDigest,independent_get_sha256:getSha,
     origin:ORIGIN,checks_per_layout:EXPECTED_CHECKS,negative_local_fixtures:6,
     report:reports,synthetic_only:true,real_human_tested:false,native_audio_tested:false,
