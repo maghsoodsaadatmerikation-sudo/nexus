@@ -10,6 +10,12 @@ import path from 'node:path';
 
 const ORIGIN='https://nexus-offline-pilot.onrender.com/';
 const FAVICON='https://nexus-offline-pilot.onrender.com/favicon.ico';
+const PUBLIC_APP_ASSETS=new Set([
+  ORIGIN,FAVICON,
+  ORIGIN+'manifest.webmanifest',
+  ORIGIN+'icons/nexus-192.png',
+  ORIGIN+'icons/nexus-512.png'
+]);
 const REPO_ROOT=new URL('../',import.meta.url);
 const sha256=value=>createHash('sha256').update(value).digest('hex');
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -38,7 +44,7 @@ function verifyDocument(status,mime,bytes,redirected=false){
   return sha256(bytes);
 }
 function verifyRequest(url,method){
-  assert(method==='GET' && (url===ORIGIN || url===FAVICON),
+  assert(method==='GET' && PUBLIC_APP_ASSETS.has(url),
     'unexpected-browser-network-request');
 }
 async function independentPublicGet(){
