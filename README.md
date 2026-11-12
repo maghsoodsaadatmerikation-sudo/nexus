@@ -29,6 +29,20 @@ See [Pilot 02 hosting and independent HTTPS evidence](docs/STATIC-PILOT-HOST.md)
 for what has and has not been verified. The full authenticated online pilot
 remains a separate open milestone.
 
+## Installable offline on Android and supported browsers (Pilot 12 candidate)
+
+The latest **unpublished source candidate** can opt-in to a locally cached,
+SHA-256-verified program shell: **آماده‌سازی حالت آفلاین**, followed by
+**افزودن به صفحهٔ اصلی** in a supporting browser. The cached app should
+reopen after network loss; no workspace, password or personal data is put
+in the app-shell cache. Saving work still requires the separate encrypted
+local checkpoint or a privately held file. The standalone HTML continues
+to work when opened directly from a downloaded file.
+
+This is not publicly promoted until a separate Render static deployment
+and independently verified HTTPS asset/browser checks.
+[Installation and security contract](docs/PILOT-12-INSTALLABLE-OFFLINE.md).
+
 ## Recoverability check for private encrypted files (Pilot 11)
 
 Pilot 11 adds **file-picker verification of an actual downloaded encrypted JSON file**, with the original passphrase, against the *committed* workspace. This does not replace the workspace, upload it or claim that the file is safe outside the device. The independent HTTPS observer checks the published source. [Pilot 11 details](docs/PILOT-11-VERIFIED-ENCRYPTED-EXPORT.md).
