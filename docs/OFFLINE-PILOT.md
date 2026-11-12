@@ -1,3 +1,5 @@
+> The optional Files tray stays only in this open tab. Encrypted workspace exports do not include original attachments. Keep a separately confirmed ZIP bundle to retain them. See [File input/output](PILOT-17-LOCAL-FILE-DESK.md).
+
 > Optional Voice tools default to local processing. Browser online speech may send audio or selected text to a provider only after opt-in and confirmation; availability depends on the device. See [Voice tools](PILOT-16-VOICE-INPUT-OUTPUT.md).
 
 > The app now opens in English. To follow the Persian button labels below,
