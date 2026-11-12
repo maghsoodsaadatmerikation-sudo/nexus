@@ -104,7 +104,7 @@ window.addEventListener('load',async()=>{
   assert(cancelled>0&&$('chat-speak-stop').disabled,'speech-can-be-stopped');
   voices.splice(1,2);const spoke=spoken.length;
   $('chat-speak').click();
-  assert(spoken.length===spoke&&$('chat-state').textContent.includes('not available'),
+  assert(spoken.length===spoke&&$('chat-state').textContent.includes('No matching on-device voice'),
     'remote-voice-alone-is-refused');
   const n=downloads.length;consent=false;$('chat-export').click();
   assert(downloads.length===n&&$('chat-messages').querySelectorAll('.chat-entry').length>=10,
