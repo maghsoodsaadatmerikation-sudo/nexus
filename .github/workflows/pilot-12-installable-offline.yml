@@ -1,0 +1,116 @@
+name: NEXUS Pilot 12 — Installable Offline App
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pilot-12-installable-offline.yml'
+      - 'scripts/test-pwa-offline-browser.mjs'
+      - 'web/offline-pilot.html'
+      - 'public/service-worker.js'
+      - 'public/manifest.webmanifest'
+      - 'public/icons/**'
+      - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pilot-12-installable-offline.yml'
+      - 'scripts/test-pwa-offline-browser.mjs'
+      - 'web/offline-pilot.html'
+      - 'public/service-worker.js'
+      - 'public/manifest.webmanifest'
+      - 'public/icons/**'
+      - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install-offline-real-chrome:
+    name: real-Chromium-offline-navigation-no-content-storage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - name: Exact candidate checkout; no git write token persisted
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Verify assets, manifest, source digest and fail-closed worker policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, struct
+          from pathlib import Path
+          html=Path('web/offline-pilot.html').read_bytes()
+          worker=Path('public/service-worker.js').read_text()
+          manifest=json.loads(Path('public/manifest.webmanifest').read_text())
+          actual=hashlib.sha256(html).hexdigest()
+          assert len(html)<300_000
+          assert f"const EXPECTED_SHA256='{actual}'" in worker
+          assert "__NEXUS_PILOT_12_SHA256__" not in worker
+          assert "connect-src 'none'" in html.decode()
+          assert "worker-src 'self'" in html.decode()
+          assert "manifest-src 'self'" in html.decode()
+          assert all(s not in worker for s in ('localStorage','indexDB','indexedDB','POST','password','/v1/'))
+          assert "req.mode!=='navigate'" in worker
+          assert "req.method!=='GET'" in worker
+          assert manifest['start_url']=='/' and manifest['scope']=='/'
+          assert manifest['display']=='standalone' and manifest['lang']=='fa'
+          assert {i['sizes'] for i in manifest['icons']}=={'192x192','512x512'}
+          for n in (192,512):
+              p=Path(f'public/icons/nexus-{n}.png')
+              raw=p.read_bytes()
+              assert len(raw)<10_000 and raw[:8]==b'\x89PNG\r\n\x1a\n'
+              assert struct.unpack('>II',raw[16:24])==(n,n)
+          print('PASS: pinned source, icon dimensions, CSP, manifest and worker-only navigation')
+          PY
+          mkdir -p public
+          cp web/offline-pilot.html public/index.html
+          cmp web/offline-pilot.html public/index.html
+          node --check scripts/test-pwa-offline-browser.mjs
+          node --check public/service-worker.js
+      - name: Test browser opt-in install and actual no-network navigation
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          test -n "$NEXUS_PWA_CHROME"
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory public \
+            > "$RUNNER_TEMP/nexus-pwa-http.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          python3 - <<'PY'
+          import time,urllib.request
+          for attempt in range(40):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:8765/', timeout=2) as r:
+                      assert r.status==200
+                  break
+              except Exception:
+                  if attempt==39: raise
+                  time.sleep(.1)
+          PY
+          node scripts/test-pwa-offline-browser.mjs > pilot-12-offline-witness.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open('pilot-12-offline-witness.json'))
+          assert r['schema']=='nexus.pilot-12.offline-install-witness.v1'
+          assert r['status']=='PASS'
+          assert len(r['checks'])==7
+          assert r['actual_offline_navigation'] is True
+          assert r['real_android_hardware'] is False
+          assert r['private_data_submitted'] is False
+          assert r['authenticated_rust_tested'] is False
+          assert r['volume_recovery_verified'] is False
+          assert r['production_mutation'] is False and r['authority']=='none'
+          print('PASS: real Chromium opt-in install, true offline reload, data isolation and uninstall')
+          PY
+      - name: Upload sanitized offline install acceptance witness
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-pilot-12-browser-offline-install
+          path: pilot-12-offline-witness.json
+          if-no-files-found: ignore
+          retention-days: 14
