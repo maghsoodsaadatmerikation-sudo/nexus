@@ -2,7 +2,11 @@
 
 ## Objective
 
-Give mobile users an immediately usable NEXUS experience **without entering personal content**. The current hosted public Render version may still be the older Pilot 06 source; this code candidate is **not live on Render** until separately deployed and independently verified under Issue #100.
+Give mobile users an immediately usable NEXUS experience **without entering personal content**. Render reported LIVE for the existing static site's manual deployment
+`dep-dbqo0pei0phs73d8rrb0` of Pilot 09 source commit
+`8e3fd8789d82db4559a9cb77cd2f82578271df4b` on 2026-11-12.
+An independent pinned public-HTTPS source-byte check is a separate gate;
+the provider's LIVE status alone is not independent proof.
 
 The demo is a single optional button above the existing workspace. It fills a visibly marked, fictional study-planning question, goal, constraints, values, exactly two sample claims and two sample alternatives. One claim's purported source is named `demo:synthetic-unverified-not-a-real-source`, never an actual provenance assertion.
 
@@ -23,6 +27,12 @@ No backend, provider or Railway action is needed. The GitHub CI success proves o
 
 ## Promotion
 
-After exact PR checks PASS, merge with expected SHA and verify main. The Render static pilot has autoDeploy disabled, so source merge does not make the new feature live. [Issue #100](https://github.com/maghsoodsaadatmerikation-sudo/nexus/issues/100) remains the tracked explicit selection, deployment and independent public-byte verification gate.
+The source was merged through PR #101 after six exact-head checks succeeded.
+The Render static pilot had autoDeploy disabled; we explicitly triggered a
+manual deployment of the existing Static Site only. The follow-up
+`.github/workflows/static-pilot-https.yml` baseline pins the actual
+Render-deployed commit. [Issue #100](https://github.com/maghsoodsaadatmerikation-sudo/nexus/issues/100)
+tracks provider receipt, independent exact-byte public identity and
+remaining honest production/nonclaims.
 
 Do not spend money, modify Railway's original `/data` volume, claim an authenticated human pilot, Seal, Release, or expand authority. `A_out <= A_in`.
