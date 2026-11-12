@@ -81,8 +81,15 @@ and first authenticated human pilot remains
 ## Deployment and exact-source evidence (2026-11-12)
 
 The existing static Render service `nexus-offline-pilot` reported LIVE for
-deployment `dep-dbqolejbc2fs73e0mha0` at source `ed13887699b49a8494a3178e426ad9192e14d57e`,
+deployment `dep-dbqooirrjlhs73a1cvdg` at source `ed13887699b49a8494a3178e426ad9192e14d57e`,
 after PR #105 merged with six exact-head checks passing. The independent
 pinned HTTPS identity and real-Chromium live-run checks are maintained by the
 following documentation/observer update; a provider LIVE label alone is not
 independent content or Android-device acceptance.
+
+The first non-cache-cleared deployment `dep-dbqolejbc2fs73e0mha0`
+returned provider LIVE while the public GET still returned a different
+SHA-256. The existing static service was redeployed with a cleared build
+cache as `dep-dbqooirrjlhs73a1cvdg`; the independent exact-byte
+HTTPS verifier then returned SUCCESS. Never equate provider LIVE with
+observed public bytes or silently call failed static identity checks PASS.
