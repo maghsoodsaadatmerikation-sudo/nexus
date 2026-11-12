@@ -356,6 +356,8 @@ where
 {
     Router::new()
         .route("/", get(web_workspace))
+        .route("/work-mode", get(work_mode_page))
+        .route("/work-mode-core.js", get(work_mode_script))
         .route("/connections", get(connections::page))
         .route("/v1/connections", get(connections::catalog::<D>))
         .route("/v1/connections/invoke", post(connections::invoke::<D>))
@@ -1009,4 +1011,24 @@ mod tests {
         assert!(!state.statuses.read().unwrap().contains_key("wrong"));
         std::fs::remove_dir_all(root).unwrap();
     }
+}
+
+async fn work_mode_page() -> impl IntoResponse {
+    (
+        [
+            ("content-security-policy", "frame-ancestors 'none'"),
+            ("x-frame-options", "DENY"),
+            ("cache-control", "no-store"),
+        ],
+        Html(include_str!("../../web/work-mode.html")),
+    )
+}
+async fn work_mode_script() -> impl IntoResponse {
+    (
+        [
+            ("content-type", "text/javascript; charset=utf-8"),
+            ("cache-control", "no-store"),
+        ],
+        include_str!("../../web/work-mode-core.js"),
+    )
 }

@@ -7,6 +7,11 @@ on:
       - 'web/research-chat.html'
       - 'web/chat-history.js'
       - 'web/connections.html'
+      - 'web/work-mode.html'
+      - 'web/work-mode-core.js'
+      - 'scripts/test-work-mode.mjs'
+      - 'scripts/test-work-mode-browser.py'
+      - 'docs/WORK-MODE.md'
       - 'scripts/test-connections-browser.py'
       - 'docs/OPTIONAL-APP-CONNECTIONS.md'
       - 'scripts/test-chat-history.mjs'
@@ -24,6 +29,11 @@ on:
       - 'web/research-chat.html'
       - 'web/chat-history.js'
       - 'web/connections.html'
+      - 'web/work-mode.html'
+      - 'web/work-mode-core.js'
+      - 'scripts/test-work-mode.mjs'
+      - 'scripts/test-work-mode-browser.py'
+      - 'docs/WORK-MODE.md'
       - 'scripts/test-connections-browser.py'
       - 'docs/OPTIONAL-APP-CONNECTIONS.md'
       - 'scripts/test-chat-history.mjs'
@@ -61,3 +71,7 @@ jobs:
         run: python3 scripts/test-chat-history-browser.py
       - name: Exercise explicit app consent and disconnect in real Chromium
         run: python3 scripts/test-connections-browser.py
+      - name: Test project state, human review gates and encrypted persistence
+        run: node --test scripts/test-work-mode.mjs
+      - name: Exercise real Chromium project work, resume, files and chat consent
+        run: python3 scripts/test-work-mode-browser.py
