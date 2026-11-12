@@ -35,7 +35,7 @@ disposable CI) can register the web-only service worker.
 
 ## Security architecture
 
-- Static app shell (HTML) only. `public/manifest.webmanifest` and
+- Static app shell (HTML) only. `public/manifest.json` and
   exactly two binary PNG icons (192×192 and 512×512) support installation.
   Existing Render build command `mkdir -p public && cp
   web/offline-pilot.html public/index.html` is **unchanged**; committed
