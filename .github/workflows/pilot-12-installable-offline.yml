@@ -7,7 +7,7 @@ on:
       - 'scripts/test-pwa-offline-browser.mjs'
       - 'web/offline-pilot.html'
       - 'public/service-worker.js'
-      - 'public/manifest.webmanifest'
+      - 'public/manifest.json'
       - 'public/icons/**'
       - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
   push:
@@ -17,7 +17,7 @@ on:
       - 'scripts/test-pwa-offline-browser.mjs'
       - 'web/offline-pilot.html'
       - 'public/service-worker.js'
-      - 'public/manifest.webmanifest'
+      - 'public/manifest.json'
       - 'public/icons/**'
       - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
   workflow_dispatch:
@@ -44,7 +44,7 @@ jobs:
           from pathlib import Path
           html=Path('web/offline-pilot.html').read_bytes()
           worker=Path('public/service-worker.js').read_text()
-          manifest=json.loads(Path('public/manifest.webmanifest').read_text())
+          manifest=json.loads(Path('public/manifest.json').read_text())
           actual=hashlib.sha256(html).hexdigest()
           assert len(html)<300_000
           assert f"const EXPECTED_SHA256='{actual}'" in worker

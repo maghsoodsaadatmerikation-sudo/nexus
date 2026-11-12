@@ -45,7 +45,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git show 736e7b25819064722675505c86efa09e7e79e2df:web/offline-pilot.html \
+          git show 87afc579be8207ab641e645f8aab207384ddd46c:web/offline-pilot.html \
             > "$RUNNER_TEMP/nexus-deployed-pwa.html"
           cmp web/offline-pilot.html "$RUNNER_TEMP/nexus-deployed-pwa.html" || {
             echo "BLOCKED: code changed after last independently authorized static deployment"

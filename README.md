@@ -18,8 +18,8 @@ A_out <= A_in
 
 The standalone Persian/RTL mobile pilot is hosted at
 **https://nexus-offline-pilot.onrender.com/**. Render reported LIVE for
-manual deployment `dep-dbqooirrjlhs73a1cvdg` of Pilot 11
-source commit `ed13887699b49a8494a3178e426ad9192e14d57e`.
+manual deployment `dep-dbqq8u0ae00c73951ju0` of Pilot 12
+source commit `87afc579be8207ab641e645f8aab207384ddd46c`.
 The independent static HTTPS identity workflow pins the actually deployed
 source; provider status alone is not byte-level proof. The app does not
 connect to the Rust gateway, send workspace content to Render, or issue
@@ -38,8 +38,8 @@ workspace JSON, password or personal information. Saving work still
 requires the separate encrypted local checkpoint or owner-held file.
 The standalone HTML continues to work when opened from a downloaded file.
 
-Render reported LIVE for static deployment `dep-dbqpt5ifngtc738bgdq0`
-from exact source `736e7b25819064722675505c86efa09e7e79e2df`.
+Render reported LIVE for static deployment `dep-dbqq8u0ae00c73951ju0`
+from exact source `87afc579be8207ab641e645f8aab207384ddd46c`.
 Independent public asset-byte checks and live-origin real Chromium offline
 acceptance must PASS separately; provider LIVE alone does not prove them.
 [Installation and security contract](docs/PILOT-12-INSTALLABLE-OFFLINE.md).

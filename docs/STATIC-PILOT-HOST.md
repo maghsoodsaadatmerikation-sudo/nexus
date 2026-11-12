@@ -39,8 +39,8 @@ Pilot 12 extended the existing public static site with **public,
 non-sensitive installation assets** (manifest, scoped service worker and
 192×192/512×512 icons), while retaining the original build command and
 browser-only decision authority. The cache-cleared manual Render deploy
-`dep-dbqpt5ifngtc738bgdq0` reports LIVE from exact source
-`736e7b25819064722675505c86efa09e7e79e2df`.
+`dep-dbqq8u0ae00c73951ju0` reports LIVE from exact source
+`87afc579be8207ab641e645f8aab207384ddd46c`.
 Only the independent public asset observer and real Chromium offline
 test can prove exact public bytes and working browser offline fallback;
 a Render LIVE status alone does not prove either. The older Pilot 11

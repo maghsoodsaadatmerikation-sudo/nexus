@@ -35,7 +35,7 @@ disposable CI) can register the web-only service worker.
 
 ## Security architecture
 
-- Static app shell (HTML) only. `public/manifest.webmanifest` and
+- Static app shell (HTML) only. `public/manifest.json` and
   exactly two binary PNG icons (192×192 and 512×512) support installation.
   Existing Render build command `mkdir -p public && cp
   web/offline-pilot.html public/index.html` is **unchanged**; committed
@@ -109,8 +109,8 @@ the first actual authenticated human Rust pilot remains
 
 The existing Render static service `nexus-offline-pilot`, with autoDeploy
 OFF, reported LIVE on build-cache-cleared deployment
-`dep-dbqpt5ifngtc738bgdq0`, source
-`736e7b25819064722675505c86efa09e7e79e2df`.
+`dep-dbqq8u0ae00c73951ju0`, source
+`87afc579be8207ab641e645f8aab207384ddd46c`.
 Provider metadata is **not** independent proof of public bytes or
 successful Android installation. The separate [public read-only five-asset
 observer](../scripts/verify-public-pwa-assets.py) and
