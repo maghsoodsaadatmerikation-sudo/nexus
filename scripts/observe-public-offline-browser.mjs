@@ -23,9 +23,10 @@ const VOICE_MODE=process.env.NEXUS_PUBLIC_VOICE==='true';
 const FILE_MODE=process.env.NEXUS_PUBLIC_FILES==='true';
 const ANALYSIS_MODE=process.env.NEXUS_PUBLIC_ANALYSIS==='true';
 const WEB_MODE=process.env.NEXUS_PUBLIC_WEB_RESEARCH==='true';
-if([REPORT_MODE,DRAFT_MODE,LANGUAGE_MODE,VOICE_MODE,FILE_MODE,ANALYSIS_MODE,WEB_MODE].filter(Boolean).length>1)throw Error('choose-one-public-witness-mode');
-const EXPECTED_CHECKS=(WEB_MODE||ANALYSIS_MODE)?null:FILE_MODE?33:VOICE_MODE?35:LANGUAGE_MODE?23:DRAFT_MODE?21:REPORT_MODE?17:46;
-const MIN_DOCUMENTS=(WEB_MODE||ANALYSIS_MODE||FILE_MODE||VOICE_MODE||LANGUAGE_MODE||DRAFT_MODE||REPORT_MODE)?1:2;
+const CHAT_MODE=process.env.NEXUS_PUBLIC_GUIDED_CHAT==='true';
+if([REPORT_MODE,DRAFT_MODE,LANGUAGE_MODE,VOICE_MODE,FILE_MODE,ANALYSIS_MODE,WEB_MODE,CHAT_MODE].filter(Boolean).length>1)throw Error('choose-one-public-witness-mode');
+const EXPECTED_CHECKS=(CHAT_MODE||WEB_MODE||ANALYSIS_MODE)?null:FILE_MODE?33:VOICE_MODE?35:LANGUAGE_MODE?23:DRAFT_MODE?21:REPORT_MODE?17:46;
+const MIN_DOCUMENTS=(CHAT_MODE||WEB_MODE||ANALYSIS_MODE||FILE_MODE||VOICE_MODE||LANGUAGE_MODE||DRAFT_MODE||REPORT_MODE)?1:2;
 const REPO_ROOT=new URL('../',import.meta.url);
 const sha256=value=>createHash('sha256').update(value).digest('hex');
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -40,9 +41,9 @@ if(!GITHUB_ONLY || !BROWSER || typeof WebSocket==='undefined' ||
 const expected=await readFile(new URL('../web/offline-pilot.html',import.meta.url));
 assert(expected.length>1000 && expected.length<=300000,'expected-source-size');
 const expectedDigest=sha256(expected);
-const pythonTest=await readFile(new URL(WEB_MODE?'./test-web-research-browser.py':ANALYSIS_MODE?'./test-local-data-analysis-browser.py':FILE_MODE?'./test-file-desk-browser.py':VOICE_MODE?'./test-voice-browser.py':LANGUAGE_MODE?'./test-ui-languages-browser.py':DRAFT_MODE?'./test-draft-guard-browser.py':REPORT_MODE?'./test-decision-report-browser.py':'./test-offline-pilot-browser.py',import.meta.url),'utf8');
+const pythonTest=await readFile(new URL(CHAT_MODE?'./test-guided-chat-browser.py':WEB_MODE?'./test-web-research-browser.py':ANALYSIS_MODE?'./test-local-data-analysis-browser.py':FILE_MODE?'./test-file-desk-browser.py':VOICE_MODE?'./test-voice-browser.py':LANGUAGE_MODE?'./test-ui-languages-browser.py':DRAFT_MODE?'./test-draft-guard-browser.py':REPORT_MODE?'./test-decision-report-browser.py':'./test-offline-pilot-browser.py',import.meta.url),'utf8');
 const match=pythonTest.match(/WITNESS = r"""([\s\S]*?)"""/);
-assert(match && match[1].length>1000 && match[1].includes(WEB_MODE?'english-first-search-panel':ANALYSIS_MODE?'english-first-analysis-panel-exists':FILE_MODE?'file-desk-uses-no-app-network-or-persistent-plaintext-storage':VOICE_MODE?'no-automatic-microphone-or-speaker-start':LANGUAGE_MODE?'english-is-explicit-default':DRAFT_MODE?'uncommitted-question-has-visible-and-unload-guard':REPORT_MODE?'report-user-content-is-inert-text':'real-page-reload-requires-passphrase-and-recovers'),
+assert(match && match[1].length>1000 && match[1].includes(CHAT_MODE?'english-first-guided-chat-panel-exists':WEB_MODE?'english-first-search-panel':ANALYSIS_MODE?'english-first-analysis-panel-exists':FILE_MODE?'file-desk-uses-no-app-network-or-persistent-plaintext-storage':VOICE_MODE?'no-automatic-microphone-or-speaker-start':LANGUAGE_MODE?'english-is-explicit-default':DRAFT_MODE?'uncommitted-question-has-visible-and-unload-guard':REPORT_MODE?'report-user-content-is-inert-text':'real-page-reload-requires-passphrase-and-recovers'),
   'exact-real-browser-witness-unavailable');
 
 function verifyDocument(status,mime,bytes,redirected=false){
@@ -172,8 +173,10 @@ async function layoutWitness(layout){
         throw error;
       }
     },180000,'real-public-browser-did-not-complete');
-    assert(((WEB_MODE||ANALYSIS_MODE)?report.checks?.length>=25:report.checks?.length===EXPECTED_CHECKS)&&report.network_requests===0&&
-      (WEB_MODE?report.production_mutation===false&&report.real_web_results_tested===false:
+    assert(((CHAT_MODE||WEB_MODE||ANALYSIS_MODE)?report.checks?.length>=(CHAT_MODE?36:25):report.checks?.length===EXPECTED_CHECKS)&&report.network_requests===0&&
+      (CHAT_MODE?report.production_mutation===false&&report.generative_model_used===false&&
+        report.real_person_peer===false&&report.autonomous_judgment===false&&report.synthetic_local_voice_verified===true:
+       WEB_MODE?report.production_mutation===false&&report.real_web_results_tested===false:
        ANALYSIS_MODE?report.production_mutation===false&&report.real_user_tested===false&&report.source_rows_exported===false:
        report.production_verified===false)&&
       report.authority==='none',
@@ -214,6 +217,7 @@ async function layoutWitness(layout){
       generated_formats_checked:FILE_MODE?8:0,
       local_analysis_checked:ANALYSIS_MODE&&report.checks.length>=25,
       web_research_checked:WEB_MODE&&report.checks.length>=25,
+      guided_chat_checked:CHAT_MODE&&report.checks.length>=36,
       real_reload_verified:report.checks.includes('real-page-reload-requires-passphrase-and-recovers'),
       test_fixture_only:true,document_responses:documents.length,
       requested_paths_count:network.length,network_attempts_by_app:report.network_requests,
@@ -247,11 +251,11 @@ async function main(){
   const getSha=await independentPublicGet();
   const reports=[];
   for(const layout of ['narrow','wide'])reports.push(await layoutWitness(layout));
-  if(ANALYSIS_MODE||WEB_MODE)assert(reports.length===2&&reports[0].checks===reports[1].checks,'public-special-mode-layout-check-count-mismatch');
+  if(ANALYSIS_MODE||WEB_MODE||CHAT_MODE)assert(reports.length===2&&reports[0].checks===reports[1].checks,'public-special-mode-layout-check-count-mismatch');
   process.stdout.write(JSON.stringify({
-    schema:WEB_MODE?'nexus.public-pilot.web-research-acceptance.v1':ANALYSIS_MODE?'nexus.public-pilot.data-analysis-acceptance.v1':FILE_MODE?'nexus.public-pilot.file-desk-acceptance.v1':VOICE_MODE?'nexus.public-pilot.voice-adapter-acceptance.v1':LANGUAGE_MODE?'nexus.public-pilot.ui-language-acceptance.v1':DRAFT_MODE?'nexus.public-pilot.draft-guard-acceptance.v1':REPORT_MODE?'nexus.public-pilot.decision-report-acceptance.v1':'nexus.public-pilot.browser-acceptance.v1',status:'PASS',
+    schema:CHAT_MODE?'nexus.public-pilot.guided-chat-acceptance.v1':WEB_MODE?'nexus.public-pilot.web-research-acceptance.v1':ANALYSIS_MODE?'nexus.public-pilot.data-analysis-acceptance.v1':FILE_MODE?'nexus.public-pilot.file-desk-acceptance.v1':VOICE_MODE?'nexus.public-pilot.voice-adapter-acceptance.v1':LANGUAGE_MODE?'nexus.public-pilot.ui-language-acceptance.v1':DRAFT_MODE?'nexus.public-pilot.draft-guard-acceptance.v1':REPORT_MODE?'nexus.public-pilot.decision-report-acceptance.v1':'nexus.public-pilot.browser-acceptance.v1',status:'PASS',
     source_sha256:expectedDigest,independent_get_sha256:getSha,
-    origin:ORIGIN,checks_per_layout:(ANALYSIS_MODE||WEB_MODE)?reports[0].checks:EXPECTED_CHECKS,negative_local_fixtures:6,
+    origin:ORIGIN,checks_per_layout:(ANALYSIS_MODE||WEB_MODE||CHAT_MODE)?reports[0].checks:EXPECTED_CHECKS,negative_local_fixtures:6,
     report:reports,synthetic_only:true,real_human_tested:false,native_audio_tested:false,
     voice_engines:VOICE_MODE?'controlled-test-adapters':'not-tested',
     authenticated_rust_tested:false,production_restore_tested:false,
