@@ -32,7 +32,7 @@ required = [
     'plan: 0.5c-512mb',
     'region: frankfurt',
     'dockerfilePath: ./Dockerfile',
-    'autoDeployTrigger: off',
+    "autoDeployTrigger: 'off'",
     'healthCheckPath: /',
     'numInstances: 1',
     'mountPath: /data',
