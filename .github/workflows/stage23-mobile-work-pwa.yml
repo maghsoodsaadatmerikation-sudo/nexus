@@ -1,0 +1,106 @@
+name: NEXUS Stage 23 — Installable Mobile Work Mode
+on:
+  pull_request:
+    branches:
+      - feat/work-mode-20261113
+    paths:
+      - '.github/workflows/stage23-mobile-work-pwa.yml'
+      - 'scripts/build-mobile-work-pwa.py'
+      - 'scripts/test-mobile-work-pwa.py'
+      - 'scripts/test-mobile-work-pwa-browser.mjs'
+      - 'scripts/build-work-mode-portable.py'
+      - 'web/work-mode.html'
+      - 'web/work-mode-core.js'
+      - 'public/icons/**'
+      - 'docs/STAGE-23-MOBILE-WORK-MODE.md'
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-installable-offline:
+    name: mobile-installable-offline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact proposed revision without saved credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validate exact source, no production credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          python3 -m py_compile scripts/build-mobile-work-pwa.py scripts/test-mobile-work-pwa.py
+          node --check scripts/test-mobile-work-pwa-browser.mjs
+
+      - name: Adversarial PWA source, authority and crypto-boundary tests
+        run: python3 scripts/test-mobile-work-pwa.py
+
+      - name: Build and verify exact portable mobile website
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build-mobile-work-pwa.py --out build/stage23-mobile
+          python3 scripts/build-mobile-work-pwa.py --out build/stage23-mobile --check
+          node --check build/stage23-mobile/service-worker.js
+          python3 - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          base=Path('build/stage23-mobile')
+          receipt=json.loads((base/'nexus-stage23-integrity.json').read_text())
+          assert receipt['status']=='STATIC_ARTIFACT_NOT_HOSTED'
+          for name,info in receipt['assets'].items():
+              b=(base/name).read_bytes()
+              assert len(b)==info['bytes'] and hashlib.sha256(b).hexdigest()==info['sha256']
+          assert (base/'.nojekyll').read_bytes()==b''
+          print('PASS: exact generated assets, public hashes, no runtime secrets')
+          PY
+
+      - name: Real Chrome explicit install, tamper rejection and real network outage
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_STAGE23_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          test -n "$NEXUS_STAGE23_CHROME"
+          node scripts/test-mobile-work-pwa-browser.mjs build/stage23-mobile > build/stage23-browser-acceptance.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open('build/stage23-browser-acceptance.json'))
+          assert r['status']=='PASS' and len(r['reports'])==2
+          assert {x['layout'] for x in r['reports']}=={'mobile','nested'}
+          assert all(x['actual_network_outage'] and len(x['checks'])>=11 for x in r['reports'])
+          assert r['production_deployed'] is False and r['real_android_tested'] is False
+          print('PASS: real synthetic Chromium mobile/root and nested-scope/offline witness')
+          PY
+
+      - name: Upload reviewable no-cost static site candidate, NOT deploy
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-stage23-mobile-pwa-site
+          path: build/stage23-mobile/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload sanitized synthetic browser acceptance
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-stage23-mobile-pwa-witness
+          path: build/stage23-browser-acceptance.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Refuse to claim public deployment or real owner device
+        shell: bash
+        run: |
+          echo 'STAGE23: PWA built, synthetic browser verified, NO public host promoted.'
+          echo 'No Pages/Render deploy; no Railway /data, external backup, Android hardware or human acceptance.'
+          echo 'NEXUS authority remains human; release and Stage D gates are separate.'
