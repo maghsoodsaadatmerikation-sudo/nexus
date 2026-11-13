@@ -1,10 +1,10 @@
 /* Reviewed public Studio application code only; model bytes use a separate opt-in cache. */
 'use strict';
-const EXPECTED_SHA256='91d228d282c96e2b9af9d78c2f9401acf395b16de0426a0d515266a3698a7fce';
-const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'cba7ce45b397154c';
+const EXPECTED_SHA256='320c66ff74a8f6f8d12083f23be56684f1335e347891576998da715811e5c494';
+const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'db5e9240c25825ce';
 const ENTRY=new URL('./',self.location.href).href;
-const HTML={url:ENTRY,bytes:272940,sha256:EXPECTED_SHA256,kind:'html'};
-const CODE=[{"path":"device/device-engine.js","bytes":2860,"sha256":"6fb0d40efe36509dfc99cb60e0cac412c0375a6ca4c5af046ca75398219cd873","kind":"javascript"},{"path":"device/device-worker.js","bytes":7863,"sha256":"a2b396fb0fe7a4411ba8a4e678b6c4f79bfc0eed673e1712f445baa8a9c60e85","kind":"javascript"},{"path":"device/device-ui.js","bytes":3860,"sha256":"fd02a4a50f35bd870c1f8aeb148fe1591f1d038289e85e003c5bdb2a9903dff6","kind":"javascript"},{"path":"device/model-manifest.json","bytes":3196,"sha256":"49353c4a16f7912fd4251b6d048923fd41d2819f9fab2faf5bfbccab9a7e3983","kind":"json"}].map(a=>({...a,url:new URL(a.path,ENTRY).href}));
+const HTML={url:ENTRY,bytes:274481,sha256:EXPECTED_SHA256,kind:'html'};
+const CODE=[{"path":"device/device-engine.js","bytes":5135,"sha256":"7241afb570cde5843afbd20272c17c4d304e61ee35fd5330ce94486120bc17c4","kind":"javascript"},{"path":"device/device-worker.js","bytes":7863,"sha256":"a2b396fb0fe7a4411ba8a4e678b6c4f79bfc0eed673e1712f445baa8a9c60e85","kind":"javascript"},{"path":"device/device-ui.js","bytes":8177,"sha256":"cd819a80d23bb362ab9642d4be36a4b954ba6c7a77bb746f435bf21933ab3248","kind":"javascript"},{"path":"device/model-manifest.json","bytes":3196,"sha256":"49353c4a16f7912fd4251b6d048923fd41d2819f9fab2faf5bfbccab9a7e3983","kind":"json"}].map(a=>({...a,url:new URL(a.path,ENTRY).href}));
 async function verified(response,asset=HTML){
  if(!response||response.status!==200||response.redirected||response.type!=='basic')return false;
  const mime=(response.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();

@@ -4,11 +4,18 @@
 <p class="help studio-fa" dir="rtl">SmolLM2-135M یک مدل کوچک برای پیش‌نویس انگلیسی با دقت محدود است. برای پیش‌نویس از اطلاعاتی که خودت می‌دهی استفاده کن؛ پاسخ دانشی مستقل قابل‌اتکا نیست. دانلود اولیه حدود ۱۶۷ مگابایت است. کلید API لازم ندارد و تولید متن روی همین دستگاه انجام می‌شود. مرورگر مناسب و دست‌کم ۴ گیگابایت حافظهٔ دستگاه توصیه می‌شود؛ سرعت به دستگاه بستگی دارد.</p>
 <p class="help studio-en">Short contexts only: at most 768 input tokens including the fixed policy, and 64 output tokens. Large contexts are refused, never silently shortened. Downloaded model/runtime bytes can be cached; this does not save conversations.</p>
 <p class="help studio-fa" dir="rtl">حداکثر ورودی ۷۶۸ توکن با احتساب سیاست ثابت و حداکثر خروجی ۶۴ توکن است. ورودی بزرگ رد می‌شود و پنهانی کوتاه نمی‌شود. کش مدل شامل فایل‌های عمومی است و گفت‌وگوها را ذخیره نمی‌کند.</p>
+<button id="device-check" class="secondary"><span class="studio-en">Check device readiness</span><span class="studio-fa">بررسی آمادگی دستگاه</span></button>
+<pre id="device-readiness" role="status" aria-live="polite"></pre>
+<p class="help studio-en">This check downloads no model. Browser storage and memory estimates are advisory; passing does not prove the model runs. Storage headroom is estimated separately from RAM.</p>
+<p class="help studio-fa" dir="rtl">این بررسی مدل را دانلود نمی‌کند. برآورد حافظه و فضای مرورگر تقریبی است؛ موفقیت بررسی، اجرای مدل را ثابت نمی‌کند. فضای ذخیره‌سازی با رم متفاوت است.</p>
 <label class="inline"><input id="device-consent" type="checkbox"><span class="studio-en">Download/reuse the public model and runtime files on this device.</span><span class="studio-fa">فایل‌های عمومی مدل و موتور اجرا روی این دستگاه دانلود یا از کش خوانده شوند.</span></label>
 <button id="device-load"><span class="studio-en">Load small model</span><span class="studio-fa">بارگذاری مدل کوچک</span></button>
 <button id="device-unload" class="secondary"><span class="studio-en">Unload from memory</span><span class="studio-fa">خروج مدل از حافظه</span></button>
 <button id="device-erase" class="secondary"><span class="studio-en">Erase downloaded model files</span><span class="studio-fa">حذف فایل‌های دانلودشدهٔ مدل</span></button>
 <p class="help studio-en">Then choose “On-device small model” in the model settings. Prepare and approve the exact context before generating. Stop terminates the inference Worker; locking the archive unloads the model. Keep an encrypted backup separately.</p>
 <p class="help studio-fa" dir="rtl">سپس در تنظیمات مدل «مدل کوچک روی دستگاه» را انتخاب کن. متن دقیق را پیش از تولید مرور و تأیید کن. توقف، پردازش مدل را قطع می‌کند و قفل‌کردن آرشیو مدل را از حافظه خارج می‌کند. پشتیبان رمزگذاری‌شده را جدا نگه دار.</p>
+<button id="device-report" class="secondary"><span class="studio-en">Download local execution report</span><span class="studio-fa">دانلود گزارش اجرای محلی</span></button>
+<p class="help studio-en">The report contains runtime status and token counts, not messages, answers, credentials or project names. It is an observation from this tab, not independent device certification. Lock/unload clears it.</p>
+<p class="help studio-fa" dir="rtl">گزارش شامل وضعیت اجرا و شمارش توکن است؛ پیام‌ها، پاسخ‌ها، رمزها و نام پروژه در آن نیست. این گزارش مشاهدهٔ همین برگه است و تأیید مستقل دستگاه نیست. قفل یا خروج مدل آن را پاک می‌کند.</p>
 <p id="device-state" role="status" aria-live="polite"></p>
 </section>
