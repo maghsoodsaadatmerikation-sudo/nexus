@@ -229,6 +229,20 @@ async fn main() {
     } else {
         nexus_artifact_05_gateway::research_chat::ResearchChat::default()
     };
+    let model_service=match std::env::var("NEXUS_MODEL_PROVIDER") {
+        Err(std::env::VarError::NotPresent) | Ok(ref p) if p=="disabled" =>
+            nexus_artifact_05_gateway::generative_chat::ModelService::default(),
+        Ok(provider)=>{
+            let model=std::env::var("NEXUS_MODEL_ID")
+                .expect("NEXUS_MODEL_ID required when a model provider is enabled");
+            let key=std::env::var("NEXUS_MODEL_API_KEY")
+                .expect("NEXUS_MODEL_API_KEY required for remote model provider");
+            nexus_artifact_05_gateway::generative_chat::ModelService::operator_configured(
+                &provider,&model,&key)
+                .unwrap_or_else(|_|panic!("invalid NEXUS model configuration"))
+        },
+        Err(_) => panic!("invalid NEXUS_MODEL_PROVIDER"),
+    };
     let connections = match std::env::var_os("NEXUS_CONNECTIONS_CONFIG") {
         None => nexus_artifact_05_gateway::connections::Connections::disabled(),
         Some(path) => {
@@ -247,6 +261,7 @@ async fn main() {
         AppState::authenticated(CoreDelegate::new(data_root.clone()), token)
             .with_safety(safety)
             .with_research_chat(research)
+            .with_model_service(model_service)
             .with_connections(connections)
             .with_body_read_timeout(Duration::from_secs(body_read_seconds))
             .with_max_concurrent_executions(max_concurrent_executions)
