@@ -26,7 +26,7 @@ const child=spawn(browser,[
  '--remote-debugging-address=127.0.0.1','--remote-debugging-port=0',
  '--user-data-dir='+profile,'--window-size=420,1000','about:blank'
 ],{stdio:['ignore','ignore','ignore']});
-let socket,seq=0,stage='chrome-start',exited=false;
+let socket,seq=0,stage='chrome-start',exited=false,lastDocumentStatus=null;
 child.on('exit',()=>{exited=true});
 const pending=new Map();
 const rpc=(method,params={},deadline=10000,sessionId=undefined)=>new Promise((resolve,reject)=>{
@@ -92,7 +92,7 @@ try{
   socket.addEventListener('error',()=>{clearTimeout(t);rej(Error('socket-connect-error'))},{once:true});
  });
  socket.addEventListener('message',e=>{
-  const msg=JSON.parse(e.data),p=pending.get(msg.id);
+  const msg=JSON.parse(e.data);if(!msg.sessionId&&msg.method==='Network.responseReceived'&&msg.params.type==='Document')lastDocumentStatus=msg.params.response.status;const p=pending.get(msg.id);
   if(!p)return;pending.delete(msg.id);
   msg.error?p.reject(Error('cdp-failure')):p.resolve(msg.result);
  });
@@ -129,11 +129,11 @@ try{
  // Reinstall, corrupt only the cached public bytes, then verify true-offline fail-closed.
  await js("document.getElementById('studio-offline').click();true");await poll(()=>retryJs("document.getElementById('studio-offline-state').textContent.includes('آماده است')"),25000,'reinstall');
  await js("(async()=>{const cache=await caches.open((await caches.keys())[0]);await cache.put(location.origin+'/',new Response('CORRUPTED PUBLIC SHELL',{headers:{'content-type':'text/html'}}));return true})()");
- await setOffline(true);await rpc('Page.reload',{ignoreCache:true});
- await poll(()=>retryJs("document.body?.textContent.includes('Studio offline code is unavailable')"),15000,'corrupted-cache-accepted');checks.push('corrupted-offline-shell-rejected');
+ lastDocumentStatus=null;await setOffline(true);await rpc('Page.reload',{ignoreCache:true});
+ await poll(async()=>lastDocumentStatus===503,15000,'corrupted-cache-accepted');checks.push('corrupted-offline-shell-rejected');
  process.stdout.write(JSON.stringify({status:'PASS',checks,source_sha256:sourceDigest,origin:ORIGIN,actual_offline_navigation:true,real_android_hardware:false,real_model_tested:false,authority:'none'})+'\n');
 }catch(error){
- process.stderr.write(JSON.stringify({event:'pwa-browser-fail-closed',stage,
+ process.stderr.write(JSON.stringify({event:'pwa-browser-fail-closed',stage,checks,last_document_status:lastDocumentStatus,
   reason:String(error?.message||'unknown').replace(/[^A-Za-z0-9-]/g,'').slice(0,90),
   production_verified:false,authority:'none'})+'\n');
  throw error;
