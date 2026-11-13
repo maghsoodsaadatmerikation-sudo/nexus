@@ -17,6 +17,7 @@ on:
       - 'web/guided-chat-core.js'
       - 'web/web-research-core.js'
       - 'web/data-analysis-core.js'
+      - 'web/table-core.js'
       - 'scripts/build-ui-languages.py'
       - 'web/locales/**'
       - 'scripts/test-offline-to-rust-http.py'
@@ -43,6 +44,7 @@ on:
       - 'web/guided-chat-core.js'
       - 'web/web-research-core.js'
       - 'web/data-analysis-core.js'
+      - 'web/table-core.js'
       - 'scripts/build-ui-languages.py'
       - 'web/locales/**'
       - 'scripts/test-offline-to-rust-http.py'
@@ -105,6 +107,7 @@ jobs:
         run: |
           set -euo pipefail
           node --check web/data-analysis-core.js
+          node --check web/table-core.js
           python3 scripts/test-local-data-analysis-browser.py > data-analysis-browser.json
           python3 - <<'PY'
           import json

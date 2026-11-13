@@ -958,33 +958,9 @@ code{direction:ltr;unicode-bidi:embed}
   });
 
   /* NEXUS_DATA_ANALYSIS_BEGIN */
-  // Pilot 18: local-only, bounded, non-authoritative data analysis.
-  // Kept inlined by build-ui-languages.py so the downloaded HTML remains standalone.
-  const ANALYSIS_MAX_BYTES=1024*1024,ANALYSIS_MAX_ROWS=5000,ANALYSIS_MAX_COLUMNS=40;
-  let analysisData=null,analysisContext=null,analysisJob=0;
-  function analysisStatus(key){$('analysis-state').textContent=t(key);}
-  function clearAnalysis(){
-    analysisJob++;analysisData=null;analysisContext=null;
-    $('analysis-run').disabled=false;
-    $('analysis-summary').textContent='';$('analysis-bars').replaceChildren();
-    $('analysis-group').replaceChildren();$('analysis-metric').replaceChildren();
-    $('analysis-download').disabled=true;$('analysis-claim').disabled=true;
-  }
-  function refreshAnalysisSources(){
-    const select=$('analysis-source'),selected=select.value;
-    const candidates=fileTray.filter(f=>['csv','tsv','json','xlsx'].includes(f.name.split('.').pop().toLowerCase())&&f.size<=ANALYSIS_MAX_BYTES);
-    select.replaceChildren();
-    const intro=document.createElement('option');intro.value='';intro.textContent=t('m373');select.append(intro);
-    for(const file of candidates){
-      const o=document.createElement('option');o.value=file.id;o.textContent=file.name;select.append(o);
-    }
-    if(candidates.some(f=>f.id===selected))select.value=selected;
-    if(analysisContext&&(analysisContext.epoch!==fileEpoch||
-       analysisContext.workspace!==state.workspace||
-       !fileTray.some(f=>f.id===analysisContext.id&&f.sha===analysisContext.sha))) {
-      clearAnalysis();analysisStatus('m382');
-    }
-  }
+/* Shared bounded descriptive table engine; no DOM, execution or network. */
+(function(root){'use strict';
+const ANALYSIS_MAX_BYTES=1024*1024,ANALYSIS_MAX_ROWS=5000,ANALYSIS_MAX_COLUMNS=40;
   function parseDelimited(text,delimiter){
     if(text.length>ANALYSIS_MAX_BYTES)throw Error('text-budget');
     const rows=[],row=[];let value='',quoted=false,justClosed=false;
@@ -1015,7 +991,7 @@ code{direction:ltr;unicode-bidi:embed}
     const used=new Set();
     const columns=header.map((name,i)=>{
       let key=String(name??'').trim().slice(0,160)||('Column '+(i+1));
-      const root=key;let suffix=2;
+      const root=key.slice(0,150);let suffix=2;
       while(used.has(key)){key=root+' ('+suffix+++')';}
       used.add(key);return key;
     });
@@ -1045,6 +1021,106 @@ code{direction:ltr;unicode-bidi:embed}
     }
     return normalizedTable(columns,data.map(row=>columns.map(key=>Object.hasOwn(row,key)?row[key]:null)));
   }
+  const strictNumeric=value=>{
+    const s=String(value).trim().replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-1776)).replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-1632)).replace(/٫/g,'.');
+    if(!/^[+-]?(?:(?:\d+(?:\.\d*)?)|(?:\.\d+))(?:[Ee][+-]?\d+)?$/.test(s))return null;
+    const n=Number(s);return Number.isFinite(n)&&!(/^[+-]?\d+$/.test(s)&&!Number.isSafeInteger(n))?n:null;
+  };
+  function numberStats(values){
+    if(!Array.isArray(values)||values.some(x=>typeof x!=='number'||!Number.isFinite(x)))throw Error('finite-values-required');
+    const nums=values.slice().sort((a,b)=>a-b),n=nums.length;if(!n)return null;
+    const scale=Math.max(...nums.map(Math.abs))||1;let mean=0,m2=0;
+    values.forEach((x,i)=>{const y=x/scale,d=y-mean;mean+=d/(i+1);m2+=d*(y-mean)});
+    const quantile=q=>{const p=(n-1)*q,lo=Math.floor(p),hi=Math.ceil(p),f=p-lo;return lo===hi?nums[lo]:(1-f)*nums[lo]+f*nums[hi]};
+    const finite=x=>Number.isFinite(x)?x:null;
+    return {count:n,min:nums[0],max:nums[n-1],mean:finite(mean*scale),median:finite(quantile(.5)),q1:finite(quantile(.25)),q3:finite(quantile(.75)),sample_stddev:n>1?finite(Math.sqrt(Math.max(0,m2/(n-1)))*scale):null};
+  }
+  function analyseTable(table,source){
+    const {columns,rows}=table,stats=[],numeric=[];
+    columns.forEach((name,i)=>{
+      const values=rows.map(r=>r[i]),missing=values.filter(x=>!String(x).trim()).length;
+      const parsed=values.map(strictNumeric).filter(x=>x!==null);
+      const validNonMissing=rows.length-missing,asNumeric=parsed.length>0&&parsed.length/validNonMissing>=.8;
+      const frequencies=new Map();
+      for(const value of values){const key=String(value).trim()||null;frequencies.set(key,(frequencies.get(key)||0)+1);}
+      const common=Array.from(frequencies,([value,count])=>({value:value===null?'(missing)':value,missing:value===null,count}))
+        .sort((a,b)=>b.count-a.count||a.value.localeCompare(b.value)).slice(0,5);
+      stats.push({name,missing,distinct:frequencies.size,type:asNumeric?'numeric':'categorical',
+        numeric_count:parsed.length,invalid_numeric:asNumeric?validNonMissing-parsed.length:0,
+        summary:asNumeric?numberStats(parsed):null,top_values:common.map(x=>({...x,value:x.value.slice(0,160)}))});
+      if(asNumeric)numeric.push(i);
+    });
+    const correlations=[];
+    for(let i=0;i<numeric.length;i++)for(let j=i+1;j<numeric.length;j++){
+      const a=numeric[i],b=numeric[j],pairs=rows.map(r=>[strictNumeric(r[a]),strictNumeric(r[b])])
+        .filter(([x,y])=>x!==null&&y!==null);
+      if(pairs.length<3)continue;
+      const sx=Math.max(...pairs.map(p=>Math.abs(p[0])))||1,sy=Math.max(...pairs.map(p=>Math.abs(p[1])))||1;
+      const scaled=pairs.map(([x,y])=>[x/sx,y/sy]);
+      const mx=scaled.reduce((sum,p)=>sum+p[0],0)/pairs.length,my=scaled.reduce((sum,p)=>sum+p[1],0)/pairs.length;
+      let cov=0,vx=0,vy=0;
+      for(const [x,y] of scaled){const dx=x-mx,dy=y-my;cov+=dx*dy;vx+=dx*dx;vy+=dy*dy;}
+      const r=vx>0&&vy>0?cov/Math.sqrt(vx*vy):null;
+      correlations.push({left:columns[a],right:columns[b],pairs:pairs.length,pearson_r:r===null||!Number.isFinite(r)?null:Math.max(-1,Math.min(1,r))});
+    }
+    return {schema:'nexus.local-analysis.v1',authority:'none',source:{name:source.name,sha256:source.sha,
+      bytes:source.size,verification:'byte-identity-only'},limits:{max_rows:ANALYSIS_MAX_ROWS,max_columns:ANALYSIS_MAX_COLUMNS},
+      rows:rows.length,columns:columns.length,column_stats:stats,correlations,notes:[
+      'Exploratory descriptive analysis only; no causal inference, diagnosis, prediction or human judgment.',
+      'Values are not independently verified; missing, invalid and mixed columns can affect statistics.',
+      'Numeric parsing accepts dot/Arabic decimal marks and local digits; unsafe plain integers stay categorical. Binary64 summaries are approximate. Non-finite results are null; labels may be shortened. Pearson uses pairwise complete cases and is not causation.']};
+  }
+  function analysisGroups(table,index,metric){
+    if(index<0)return [];
+    const groups=new Map();
+    for(const row of table.rows){
+      const key=String(row[index]).trim()||null,label=key===null?'(missing)':key;
+      if(!groups.has(key))groups.set(key,{label,missing:key===null,count:0,values:[]});
+      const item=groups.get(key);item.count++;
+      if(metric>=0){const v=strictNumeric(row[metric]);if(v!==null)item.values.push(v);}
+    }
+    return Array.from(groups.values()).map(g=>({label:g.label,missing:g.missing,count:g.count,
+      metric_mean:metric<0?null:numberStats(g.values)?.mean??null,numeric_n:g.values.length}))
+      .sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label)).slice(0,12);
+  }
+function parse(text,extension){
+ if(typeof text!=='string'||new TextEncoder().encode(text).length>ANALYSIS_MAX_BYTES)throw Error('text-budget');
+ text=text.replace(/^\uFEFF/,'');const kind=String(extension).toLowerCase();
+ if(kind==='json')return parseJsonTable(text);
+ if(!['csv','tsv'].includes(kind))throw Error('unsupported-table');
+ const rows=parseDelimited(text,kind==='tsv'?'\t':',');
+ return normalizedTable(rows[0]||[],rows.slice(1).filter(row=>row.some(x=>x!=='')));
+}
+root.NexusTable=Object.freeze({parse,parseDelimited,normalizedTable,parseJsonTable,strictNumeric,numberStats,analyseTable,analysisGroups,MAX_BYTES:ANALYSIS_MAX_BYTES,MAX_ROWS:ANALYSIS_MAX_ROWS,MAX_COLUMNS:ANALYSIS_MAX_COLUMNS});
+})(globalThis);
+  // Pilot 18: local-only, bounded, non-authoritative data analysis.
+  // Kept inlined by build-ui-languages.py so the downloaded HTML remains standalone.
+  const ANALYSIS_MAX_BYTES=NexusTable.MAX_BYTES,ANALYSIS_MAX_ROWS=NexusTable.MAX_ROWS,ANALYSIS_MAX_COLUMNS=NexusTable.MAX_COLUMNS;
+  let analysisData=null,analysisContext=null,analysisJob=0;
+  function analysisStatus(key){$('analysis-state').textContent=t(key);}
+  function clearAnalysis(){
+    analysisJob++;analysisData=null;analysisContext=null;
+    $('analysis-run').disabled=false;
+    $('analysis-summary').textContent='';$('analysis-bars').replaceChildren();
+    $('analysis-group').replaceChildren();$('analysis-metric').replaceChildren();
+    $('analysis-download').disabled=true;$('analysis-claim').disabled=true;
+  }
+  function refreshAnalysisSources(){
+    const select=$('analysis-source'),selected=select.value;
+    const candidates=fileTray.filter(f=>['csv','tsv','json','xlsx'].includes(f.name.split('.').pop().toLowerCase())&&f.size<=ANALYSIS_MAX_BYTES);
+    select.replaceChildren();
+    const intro=document.createElement('option');intro.value='';intro.textContent=t('m373');select.append(intro);
+    for(const file of candidates){
+      const o=document.createElement('option');o.value=file.id;o.textContent=file.name;select.append(o);
+    }
+    if(candidates.some(f=>f.id===selected))select.value=selected;
+    if(analysisContext&&(analysisContext.epoch!==fileEpoch||
+       analysisContext.workspace!==state.workspace||
+       !fileTray.some(f=>f.id===analysisContext.id&&f.sha===analysisContext.sha))) {
+      clearAnalysis();analysisStatus('m382');
+    }
+  }
+  const {parseDelimited,normalizedTable,parseJsonTable}=NexusTable;
   async function parseXlsxTable(bytes){
     const zip=zipReader(bytes);
     const worksheets=zip.names.filter(n=>/^xl\/worksheets\/sheet\d+\.xml$/.test(n))
@@ -1101,54 +1177,7 @@ code{direction:ltr;unicode-bidi:embed}
     }
     throw Error('unsupported-analysis');
   }
-  const strictNumeric=value=>{
-    const s=String(value).trim();
-    if(!/^[+-]?(?:(?:\d+(?:\.\d*)?)|(?:\.\d+))(?:[Ee][+-]?\d+)?$/.test(s))return null;
-    const n=Number(s);return Number.isFinite(n)?n:null;
-  };
-  function numberStats(values){
-    const nums=values.slice().sort((a,b)=>a-b),n=nums.length;
-    if(!n)return null;
-    let mean=0,m2=0;
-    values.forEach((x,i)=>{const d=x-mean;mean+=d/(i+1);m2+=d*(x-mean);});
-    const quantile=q=>{const p=(n-1)*q,lo=Math.floor(p),hi=Math.ceil(p);return nums[lo]+(nums[hi]-nums[lo])*(p-lo);};
-    const value=x=>Number.isFinite(x)?x:null;
-    return {count:n,min:value(nums[0]),max:value(nums[n-1]),mean:value(mean),median:value(quantile(.5)),
-      q1:value(quantile(.25)),q3:value(quantile(.75)),sample_stddev:n>1?value(Math.sqrt(m2/(n-1))):null};
-  }
-  function analyseTable(table,source){
-    const {columns,rows}=table,stats=[],numeric=[];
-    columns.forEach((name,i)=>{
-      const values=rows.map(r=>r[i]),missing=values.filter(x=>!String(x).trim()).length;
-      const parsed=values.map(strictNumeric).filter(x=>x!==null);
-      const validNonMissing=rows.length-missing,asNumeric=parsed.length>0&&parsed.length/validNonMissing>=.8;
-      const frequencies=new Map();
-      for(const value of values){const key=String(value).trim()||'(missing)';frequencies.set(key,(frequencies.get(key)||0)+1);}
-      const common=Array.from(frequencies,([value,count])=>({value,count}))
-        .sort((a,b)=>b.count-a.count||a.value.localeCompare(b.value)).slice(0,5);
-      stats.push({name,missing,distinct:frequencies.size,type:asNumeric?'numeric':'categorical',
-        numeric_count:parsed.length,invalid_numeric:asNumeric?validNonMissing-parsed.length:0,
-        summary:asNumeric?numberStats(parsed):null,top_values:common});
-      if(asNumeric)numeric.push(i);
-    });
-    const correlations=[];
-    for(let i=0;i<numeric.length;i++)for(let j=i+1;j<numeric.length;j++){
-      const a=numeric[i],b=numeric[j],pairs=rows.map(r=>[strictNumeric(r[a]),strictNumeric(r[b])])
-        .filter(([x,y])=>x!==null&&y!==null);
-      if(pairs.length<3)continue;
-      const mx=pairs.reduce((sum,p)=>sum+p[0],0)/pairs.length,my=pairs.reduce((sum,p)=>sum+p[1],0)/pairs.length;
-      let cov=0,vx=0,vy=0;
-      for(const [x,y] of pairs){const dx=x-mx,dy=y-my;cov+=dx*dy;vx+=dx*dx;vy+=dy*dy;}
-      const r=vx>0&&vy>0?cov/Math.sqrt(vx*vy):null;
-      correlations.push({left:columns[a],right:columns[b],pairs:pairs.length,pearson_r:r===null?null:Math.max(-1,Math.min(1,r))});
-    }
-    return {schema:'nexus.local-analysis.v1',authority:'none',source:{name:source.name,sha256:source.sha,
-      bytes:source.size,verification:'byte-identity-only'},limits:{max_rows:ANALYSIS_MAX_ROWS,max_columns:ANALYSIS_MAX_COLUMNS},
-      rows:rows.length,columns:columns.length,column_stats:stats,correlations,notes:[
-      'Exploratory descriptive analysis only; no causal inference, diagnosis, prediction or human judgment.',
-      'Values are not independently verified; missing, invalid and mixed columns can affect statistics.',
-      'Numeric parsing uses dot decimals and sample standard deviation; Pearson uses pairwise complete cases.']};
-  }
+  const {strictNumeric,numberStats,analyseTable}=NexusTable;
   function metricFormat(value){
     if(value===null||value===undefined)return '—';
     return typeof value==='number'?new Intl.NumberFormat(interfaceLang,{maximumFractionDigits:4}).format(value):String(value);
@@ -1163,19 +1192,7 @@ code{direction:ltr;unicode-bidi:embed}
       bar.style.width=(100*item.count/max).toFixed(2)+'%';track.append(bar);wrap.append(track);host.append(wrap);
     }
   }
-  function analysisGroups(table,index,metric){
-    if(index<0)return [];
-    const groups=new Map();
-    for(const row of table.rows){
-      const label=String(row[index]).trim()||'(missing)';
-      if(!groups.has(label))groups.set(label,{label,count:0,values:[]});
-      const item=groups.get(label);item.count++;
-      if(metric>=0){const v=strictNumeric(row[metric]);if(v!==null)item.values.push(v);}
-    }
-    return Array.from(groups.values()).map(g=>({label:g.label,count:g.count,
-      metric_mean:metric<0?null:numberStats(g.values)?.mean??null,numeric_n:g.values.length}))
-      .sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label)).slice(0,12);
-  }
+  const {analysisGroups}=NexusTable;
   function renderAnalysisResults(){
     if(!analysisData)return;
     const {table,report}=analysisData,group=Number($('analysis-group').value),metric=Number($('analysis-metric').value);

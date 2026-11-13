@@ -4,6 +4,7 @@ on:
     paths:
       - 'web/studio*'
       - 'web/vendor/**'
+      - 'web/table-core.js'
       - 'scripts/*studio*'
       - 'nexus-cloud/**'
       - 'artifact-05/src/lib.rs'
@@ -13,6 +14,7 @@ on:
     paths:
       - 'web/studio*'
       - 'web/vendor/**'
+      - 'web/table-core.js'
       - 'scripts/*studio*'
       - '.github/workflows/studio.yml'
   workflow_dispatch:
@@ -38,6 +40,9 @@ jobs:
           node --check web/studio-astrology-ui.js
           node --check web/studio-sky.js
           node --check web/studio-sky-ui.js
+          node --check web/table-core.js
+          node --check web/studio-quality-ui.js
+          node scripts/test-studio-quality.mjs
           node scripts/test-studio-sky.mjs
           node scripts/test-studio-astrology.mjs
           node scripts/test-studio-core.mjs
@@ -48,6 +53,8 @@ jobs:
         run: python3 scripts/test-studio-astrology-browser.py
       - name: Exercise offline sky computation and general presentation
         run: python3 scripts/test-studio-sky-browser.py
+      - name: Exercise integrated data, recovery and keyboard workflow
+        run: python3 scripts/test-studio-quality-browser.py
       - name: Exercise actual isolated code and local network sentinel
         run: python3 scripts/test-studio-lab-browser.py
       - name: Capture synthetic empty Studio layout for review

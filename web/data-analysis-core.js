@@ -1,6 +1,6 @@
   // Pilot 18: local-only, bounded, non-authoritative data analysis.
   // Kept inlined by build-ui-languages.py so the downloaded HTML remains standalone.
-  const ANALYSIS_MAX_BYTES=1024*1024,ANALYSIS_MAX_ROWS=5000,ANALYSIS_MAX_COLUMNS=40;
+  const ANALYSIS_MAX_BYTES=NexusTable.MAX_BYTES,ANALYSIS_MAX_ROWS=NexusTable.MAX_ROWS,ANALYSIS_MAX_COLUMNS=NexusTable.MAX_COLUMNS;
   let analysisData=null,analysisContext=null,analysisJob=0;
   function analysisStatus(key){$('analysis-state').textContent=t(key);}
   function clearAnalysis(){
@@ -25,66 +25,7 @@
       clearAnalysis();analysisStatus('m382');
     }
   }
-  function parseDelimited(text,delimiter){
-    if(text.length>ANALYSIS_MAX_BYTES)throw Error('text-budget');
-    const rows=[],row=[];let value='',quoted=false,justClosed=false;
-    const finishField=()=>{row.push(value);value='';justClosed=false;if(row.length>ANALYSIS_MAX_COLUMNS)throw Error('columns');};
-    const finishRow=()=>{finishField();rows.push(row.splice(0));if(rows.length>ANALYSIS_MAX_ROWS+1)throw Error('rows');};
-    for(let i=0;i<text.length;i++){
-      const c=text[i];
-      if(quoted){
-        if(c==='"'){if(text[i+1]==='"'){value+='"';i++;}else{quoted=false;justClosed=true;}}
-        else value+=c;
-      }else if(c==='"'&&value===''&&!justClosed)quoted=true;
-      else if(c===delimiter)finishField();
-      else if(c==='\r'||c==='\n'){
-        if(c==='\r'&&text[i+1]==='\n')i++;
-        finishRow();
-      }else if(justClosed)throw Error('csv-close');
-      else if(c==='"')throw Error('csv-quote');
-      else value+=c;
-      if(value.length>ANALYSIS_MAX_BYTES)throw Error('field-size');
-    }
-    if(quoted)throw Error('csv-unclosed');
-    if(value!==''||row.length||justClosed)finishRow();
-    return rows;
-  }
-  function normalizedTable(header,body){
-    if(!Array.isArray(header)||!header.length||header.length>ANALYSIS_MAX_COLUMNS||
-       !Array.isArray(body)||!body.length||body.length>ANALYSIS_MAX_ROWS)throw Error('table-shape');
-    const used=new Set();
-    const columns=header.map((name,i)=>{
-      let key=String(name??'').trim().slice(0,160)||('Column '+(i+1));
-      const root=key;let suffix=2;
-      while(used.has(key)){key=root+' ('+suffix+++')';}
-      used.add(key);return key;
-    });
-    const rows=body.map(row=>{
-      if(!Array.isArray(row)||row.length>columns.length)throw Error('row-width');
-      return columns.map((_,j)=>{
-        const value=row[j];
-        if(value===null||value===undefined)return '';
-        if(!['string','number','boolean'].includes(typeof value)||!Number.isFinite(value===true?1:value===false?0:typeof value==='number'?value:0))throw Error('non-scalar');
-        const text=String(value);
-        if(text.length>10000)throw Error('cell-length');
-        return text;
-      });
-    });
-    return {columns,rows};
-  }
-  function parseJsonTable(text){
-    const data=JSON.parse(text);
-    if(!Array.isArray(data)||data.length===0||data.length>ANALYSIS_MAX_ROWS)throw Error('json-array');
-    const columns=[];
-    for(const row of data){
-      if(!row||typeof row!=='object'||Array.isArray(row))throw Error('json-object');
-      for(const key of Object.keys(row)){
-        if(key.length>160)throw Error('json-key');
-        if(!columns.includes(key)){columns.push(key);if(columns.length>ANALYSIS_MAX_COLUMNS)throw Error('json-columns');}
-      }
-    }
-    return normalizedTable(columns,data.map(row=>columns.map(key=>Object.hasOwn(row,key)?row[key]:null)));
-  }
+  const {parseDelimited,normalizedTable,parseJsonTable}=NexusTable;
   async function parseXlsxTable(bytes){
     const zip=zipReader(bytes);
     const worksheets=zip.names.filter(n=>/^xl\/worksheets\/sheet\d+\.xml$/.test(n))
@@ -141,54 +82,7 @@
     }
     throw Error('unsupported-analysis');
   }
-  const strictNumeric=value=>{
-    const s=String(value).trim();
-    if(!/^[+-]?(?:(?:\d+(?:\.\d*)?)|(?:\.\d+))(?:[Ee][+-]?\d+)?$/.test(s))return null;
-    const n=Number(s);return Number.isFinite(n)?n:null;
-  };
-  function numberStats(values){
-    const nums=values.slice().sort((a,b)=>a-b),n=nums.length;
-    if(!n)return null;
-    let mean=0,m2=0;
-    values.forEach((x,i)=>{const d=x-mean;mean+=d/(i+1);m2+=d*(x-mean);});
-    const quantile=q=>{const p=(n-1)*q,lo=Math.floor(p),hi=Math.ceil(p);return nums[lo]+(nums[hi]-nums[lo])*(p-lo);};
-    const value=x=>Number.isFinite(x)?x:null;
-    return {count:n,min:value(nums[0]),max:value(nums[n-1]),mean:value(mean),median:value(quantile(.5)),
-      q1:value(quantile(.25)),q3:value(quantile(.75)),sample_stddev:n>1?value(Math.sqrt(m2/(n-1))):null};
-  }
-  function analyseTable(table,source){
-    const {columns,rows}=table,stats=[],numeric=[];
-    columns.forEach((name,i)=>{
-      const values=rows.map(r=>r[i]),missing=values.filter(x=>!String(x).trim()).length;
-      const parsed=values.map(strictNumeric).filter(x=>x!==null);
-      const validNonMissing=rows.length-missing,asNumeric=parsed.length>0&&parsed.length/validNonMissing>=.8;
-      const frequencies=new Map();
-      for(const value of values){const key=String(value).trim()||'(missing)';frequencies.set(key,(frequencies.get(key)||0)+1);}
-      const common=Array.from(frequencies,([value,count])=>({value,count}))
-        .sort((a,b)=>b.count-a.count||a.value.localeCompare(b.value)).slice(0,5);
-      stats.push({name,missing,distinct:frequencies.size,type:asNumeric?'numeric':'categorical',
-        numeric_count:parsed.length,invalid_numeric:asNumeric?validNonMissing-parsed.length:0,
-        summary:asNumeric?numberStats(parsed):null,top_values:common});
-      if(asNumeric)numeric.push(i);
-    });
-    const correlations=[];
-    for(let i=0;i<numeric.length;i++)for(let j=i+1;j<numeric.length;j++){
-      const a=numeric[i],b=numeric[j],pairs=rows.map(r=>[strictNumeric(r[a]),strictNumeric(r[b])])
-        .filter(([x,y])=>x!==null&&y!==null);
-      if(pairs.length<3)continue;
-      const mx=pairs.reduce((sum,p)=>sum+p[0],0)/pairs.length,my=pairs.reduce((sum,p)=>sum+p[1],0)/pairs.length;
-      let cov=0,vx=0,vy=0;
-      for(const [x,y] of pairs){const dx=x-mx,dy=y-my;cov+=dx*dy;vx+=dx*dx;vy+=dy*dy;}
-      const r=vx>0&&vy>0?cov/Math.sqrt(vx*vy):null;
-      correlations.push({left:columns[a],right:columns[b],pairs:pairs.length,pearson_r:r===null?null:Math.max(-1,Math.min(1,r))});
-    }
-    return {schema:'nexus.local-analysis.v1',authority:'none',source:{name:source.name,sha256:source.sha,
-      bytes:source.size,verification:'byte-identity-only'},limits:{max_rows:ANALYSIS_MAX_ROWS,max_columns:ANALYSIS_MAX_COLUMNS},
-      rows:rows.length,columns:columns.length,column_stats:stats,correlations,notes:[
-      'Exploratory descriptive analysis only; no causal inference, diagnosis, prediction or human judgment.',
-      'Values are not independently verified; missing, invalid and mixed columns can affect statistics.',
-      'Numeric parsing uses dot decimals and sample standard deviation; Pearson uses pairwise complete cases.']};
-  }
+  const {strictNumeric,numberStats,analyseTable}=NexusTable;
   function metricFormat(value){
     if(value===null||value===undefined)return '—';
     return typeof value==='number'?new Intl.NumberFormat(interfaceLang,{maximumFractionDigits:4}).format(value):String(value);
@@ -203,19 +97,7 @@
       bar.style.width=(100*item.count/max).toFixed(2)+'%';track.append(bar);wrap.append(track);host.append(wrap);
     }
   }
-  function analysisGroups(table,index,metric){
-    if(index<0)return [];
-    const groups=new Map();
-    for(const row of table.rows){
-      const label=String(row[index]).trim()||'(missing)';
-      if(!groups.has(label))groups.set(label,{label,count:0,values:[]});
-      const item=groups.get(label);item.count++;
-      if(metric>=0){const v=strictNumeric(row[metric]);if(v!==null)item.values.push(v);}
-    }
-    return Array.from(groups.values()).map(g=>({label:g.label,count:g.count,
-      metric_mean:metric<0?null:numberStats(g.values)?.mean??null,numeric_n:g.values.length}))
-      .sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label)).slice(0,12);
-  }
+  const {analysisGroups}=NexusTable;
   function renderAnalysisResults(){
     if(!analysisData)return;
     const {table,report}=analysisData,group=Number($('analysis-group').value),metric=Number($('analysis-metric').value);

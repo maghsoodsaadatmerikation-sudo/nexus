@@ -69,7 +69,7 @@ $('astro-save').onclick=()=>{
  if(!p()||busy)return;
  try{const value=A.profile({...current(),orb:Number($('astro-orb').value)});if(!$('astro-known').checked||A.instant($('astro-birth').value.trim())!==value.natal.at)throw Error('birth-draft');if(value.transit&&A.instant($('astro-transit').value.trim())!==value.transit.at)throw Error('transit-draft');if(mutate(v=>projectIn(v).astrology=value)){draft=null;$('use-astrology').checked=false;render()}}catch{$('astro-status').textContent=t('astroFailed')}
 };
-$('astro-delete').onclick=()=>{if(!p()?.astrology||!confirm(t('discard')))return;clear();mutate(v=>{delete projectIn(v).astrology});render()};
+$('astro-delete').onclick=()=>{if(!p()?.astrology||!confirm(t('discard')))return;clear();mutate(v=>{delete projectIn(v).astrology},{undoable:true});render()};
 for(const kind of ['natal','transit'])$('astro-import-'+kind).onclick=()=>{if(!p()||busy)return;importTarget={kind,project:projectId,epoch};$('astro-import-file').click()};
 $('astro-import-file').onchange=async event=>{
  const file=event.target.files[0],task=importTarget;event.target.value='';importTarget=null;

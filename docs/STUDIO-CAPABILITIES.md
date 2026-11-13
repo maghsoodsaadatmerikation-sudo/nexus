@@ -157,3 +157,5 @@ Python/OS environment.
 See [Optional astrology](OPTIONAL-ASTROLOGY.md) for its exact provider, privacy, calculation and interpretation boundaries.
 
 The [offline ephemeris and general style](OFFLINE-SKY-TONE.md) now support local natal/transit computation and an inspectable, switchable general presentation heuristic without runtime website requests.
+
+The [integrated quality upgrade](QUALITY-UPGRADE-2026-11-13.md) shares bounded numerical analysis across the offline app and Studio, adds source ranking, recoverable removals, direct chart/canvas flow and capability/navigation controls.
