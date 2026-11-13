@@ -1,5 +1,10 @@
 name: NEXUS Public Studio Witness
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/studio-static-public.yml'
+      - 'docs/STUDIO-STATIC.md'
+      - 'README.md'
   push:
     branches: [main]
   workflow_dispatch:
@@ -7,7 +12,7 @@ permissions:
   contents: read
 jobs:
   public-browser:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[verify-studio-public]')
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[verify-studio-public]') || (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[verify-studio-public]'))
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

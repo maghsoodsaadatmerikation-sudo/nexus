@@ -25,6 +25,15 @@ A separate optional server-side model bridge requires a real configured
 provider; the local guide is labeled non-generative. No provider has been funded
 or provisioned by this implementation. [Features, comparison, setup and limits](docs/STUDIO-CAPABILITIES.md).
 
+## Open Studio on a phone
+
+The independent static Studio is at
+**https://nexus-studio-merikation.onrender.com/**. It includes conversations,
+source search, writing and explicit encrypted browser saving. Choose
+**Prepare offline use**, then use your browser's installation menu when
+supported. The local guide is non-generative; this site hosts no model.
+[Mobile setup, deployment identity and public verification](docs/STUDIO-STATIC.md).
+
 ## Run Studio locally (Linux, one command)
 
 With Python 3.13 and `uv` installed, run from a complete checkout:
