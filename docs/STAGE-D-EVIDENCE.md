@@ -10,6 +10,41 @@ Stage D evaluates operational transport security, persistence, replacement survi
 
 A health check, successful replacement, or successful restore is never evidence of epistemic correctness.
 
+## Private operator-evidence hygiene (new source-only control)
+
+The historical `stage-d-evidence.sh` collected authenticated survival,
+absence and restored-state HTTP responses with `curl -H "authorization:
+Bearer ..."`, placing the operator token in the process argument list.
+It also redirected potentially private responses to predictable output
+paths without enforcing private file permissions. This was a confidentiality
+and integrity risk even when the API response was otherwise correct.
+
+The updated collector invokes `stage-d-private-observation.py` for those
+three authenticated GET phases. It uses only exact-origin HTTPS (or
+loopback HTTP in synthetic CI), refuses proxies and redirects, keeps the
+bearer out of subprocess argument lists, and accepts only the expected
+200 workspace snapshot or exact authenticated JSON 404 absence response.
+Output is bounded, private `0600`, fsynced, and atomically published
+without replacing any existing file or symlink. A previous result cannot
+silently be overwritten: `stage-d-evidence.sh` now enforces shell
+`noclobber` on phase summaries and lifecycle markers as well.
+
+Create the evidence folder with **mode 0700**, owned by the operator and
+without symlink ancestors. Do not use a shared/public directory. The
+collector refuses an existing folder with group or other access rather
+than quietly widening or changing permissions. The network phases write
+sensitive single-workspace JSON, **not** an encrypted full-volume backup.
+Keep the entire folder in separately encrypted operator-controlled storage.
+
+The independent, read-only CI workflow
+`.github/workflows/stage-d-private-operator-evidence.yml` exercises
+disposable loopback HTTP, bad/mismatched 404, redirect, JSON, permission,
+and output-collision fixtures, plus the historical release-readiness
+lifecycle test. **CI never contacts Render, Railway or a production
+workspace.** No new provider identity, independently witnessed live
+backup, complete original-volume copy, recovery-point consistency,
+human release approval or Seal is proven by those tests.
+
 ## Evidence harness
 
 Use `scripts/stage-d-evidence.sh` from an operator machine. The evidence directory must be kept independently of the host under test.
