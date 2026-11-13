@@ -2,7 +2,7 @@
   "schema": "nexus.device-model.v1",
   "model": "HuggingFaceTB/SmolLM2-135M-Instruct",
   "revision": "12fd25f77366fa6b3b4b768ec3050bf629380bac",
-  "runtime": "transformers.js 3.8.1",
+  "runtime": "transformers.js 4.3.2",
   "license": "Apache-2.0",
   "device": "wasm",
   "dtype": "q8",
@@ -35,22 +35,29 @@
       "sha256": "ecc1a19eece6494e2963cf74f78ace35916e8d0b803168ddd41db00979f18e39"
     },
     {
-      "url": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/ort-wasm-simd-threaded.jsep.wasm",
-      "bytes": 21596019,
-      "sha256": "c46655e8a94afc45338d4cb2b840475f88e5012d524509916e505079c00bfa39"
+      "url": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.0-dev.20260914-8d85527a0/dist/ort-wasm-simd-threaded.asyncify.wasm",
+      "bytes": 26861777,
+      "sha256": "49871f5a4409519797e127440868a6d1923339d9185907f301a5b2a1d90af082"
+    },
+    {
+      "role": "runtime",
+      "url": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/dist/transformers.js",
+      "bytes": 1352822,
+      "sha256": "f9e04d8c2f7839e32b0b6cf8f63ae1d0e13b06b453fddffdb9a1f595a4c733b1"
     }
   ],
   "vendor": {
-    "ort-wasm-simd-threaded.jsep.mjs": "08fb86ec433c78bfb032c5d84a68b8e8e5a8d81268fa39e24314179a5767a5b9",
+    "LICENSE-jinja.txt": "d6e7b19451c1b3d1d66353bb4b1274138953b3bfd9ae60c56e77b1f548796982",
     "LICENSE-transformers.txt": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-    "transformers-3.8.1.min.js": "aa5002b70e789798da263f5f99c62bd3e8fcd0c119258a493c40c180648365fa",
-    "LICENSE-onnxruntime.txt": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+    "LICENSE-onnxruntime.txt": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c",
+    "ort-wasm-simd-threaded.asyncify.mjs": "0966b6105cd936744498aa60df7a22cbd47af3374dbc64a9ab561c08a71e3611"
   },
-  "download_bytes": 160853313,
+  "download_bytes": 167471893,
   "vendor_sizes": {
-    "ort-wasm-simd-threaded.jsep.mjs": 44484,
+    "LICENSE-jinja.txt": 1069,
     "LICENSE-transformers.txt": 11358,
-    "transformers-3.8.1.min.js": 888173,
-    "LICENSE-onnxruntime.txt": 1073
-  }
+    "LICENSE-onnxruntime.txt": 1073,
+    "ort-wasm-simd-threaded.asyncify.mjs": 53057
+  },
+  "onnx_runtime": "1.31.0-dev.20260914-8d85527a0"
 }

@@ -1,13 +1,13 @@
 # Optional device model
 
 Studio can optionally load **HuggingFaceTB/SmolLM2-135M-Instruct**, q8, using
-Transformers.js 3.8.1 and a single-threaded WASM Worker. This is a small English
+Transformers.js 4.3.2 and a single-threaded WASM Worker. This is a small English
 drafting model with limited accuracy, not a replacement for a large hosted model.
 No account, provider API key, hosted inference service or paid instance is added.
 
 ## Explicit download and review
 
-1. Open the device-model panel and review the roughly 161 MB initial download.
+1. Open the device-model panel and review the roughly 167 MB initial download.
 2. Select download consent and choose **Load small model**. The controls refuse
    a missing consent or a browser without Worker/WASM/Cache/crypto support.
    Browsers reporting less than 4 GB device memory are refused before download.
@@ -21,7 +21,7 @@ No account, provider API key, hosted inference service or paid instance is added
 
 The model, revision and runtime artifact sizes/digests are locked in
 `web/device/model-manifest.json`. The remote model/runtime download is
-160,853,313 bytes; small reviewed local JS modules are additional. Downloads
+167,471,893 bytes; small reviewed local JS modules are additional. Downloads
 contact Hugging Face and jsDelivr, which can observe ordinary request metadata
 such as IP address and selected artifact. Conversation text is not placed in
 artifact URLs, headers or caches. Runtime and model files are checked for exact
@@ -70,10 +70,10 @@ witness does not establish them.
 Primary upstream references:
 
 - https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct
-- https://huggingface.co/docs/transformers.js/v3.8.1/en/custom_usage
-- https://huggingface.co/docs/transformers.js/v3.8.1/api/env
+- https://huggingface.co/docs/transformers.js/en/custom_usage
+- https://huggingface.co/docs/transformers.js/api/env
 - https://github.com/huggingface/transformers.js
 
-Vendored Transformers.js/Jinja code is Apache-2.0/MIT as attributed in its
+Downloaded Transformers.js/Jinja code is Apache-2.0/MIT as attributed in its
 upstream distributions; ONNX Runtime is MIT. License texts are shipped with the
 runtime. Model licensing is Apache-2.0 according to the upstream model card.

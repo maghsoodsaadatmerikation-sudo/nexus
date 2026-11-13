@@ -27,9 +27,9 @@ async function load(){
  if(manifest.model!=='HuggingFaceTB/SmolLM2-135M-Instruct'||manifest.dtype!=='q8'||manifest.device!=='wasm')fail('invalid-manifest');
  const vendor=async name=>{const path=new URL('vendor/'+name,root).href;const bytes=await checked({url:path,bytes:manifest.vendor_sizes[name],sha256:manifest.vendor[name]});const url=URL.createObjectURL(new Blob([bytes],{type:'text/javascript'}));urls.push(url);return url};
  postMessage({type:'phase',stage:'runtime-import'});
- const runtimeURL=await vendor('transformers-3.8.1.min.js'),moduleURL=await vendor('ort-wasm-simd-threaded.jsep.mjs');
+ const runtimeBytes=await checked(manifest.assets.find(a=>a.role==='runtime'));const runtimeURL=URL.createObjectURL(new Blob([runtimeBytes],{type:'text/javascript'}));urls.push(runtimeURL);const moduleURL=await vendor('ort-wasm-simd-threaded.asyncify.mjs');
  const {pipeline,env}=await import(runtimeURL);
- env.allowLocalModels=false;env.allowRemoteModels=true;env.useBrowserCache=false;env.useFSCache=false;
+ env.allowLocalModels=false;env.allowRemoteModels=true;env.useWasmCache=false;env.useBrowserCache=false;env.useFSCache=false;
  env.backends.onnx.wasm.initTimeout=30000;env.backends.onnx.wasm.numThreads=1;env.backends.onnx.wasm.proxy=false;
  env.backends.onnx.wasm.wasmPaths={mjs:moduleURL};
  postMessage({type:'phase',stage:'wasm-bytes'});
@@ -42,6 +42,7 @@ async function load(){
   return new Response(await checked(asset),{headers:{'content-type':url.endsWith('.json')?'application/json':'application/octet-stream'}});
  };
  postMessage({type:'phase',stage:'model-session'});
+ env.fetch=globalThis.fetch;
  pipe=await pipeline('text-generation',manifest.model,{revision:manifest.revision,device:'wasm',dtype:'q8',session_options:{graphOptimizationLevel:'disabled'}});
  phase='ready';postMessage({type:'ready',configuration_id:MANIFEST_SHA,model:manifest.model,policy:POLICY,max_output_tokens:manifest.max_output_tokens,max_input_tokens:manifest.max_input_tokens});
 }
