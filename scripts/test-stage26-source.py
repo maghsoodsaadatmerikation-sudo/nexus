@@ -62,14 +62,17 @@ class Stage26Source(unittest.TestCase):
     def test_instrumentation_only_contains_synthetic_data(self):
         src=(ROOT/"android/stage26/src/org/nexus/offline/stage26/test/Stage26Instrumentation.java").read_text()
         for token in ("SYNTHETIC_STAGE26_DO_NOT_USE",
-                      "ActivityMonitor",
-                      "ACTION_CREATE_DOCUMENT",
-                      "ACTION_OPEN_DOCUMENT",
+                      "UiAutomation",
+                      "getRootInActiveWindow",
+                      "GLOBAL_ACTION_BACK",
                       "new W.Vault()",
                       "work-review-required",
                       "work-unlock-failed",
                       "tampered-archive-accepted"):
             self.assertIn(token,src)
+        native_app=(ROOT/"android/stage25/src/org/nexus/offline/stage25/MainActivity.java").read_text()
+        self.assertIn("Intent.ACTION_CREATE_DOCUMENT", native_app)
+        self.assertIn("Intent.ACTION_OPEN_DOCUMENT", native_app)
         for unsafe in ("https://github.com", "https://api.openai.com",
                        "RAILWAY_TOKEN", "getSharedPreferences",
                        "setWebContentsDebuggingEnabled(true)"):
