@@ -8,25 +8,30 @@ import re
 import sys
 import zipfile
 
+def need(condition, label):
+    if not condition:
+        raise ValueError(label)
+
+
 def audit(apk: Path,badging: str,permissions: str,public_cert: str):
     source=Path("build/stage25-android/generated/nexus/index.html").read_bytes()
     with zipfile.ZipFile(apk) as archive:
         names=set(archive.namelist())
-        assert "AndroidManifest.xml" in names
-        assert "classes.dex" in names
-        assert "assets/nexus/index.html" in names
-        assert not any(n.startswith("assets/") and n!="assets/nexus/index.html"
-                       for n in names), "unexpected Android bundled private asset"
-        assert archive.read("assets/nexus/index.html")==source
-        assert any(n.startswith("res/") and n.endswith(".png") for n in names)
+        need("AndroidManifest.xml" in names,"missing-binary-manifest")
+        need("classes.dex" in names,"missing-dex")
+        need("assets/nexus/index.html" in names,"missing-bundled-offline-html")
+        need(not any(n.startswith("assets/") and n!="assets/nexus/index.html"
+                       for n in names), "unexpected-private-asset")
+        need(archive.read("assets/nexus/index.html")==source,"bundled-html-source-drift")
+        need(any(n.startswith("res/") and n.endswith(".png") for n in names), "native-launcher-icon-absent")
         dex=archive.read("classes.dex")
-        assert dex.startswith(b"dex\n")
-        assert len(dex)>2000
-    assert "package: name='org.nexus.offline.stage25'" in badging
-    assert "sdkVersion:'26'" in badging and "targetSdkVersion:'35'" in badging
-    assert not re.search(r"(?m)^uses-permission",permissions)
-    assert "Signer #1 certificate SHA-256 digest" in public_cert
-    assert len(apk.read_bytes())>15000
+        need(dex.startswith(b"dex\n"), "bad-dex-header")
+        need(len(dex)>2000, "dex-too-small")
+    need("package: name='org.nexus.offline.stage25'" in badging,"unexpected-package-id")
+    need("sdkVersion:'26'" in badging and "targetSdkVersion:'35'" in badging,"bad-min-target-sdk")
+    need(not re.search(r"(?m)^uses-permission",permissions),"manifest-requests-permissions")
+    need("Signer #1 certificate SHA-256 digest" in public_cert,"signer-digest-missing")
+    need(len(apk.read_bytes())>15000,"apk-too-small")
     return {
         "schema":"nexus.stage25.android-sdk-apk-witness.v1",
         "status":"SIGNED_TEST_APK_STATIC_CHECKS_PASS",
@@ -62,7 +67,7 @@ def main():
         print("PASS: signed standalone APK, no declared Android permissions, exact offline HTML")
     except (OSError,AssertionError,ValueError,KeyError,AttributeError,
             zipfile.BadZipFile) as exc:
-        print("BLOCKED: Android native APK audit ("+type(exc).__name__+")",
+        print("BLOCKED: Android native APK audit ("+str(exc)[:85]+")",
               file=sys.stderr)
         return 2
     return 0
