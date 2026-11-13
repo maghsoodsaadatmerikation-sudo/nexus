@@ -75,7 +75,7 @@ impl ModelService {
     /// proxies, model tokens or ambient generic HTTP destinations.
     pub fn operator_configured(profile:&str,model:&str,key:&str)->Result<Self,&'static str>{
         if !valid_model_id(model) || key.is_empty() || key.len()>1024 ||
-           key.contains(['\r','\n',' ']) {
+           key.chars().any(|c|c=='\r'||c=='\n'||c==' ') {
             return Err("model_configuration_invalid")
         }
         let (provider,url)=match profile {
