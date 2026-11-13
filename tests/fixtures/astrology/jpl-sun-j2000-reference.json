@@ -1,0 +1,12 @@
+{
+  "source": "https://ssd-api.jpl.nasa.gov/doc/horizons.html",
+  "target": "Sun (10)",
+  "center": "500@399",
+  "julian_day_ut": 2451545.0,
+  "quantities": "31",
+  "longitude": 280.3689092,
+  "row": "2000-Jan-01 12:00:00.000, , , 280.3689092,  0.0002381,",
+  "provider_longitude": 280.36891867,
+  "difference_degrees": 9.470000009059731e-06,
+  "scope": "one Sun coordinate at J2000; not a complete accuracy validation"
+}

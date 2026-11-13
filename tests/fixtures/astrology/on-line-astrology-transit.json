@@ -1,0 +1,170 @@
+{
+  "ok": true,
+  "input": {
+    "datetime_utc": "2026-11-13T12:00:00Z",
+    "julian_day_utc": 2461358,
+    "bodies": [
+      "So",
+      "Mo",
+      "Me",
+      "Ve",
+      "Ma",
+      "Ju",
+      "Sa",
+      "Ur",
+      "Ne",
+      "Pl"
+    ],
+    "longitude": null,
+    "latitude": null,
+    "house_system": null
+  },
+  "zodiac": {
+    "type": "tropical",
+    "reference": "apparent geocentric ecliptic longitude of date"
+  },
+  "record": {
+    "schema_version": "1.0",
+    "time_utc": "2026-11-13T12:00:00Z",
+    "julian_day_ut": 2461358,
+    "coordinate_system": {
+      "frame": "geocentric",
+      "zodiac": "tropical",
+      "coordinates": "ecliptic",
+      "longitude_unit": "degrees",
+      "position_type": "apparent"
+    },
+    "bodies": {
+      "So": {
+        "name": "Sun",
+        "longitude": 231.12029672,
+        "latitude": -6.959e-05,
+        "distance_au": 0.9896573017,
+        "speed_longitude": 1.00653484,
+        "retrograde": false,
+        "zodiac": {
+          "sign_index": 8,
+          "sign_code": "Sc",
+          "degree_in_sign": 21.12029672
+        }
+      },
+      "Mo": {
+        "name": "Moon",
+        "longitude": 277.6712574,
+        "latitude": -3.71228398,
+        "distance_au": 0.0027113858,
+        "speed_longitude": 11.81973434,
+        "retrograde": false,
+        "zodiac": {
+          "sign_index": 10,
+          "sign_code": "Cp",
+          "degree_in_sign": 7.6712574
+        }
+      },
+      "Me": {
+        "name": "Mercury",
+        "longitude": 215.03595321,
+        "latitude": 2.02816824,
+        "distance_au": 0.8082690191,
+        "speed_longitude": -0.0303737,
+        "retrograde": true,
+        "zodiac": {
+          "sign_index": 8,
+          "sign_code": "Sc",
+          "degree_in_sign": 5.03595321
+        }
+      },
+      "Ve": {
+        "name": "Venus",
+        "longitude": 202.86908753,
+        "latitude": -1.77892544,
+        "distance_au": 0.3232330177,
+        "speed_longitude": -0.02093179,
+        "retrograde": true,
+        "zodiac": {
+          "sign_index": 7,
+          "sign_code": "Li",
+          "degree_in_sign": 22.86908753
+        }
+      },
+      "Ma": {
+        "name": "Mars",
+        "longitude": 144.64006957,
+        "latitude": 1.87517725,
+        "distance_au": 1.3286074939,
+        "speed_longitude": 0.45737146,
+        "retrograde": false,
+        "zodiac": {
+          "sign_index": 5,
+          "sign_code": "Le",
+          "degree_in_sign": 24.64006957
+        }
+      },
+      "Ju": {
+        "name": "Jupiter",
+        "longitude": 145.65054365,
+        "latitude": 0.73449916,
+        "distance_au": 5.3066498108,
+        "speed_longitude": 0.09003221,
+        "retrograde": false,
+        "zodiac": {
+          "sign_index": 5,
+          "sign_code": "Le",
+          "degree_in_sign": 25.65054365
+        }
+      },
+      "Sa": {
+        "name": "Saturn",
+        "longitude": 8.59575709,
+        "latitude": -2.65026504,
+        "distance_au": 8.6691306039,
+        "speed_longitude": -0.04671034,
+        "retrograde": true,
+        "zodiac": {
+          "sign_index": 1,
+          "sign_code": "Ar",
+          "degree_in_sign": 8.59575709
+        }
+      },
+      "Ur": {
+        "name": "Uranus",
+        "longitude": 64.19229579,
+        "latitude": -0.14986945,
+        "distance_au": 18.4680665048,
+        "speed_longitude": -0.04056767,
+        "retrograde": true,
+        "zodiac": {
+          "sign_index": 3,
+          "sign_code": "Ge",
+          "degree_in_sign": 4.19229579
+        }
+      },
+      "Ne": {
+        "name": "Neptune",
+        "longitude": 1.85319137,
+        "latitude": -1.40882072,
+        "distance_au": 29.2221326357,
+        "speed_longitude": -0.01572431,
+        "retrograde": true,
+        "zodiac": {
+          "sign_index": 1,
+          "sign_code": "Ar",
+          "degree_in_sign": 1.85319137
+        }
+      },
+      "Pl": {
+        "name": "Pluto",
+        "longitude": 303.25936156,
+        "latitude": -4.26434191,
+        "distance_au": 35.9306211225,
+        "speed_longitude": 0.013371,
+        "retrograde": false,
+        "zodiac": {
+          "sign_index": 11,
+          "sign_code": "Aq",
+          "degree_in_sign": 3.25936156
+        }
+      }
+    }
+  }
+}

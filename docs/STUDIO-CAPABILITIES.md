@@ -36,6 +36,7 @@ judgment workspace or migrate the separate Android prototype's local archives.
 | Live source retrieval | Provider search destinations only | Explicit direct Wikipedia excerpts and Crossref metadata, with source/provenance cards |
 | Local code execution | Inert text only | Explicit JavaScript execution in an opaque-origin Worker, with network/storage isolation, timeout and output bounds |
 | Data charts | Separate local analysis tools | Validated bar/line JSON to local Canvas and explicit PNG export |
+| Optional personal transits | No integrated astrology profile | Explicit On-line Astrology data retrieval, local tropical contacts, encrypted project profile and opt-in guide/model context |
 
 The model bridge is **implemented but not provisioned with a real model** by this
 change. A synthetic HTTP provider verifies the transport contract, not reasoning
@@ -152,3 +153,5 @@ public source retrieval, isolated local JavaScript execution and chart rendering
 Source text remains unverified; code execution is explicit, local and separate
 from the writing canvas. These tools do not provision a language model or a
 Python/OS environment.
+
+See [Optional astrology](OPTIONAL-ASTROLOGY.md) for its exact provider, privacy, calculation and interpretation boundaries.
