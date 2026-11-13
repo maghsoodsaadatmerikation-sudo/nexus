@@ -96,13 +96,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git fetch --no-tags origin \\
-            +refs/heads/main:refs/remotes/origin/main \\
-            +refs/pull/129/head:refs/remotes/origin/rehearsal-129 \\
-            +refs/pull/130/head:refs/remotes/origin/rehearsal-130 \\
-            +refs/pull/131/head:refs/remotes/origin/rehearsal-131 \\
-            +refs/pull/132/head:refs/remotes/origin/rehearsal-132 \\
-            +refs/pull/133/head:refs/remotes/origin/rehearsal-133 \\
+          git fetch --no-tags origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/pull/129/head:refs/remotes/origin/rehearsal-129 \
+            +refs/pull/130/head:refs/remotes/origin/rehearsal-130 \
+            +refs/pull/131/head:refs/remotes/origin/rehearsal-131 \
+            +refs/pull/132/head:refs/remotes/origin/rehearsal-132 \
+            +refs/pull/133/head:refs/remotes/origin/rehearsal-133 \
             +refs/pull/134/head:refs/remotes/origin/rehearsal-134
           for pair in '129 130' '130 131' '131 132' '132 133' '133 134'; do
             set -- $pair
@@ -127,10 +127,10 @@ jobs:
         run: |
           set -euo pipefail
           image='rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e'
-          docker run --rm \\
-            --user "$(id -u):$(id -g)" \\
-            -e HOME=/tmp/home -e CARGO_HOME=/tmp/cargo \\
-            -v "$PWD:/app" -w /app "$image" \\
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp/home -e CARGO_HOME=/tmp/cargo \
+            -v "$PWD:/app" -w /app "$image" \
             bash scripts/run_gates.sh
 
       - name: Test gateway separately using its locked manifest
@@ -138,10 +138,10 @@ jobs:
         run: |
           set -euo pipefail
           image='rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e'
-          docker run --rm \\
-            --user "$(id -u):$(id -g)" \\
-            -e HOME=/tmp/home -e CARGO_HOME=/tmp/cargo \\
-            -v "$PWD:/app" -w /app "$image" \\
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp/home -e CARGO_HOME=/tmp/cargo \
+            -v "$PWD:/app" -w /app "$image" \
             cargo test --manifest-path artifact-05/Cargo.toml --locked
 
       - name: Explicitly block remote publishing
