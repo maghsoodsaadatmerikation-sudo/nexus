@@ -149,7 +149,10 @@ def test_slow_request_body_has_total_deadline(monkeypatch):
     async def receive():
         await anyio.sleep(1)
         return {"type": "http.request", "body": b"x", "more_body": False}
-    request = Request({"type": "http", "method": "POST", "path": "/v1/requests", "headers": [(b"authorization", b"Bearer opaque")]}, receive)
+    # Direct handler tests must supply the app scope and admission state that
+    # ASGI normally creates before dispatching a real request.
+    main.app.state.core_limiter = anyio.CapacityLimiter(32)
+    request = Request({"type": "http", "app": main.app, "method": "POST", "path": "/v1/requests", "headers": [(b"authorization", b"Bearer opaque")]}, receive)
     async def run():
         with pytest.raises(HTTPException) as error:
             await main.delegate_to_constitutional_gateway("requests", request)
