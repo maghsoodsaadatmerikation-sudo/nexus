@@ -121,3 +121,7 @@ Primary documentation:
 - https://app.on-lineastrology.com/api/openapi.json
 - https://ssd-api.jpl.nasa.gov/doc/horizons.html
 - https://ssd.jpl.nasa.gov/horizons/manual.html
+
+## Offline engine follow-up
+
+The [offline sky module](OFFLINE-SKY-TONE.md) adds explicitly selected local natal/transit calculations, with `computed` provenance and a pinned bundled engine. Its general non-personal tone setting is separate from this document's opt-in natal feature. No website request is needed for that local path.

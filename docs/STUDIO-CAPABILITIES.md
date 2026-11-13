@@ -155,3 +155,5 @@ from the writing canvas. These tools do not provision a language model or a
 Python/OS environment.
 
 See [Optional astrology](OPTIONAL-ASTROLOGY.md) for its exact provider, privacy, calculation and interpretation boundaries.
+
+The [offline ephemeris and general style](OFFLINE-SKY-TONE.md) now support local natal/transit computation and an inspectable, switchable general presentation heuristic without runtime website requests.

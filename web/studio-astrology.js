@@ -35,8 +35,8 @@ function positions(items) {
  return CODES.map(body=>clean.find(p=>p.body===body));
 }
 function snapshot(v) {
- if(!v||v.provider!==PROVIDER||v.zodiac!=='tropical'||!['live','import'].includes(v.acquisition))fail('snapshot-convention');
- return {provider:PROVIDER,zodiac:'tropical',at:instant(v.at),retrievedAt:instant(v.retrievedAt),acquisition:v.acquisition,positions:positions(v.positions)};
+ if(!v||v.zodiac!=='tropical'||!((v.provider===PROVIDER&&['live','import'].includes(v.acquisition))||(v.provider==='astronomy-engine-2.1.19'&&v.acquisition==='computed')))fail('snapshot-convention');
+ return {provider:v.provider,zodiac:'tropical',at:instant(v.at),retrievedAt:instant(v.retrievedAt),acquisition:v.acquisition,positions:positions(v.positions)};
 }
 function parse(body,expectedAt,acquisition='live',retrievedAt=new Date().toISOString().replace(/\.\d{3}Z$/,'Z')) {
  const at=instant(expectedAt);
@@ -83,7 +83,7 @@ function context(value,{historical=false,now=Date.now()}={}) {
  const v=profile(value);if(!v.transit)fail('transit-required');
  if(!historical&&Math.abs(now-Date.parse(v.transit.at))>86400000)fail('refresh-transit-or-review-selected-time');
  const all=contacts(v);
- return {kind:'optional-symbolic-astrology',convention:'apparent geocentric tropical ecliptic longitude of date',provider:HOME,transit_at:v.transit.at,selected_time_mode:historical===true,natal_acquisition:v.natal.acquisition,transit_acquisition:v.transit.acquisition,orb_limit_degrees:v.orb,natal_positions:v.natal.positions,transit_positions:v.transit.positions,contacts:all.slice(0,20),omitted_contacts:Math.max(0,all.length-20),limits:'No houses, Ascendant, MC, sidereal conversion, exact future-event times or causal/diagnostic claims. Imported data are user-supplied, not independently verified. Interpretations are optional symbolic reflection. Answer the actual question; separate numerical source statements, interpretation, uncertainty and values. Do not infer health diagnoses or replace evidence-based decisions. Birth instant, name and location are omitted; positions are still personal data.'};
+ return {kind:'optional-symbolic-astrology',convention:'apparent geocentric tropical ecliptic longitude of date',provider:v.natal.provider===PROVIDER&&v.transit.provider===PROVIDER?HOME:'local-or-mixed-ephemeris',sources:{natal:v.natal.provider,transit:v.transit.provider},transit_at:v.transit.at,selected_time_mode:historical===true,natal_acquisition:v.natal.acquisition,transit_acquisition:v.transit.acquisition,orb_limit_degrees:v.orb,natal_positions:v.natal.positions,transit_positions:v.transit.positions,contacts:all.slice(0,20),omitted_contacts:Math.max(0,all.length-20),limits:'No houses, Ascendant, MC, sidereal conversion, exact future-event times or causal/diagnostic claims. Imported data are user-supplied, not independently verified. Interpretations are optional symbolic reflection. Answer the actual question; separate numerical source statements, interpretation, uncertainty and values. Do not infer health diagnoses or replace evidence-based decisions. Birth instant, name and location are omitted; positions are still personal data.'};
 }
 function name(code,fa=false){return (fa?FA:NAMES)[CODES.indexOf(code)]||code}
 function placement(longitude){return SIGNS[Math.floor(longitude/30)]+' '+(longitude%30).toFixed(4)+'°'}
