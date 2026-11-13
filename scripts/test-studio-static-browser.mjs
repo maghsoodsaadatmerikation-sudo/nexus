@@ -29,10 +29,10 @@ const child=spawn(browser,[
 let socket,seq=0,stage='chrome-start',exited=false;
 child.on('exit',()=>{exited=true});
 const pending=new Map();
-const rpc=(method,params={},deadline=10000)=>new Promise((resolve,reject)=>{
+const rpc=(method,params={},deadline=10000,sessionId=undefined)=>new Promise((resolve,reject)=>{
  const id=++seq,timeout=setTimeout(()=>{pending.delete(id);reject(Error('local-debugger-timeout'))},deadline);
  pending.set(id,{resolve:r=>{clearTimeout(timeout);resolve(r)},reject:e=>{clearTimeout(timeout);reject(e)}});
- socket.send(JSON.stringify({id,method,params}));
+ socket.send(JSON.stringify({id,method,params,...(sessionId?{sessionId}:{})}));
 });
 async function poll(fn,ms,reason){
  const limit=Date.now()+ms;
@@ -54,6 +54,19 @@ async function retryJs(expression){
   // retry observation inside the bounded poll, but never failed assertions.
   if(['cdp-failure','javascript-evaluation-rejected'].includes(e.message))return null;
   throw e;
+ }
+}
+const workerSessions=new Map();
+async function setOffline(offline){
+ const conditions={offline,latency:0,downloadThroughput:offline?0:-1,uploadThroughput:offline?0:-1};
+ await rpc('Network.emulateNetworkConditions',conditions);
+ const {targetInfos}=await rpc('Target.getTargets');
+ const workers=targetInfos.filter(t=>t.type==='service_worker'&&t.url===ORIGIN+'service-worker.js');
+ assert(workers.length>0,'active-worker-target-missing');
+ for(const worker of workers){
+  let session=workerSessions.get(worker.targetId);
+  if(!session){session=(await rpc('Target.attachToTarget',{targetId:worker.targetId,flatten:true})).sessionId;workerSessions.set(worker.targetId,session);await rpc('Network.enable',{},10000,session)}
+  await rpc('Network.emulateNetworkConditions',conditions,10000,session);
  }
 }
 const checks=[];
@@ -103,20 +116,20 @@ try{
  assert(cached.names.length===1&&cached.names[0].startsWith('nexus-studio-shell-v1-')&&cached.entries.length===1&&cached.entries[0]===ORIGIN&&cached.sha===sourceDigest&&!cached.private,'cache-not-public-code-only');checks.push('opt-in-cache-exact-public-code-only');
  await poll(()=>retryJs("Boolean(navigator.serviceWorker.controller)"),10000,'worker-control');
  await js("window.__beforeOfflineReload=true;true");
- stage='true-offline';await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});await rpc('Page.reload',{ignoreCache:true});
- await poll(()=>retryJs("!window.__beforeOfflineReload&&document.readyState==='complete'&&Boolean(window.NexusStudioUI)&&Boolean(document.getElementById('studio-offline'))"),15000,'offline-reload');
+ stage='true-offline';await setOffline(true);await rpc('Page.reload',{ignoreCache:true});
+ await poll(()=>retryJs("!window.__beforeOfflineReload&&navigator.onLine===false&&document.readyState==='complete'&&Boolean(window.NexusStudioUI)&&Boolean(document.getElementById('studio-offline'))"),15000,'offline-reload');
  assert(await js("NexusStudioUI.snapshot().projects.length===0"),'automatic-private-reopen');checks.push('true-offline-reload-still-locked');
  await js("document.getElementById('passphrase').value='synthetic secret phrase 123';document.getElementById('unlock').click();true");
  await poll(()=>retryJs("NexusStudioUI.snapshot().projects[0]?.title==='SYNTHETIC MOBILE PROJECT'"),12000,'offline-unlock');checks.push('offline-encrypted-reopen');
  await js("document.getElementById('language').value='fa';document.getElementById('language').dispatchEvent(new Event('change'));true");
  assert(await js("document.documentElement.dir==='rtl'&&getComputedStyle(document.querySelector('.studio-en')).display==='none'"),'persian-static-panel');checks.push('persian-rtl-installation-panel');
- stage='remove';await rpc('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
+ stage='remove';await setOffline(false);
  await js("document.getElementById('studio-remove-offline').click();true");await poll(()=>retryJs("document.getElementById('studio-offline-state').textContent.includes('حذف شد')"),12000,'remove-offline');
  assert(await js("(async()=>!(await navigator.serviceWorker.getRegistration(location.href))&&(await caches.keys()).length===0&&NexusStudioUI.snapshot().projects.length===1&&Boolean(await new NexusStudio.IndexedStore().read()))()"),'remove-destroyed-private-state');checks.push('remove-code-retains-open-and-encrypted-work');
  // Reinstall, corrupt only the cached public bytes, then verify true-offline fail-closed.
  await js("document.getElementById('studio-offline').click();true");await poll(()=>retryJs("document.getElementById('studio-offline-state').textContent.includes('آماده است')"),25000,'reinstall');
  await js("(async()=>{const cache=await caches.open((await caches.keys())[0]);await cache.put(location.origin+'/',new Response('CORRUPTED PUBLIC SHELL',{headers:{'content-type':'text/html'}}));return true})()");
- await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});await rpc('Page.reload',{ignoreCache:true});
+ await setOffline(true);await rpc('Page.reload',{ignoreCache:true});
  await poll(()=>retryJs("document.body?.textContent.includes('Studio offline code is unavailable')"),15000,'corrupted-cache-accepted');checks.push('corrupted-offline-shell-rejected');
  process.stdout.write(JSON.stringify({status:'PASS',checks,source_sha256:sourceDigest,origin:ORIGIN,actual_offline_navigation:true,real_android_hardware:false,real_model_tested:false,authority:'none'})+'\n');
 }catch(error){
