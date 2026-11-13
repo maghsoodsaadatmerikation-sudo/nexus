@@ -116,7 +116,10 @@ implementation. The original independent real Railway-volume backup/restore
   prompt fields, secret exclusion, audit/review authority, ciphertext privacy,
   correct passphrase recovery and cross-vault portable restore. Browser tests
   verify explicit editor+save, no automatic network calls and FA localization.
-  Android emulator rechecks previous working local data behavior.
+  Android emulator also saves an explicitly scoped assistant and memory entry,
+  closes the native Activity, reopens WebView, and requires exact encrypted
+  profile/memory recovery without disclosing either field in the backup blob.
+  This is an emulator acceptance, never a physical Android hardware claim.
 
 **Release truth:** completion in this PR does not equal production release,
 full ChatGPT feature parity, or the existence of an LLM. Main/Render/Railway
