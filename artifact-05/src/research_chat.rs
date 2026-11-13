@@ -618,6 +618,10 @@ pub(crate) async fn history_script() -> impl IntoResponse {
 pub(crate) async fn page() -> Html<&'static str> {
     Html(include_str!("../../web/research-chat.html"))
 }
+pub(crate) async fn workbench_page() -> Html<&'static str> {
+    Html(include_str!("../../web/research-workbench.html"))
+}
+
 pub(crate) async fn respond<D: ConstitutionalDelegate>(
     State(state): State<AppState<D>>,
     Json(input): Json<ChatRequest>,
