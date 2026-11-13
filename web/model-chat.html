@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer"><title>NEXUS — opt-in generative chat</title>
+<style>
+:root{font:16px/1.6 system-ui,sans-serif;background:#eef5f2;color:#173e38}
+*{box-sizing:border-box}body{margin:0}main{max-width:800px;margin:0 auto;padding:24px 15px}
+section{padding:18px;border:1px solid #bdccc6;border-radius:14px;background:white;margin:16px 0}
+h1{font-size:1.7rem;margin:5px 0}h2{font-size:1.1rem}p{margin:8px 0}
+label{display:block;margin:12px 0}input:not([type=checkbox]),textarea,button,select{font:inherit;max-width:100%;border:1px solid #a4bbb2;border-radius:8px;padding:9px}textarea,input:not([type=checkbox]){width:100%}
+textarea{min-height:110px}button{background:#14675a;color:white;cursor:pointer}
+button:disabled{opacity:.55;cursor:wait}.row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+small,.help{color:#49695d}.entry{white-space:pre-wrap;border-bottom:1px solid #dae5df;padding:10px;overflow-wrap:anywhere}
+.user{background:#ebf4ef}.machine{background:#fbf5e9}.notice{font-weight:600}
+#message:focus-visible{outline:3px solid #6bbaad}
+</style></head><body><main>
+<div class="row"><a href="/research-chat">Source-grounded chat</a><a href="/work-mode">Work Mode</a><label for="lang">Language <select id="lang"><option value="en">English</option><option value="fa">فارسی</option></select></label></div>
+<h1 data-k="title">NEXUS · Generative text preview</h1>
+<p data-k="intro">Real model inference is available ONLY when the NEXUS operator configures a provider and model. Model output is an unverified machine draft, never human judgment, source evidence or execution.</p>
+<section>
+<label for="api-token" data-k="token">NEXUS gateway token (never saved)</label><input id="api-token" type="password" autocomplete="off" spellcheck="false">
+<p class="help" data-k="privacy">The selected conversation is sent to your NEXUS server and its configured external model provider ONLY after you consent. Provider pricing, retention and processing policies may apply. No provider is contacted until Send.</p>
+<div id="conversation" aria-live="polite"></div>
+<label for="message" data-k="message">Your exact message</label><textarea id="message" maxlength="1500"></textarea>
+<label class="row"><input id="consent" type="checkbox"><span data-k="consent">Send these messages to the configured model provider once.</span></label>
+<label class="row"><input id="cost" type="checkbox"><span data-k="cost">I understand the provider may charge and process my text under its privacy policy.</span></label>
+<div class="row">
+<button type="button" id="send" data-k="send">Send to model</button>
+<button type="button" id="cancel" data-k="cancel" disabled>Cancel waiting</button>
+<button type="button" id="clear" data-k="clear">Clear this session</button>
+</div>
+<p id="status" role="status" aria-live="polite">No model connection has been requested.</p>
+<p class="help" data-k="limits">No automatic web search, citations, file upload, shared history, memory, tool use, executions or billing guarantees. The model identity is shown on each reply; quality and price must be checked independently.</p>
+</section></main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id),messages=[];let epoch=0,active=null,busy=false;
+const labels={
+ en:{title:'NEXUS · Generative text preview',intro:'Real model inference requires operator-configured model credentials. Output is unverified machine text; never judgment, evidence or an executed action.',token:'NEXUS gateway token (never saved)',privacy:'Only after approval, selected conversation text goes to NEXUS and its configured provider. Processing, retention and price may vary by provider.',message:'Your exact message',consent:'Send this conversation to the configured model once.',cost:'I accept that the provider may process my text and charge according to its policy.',send:'Send to model',cancel:'Cancel waiting',clear:'Clear this session',limits:'No auto search, model-selected citations, file upload, memory, provider fallback or tool calls. Model output may be wrong.'},
+ fa:{title:'نکسوس · گفت‌وگوی مولد آزمایشی',intro:'استنتاج واقعی فقط در صورت تنظیم مدل و اعتبارنامه توسط مسئول سرویس فعال است. پاسخ ماشین، قضاوت انسانی یا سند تأییدشده نیست.',token:'توکن خصوصی درگاه نکسوس (ذخیره نمی‌شود)',privacy:'فقط با تأیید شما متن مکالمه به سرور نکسوس و ارائه‌دهندهٔ مدل تنظیم‌شده ارسال می‌شود؛ امکان هزینه و پردازش خارجی وجود دارد.',message:'متن دقیق پیام شما',consent:'اجازهٔ یک‌باره برای ارسال مکالمه به مدل تنظیم‌شده.',cost:'می‌پذیرم که ارائه‌دهنده ممکن است اطلاعات را پردازش و هزینه دریافت کند.',send:'ارسال به مدل',cancel:'لغو انتظار',clear:'پاک‌کردن این مکالمه',limits:'بدون جست‌وجوی خودکار، استناد تأییدشده، فایل، حافظه، تغییر مدل یا اجرای ابزار؛ پاسخ ممکن است نادرست باشد.'}
+};
+function t(k){return labels[$('lang').value][k]||k}
+function status(msg){$('status').textContent=msg}
+function controls(){$('send').disabled=busy;$('cancel').disabled=!busy;$('clear').disabled=busy}
+function resetConsent(){$('consent').checked=false;$('cost').checked=false}
+function render(){const slot=$('conversation');slot.replaceChildren();for(const m of messages){const n=document.createElement('div');n.className='entry '+(m.role==='human'?'user':'machine');n.textContent=(m.role==='human'?'Human':'Machine draft')+' · '+m.content;slot.append(n)}}
+function invalidate(){epoch++;active?.abort();active=null;busy=false;resetConsent();controls()}
+$('lang').onchange=()=>{invalidate();document.documentElement.lang=$('lang').value;document.documentElement.dir=$('lang').value==='fa'?'rtl':'ltr';for(const x of document.querySelectorAll('[data-k]'))x.textContent=t(x.dataset.k)};
+$('api-token').addEventListener('input',()=>{invalidate();messages.length=0;render()});
+$('message').addEventListener('input',resetConsent);
+$('consent').addEventListener('change',()=>{if(!$('consent').checked)$('cost').checked=false});
+$('cancel').onclick=()=>{invalidate();status('Request cancelled locally. Provider processing may already have started.')};
+$('clear').onclick=()=>{invalidate();messages.length=0;$('message').value='';render();status('Session cleared')};
+$('send').onclick=async()=>{
+ if(busy)return;
+ const content=$('message').value.trim(),token=$('api-token').value.trim();
+ if(!content||Array.from(content).length>1500||!token||!$('consent').checked||!$('cost').checked){status('Message, private token and two explicit approvals are required.');return}
+ const limited=messages.slice(-10).map(m=>({role:m.role,content:m.content}));const payload=limited.concat({role:'human',content});
+ if(payload.length>12){status('Conversation limit; clear this session to continue.');return}
+ resetConsent();const own=new AbortController(),scope=++epoch;active=own;busy=true;controls();
+ const timeout=setTimeout(()=>own.abort(),28000);
+ status('Contacting the operator-configured model…');
+ try{
+   const response=await fetch('/v1/model-chat',{
+     method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+token},
+     credentials:'omit',referrerPolicy:'no-referrer',cache:'no-store',
+     body:JSON.stringify({messages:payload,consent:true,cost_acknowledged:true}),
+     signal:own.signal
+   });
+   if(scope!==epoch)return;
+   if(!response.ok)throw Error('Model unavailable, denied, or not configured ('+response.status+').');
+   const out=await response.json();
+   if(scope!==epoch)return;
+   if(out.schema!=='nexus.model-chat.v1'||out.authority!=='none'||out.judgment_changed!==false||
+      out.mode!=='generative_unverified_machine_draft'||out.verified_facts!==false||
+      !Array.isArray(out.citations)||out.citations.length!==0||
+      typeof out.answer!=='string'||out.answer.length>6000||
+      typeof out.model!=='string'||typeof out.provider!=='string'||
+      out.automatic_actions!==false||out.actual_cost_known!==false)throw Error('Unexpected model response; no data accepted.');
+   messages.push({role:'human',content},{role:'assistant',content:out.answer});
+   $('message').value='';render();status('Unverified machine draft · '+out.provider+' / '+out.model+' · actual cost unknown');
+ }catch(err){if(scope===epoch)status(err.name==='AbortError'?'Request timed out or cancelled.':String(err.message||err).slice(0,130))}
+ finally{clearTimeout(timeout);if(scope===epoch){active=null;busy=false;controls()}}
+};
+controls();
+</script></body></html>
