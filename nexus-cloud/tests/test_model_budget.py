@@ -82,6 +82,8 @@ def test_output_token_reservation_rejects_before_provider_call(monkeypatch):
     ("NEXUS_MODEL_MAX_CALLS_PER_HOUR", "1000001"),
     ("NEXUS_MODEL_OUTPUT_TOKENS_PER_HOUR", ""),
     ("NEXUS_MODEL_OUTPUT_TOKENS_PER_HOUR", "100000001"),
+    ("NEXUS_MODEL_INPUT_BYTES_PER_HOUR", "0"),
+    ("NEXUS_MODEL_INPUT_BYTES_PER_HOUR", "100000001"),
 ])
 def test_invalid_budget_config_fails_closed(monkeypatch, name, value):
     monkeypatch.setenv(name, value)
@@ -118,10 +120,10 @@ def test_upstream_failure_consumes_conservative_dispatch_budget(monkeypatch):
 def test_budget_is_atomic_and_resets_at_monotonic_window():
     budget = model.ModelBudget()
     start = budget.started
-    assert budget.reserve(10, 1, 10, now=start) == 0
-    assert budget.reserve(1, 1, 10, now=start + 1) > 0
-    assert budget.reserve(10, 1, 10, now=start + 3600) == 0
-    assert budget.calls == 1 and budget.tokens == 10
+    assert budget.reserve(10, 10, 1, 10, 10, now=start) == 0
+    assert budget.reserve(1, 1, 1, 10, 10, now=start + 1) > 0
+    assert budget.reserve(10, 10, 1, 10, 10, now=start + 3600) == 0
+    assert budget.calls == 1 and budget.tokens == 10 and budget.input_bytes == 10
 
 
 def test_requested_output_larger_than_entire_budget_is_never_sent(monkeypatch):
@@ -130,3 +132,23 @@ def test_requested_output_larger_than_entire_budget_is_never_sent(monkeypatch):
         denied = client.post("/studio-api/respond", json=body(), headers=AUTH)
     assert denied.status_code == 429
     assert int(denied.headers["retry-after"]) >= 1
+
+
+def test_hourly_input_byte_budget_blocks_repeated_large_prompts(monkeypatch):
+    import json
+    monkeypatch.setenv("NEXUS_MODEL_MAX_CALLS_PER_HOUR", "10")
+    count = 0
+    def provider(request):
+        nonlocal count
+        count += 1
+        return provider_response(request)
+    with configured(monkeypatch, provider) as client:
+        payload = body()
+        payload["messages"][0]["content"] = "Synthetic input " + "x" * 200
+        size = len(json.dumps(payload).encode()) + len(model.POLICY.encode())
+        # One reviewed payload fits, but the exact same second payload cannot.
+        monkeypatch.setenv("NEXUS_MODEL_INPUT_BYTES_PER_HOUR", str(size + 100))
+        assert client.post("/studio-api/respond", json=payload, headers=AUTH).status_code == 200
+        assert client.post("/studio-api/respond", json=payload, headers=AUTH).status_code == 429
+        assert client.app.state.model_budget.input_bytes > 0
+    assert count == 1
