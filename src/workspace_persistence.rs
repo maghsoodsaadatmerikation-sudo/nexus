@@ -41,16 +41,18 @@ impl FileWorkspaceRepository {
 
     pub fn save(&mut self, snapshot: WorkspaceSnapshot) -> Result<(), DurableWorkspaceError> {
         validate_snapshot(&snapshot)?;
-        fs::create_dir_all(&self.root).map_err(|_| DurableWorkspaceError::Io)?;
-
-        let path = self.path_for(&snapshot.workspace.id);
+        let directory =
+            SnapshotDirectory::open(&self.root, true)?.ok_or(DurableWorkspaceError::Io)?;
+        let path = directory.path_for(&snapshot.workspace.id);
         // Lock the directory itself: no lock metadata enters the data tree or
         // its strict recovery archives. This serializes cooperating writers
         // across all workspaces; the kernel releases the lock on process exit.
-        let lock = File::open(&self.root).map_err(|_| DurableWorkspaceError::Io)?;
-        lock.lock_exclusive()
+        directory
+            .file
+            .lock_exclusive()
             .map_err(|_| DurableWorkspaceError::Io)?;
-        if let Some(existing) = self.load(&snapshot.workspace.id)? {
+        directory.verify()?;
+        if let Some(existing) = directory.load(&snapshot.workspace.id)? {
             validate_history_extension(&existing, &snapshot)?;
         }
 
@@ -66,32 +68,144 @@ impl FileWorkspaceRepository {
                 .map_err(|_| DurableWorkspaceError::Io)?;
             file.sync_all().map_err(|_| DurableWorkspaceError::Io)?;
         }
+        directory.verify()?;
         fs::rename(&tmp, &path).map_err(|_| DurableWorkspaceError::Io)?;
         // Persist the directory entry, not only the temporary file contents.
         #[cfg(unix)]
-        File::open(&self.root)
-            .and_then(|directory| directory.sync_all())
+        directory
+            .file
+            .sync_all()
             .map_err(|_| DurableWorkspaceError::Io)?;
-        Ok(())
+        directory.verify()
     }
 
     pub fn load(
         &self,
         workspace_id: &str,
     ) -> Result<Option<WorkspaceSnapshot>, DurableWorkspaceError> {
-        let path = self.path_for(workspace_id);
-        let file = match File::open(path) {
-            Ok(file) => file,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        match SnapshotDirectory::open(&self.root, false)? {
+            Some(directory) => directory.load(workspace_id),
+            None => Ok(None),
+        }
+    }
+}
+
+// Pin one directory for the whole read or write transaction. On Linux every
+// child operation resolves through the descriptor, not mutable ancestor paths.
+struct SnapshotDirectory {
+    root: PathBuf,
+    file: File,
+}
+
+impl SnapshotDirectory {
+    fn open(root: &Path, create: bool) -> Result<Option<Self>, DurableWorkspaceError> {
+        let root = if root.is_absolute() {
+            root.to_owned()
+        } else {
+            std::env::current_dir()
+                .map_err(|_| DurableWorkspaceError::Io)?
+                .join(root)
+        };
+        if create {
+            fs::create_dir_all(&root).map_err(|_| DurableWorkspaceError::Io)?;
+        }
+        let initial = match fs::symlink_metadata(&root) {
+            Ok(meta) if meta.is_dir() => meta,
+            Ok(_) => return Err(DurableWorkspaceError::Io),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound && !create => return Ok(None),
             Err(_) => return Err(DurableWorkspaceError::Io),
         };
+        let mut options = OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(
+                libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
+            );
+        }
+        let file = options.open(&root).map_err(|_| DurableWorkspaceError::Io)?;
+        if !same_identity(
+            &initial,
+            &file.metadata().map_err(|_| DurableWorkspaceError::Io)?,
+        ) {
+            return Err(DurableWorkspaceError::Io);
+        }
+        let directory = Self { root, file };
+        directory.verify()?;
+        Ok(Some(directory))
+    }
+
+    fn verify(&self) -> Result<(), DurableWorkspaceError> {
+        let linked = fs::symlink_metadata(&self.root).map_err(|_| DurableWorkspaceError::Io)?;
+        let pinned = self
+            .file
+            .metadata()
+            .map_err(|_| DurableWorkspaceError::Io)?;
+        if !linked.is_dir() || !pinned.is_dir() || !same_identity(&linked, &pinned) {
+            return Err(DurableWorkspaceError::Io);
+        }
+        Ok(())
+    }
+
+    fn path_for(&self, workspace_id: &str) -> PathBuf {
+        #[cfg(target_os = "linux")]
+        let root = {
+            use std::os::fd::AsRawFd;
+            Path::new("/proc/self/fd").join(self.file.as_raw_fd().to_string())
+        };
+        #[cfg(not(target_os = "linux"))]
+        let root = self.root.clone();
+        root.join(format!("{}.json", encode_id(workspace_id)))
+    }
+
+    fn load(&self, workspace_id: &str) -> Result<Option<WorkspaceSnapshot>, DurableWorkspaceError> {
+        self.verify()?;
+        let path = self.path_for(workspace_id);
+        let initial = match fs::symlink_metadata(&path) {
+            Ok(meta) => meta,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                self.verify()?;
+                return Ok(None);
+            }
+            Err(_) => return Err(DurableWorkspaceError::Io),
+        };
+        regular_snapshot(&initial)?;
+        let mut options = OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC);
+        }
+        let file = match options.open(&path) {
+            Ok(file) => file,
+            Err(_) => return Err(DurableWorkspaceError::Io),
+        };
+        let before = file.metadata().map_err(|_| DurableWorkspaceError::Io)?;
+        regular_snapshot(&before)?;
+        if !stable_file(&initial, &before) {
+            return Err(DurableWorkspaceError::Io);
+        }
         let mut bytes = Vec::new();
-        file.take(MAX_SNAPSHOT_BYTES + 1)
+        (&file)
+            .take(MAX_SNAPSHOT_BYTES + 1)
             .read_to_end(&mut bytes)
             .map_err(|_| DurableWorkspaceError::Io)?;
         if bytes.len() as u64 > MAX_SNAPSHOT_BYTES {
             return Err(DurableWorkspaceError::Capacity);
         }
+        let after = file.metadata().map_err(|_| DurableWorkspaceError::Io)?;
+        let linked = fs::symlink_metadata(&path).map_err(|_| DurableWorkspaceError::Io)?;
+        regular_snapshot(&after)?;
+        regular_snapshot(&linked)?;
+        if !stable_file(&before, &after)
+            || !stable_file(&after, &linked)
+            || after.len() != bytes.len() as u64
+        {
+            return Err(DurableWorkspaceError::Io);
+        }
+        self.verify()?;
         let snapshot: WorkspaceSnapshot =
             serde_json::from_slice(&bytes).map_err(|_| DurableWorkspaceError::Serialization)?;
         validate_snapshot(&snapshot)?;
@@ -100,9 +214,49 @@ impl FileWorkspaceRepository {
         }
         Ok(Some(snapshot))
     }
+}
 
-    fn path_for(&self, workspace_id: &str) -> PathBuf {
-        self.root.join(format!("{}.json", encode_id(workspace_id)))
+fn regular_snapshot(meta: &fs::Metadata) -> Result<(), DurableWorkspaceError> {
+    if !meta.is_file() {
+        return Err(DurableWorkspaceError::Io);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if meta.nlink() != 1 {
+            return Err(DurableWorkspaceError::Io);
+        }
+    }
+    if meta.len() > MAX_SNAPSHOT_BYTES {
+        return Err(DurableWorkspaceError::Capacity);
+    }
+    Ok(())
+}
+
+fn same_identity(a: &fs::Metadata, b: &fs::Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        (a.dev(), a.ino()) == (b.dev(), b.ino())
+    }
+    #[cfg(not(unix))]
+    {
+        a.file_type() == b.file_type() && a.created().ok() == b.created().ok()
+    }
+}
+
+fn stable_file(a: &fs::Metadata, b: &fs::Metadata) -> bool {
+    if !same_identity(a, b) || a.len() != b.len() || a.modified().ok() != b.modified().ok() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        (a.nlink(), a.ctime(), a.ctime_nsec()) == (b.nlink(), b.ctime(), b.ctime_nsec())
+    }
+    #[cfg(not(unix))]
+    {
+        true
     }
 }
 
@@ -268,5 +422,33 @@ mod tests {
             Err(DurableWorkspaceError::UnsupportedSchemaVersion { .. })
         ));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn pinned_directory_cannot_redirect_operations_after_an_ancestor_is_replaced() {
+        let parent = temp_root("pinned-ancestor");
+        let root = parent.join("workspaces");
+        let original = parent.with_extension("original");
+        let mut repo = FileWorkspaceRepository::new(&root);
+        let snapshot = WorkspaceEngine::new("w", "Question", ProvenanceId::new("p")).snapshot();
+        repo.save(snapshot.clone()).unwrap();
+        let directory = SnapshotDirectory::open(&root, false).unwrap().unwrap();
+        fs::rename(&parent, &original).unwrap();
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("77.json"), b"replacement must remain untouched").unwrap();
+        assert!(directory.verify().is_err());
+        assert!(directory.load("w").is_err());
+        // Even the internal descriptor path continues to name the original,
+        // rather than silently resolving into the replacement directory.
+        let old: WorkspaceSnapshot =
+            serde_json::from_slice(&fs::read(directory.path_for("w")).unwrap()).unwrap();
+        assert_eq!(old, snapshot);
+        assert_eq!(
+            fs::read(root.join("77.json")).unwrap(),
+            b"replacement must remain untouched"
+        );
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_dir_all(original).unwrap();
     }
 }
