@@ -4,10 +4,15 @@ The static package is `public/studio`. It contains the integrated Studio,
 a scoped manifest, an integrity-pinned service worker and app icons. Build with
 `python3 scripts/build-studio-static.py`, verify with `--check`.
 
-It is intended for the independent static origin
-`https://nexus-studio-merikation.onrender.com/`. Public promotion is separate from
-implementation: provider deployment status, exact public bytes and a real
-public-origin offline browser witness must pass before claiming it is live.
+The independent public origin is
+https://nexus-studio-merikation.onrender.com/.
+Render reported LIVE on 13 November 2026 for service
+`srv-dbrjurc9v7es73cqe0v0`, deploy `dep-dbrjurk9v7es73cqe1a0`, source
+`ba81a44a8150098c636481ec32922ef7e2d93124`. AutoDeploy is off.
+The build command verifies deterministic packaging and publishes only
+`public/studio`. Provider status is distinct from the exact HTTPS byte check
+and public-origin offline browser witness; their reports are uploaded by
+[NEXUS Public Studio Witness](https://github.com/maghsoodsaadatmerikation-sudo/nexus/actions/workflows/studio-static-public.yml).
 The existing `nexus-offline-pilot` service is not redeployed by this stage.
 
 ## Use on a phone
@@ -46,7 +51,7 @@ assets, not private records. The local code lab retains its isolated Worker.
 `studio-static.yml` checks deterministic packaging, the public observer's
 negative fixtures, and real Chromium offline lifecycle with synthetic private
 work. `studio-static-public.yml` runs after an explicit main commit marked
-`[verify-studio-public]`, or manual dispatch. It GETs only the fixed public
+`[verify-studio-public]`, a review PR whose title includes that marker, or manual dispatch. It GETs only the fixed public
 origin, checks exact HTML/JS/manifest bytes and decoded icon pixels, then uses
 a fresh disposable Chromium profile to test actual offline navigation,
 encrypted reopen, removal and rejection of a corrupted cached shell. It uploads
