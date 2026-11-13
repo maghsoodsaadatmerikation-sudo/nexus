@@ -111,6 +111,17 @@ class Stage24Tests(unittest.TestCase):
             self.assertEqual(p.verified_url(name),
                              "https://maghsoodsaadatmerikation-sudo.github.io/nexus/"+name)
 
+    def test_privileged_publish_only_after_read_only_pr_verification(self):
+        workflow = (ROOT / ".github/workflows/stage24-static-site.yml").read_text()
+        self.assertIn("needs: verify-snapshot", workflow)
+        self.assertIn("github.event_name == 'push'", workflow)
+        self.assertIn("refs/heads/feat/work-mode-20261113", workflow)
+        self.assertIn("permissions:\n  contents: read", workflow)
+        self.assertIn("    permissions:\n      contents: write", workflow)
+        self.assertIn("git switch --orphan", workflow)
+        self.assertNotIn("git push --force", workflow)
+        self.assertIn("test -z \"$(git ls-remote --heads origin", workflow)
+
     def test_icon_binary_not_embedded_in_private_log(self):
         for name in ["icons/nexus-192.png","icons/nexus-512.png"]:
             x = self.files[name]
