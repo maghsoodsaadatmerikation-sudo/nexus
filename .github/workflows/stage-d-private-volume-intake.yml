@@ -34,6 +34,8 @@ on:
       - 'scripts/test-private-core-audit.py'
       - 'scripts/stage-d-core-parity.py'
       - 'scripts/test-stage-d-core-parity.py'
+      - 'scripts/test-legacy-runtime-core.sh'
+      - 'tests/fixtures/legacy-runtime-core/**'
       - 'src/bin/nexus-private-core-audit.rs'
       - 'src/workspace_persistence.rs'
       - 'artifact-05/src/request_store.rs'
@@ -158,13 +160,13 @@ jobs:
           test -z "${RENDER_API_KEY:-}"
           test -z "${NEXUS_API_TOKEN:-}"
           grep -Eq '^channel = "1.85.0"$' rust-toolchain.toml
-      - name: Prove selected workspace sources equal observed pinned Railway revision
+      - name: Verify pinned legacy sources and reject current-core parity confusion
         shell: bash
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/stage-d-core-parity.py scripts/test-stage-d-core-parity.py
           python3 scripts/test-stage-d-core-parity.py
-          python3 scripts/stage-d-core-parity.py --runtime-commit 3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959
+          python3 scripts/stage-d-core-parity.py --repo-root tests/fixtures/legacy-runtime-core --runtime-commit 3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959
       - name: Compile current Rust durable workspace semantic validator
         shell: bash
         run: |
@@ -179,7 +181,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export NEXUS_PRIVATE_CORE_AUDIT_BIN="$PWD/target/debug/nexus-private-core-audit"
-          python3 -m py_compile scripts/test-private-core-audit.py
-          python3 scripts/test-private-core-audit.py
+          cargo test --locked --test workspace_integrity
+          bash scripts/test-legacy-runtime-core.sh
           echo 'No Railway access; no user data or recovery archive published.'

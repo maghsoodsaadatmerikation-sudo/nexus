@@ -34,6 +34,9 @@ Local environment: Rust 1.85.0, Python 3.13, locked dependencies, Linux.
 | Core test suite | 104 passed, including 11 new integrity tests |
 | `cargo test --locked` in `artifact-05` | 54 passed, 1 pre-existing ignored ENOSPC test |
 | `uv run --locked pytest -q` in `nexus-cloud` | 30 passed, including 15 new cases |
+| Legacy runtime semantic intake | 15 passed using a disposable validator and verified original source fixtures |
+| Historical/current source-parity separation | 10 passed |
+| Synthetic real-process launcher and backup/restart contract | PASS, including backup with workspace data and preserved request ledger |
 | Concurrent independent repository instances | Exactly one of 8 competing divergent writes succeeded; 7 were rejected; resulting snapshot was readable and no temporary file remained |
 
 The existing compile-failure fixture was refreshed for Rust 1.85 diagnostic
@@ -41,6 +44,22 @@ wording: it still requires E0603, rejecting construction through the private
 authorization module. Pre-existing Rust formatting was normalized in a separate
 local commit so the existing formatting gate could pass. Dependency locks for
 both the core and gateway include the new `fs2` OS-lock dependency.
+
+## Historical runtime recovery remains separate
+
+The old recovery harness assumed every current checkout still matched five
+selected modules of deployed revision `3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959`.
+A core repair correctly invalidates that assumption. Immutable fixtures retain
+those exact five original Git blobs; the existing parity guard verifies them.
+The revised test harness builds its legacy semantic validator in a disposable
+source tree containing those modules, then runs all 15 original synthetic
+private-intake tests there. Ten parity tests include explicit rejection of a
+claim that the changed current source equals the historical runtime. Production
+parity checks remain fail-closed; no runtime revision or original evidence was
+rewritten. Current-source integrity is tested separately.
+
+The write lock uses the repository directory itself, so it creates no lock files
+that would break the strict backup path allowlist. Workspaces share that lock.
 
 ## Compatibility and remaining boundaries
 
@@ -50,8 +69,8 @@ both the core and gateway include the new `fs2` OS-lock dependency.
 - Changing previously saved question/goal/values/constraints requires a future
   explicit audited update design, or creation of a separate workspace. The
   current schema has no event that can authenticate those edits.
-- Advisory locking coordinates cooperating processes on a filesystem supporting
-  OS locks. It is not distributed consensus or protection from a process that
+- Directory advisory locking coordinates cooperating processes on a filesystem supporting
+  OS directory locks (verified here on Linux). It is not distributed consensus or protection from a process that
   bypasses this repository. Keep the repository directory operator-controlled.
 - These snapshots are not cryptographically signed. An actor able to rewrite
   the entire storage tree remains outside this repair's integrity guarantee.

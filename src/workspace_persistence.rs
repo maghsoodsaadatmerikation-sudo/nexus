@@ -44,15 +44,10 @@ impl FileWorkspaceRepository {
         fs::create_dir_all(&self.root).map_err(|_| DurableWorkspaceError::Io)?;
 
         let path = self.path_for(&snapshot.workspace.id);
-        // A persistent OS lock serializes read/validate/replace across repository
-        // objects and processes. The kernel releases it on process exit.
-        let lock = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(path.with_extension("lock"))
-            .map_err(|_| DurableWorkspaceError::Io)?;
+        // Lock the directory itself: no lock metadata enters the data tree or
+        // its strict recovery archives. This serializes cooperating writers
+        // across all workspaces; the kernel releases the lock on process exit.
+        let lock = File::open(&self.root).map_err(|_| DurableWorkspaceError::Io)?;
         lock.lock_exclusive()
             .map_err(|_| DurableWorkspaceError::Io)?;
         if let Some(existing) = self.load(&snapshot.workspace.id)? {

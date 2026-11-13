@@ -236,6 +236,8 @@ fn unchanged_and_append_only_saves_remain_supported() {
     let mut disk = FileWorkspaceRepository::new(&dir);
     disk.save(s.clone()).unwrap();
     disk.save(s).unwrap();
+    // Operational locking must not add files rejected by strict backup readers.
+    assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
     e.record_human_judgment(
         HumanJudgment {
             decision: "A".into(),
