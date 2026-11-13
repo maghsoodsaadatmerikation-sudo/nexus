@@ -1,0 +1,171 @@
+name: NEXUS Stage 24 — Publish Isolated Reviewed Mobile Snapshot
+on:
+  pull_request:
+    branches:
+      - feat/work-mode-20261113
+    paths:
+      - '.github/workflows/stage24-static-site.yml'
+      - 'scripts/stage24-static-publish-check.py'
+      - 'scripts/test-stage24-static-publish.py'
+      - 'docs/STAGE-24-STATIC-SNAPSHOT-AND-PAGES.md'
+  push:
+    branches:
+      - feat/work-mode-20261113
+    paths:
+      - '.github/workflows/stage24-static-site.yml'
+      - 'scripts/stage24-static-publish-check.py'
+      - 'scripts/test-stage24-static-publish.py'
+      - 'docs/STAGE-24-STATIC-SNAPSHOT-AND-PAGES.md'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-snapshot:
+    name: exact-source-static-snapshot
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact proposed commit with no persisted credential
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Assert no privileged provider credentials and exact build provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          python3 -m py_compile scripts/stage24-static-publish-check.py scripts/test-stage24-static-publish.py
+          node --check scripts/test-mobile-work-pwa-browser.mjs
+
+      - name: Recheck current Stage 23 adversarial safety contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/test-work-mode-portable.py
+          python3 scripts/test-mobile-work-pwa.py
+          python3 scripts/test-stage24-static-publish.py
+
+      - name: Build independently and reject unrelated files, changed source or bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build-mobile-work-pwa.py --out build/stage24-site
+          python3 scripts/build-mobile-work-pwa.py --out build/stage24-site --check
+          python3 scripts/stage24-static-publish-check.py --site build/stage24-site
+          node --check build/stage24-site/service-worker.js
+          test -f build/stage24-site/.nojekyll
+
+      - name: Real Chromium consent, tamper rejection and true offline reopening
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_STAGE23_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          test -n "$NEXUS_STAGE23_CHROME"
+          node scripts/test-mobile-work-pwa-browser.mjs build/stage24-site > build/stage24-browser-witness.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open('build/stage24-browser-witness.json'))
+          assert data['status']=='PASS' and len(data['reports'])==2
+          assert all(len(v['checks'])>=11 for v in data['reports'])
+          assert data['production_deployed'] is False and data['real_android_tested'] is False
+          print('PASS: 2 independent synthetic Chromium layouts; 0 production claims')
+          PY
+
+      - name: Upload exact static-only, public-reviewable candidate
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-stage24-reviewed-site
+          path: build/stage24-site/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload synthetic acceptance evidence, no private payloads
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-stage24-offline-witness
+          path: build/stage24-browser-witness.json
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-static-only-branch:
+    name: isolated-static-only-branch
+    needs: verify-snapshot
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feat/work-mode-20261113'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout exact reviewed development commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: true
+
+      - name: Download only artifact from the successful verification job
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: nexus-stage24-reviewed-site
+          path: build/stage24-reviewed
+
+      - name: Revalidate download bytes and reject existing target branch
+        shell: bash
+        env:
+          SITE_BRANCH: nexus-mobile-site-v24
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/feat/work-mode-20261113"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          python3 scripts/stage24-static-publish-check.py --site build/stage24-reviewed
+          test -z "$(git ls-remote --heads origin "refs/heads/$SITE_BRANCH")"
+          mkdir -p "$RUNNER_TEMP/nexus-stage24-verified-site"
+          cp -a build/stage24-reviewed/. "$RUNNER_TEMP/nexus-stage24-verified-site/"
+
+      - name: Publish an orphan branch containing exactly seven reviewed static files
+        shell: bash
+        env:
+          SITE_BRANCH: nexus-mobile-site-v24
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git ls-remote --heads origin "refs/heads/$SITE_BRANCH")"
+          git switch --orphan "$SITE_BRANCH"
+          git rm --cached -r -q -- .
+          cp -a "$RUNNER_TEMP/nexus-stage24-verified-site/." .
+          git add -f -- .nojekyll index.html manifest.json service-worker.js \
+            icons/nexus-192.png icons/nexus-512.png nexus-stage23-integrity.json
+          python3 - <<'PY'
+          import subprocess
+          expected={'.nojekyll','index.html','manifest.json','service-worker.js',
+            'icons/nexus-192.png','icons/nexus-512.png','nexus-stage23-integrity.json'}
+          got=set(subprocess.check_output(
+            ['git','diff','--cached','--name-only'],text=True).splitlines())
+          assert got==expected,('unexpected-staged-site-files',got^expected)
+          PY
+          git -c user.name='nexus-static-snapshot[bot]' \
+            -c user.email='noreply@users.noreply.github.com' \
+            commit -m "Stage 24: immutable reviewed offline NEXUS mobile site"
+          test -z "$(git log -1 --format=%P)"
+          python3 - <<'PY'
+          import subprocess
+          expected={'.nojekyll','index.html','manifest.json','service-worker.js',
+            'icons/nexus-192.png','icons/nexus-512.png','nexus-stage23-integrity.json'}
+          got=set(subprocess.check_output(
+            ['git','ls-tree','-r','--name-only','HEAD'],text=True).splitlines())
+          assert got==expected,('unexpected-published-repository-tree',got^expected)
+          PY
+          git push --porcelain origin "HEAD:refs/heads/$SITE_BRANCH"
+          echo "STAGE24: static-only branch published to GitHub repository, not GitHub Pages."
+          echo "No Rails/Railway backup, production web host, Android owner device or release Seal claimed."
