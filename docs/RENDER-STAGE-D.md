@@ -11,7 +11,7 @@ The repository root `render.yaml` defines a single paid Docker web service in Fr
 - `NEXUS_DATA_DIR=/data`,
 - `NEXUS_BIND_ADDR=0.0.0.0:3000`,
 - public HTTPS managed by Render,
-- HTTP health check on `/readyz` rather than the root HTML page (it detects recovery quarantine, but not every disk/operation failure),
+- HTTP liveness health check on `/livez` (do not use `/readyz` as Render's continuously polled health path: its intentional 503 during recovery quarantine can trigger restart loops),
 - `autoDeployTrigger: off` (manual deployment only; CI success is not release permission),
 - `NEXUS_API_TOKEN` supplied interactively as a secret (`sync: false`).
 
@@ -40,6 +40,13 @@ For each actual Git-connected production service:
 5. Do not merge a candidate that would change a production-linked executable
    until actual full-volume backup, rollback anchor and recovery evidence
    appropriate to that executable have been independently reviewed.
+
+For release acceptance, **separately** query `GET /readyz` over the actual
+HTTPS origin. Require HTTP 200 and exact `status=ready`; 503 means the restored
+service is quarantined and must not be promoted. This independent readiness
+test does not turn a synthetic/partial backup into production recovery evidence.
+Use `python3 scripts/check-render-readiness.py` with `NEXUS_BASE_URL` set to
+the inspected origin. It sends no bearer token and makes no mutations.
 
 The repository gate `scripts/verify-render-manual-deployment.py` checks the
 exact reviewed source profile and its adversarial test fixtures. It cannot
