@@ -43,7 +43,7 @@ for boundary in (
     assert boundary in backup, boundary
 for boundary in (
     'NEXUS_API_TOKEN', '/v1/workspaces/import',
-    'snapshot_bytes', 'os.O_NOFOLLOW', 'os.fstat',
+    'snapshot_bytes', "getattr(os, 'O_NOFOLLOW', 0)", 'os.fstat',
     'object_pairs_hook=no_duplicates', 'data=raw',
     'status == 201', 'backup.NoRedirect', 'ProxyHandler({})',
 ):
