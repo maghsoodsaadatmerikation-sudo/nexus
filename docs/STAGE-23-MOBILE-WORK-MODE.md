@@ -41,7 +41,7 @@ The app keeps connect-src none. A user must click Prepare offline before
 any Service Worker registration. The worker pins SHA-256, exact lengths and
 types for ONLY four public files: HTML, manifest and two icons. It refuses
 redirects, altered files, unreviewed paths, queries and non-GET requests.
-Only its own cache namespace is removed on explicit user confirmation.
+Only its own cache namespace is removed on explicit user confirmation. Browser hard-refresh, service-worker bypass or a compromised hosting origin can serve changed HTML without passing through the existing worker; the digest pin protects only worker-intercepted asset responses and is not a public-host authenticity guarantee.
 Existing user browser archives and downloaded encrypted files are not
 intentionally deleted when an offline shell is removed.
 
