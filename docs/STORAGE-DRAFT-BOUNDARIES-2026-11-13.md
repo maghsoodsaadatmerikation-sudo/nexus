@@ -14,7 +14,8 @@ It does not claim a complete security audit or model-capability equivalence.
 | Inconsistent snapshot read | Size was bounded but identity/content metadata were not compared across reading | Compare inode, length, modification/change times and link count before/after reading and against the final directory entry; reject a changed snapshot |
 | Unsent message loss | Unlock checked applied state and editor/profile drafts, but overlooked unsent message text | Require the existing replacement confirmation for an unsent message as well; declining preserves state, draft and passphrase |
 | Misleading branch selection | Declining a branch switch left the selector pointing to the rejected branch | Re-render the selector from the actual active thread without replacing its draft |
-| Stale operation failure | A rejected old asynchronous operation could replace the status of a newer/locked session | Scope failure status updates to the operation's original revision, matching the existing success guard |
+| Late archive conflict | An old conflict callback could lock a later queued archive unlock | Only the originating vault epoch can invalidate its key/session |
+| Stale operation failure | A rejected old asynchronous operation could replace the status of a newer/locked session | Scope operation and source-file failure updates to their original revision/project |
 
 ## Verification contract
 
@@ -26,9 +27,9 @@ identity and eight-writer conflict tests remain required. No lock file or snapsh
 schema change is introduced. The Unix `libc` dependency already existed transitively;
 its direct use is recorded in both dependency locks.
 
-Real Chromium acceptance adds three transition regressions: rejecting a branch
+Real Chromium acceptance adds four transition regressions: rejecting a branch
 change preserves selection/draft, declining unlock preserves unsent text and
-state, and a late failed configuration request cannot change locked-session status.
+state, and late failed configuration requests or source-file reads cannot change locked-session status.
 The existing archive encryption/reopen, branches, model-transport fixtures and
 isolated-code/network-sentinel tests remain required. Synthetic model responses
 are transport fixtures, not evidence of actual model quality.
@@ -41,7 +42,7 @@ are transport fixtures, not evidence of actual model quality.
   builds/tests and the type boundary. All 14 workspace-integrity cases and six
   persistence-unit cases pass.
 - Gateway `cargo test --locked`: 55 passed, one pre-existing ignored ENOSPC case.
-- Studio state/encryption: 40 checks passed; research/chart: 31 checks passed.
+- Studio state/encryption: 44 checks passed; research/chart: 31 checks passed.
 - Deterministic HTML bundle, Python test syntax and workflow authority checks pass.
 - Real Chromium transition and existing UI/lab witnesses run separately in CI;
   local Rust success is not claimed as browser validation.

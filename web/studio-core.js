@@ -74,7 +74,7 @@ class Vault{
  constructor(store=new IndexedStore()){this.store=store;this.epoch=0;this.tail=Promise.resolve();this.lock()}
  lock(){this.epoch++;this.key=null;this.salt=null;this.raw=null;this.data=null}
  get unlocked(){return this.key!==null}
- run(fn){const e=this.epoch;const check=()=>{if(e!==this.epoch)fail('locked')};const result=this.tail.catch(()=>{}).then(async()=>{check();try{return await fn(check)}catch(x){if(x.message==='conflict')this.lock();throw x}});this.tail=result.catch(()=>{});return result}
+ run(fn){const e=this.epoch;const check=()=>{if(e!==this.epoch)fail('locked')};const result=this.tail.catch(()=>{}).then(async()=>{check();try{return await fn(check)}catch(x){if(x.message==='conflict'&&e===this.epoch)this.lock();throw x}});this.tail=result.catch(()=>{});return result}
  async create(pass){return this.run(async check=>{if(await this.store.read())fail('archive-exists');const salt=crypto.getRandomValues(new Uint8Array(16)),key=await keyFor(pass,salt),raw=await encrypt(empty(),key,salt);check();await this.store.commit(null,raw,()=>{try{check();return true}catch{return false}});check();Object.assign(this,{key,salt,raw})})}
  async unlock(pass){return this.run(async check=>{const raw=await this.store.read();if(!raw)fail('archive-missing');const opened=await decrypt(raw,pass);check();Object.assign(this,{key:opened.key,salt:opened.salt,raw:opened.raw});return copy(opened.data)})}
  async save(value){const data=state(value);return this.run(async check=>{if(!this.unlocked)fail('locked');const raw=await encrypt(data,this.key,this.salt);check();await this.store.commit(envelope(this.raw).revision,raw,()=>{try{check();return true}catch{return false}});check();this.raw=raw})}

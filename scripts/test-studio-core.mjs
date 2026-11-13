@@ -19,4 +19,10 @@ a.lock();ok(()=>assert.equal(a.key,null));ok(()=>assert.equal(a.data,null));awai
 const b=new S.Vault(store),d=new S.Vault(store);await b.unlock(pass);await d.unlock(pass);await b.save(v);await reject(()=>d.save(v));ok(()=>assert.equal(d.unlocked,false));
 let resume;const gate=new Promise(r=>resume=r);const delayed=new Store();const old=delayed.commit.bind(delayed);delayed.commit=async(...args)=>{await gate;return old(...args)};const e=new S.Vault(delayed);const creation=e.create(pass);await new Promise(r=>setTimeout(r,150));e.lock();resume();await reject(()=>creation);ok(()=>assert.equal(delayed.raw,null));
 await b.erase();ok(()=>assert.equal(store.raw,null));ok(()=>assert.equal(b.unlocked,false));
+// A conflict callback delivered after Lock must not lock a later queued Unlock.
+const raceStore=new Store(),raceVault=new S.Vault(raceStore);await raceVault.create(pass);await raceVault.save(v);
+let signalCommit,releaseConflict;const entered=new Promise(r=>signalCommit=r),conflictGate=new Promise(r=>releaseConflict=r);
+raceStore.commit=async(expected,raw,guard)=>{if(!guard())throw Error('locked');signalCommit();await conflictGate;throw Error('conflict')};
+const obsoleteSave=raceVault.save(v);await entered;raceVault.lock();const reopen=raceVault.unlock(pass);releaseConflict();await reject(()=>obsoleteSave);const recovered=await reopen;checks++;
+ok(()=>assert(raceVault.unlocked));ok(()=>assert.deepEqual(recovered,S.state(v)));
 console.log(JSON.stringify({status:'PASS',checks,scope:'synthetic-state-and-encryption',live_model_tested:false}));
