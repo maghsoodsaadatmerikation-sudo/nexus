@@ -230,7 +230,9 @@ async fn main() {
         nexus_artifact_05_gateway::research_chat::ResearchChat::default()
     };
     let model_service=match std::env::var("NEXUS_MODEL_PROVIDER") {
-        Err(std::env::VarError::NotPresent) | Ok(ref p) if p=="disabled" =>
+        Err(std::env::VarError::NotPresent) =>
+            nexus_artifact_05_gateway::generative_chat::ModelService::default(),
+        Ok(p) if p=="disabled" =>
             nexus_artifact_05_gateway::generative_chat::ModelService::default(),
         Ok(provider)=>{
             let model=std::env::var("NEXUS_MODEL_ID")
