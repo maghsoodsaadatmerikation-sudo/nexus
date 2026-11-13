@@ -30,9 +30,14 @@ jobs:
           python3 scripts/build-studio.py --check
           node --check web/studio-core.js
           node --check web/studio-app.js
+          node --check web/studio-lab.js
+          node --check web/studio-lab-ui.js
           node scripts/test-studio-core.mjs
+          node scripts/test-studio-lab.mjs
       - name: Exercise Studio in disposable narrow and wide Chromium
         run: python3 scripts/test-studio-browser.py
+      - name: Exercise actual isolated code and local network sentinel
+        run: python3 scripts/test-studio-lab-browser.py
       - name: Capture synthetic empty Studio layout for review
         run: |
           chrome="$(command -v google-chrome || command -v chromium)"
