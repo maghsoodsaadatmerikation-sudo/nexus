@@ -2,6 +2,7 @@ name: NEXUS Stage 28 — Authenticated, Opt-in Generative Model Boundary
 on:
   pull_request:
     branches:
+      - feat/work-mode-20261113
       - stage27/custom-assistants-project-memory-20261113
     paths:
       - '.github/workflows/stage28-generative-consent.yml'
