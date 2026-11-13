@@ -59,8 +59,13 @@ def validate(ruleset: object, branch: object, expected_base_sha: str,
             "default branch is not targeted")
     require(type(exclude) is list and not exclude,
             "protected branch has exclusions")
-    require(ruleset.get("bypass_actors") == [],
-            "ruleset contains bypass actors")
+    # GitHub intentionally redacts bypass_actors from tokens lacking write
+    # permission on the ruleset (including this read-only PR token).
+    # Absence is UNKNOWN, not evidence that bypass actors do not exist.
+    bypass_known = "bypass_actors" in ruleset
+    if bypass_known:
+        require(ruleset["bypass_actors"] == [],
+                "ruleset explicitly contains bypass actors")
     require(type(branch) is dict and branch.get("ref") == "refs/heads/main",
             "unexpected protected branch ref")
     node = branch.get("object")
@@ -108,6 +113,9 @@ def validate(ruleset: object, branch: object, expected_base_sha: str,
         "ruleset_id": RULESET_ID,
         "strict_status_checks": True,
         "required_check": REQUIRED_CHECK,
+        "bypass_actor_visibility": (
+            "observed_none" if bypass_known else "redacted_not_verified"
+        ),
         "production_release_authorized": False,
     }
 
