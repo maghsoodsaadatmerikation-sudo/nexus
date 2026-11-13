@@ -61,6 +61,9 @@ try{
  input('notes','My private notes');e('export').click();
  check(files.length===1,'plaintext-export-requires-user-action');
  check((await files[0].text()).includes('My private notes'),'human-notes-explicitly-exported');
+ check(!(await files[0].text()).includes('<img') &&
+       (await files[0].text()).includes('&lt;img'),
+       'downloaded-markdown-escapes-untrusted-executable-markup');
  let resolve;remote=()=>new Promise(fn=>{resolve=fn});
  input('query','cancelled query');e('consent').checked=true;e('search').click();
  await wait(()=>!!resolve);e('stop').click();resolve({ok:true,json:async()=>response()});
