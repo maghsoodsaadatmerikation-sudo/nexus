@@ -60,6 +60,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ) as client:
         app.state.client = client
         app.state.model_limiter = anyio.CapacityLimiter(4)
+        # Bound authenticated delegated traffic before consuming request bodies.
+        # A separate limiter keeps the model bridge capacity independent.
+        app.state.core_limiter = anyio.CapacityLimiter(32)
         yield
 
 
@@ -128,49 +131,62 @@ async def delegate_to_constitutional_gateway(path: str, request: Request) -> Res
             raise HTTPException(status_code=400, detail="Invalid Content-Length")
         if len(declared) > 10 or int(declared) > MAX_REQUEST_BYTES:
             raise HTTPException(status_code=413, detail="Request body is too large")
-    body = bytearray()
+    # An authenticated request holds a slot until its response is completely
+    # received (or fails). Never queue unbounded work behind the HTTP pool.
+    limiter = request.app.state.core_limiter
     try:
-        with anyio.fail_after(BODY_TIMEOUT_SECONDS):
-            async for chunk in request.stream():
-                if len(body) + len(chunk) > MAX_REQUEST_BYTES:
-                    raise HTTPException(status_code=413, detail="Request body is too large")
-                body.extend(chunk)
-    except TimeoutError as exc:
-        raise HTTPException(status_code=408, detail="Request body timed out") from exc
-
-    headers = {"authorization": authorization, "accept-encoding": "identity"}
-    if content_type := request.headers.get("content-type"):
-        headers["content-type"] = content_type
-    if encoding := request.headers.get("content-encoding"):
-        headers["content-encoding"] = encoding
-    response_headers = {"cache-control": "no-store"}
-    content = bytearray()
-    try:
-        async with request.app.state.client.stream(
-            method=request.method,
-            url=f"{core_url}/v1/{quote(path, safe='/')}",
-            params=request.query_params.multi_items(),
-            headers=headers,
-            content=bytes(body),
-            follow_redirects=False,
-        ) as upstream:
-            # Never invoke an unbounded decompressor on an opaque core response.
-            # The core receives Accept-Encoding: identity; fail closed if ignored.
-            if upstream.headers.get("content-encoding", "identity").lower() != "identity":
-                raise HTTPException(status_code=502, detail="Encoded core response is unsupported")
-            with anyio.fail_after(BODY_TIMEOUT_SECONDS):
-                async for chunk in upstream.aiter_bytes(chunk_size=65536):
-                    if len(content) + len(chunk) > MAX_RESPONSE_BYTES:
-                        raise HTTPException(status_code=502, detail="Core response is too large")
-                    content.extend(chunk)
-            for name in ("content-type", "www-authenticate", "retry-after"):
-                if value := upstream.headers.get(name):
-                    response_headers[name] = value
-            upstream_status = upstream.status_code
-    except (httpx.RequestError, TimeoutError) as exc:
+        limiter.acquire_nowait()
+    except anyio.WouldBlock:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="NEXUS constitutional core is unavailable",
-        ) from exc
-
-    return Response(content=bytes(content), status_code=upstream_status, headers=response_headers)
+            status_code=429, detail="Core adapter capacity is busy",
+            headers={"Retry-After": "1", "Cache-Control": "no-store"},
+        ) from None
+    try:
+        body = bytearray()
+        try:
+            with anyio.fail_after(BODY_TIMEOUT_SECONDS):
+                async for chunk in request.stream():
+                    if len(body) + len(chunk) > MAX_REQUEST_BYTES:
+                        raise HTTPException(status_code=413, detail="Request body is too large")
+                    body.extend(chunk)
+        except TimeoutError as exc:
+            raise HTTPException(status_code=408, detail="Request body timed out") from exc
+    
+        headers = {"authorization": authorization, "accept-encoding": "identity"}
+        if content_type := request.headers.get("content-type"):
+            headers["content-type"] = content_type
+        if encoding := request.headers.get("content-encoding"):
+            headers["content-encoding"] = encoding
+        response_headers = {"cache-control": "no-store"}
+        content = bytearray()
+        try:
+            async with request.app.state.client.stream(
+                method=request.method,
+                url=f"{core_url}/v1/{quote(path, safe='/')}",
+                params=request.query_params.multi_items(),
+                headers=headers,
+                content=bytes(body),
+                follow_redirects=False,
+            ) as upstream:
+                # Never invoke an unbounded decompressor on an opaque core response.
+                # The core receives Accept-Encoding: identity; fail closed if ignored.
+                if upstream.headers.get("content-encoding", "identity").lower() != "identity":
+                    raise HTTPException(status_code=502, detail="Encoded core response is unsupported")
+                with anyio.fail_after(BODY_TIMEOUT_SECONDS):
+                    async for chunk in upstream.aiter_bytes(chunk_size=65536):
+                        if len(content) + len(chunk) > MAX_RESPONSE_BYTES:
+                            raise HTTPException(status_code=502, detail="Core response is too large")
+                        content.extend(chunk)
+                for name in ("content-type", "www-authenticate", "retry-after"):
+                    if value := upstream.headers.get(name):
+                        response_headers[name] = value
+                upstream_status = upstream.status_code
+        except (httpx.RequestError, TimeoutError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="NEXUS constitutional core is unavailable",
+            ) from exc
+    
+        return Response(content=bytes(content), status_code=upstream_status, headers=response_headers)
+    finally:
+        limiter.release()
