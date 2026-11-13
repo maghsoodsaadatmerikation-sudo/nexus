@@ -37,6 +37,8 @@ class Completion(BaseModel):
     consent: Literal[True]
     configuration_id: str = Field(pattern=r"^[a-f0-9]{64}$")
     messages: list[Message] = Field(min_length=1, max_length=42)
+    mode: Literal["standard", "thinking", "non-thinking"] = "standard"
+    max_output_tokens: int = Field(default=2048, ge=1, le=8192)
 
     @field_validator("consent", mode="before")
     @classmethod
@@ -55,7 +57,7 @@ def config():
         _ = p.port
     except ValueError:
         return None
-    if (not model or len(model) > 150 or len(token) < 32 or not p.hostname
+    if (adapter() not in {"generic", "deepseek"} or not model or len(model) > 150 or len(token) < 32 or not p.hostname
         or p.username is not None or p.password is not None or p.query or p.fragment
         or any(c.isspace() for c in endpoint)
         or not (p.scheme == "https" or (p.scheme == "http" and p.hostname in {"127.0.0.1", "::1"}))):
@@ -63,8 +65,13 @@ def config():
     return endpoint, model, token, p.hostname
 
 
+def adapter():
+    return os.getenv("NEXUS_MODEL_ADAPTER", "generic").strip()
+
+
 def configuration_id(c):
-    return hashlib.sha256((c[0]+"\n"+c[1]).encode()).hexdigest()
+    suffix = "" if adapter() == "generic" else "\nadapter:" + adapter()
+    return hashlib.sha256((c[0]+"\n"+c[1]+suffix).encode()).hexdigest()
 
 
 def register(app):
@@ -79,7 +86,8 @@ def register(app):
     async def model_status():
         c = config()
         return JSONResponse({"configured": c is not None, "configuration_id": configuration_id(c) if c else None, "model": c[1] if c else None,
-                             "provider_host": c[3] if c else None, "authority": "none"},
+                             "provider_host": c[3] if c else None, "authority": "none",
+                             **({"modes": ["standard", "thinking", "non-thinking"], "max_output_tokens": 8192} if c and adapter() == "deepseek" else {})},
                             headers={"Cache-Control": "no-store"})
 
     @app.post("/studio-api/respond")
@@ -111,19 +119,24 @@ def register(app):
                 raise HTTPException(409, "Model configuration changed; review again")
             if data.messages[-1].role != "user":
                 raise HTTPException(422, "Final message must be from the user")
+            if data.mode != "standard" and adapter() != "deepseek":
+                raise HTTPException(422, "Execution mode is unsupported by this adapter")
             messages = [{"role": "system", "content": POLICY}]
             messages.extend(m.model_dump() for m in data.messages)
             headers = {"accept-encoding": "identity"}
             key = os.getenv("NEXUS_MODEL_API_KEY", "").strip()
             if key:
                 headers["authorization"] = "Bearer " + key
+            payload = {"model": c[1], "messages": messages, "stream": False, "store": False}
+            payload["max_tokens" if adapter() == "deepseek" else "max_completion_tokens"] = data.max_output_tokens
+            if data.mode != "standard":
+                payload["thinking"] = {"type": "enabled" if data.mode == "thinking" else "disabled"}
             raw = bytearray()
             # Both first-byte and total-response deadlines apply; no redirects.
             with anyio.fail_after(45):
                 async with request.app.state.client.stream(
                     "POST", c[0], headers=headers, follow_redirects=False,
-                    json={"model": c[1], "messages": messages, "stream": False,
-                          "store": False, "max_completion_tokens": 2048},
+                    json=payload,
                 ) as upstream:
                     if upstream.status_code != 200:
                         raise HTTPException(502, "Model provider rejected the request")
@@ -144,6 +157,7 @@ def register(app):
             except (KeyError, IndexError, TypeError, ValueError):
                 raise HTTPException(502, "Invalid text-only model response") from None
             return JSONResponse({"text": content, "origin": "model", "model": c[1],
+                                 "mode": data.mode, "max_output_tokens": data.max_output_tokens,
                                  "truncated": choice.get("finish_reason") == "length", "authority": "none"},
                                 headers={"Cache-Control": "no-store"})
         except TimeoutError:

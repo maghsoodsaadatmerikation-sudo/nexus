@@ -146,3 +146,28 @@ def test_short_gateway_credentials_leave_model_disabled(monkeypatch):
     with configured(monkeypatch):
         monkeypatch.setenv('NEXUS_STUDIO_TOKEN','short')
         assert model.config() is None
+
+
+@pytest.mark.parametrize('mode,expected',[('thinking','enabled'),('non-thinking','disabled')])
+def test_deepseek_modes_bind_review_and_forward_real_flag(monkeypatch,mode,expected):
+    import json
+    monkeypatch.setenv('NEXUS_MODEL_ADAPTER','deepseek')
+    def handler(req):
+        payload=json.loads(req.content)
+        assert payload['thinking']=={'type':expected}
+        assert payload['max_tokens']==4096 and 'max_completion_tokens' not in payload
+        return httpx.Response(200,json={'choices':[{'message':{'content':'Result','reasoning_content':'private reasoning not returned'},'finish_reason':'stop'}]})
+    with configured(monkeypatch,handler) as c:
+        status=c.get('/studio-api/status').json()
+        assert mode in status['modes']
+        assert status['configuration_id']!=BODY['configuration_id']
+        assert c.post('/studio-api/respond',json=BODY,headers=AUTH).status_code==409
+        r=c.post('/studio-api/respond',json={**BODY,'configuration_id':status['configuration_id'],'mode':mode,'max_output_tokens':4096},headers=AUTH)
+        assert r.status_code==200 and r.json()['mode']==mode
+        assert 'private reasoning' not in r.text
+
+
+@pytest.mark.parametrize('fields',[{'mode':'thinking'},{'mode':'non-thinking'},{'max_output_tokens':True},{'max_output_tokens':8193},{'max_output_tokens':0},{'max_output_tokens':1.2},{'mode':'made-up'}])
+def test_modes_and_budgets_fail_before_upstream(monkeypatch,fields):
+    with configured(monkeypatch,lambda _:pytest.fail('unsupported input reached provider')) as c:
+        assert c.post('/studio-api/respond',json={**BODY,**fields},headers=AUTH).status_code==422

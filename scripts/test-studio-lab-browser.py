@@ -37,8 +37,20 @@ window.addEventListener('load',async()=>{
   let capped=false;try{await runner.run("console.log('x'.repeat(100000));return 'bad'")}catch{capped=true}assert(capped,'oversized-output-is-rejected');
   assert(await runner.run('return 2+2')==='4','sandbox-remains-usable-after-failures');assert(!document.querySelector('iframe'),'sandbox-contexts-removed-after-run');
   fill('chart-json','{"type":"bar","labels":["a"],"values":[1e99]}');$('chart-draw').click();assert($('chart').hidden&&$('chart-status').textContent,'invalid-chart-not-rendered');
+  $('task-sample').click();$('task-run').click();assert(!$('task-report').textContent,'task-plan-requires-consent');
+  $('task-consent').checked=true;$('task-run').click();await wait(()=>!$('task-run').disabled&&$('task-report').textContent);
+  let taskReport=JSON.parse($('task-report').textContent);assert(taskReport.jobs.every(j=>j.status==='succeeded'),'real-task-workers-complete');assert(Math.abs(Number(taskReport.jobs.find(j=>j.id==='mean').output)-10/3)<1e-10,'dependency-output-feeds-real-calculation');
+  $('task-consent').checked=true;fill('task-plan',$('task-plan').value);assert(!$('task-consent').checked,'task-edit-revokes-consent');
+  const taskPlan=jobs=>JSON.stringify({version:1,jobs});
+  fill('task-plan',taskPlan([{id:'slow',code:'await new Promise(r=>setTimeout(r,250)); return 8;'}]));$('task-consent').checked=true;$('task-run').click();fill('message','Chat remains interactive');await wait(()=>!$('task-run').disabled);assert(JSON.parse($('task-report').textContent).jobs[0].status==='succeeded','chat-typing-does-not-cancel-workers');
+  fill('task-plan',taskPlan([{id:'loop',code:'while(true){}'},{id:'dependent',needs:['loop'],code:'return 0;'},{id:'independent',code:'return 4;'}]));$('task-consent').checked=true;$('task-run').click();await wait(()=>!$('task-run').disabled);taskReport=JSON.parse($('task-report').textContent);assert(taskReport.jobs[0].status==='failed'&&taskReport.jobs[1].status==='blocked'&&taskReport.jobs[2].status==='succeeded','watchdog-blocks-only-dependent-jobs');
+  fill('task-plan',taskPlan([{id:'network',code:'try{await fetch(JSON.parse(input).input);return "LEAK"}catch{return "BLOCKED"}',input:location.origin+'/probe'}]));$('task-consent').checked=true;$('task-run').click();await wait(()=>!$('task-run').disabled);assert(JSON.parse($('task-report').textContent).jobs[0].output==='"BLOCKED"','task-workers-cannot-contact-network-sentinel');
+  fill('task-plan',taskPlan([{id:'cancel',code:'while(true){}'}]));$('task-consent').checked=true;$('task-run').click();$('task-stop').click();assert(JSON.parse($('task-report').textContent).jobs[0].status==='cancelled','explicit-task-cancellation');
+  assert(!document.querySelector('iframe'),'task-workers-removed-after-cancel');
+  fill('task-plan',taskPlan([{id:'old',code:'await new Promise(r=>setTimeout(r,200));return "OLD";'}]));$('task-consent').checked=true;$('task-run').click();fill('project-title','SECOND TASK PROJECT');$('new-project').click();await new Promise(r=>setTimeout(r,300));assert(!$('task-plan').value&&!$('task-report').textContent,'project-change-clears-workers-and-stale-reports');
+  $('task-sample').click();$('task-consent').checked=true;$('task-run').click();
   $('lock').click();assert(!$('code').value&&!$('code-input').value&&!$('code-result').textContent&&!$('research-query').value&&!$('research-cards').textContent&&$('chart').width===1,'lock-clears-lab-data-and-pixels');
-  assert(snapshot().projects.length===0,'lock-clears-project-state');assert(document.documentElement.scrollWidth<=innerWidth+2,'lab-responsive-without-horizontal-scroll');
+  assert(snapshot().projects.length===0,'lock-clears-project-state');assert(!$('task-plan').value&&!$('task-report').textContent&&!document.querySelector('iframe'),'lock-clears-task-plans-and-workers');assert(document.documentElement.scrollWidth<=innerWidth+2,'lab-responsive-without-horizontal-scroll');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,authority:'none',real_model_tested:false});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
 });

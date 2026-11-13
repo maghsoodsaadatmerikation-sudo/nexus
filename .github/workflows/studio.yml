@@ -34,6 +34,9 @@ jobs:
           python3 scripts/build-studio.py --check
           node --check web/studio-core.js
           node --check web/studio-app.js
+          node --check web/studio-tasks.js
+          node --check web/studio-tasks-ui.js
+          node scripts/test-studio-tasks.mjs
           node --check web/studio-lab.js
           node --check web/studio-lab-ui.js
           node --check web/studio-astrology.js
