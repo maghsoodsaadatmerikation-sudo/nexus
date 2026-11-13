@@ -20,7 +20,7 @@ the fixed official ruleset with the read-only \`gh api\` client in a PR job.
 It rejects:
 
 - base SHA different from the currently observed main head;
-- unprotected or excluded main, inactive/wrong ruleset, or bypass actors;
+- unprotected or excluded main, inactive/wrong ruleset, or **visible** bypass actors;
 - missing/ambiguous required GitHub Actions check identity;
 - disabled \`strict_required_status_checks_policy\`;
 - malformed/unavailable/oversized GitHub responses.
@@ -29,7 +29,13 @@ The step runs before costly Rust/Docker verification, to avoid marking an
 obsolete candidate as release-ready. It is **not** a production deployment
 gate, does not grant any release authority, and does not access Render.
 
-The 15 adversarial tests are entirely synthetic, do not contact GitHub and
+GitHub's documented API redacts `bypass_actors` for read-only tokens. The
+CI guard reports `bypass_actor_visibility=redacted_not_verified` instead of
+inventing a no-bypass claim; if the field is visible and non-empty, it
+rejects it. An operator with ruleset write permission must independently
+check for bypass actors. No elevated token is passed to untrusted PR code.
+
+The 16 adversarial tests are entirely synthetic, do not contact GitHub and
 include \`python -O\`, checked SHA, ruleset and JSON mutation cases.
 
 ## Mandatory GitHub action (still outstanding)
