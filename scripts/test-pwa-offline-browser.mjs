@@ -30,7 +30,7 @@ assert(manifest.start_url==='/'&&manifest.scope==='/'&&manifest.display==='stand
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const profile=await mkdtemp(path.join(tmpdir(),'nexus-pwa-private-'));
 const child=spawn(browser,[
- '--headless','--no-sandbox','--disable-dev-shm-usage','--disable-extensions',
+ '--headless','--disable-gpu','--no-sandbox','--disable-dev-shm-usage','--disable-extensions',
  '--disable-background-networking','--no-first-run','--no-default-browser-check',
  '--remote-debugging-address=127.0.0.1','--remote-debugging-port=0',
  '--user-data-dir='+profile,'--window-size=500,980','about:blank'
@@ -98,7 +98,7 @@ try{
  stage='online-bootstrap';
  const initial=await rpc('Page.navigate',{url:ORIGIN});
  assert(!initial.errorText,'local-online-navigation-failed');
- await poll(()=>retryJs("Boolean(document.getElementById('offline-install'))"),12000,'pwa-install-ui-missing');
+ await poll(()=>retryJs("document.readyState==='complete'&&Boolean(document.getElementById('offline-install'))"),12000,'pwa-install-ui-missing');
  checks.push('online-real-chromium-renders-html');
  // The first visit does NOT auto-register a service worker.
  assert(await js("navigator.serviceWorker.getRegistration('/').then(r=>Boolean(r))")===false,
@@ -115,10 +115,11 @@ try{
  const actual=await js("(async()=>{const ns=await caches.keys();const c=await caches.open(ns[0]);const r=await c.match('/');return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await r.arrayBuffer())),x=>x.toString(16).padStart(2,'0')).join('')})()");
  assert(actual===sourceDigest,'cached-shell-differs-from-reviewed-source');
  checks.push('installed-cache-sha256-is-exact-reviewed-html');
+ await js("window.__nexusBeforeOfflineReload=true;true");
  stage='real-network-offline';
  await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
  await rpc('Page.reload',{ignoreCache:true});
- await poll(()=>retryJs("document.getElementById('offline-install') && navigator.onLine===false"),15000,'offline-navigation-not-served');
+ await poll(()=>retryJs("!window.__nexusBeforeOfflineReload&&document.readyState==='complete'&&document.getElementById('offline-install')&&navigator.onLine===false"),15000,'offline-navigation-not-served');
  checks.push('real-chrome-network-offline-reload-served-cached-app');
  const offline=await js("(()=>{document.getElementById('load-demo').click();return {question:document.getElementById('question-view').textContent,claims:document.getElementById('claims').querySelectorAll('.entry').length,options:document.getElementById('alternatives').querySelectorAll('.entry').length,decision:document.getElementById('decision-view').textContent,net:navigator.onLine}})()");
  assert(offline.question.includes('ساختگی')&&offline.claims===2&&offline.options===2&&

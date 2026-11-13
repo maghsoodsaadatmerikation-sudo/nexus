@@ -21,7 +21,7 @@ BOOTSTRAP = r'''
 const $=id=>document.getElementById(id),base=new URL('./',location.href),prefix='nexus-studio-shell-v1-';
 const text=(en,fa)=>document.documentElement.lang==='fa'?fa:en;
 const modelClick=$('check-model').onclick;
-$('check-model').onclick=function(event){if(!$('gateway').value.trim()){$('model-status').textContent=text('No model hosted here. Local guide is available.','اینجا مدلی میزبانی نمی‌شود؛ راهنمای محلی در دسترس است.');return}return modelClick.call(this,event)};
+$('check-model').onclick=function(event){if($('model-engine')?.value!=='device'&&!$('gateway').value.trim()){$('model-status').textContent=text('No model hosted here. Local guide is available.','اینجا مدلی میزبانی نمی‌شود؛ راهنمای محلی در دسترس است.');return}return modelClick.call(this,event)};
 let changing=false;
 async function change(fn){if(changing)return;changing=true;$('studio-offline').disabled=$('studio-remove-offline').disabled=true;try{if(!isSecureContext||!('serviceWorker'in navigator))throw Error('unsupported');await fn()}catch{$('studio-offline-state').textContent=text('Offline setup failed. Reconnect and try again in a supported browser.','آماده‌سازی آفلاین انجام نشد؛ با اتصال اینترنت و مرورگر پشتیبانی‌شده دوباره تلاش کن.')}finally{changing=false;$('studio-offline').disabled=$('studio-remove-offline').disabled=false}}
 $('studio-offline').onclick=()=>change(async()=>{
@@ -41,55 +41,55 @@ $('studio-remove-offline').onclick=()=>change(async()=>{
 });
 })();
 '''
-WORKER = r'''/* Public Studio code only. Registration requires an explicit button click. */
+WORKER = r'''/* Reviewed public Studio application code only; model bytes use a separate opt-in cache. */
 'use strict';
 const EXPECTED_SHA256='__DIGEST__';
-const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+EXPECTED_SHA256.slice(0,16);
+const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'__PACKAGE_ID__';
 const ENTRY=new URL('./',self.location.href).href;
-async function verified(response){
- if(!response||response.status!==200||response.redirected||response.type!=='basic'||!/^text\/html(?:\s*;|$)/i.test(response.headers.get('content-type')||''))return false;
- const bytes=await response.clone().arrayBuffer();if(bytes.byteLength<5000||bytes.byteLength>500000)return false;
- const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
- return digest===EXPECTED_SHA256;
+const HTML={url:ENTRY,bytes:__INDEX_BYTES__,sha256:EXPECTED_SHA256,kind:'html'};
+const CODE=__CODE_ASSETS__.map(a=>({...a,url:new URL(a.path,ENTRY).href}));
+async function verified(response,asset=HTML){
+ if(!response||response.status!==200||response.redirected||response.type!=='basic')return false;
+ const mime=(response.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
+ if(asset.kind==='html'?mime!=='text/html':asset.kind==='json'?!['application/json','application/manifest+json'].includes(mime):!['text/javascript','application/javascript'].includes(mime))return false;
+ const bytes=await response.clone().arrayBuffer();if(bytes.byteLength!==asset.bytes)return false;
+ const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');return digest===asset.sha256;
 }
 async function cacheShell(){
- const response=await fetch(ENTRY,{cache:'no-store',credentials:'omit',redirect:'error'});
- if(!await verified(response))throw Error('studio-integrity-mismatch');
- const cache=await caches.open(CACHE);await cache.put(ENTRY,response);
+ const cache=await caches.open(CACHE);
+ for(const asset of [HTML,...CODE]){const response=await fetch(asset.url,{cache:'no-store',credentials:'omit',redirect:'error'});if(!await verified(response,asset))throw Error('studio-integrity-mismatch');await cache.put(asset.url,response)}
 }
 self.addEventListener('install',event=>event.waitUntil((async()=>{await cacheShell();await self.skipWaiting()})()));
-self.addEventListener('message',event=>{
- if(event.data?.type!=='refresh-public-shell'||!event.ports[0])return;
- event.waitUntil(cacheShell().then(()=>event.ports[0].postMessage({ok:true}),()=>event.ports[0].postMessage({ok:false})));
-});
-self.addEventListener('activate',event=>event.waitUntil((async()=>{
- await Promise.all((await caches.keys()).filter(n=>n.startsWith(PREFIX)&&n!==CACHE).map(n=>caches.delete(n)));
- await self.clients.claim();
-})()));
+self.addEventListener('message',event=>{if(event.data?.type!=='refresh-public-shell'||!event.ports[0])return;event.waitUntil(cacheShell().then(()=>event.ports[0].postMessage({ok:true}),()=>event.ports[0].postMessage({ok:false})))});
+self.addEventListener('activate',event=>event.waitUntil((async()=>{await Promise.all((await caches.keys()).filter(n=>n.startsWith(PREFIX)&&n!==CACHE).map(n=>caches.delete(n)));await self.clients.claim()})()));
 self.addEventListener('fetch',event=>{
  const request=event.request,url=new URL(request.url),entry=new URL(ENTRY);
- if(request.method!=='GET'||request.mode!=='navigate'||url.origin!==entry.origin||url.search||![entry.pathname,entry.pathname+'index.html'].includes(url.pathname))return;
- event.respondWith((async()=>{
-  try{const response=await fetch(request);if(await verified(response))return response}catch{}
-  const cache=await caches.open(CACHE),response=await cache.match(ENTRY);
-  if(await verified(response))return response;
-  return new Response('Studio offline code is unavailable. Reconnect and retry.',{status:503,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}});
- })());
+ if(request.method!=='GET'||url.origin!==entry.origin||url.search)return;
+ const asset=CODE.find(a=>a.url===url.href)||(request.mode==='navigate'&&[entry.pathname,entry.pathname+'index.html'].includes(url.pathname)?HTML:null);if(!asset)return;
+ event.respondWith((async()=>{try{const response=await fetch(request);if(await verified(response,asset))return response}catch{}const cache=await caches.open(CACHE),response=await cache.match(asset.url);if(await verified(response,asset))return response;return new Response('Studio offline code is unavailable. Reconnect and retry.',{status:503,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}})})());
 });
 '''
 
 
 def artifacts():
     subprocess.run([sys.executable, str(ROOT/'scripts/build-studio.py'), '--check'], check=True)
+    subprocess.run([sys.executable, str(ROOT/'scripts/build-device-model.py'), '--check'], check=True)
     source=(ROOT/'web/studio.html').read_text()
+    source=source.replace("script-src 'unsafe-inline'", "script-src 'self' blob: 'unsafe-inline' 'wasm-unsafe-eval'")
     source=source.replace("worker-src blob:", "worker-src 'self' blob:").replace("img-src 'none'", "img-src 'self'; manifest-src 'self'")
     source=source.replace('<title>', '<link rel="manifest" href="./manifest.json"><meta name="theme-color" content="#185e48"><title>',1)
     source=source.replace('</style>', '.studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style>',1)
     source=source.replace('<body><main>','<body><main>'+PANEL,1)
-    source=source.replace('</body>','<script>'+BOOTSTRAP+'</script></body>',1)
+    source=source.replace('value="2048"></details>', 'value="2048">'+(ROOT/'web/device/device-panel.html').read_text()+'</details>',1)
+    source=source.replace('<label for="gateway"', '<label for="model-engine"><span class="studio-en">Model engine</span><span class="studio-fa">موتور مدل</span></label><select id="model-engine"><option value="gateway">Remote gateway / درگاه سرور</option><option value="device">On-device small model / مدل کوچک روی دستگاه</option></select><label for="gateway"',1)
+    source=source.replace('</body>','<script>'+BOOTSTRAP+'</script><script type="module" src="./device/device-ui.js"></script></body>',1)
     html=source.encode()
     manifest={"id":"./", "name":"NEXUS Studio", "short_name":"NEXUS", "start_url":"./", "scope":"./", "display":"standalone", "lang":"en", "dir":"ltr", "background_color":"#f1f5f3", "theme_color":"#185e48", "icons":[{"src":f"./icons/nexus-{size}.png","sizes":f"{size}x{size}","type":"image/png","purpose":"any"} for size in (192,512)]}
-    return {'index.html':html, 'service-worker.js':WORKER.replace('__DIGEST__',hashlib.sha256(html).hexdigest()).encode(), 'manifest.json':(json.dumps(manifest,indent=2)+'\n').encode(), **{f'icons/nexus-{size}.png':(ROOT/f'public/icons/nexus-{size}.png').read_bytes() for size in (192,512)}}
+    code=[]
+    for name in ['device-engine.js','device-worker.js','device-ui.js','model-manifest.json']:
+        content=(ROOT/'public/studio/device'/name).read_bytes();code.append({'path':'device/'+name,'bytes':len(content),'sha256':hashlib.sha256(content).hexdigest(),'kind':'json' if name.endswith('.json') else 'javascript'})
+    worker=WORKER.replace('__DIGEST__',hashlib.sha256(html).hexdigest()).replace('__INDEX_BYTES__',str(len(html))).replace('__CODE_ASSETS__',json.dumps(code,separators=(',',':'))).replace('__PACKAGE_ID__',hashlib.sha256(html+json.dumps(code,sort_keys=True).encode()).hexdigest()[:16])
+    return {'index.html':html, 'service-worker.js':worker.encode(), 'manifest.json':(json.dumps(manifest,indent=2)+'\n').encode(), **{f'icons/nexus-{size}.png':(ROOT/f'public/icons/nexus-{size}.png').read_bytes() for size in (192,512)}}
 
 
 def main():

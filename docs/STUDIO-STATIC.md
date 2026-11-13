@@ -6,9 +6,11 @@ a scoped manifest, an integrity-pinned service worker and app icons. Build with
 
 The independent public origin is
 https://nexus-studio-merikation.onrender.com/.
-Render reported LIVE on 13 November 2026 for service
+The initial static release was reported LIVE on 13 November 2026 for service
 `srv-dbrjurc9v7es73cqe0v0`, deploy `dep-dbrjurk9v7es73cqe1a0`, source
-`ba81a44a8150098c636481ec32922ef7e2d93124`. AutoDeploy is off.
+`ba81a44a8150098c636481ec32922ef7e2d93124`. That is the pre-device-model
+rollback reference. AutoDeploy is off; subsequent source promotion requires a
+manual deployment and a new successful public witness.
 The build command verifies deterministic packaging and publishes only
 `public/studio`. Provider status is distinct from the exact HTTPS byte check
 and public-origin offline browser witness; their reports are uploaded by
@@ -41,7 +43,7 @@ not erase user data. Closing the last controlled tab completes worker removal.
 
 ## Verification and limits
 
-The worker caches exactly the public index page and checks its SHA-256 before
+The worker caches the public index page and four pinned device-model control files and checks its SHA-256 before
 installation and before returning an offline fallback. It intercepts only
 same-origin GET navigation to the entry page or index.html, without query
 parameters. It never caches model responses, source passages, user uploads,
@@ -55,10 +57,19 @@ work. `studio-static-public.yml` runs after an explicit main commit marked
 origin, checks exact HTML/JS/manifest bytes and decoded icon pixels, then uses
 a fresh disposable Chromium profile to test actual offline navigation,
 encrypted reopen, removal and rejection of a corrupted cached shell. It uploads
-both reports. No provider credentials or actual user files are used.
+the asset and browser reports, then runs the real pinned device model on the
+public origin with a supplied-fact prompt and network-disconnected inference.
+All three reports are uploaded. No provider credentials or actual user files are used.
 
 A passing Chromium witness is not a real Android hardware test. Installation,
 voice support and browser retention vary by device. This static site provides
 no hosted model, user accounts, cross-device sync, server-side execution or
 Stage D durable-core attestation. Live web sources and remote models still need
 network access. No paid service or model is requested by this static package.
+
+The optional [device model](DEVICE-MODEL.md) is an explicit local download, not
+a hosted provider. The model artifact cache remains separate from the app shell.
+
+To update an older installed copy, choose Prepare offline use and reload after
+the new worker activates. Existing encrypted archives remain in the same origin;
+app-code updates and model-cache erasure do not delete them.

@@ -15,13 +15,13 @@ const sourceHtml=await readFile(new URL('index.html',root)),sourceDigest=sha(sou
 const assert=(v,label)=>{if(!v)throw Error(label)};
 const allowed={'/':'index.html','/index.html':'index.html','/service-worker.js':'service-worker.js','/manifest.json':'manifest.json','/icons/nexus-192.png':'icons/nexus-192.png','/icons/nexus-512.png':'icons/nexus-512.png'};
 let server;
-if(!PUBLIC_MODE){server=createServer(async(req,res)=>{const file=allowed[req.url];if(req.method!=='GET'||!file){res.writeHead(404);res.end();return}res.setHeader('content-type',file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.js')?'text/javascript':file.endsWith('.json')?'application/manifest+json':'image/png');res.end(await readFile(new URL(file,root)))});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))}
+if(!PUBLIC_MODE){server=createServer(async(req,res)=>{const file=allowed[req.url]||(['device-engine.js','device-worker.js','device-ui.js','model-manifest.json'].some(n=>req.url==='/device/'+n)?req.url.slice(1):null);if(req.method!=='GET'||!file){res.writeHead(404);res.end();return}res.setHeader('content-type',file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.js')?'text/javascript':file.endsWith('.json')?'application/manifest+json':'image/png');res.end(await readFile(new URL(file,root)))});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))}
 const ORIGIN=PUBLIC_MODE?'https://nexus-studio-merikation.onrender.com/':`http://127.0.0.1:${server.address().port}/`;
 for(const name of ['index.html','service-worker.js','manifest.json']){const response=await fetch(ORIGIN+(name==='index.html'?'':name),{redirect:'error',signal:AbortSignal.timeout(15000)});assert(response.status===200&&sha(Buffer.from(await response.arrayBuffer()))===sha(await readFile(new URL(name,root))),'public-source-identity-'+name)}
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const profile=await mkdtemp(path.join(tmpdir(),'nexus-pwa-private-'));
 const child=spawn(browser,[
- '--headless','--no-sandbox','--disable-dev-shm-usage','--disable-extensions',
+ '--headless','--disable-gpu','--no-sandbox','--disable-dev-shm-usage','--disable-extensions',
  '--disable-background-networking','--no-first-run','--no-default-browser-check',
  '--remote-debugging-address=127.0.0.1','--remote-debugging-port=0',
  '--user-data-dir='+profile,'--window-size=420,1000','about:blank'
@@ -113,7 +113,7 @@ try{
  stage='opt-in-offline';await js("document.getElementById('studio-offline').click();true");
  await poll(()=>retryJs("document.getElementById('studio-offline-state').textContent.includes('code is ready')"),25000,'offline-prepare');
  const cached=await js("(async()=>{const names=await caches.keys(),cache=await caches.open(names[0]),keys=await cache.keys();const response=await cache.match(location.origin+'/');const bytes=await response.arrayBuffer();return {names,entries:keys.map(k=>k.url),sha:Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join(''),private:new TextDecoder().decode(bytes).includes('SYNTHETIC PRIVATE QUESTION')}})()");
- assert(cached.names.length===1&&cached.names[0].startsWith('nexus-studio-shell-v1-')&&cached.entries.length===1&&cached.entries[0]===ORIGIN&&cached.sha===sourceDigest&&!cached.private,'cache-not-public-code-only');checks.push('opt-in-cache-exact-public-code-only');
+ assert(cached.names.length===1&&cached.names[0].startsWith('nexus-studio-shell-v1-')&&cached.entries.length===5&&cached.entries.includes(ORIGIN)&&cached.sha===sourceDigest&&!cached.private,'cache-not-public-code-only');checks.push('opt-in-cache-exact-public-code-only');
  await poll(()=>retryJs("Boolean(navigator.serviceWorker.controller)"),10000,'worker-control');
  await js("window.__beforeOfflineReload=true;true");
  stage='true-offline';await setOffline(true);await rpc('Page.reload',{ignoreCache:true});

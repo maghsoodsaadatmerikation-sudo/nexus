@@ -31,7 +31,10 @@ The independent static Studio is at
 **https://nexus-studio-merikation.onrender.com/**. It includes conversations,
 source search, writing and explicit encrypted browser saving. Choose
 **Prepare offline use**, then use your browser's installation menu when
-supported. The local guide is non-generative; this site hosts no model.
+supported. The local guide is non-generative; no model runs on the hosting server. An
+optional, explicitly downloaded small model can draft short English replies
+from supplied facts on the device, without an API key. The initial download is
+about 167 MB; accuracy and context capacity are limited. [Device model setup](docs/DEVICE-MODEL.md).
 [Mobile setup, deployment identity and public verification](docs/STUDIO-STATIC.md).
 
 ## Run Studio locally (Linux, one command)

@@ -23,7 +23,7 @@ if (!browser || !page || !profile || !/^\d+,\d+$/.test(dimensions || '') ||
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 // Refuse every pre-existing profile rather than attaching to a user's session.
 await mkdir(profile, {mode: 0o700});
-const child = spawn(browser, ['--headless', '--no-sandbox', '--disable-dev-shm-usage',
+const child = spawn(browser, ['--headless','--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage',
   '--disable-background-networking', '--disable-extensions', '--no-first-run',
   '--no-default-browser-check', '--hide-scrollbars', '--force-device-scale-factor=1',
   '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0',
