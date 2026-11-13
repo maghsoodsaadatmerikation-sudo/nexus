@@ -2,6 +2,9 @@ package org.nexus.offline.stage26.test;
 
 import android.app.Activity;
 import android.app.Instrumentation;
+import android.app.UiAutomation;
+import android.accessibilityservice.AccessibilityService;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.Uri;
@@ -179,9 +182,28 @@ public final class Stage26Instrumentation extends Instrumentation {
         check(result.getBoolean("stillDone"), "failed-restore-keeps-project");
     }
 
-    private void waitForHits(ActivityMonitor monitor, String name) {
-        for(int i=0;i<60 && monitor.getHits()<1;i++) SystemClock.sleep(100);
-        check(monitor.getHits()>=1,name);
+    private void confirmActualSystemDocumentPicker(String name) throws Exception {
+        UiAutomation automation=getUiAutomation();
+        String lastPackage="none";
+        for(int i=0;i<120;i++) {
+            AccessibilityNodeInfo root=automation.getRootInActiveWindow();
+            if(root!=null&&root.getPackageName()!=null) {
+                lastPackage=root.getPackageName().toString();
+                // A real OS document UI window, NOT a fabricated app dialog.
+                if(lastPackage.toLowerCase().contains("documentsui")) {
+                    check(true,name);
+                    check(automation.performGlobalAction(
+                          AccessibilityService.GLOBAL_ACTION_BACK),
+                          "android-document-picker-back");
+                    SystemClock.sleep(550);
+                    return;
+                }
+            }
+            SystemClock.sleep(100);
+        }
+        // Package only: no file names, project data, clipboard or UI contents.
+        throw new IllegalStateException("stage26-"+name+"-not-visible-package_"+
+            lastPackage.replaceAll("[^a-zA-Z0-9_.]","_"));
     }
 
     private void testDocumentPickers(Activity activity,WebView view) throws Exception {
@@ -194,51 +216,25 @@ public final class Stage26Instrumentation extends Instrumentation {
               nativeBridge.getBoolean("callable") &&
               URL.equals(nativeBridge.getString("origin")),
               "native-export-bridge-not-bound");
-        IntentFilter write=new IntentFilter(Intent.ACTION_CREATE_DOCUMENT);
-        ActivityMonitor outbound=addMonitor(write,
-            new ActivityResult(Activity.RESULT_CANCELED,null),true);
-        try {
-            evaluate(view,
-                "NEXUS_NATIVE_EXPORT.save('nexus-stage26.synthetic.json'," +
-                "btoa('offline-synthetic-encrypted-export'))");
-            for(int i=0;i<100 && outbound.getHits()<1;i++)
-                SystemClock.sleep(100);
-            if(outbound.getHits()<1) {
-                AtomicReference<Boolean> exportPending=new AtomicReference<>(false);
-                AtomicReference<Boolean> exactOrigin=new AtomicReference<>(false);
-                runOnMainSync(()->{
-                    try {
-                        Field field=activity.getClass().getDeclaredField("pendingExport");
-                        field.setAccessible(true);
-                        exportPending.set(field.get(activity)!=null);
-                        exactOrigin.set(URL.equals(view.getUrl()));
-                    } catch(Exception ignored) {}
-                });
-                throw new IllegalStateException(
-                    "stage26-save-picker-missing-pending_" +
-                    exportPending.get()+"_origin_"+exactOrigin.get());
-            }
-            check(true,"native-save-picker-approval-required");
-        } finally {
-            removeMonitor(outbound);
-        }
 
-        IntentFilter read=new IntentFilter(Intent.ACTION_OPEN_DOCUMENT);
-        ActivityMonitor inbound=addMonitor(read,
-            new ActivityResult(Activity.RESULT_CANCELED,null),true);
-        try {
-            AtomicReference<Boolean> result=new AtomicReference<>(false);
-            runOnMainSync(()->{
-                WebChromeClient chrome=view.getWebChromeClient();
-                ValueCallback<Uri[]> callback=uris-> {};
-                result.set(chrome!=null &&
-                    chrome.onShowFileChooser(view,callback,null));
-            });
-            check(Boolean.TRUE.equals(result.get()),"native-import-chooser-hook");
-            waitForHits(inbound,"native-open-picker-approval-required");
-        } finally {
-            removeMonitor(inbound);
-        }
+        // Accessibility observes the actual Android DocumentsUI activity.
+        // Instrumentation.ActivityMonitor did not intercept this cross-process
+        // SAF launch; a real DocumentsUI window is stronger runtime proof.
+        getUiAutomation().getRootInActiveWindow();
+        evaluate(view,
+            "NEXUS_NATIVE_EXPORT.save('nexus-stage26.synthetic.json'," +
+            "btoa('offline-synthetic-encrypted-export'))");
+        confirmActualSystemDocumentPicker("native-save-picker-approval-required");
+
+        AtomicReference<Boolean> importHook=new AtomicReference<>(false);
+        runOnMainSync(()->{
+            WebChromeClient chrome=view.getWebChromeClient();
+            ValueCallback<Uri[]> callback=uris-> {};
+            importHook.set(chrome!=null &&
+                chrome.onShowFileChooser(view,callback,null));
+        });
+        check(Boolean.TRUE.equals(importHook.get()),"native-import-chooser-hook");
+        confirmActualSystemDocumentPicker("native-open-picker-approval-required");
     }
 
     @Override public void onStart() {
