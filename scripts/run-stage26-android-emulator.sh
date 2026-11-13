@@ -15,10 +15,24 @@ test -x "$ANDROID_HOME/emulator/emulator"
 
 mkdir -p build/stage26-emulator
 OUT=build/stage26-emulator
+# Both avdmanager and emulator MUST resolve the same explicit AVD directory.
+# GitHub Actions can give child processes distinct default Android homes.
+export ANDROID_AVD_HOME="$PWD/$OUT/avd"
+export ANDROID_EMULATOR_HOME="$PWD/$OUT/emulator-home"
+mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_EMULATOR_HOME"
 IMAGE='system-images;android-35;google_apis;x86_64'
 printf 'no\n' | avdmanager create avd --force --name nexus_stage26 \
     --package "$IMAGE" --device 'pixel_3a' \
     > "$OUT/avd-create.log" 2>&1
+test -f "$ANDROID_AVD_HOME/nexus_stage26.ini" || {
+  echo 'BLOCKED: avdmanager did not create expected AVD metadata'
+  tail -n 20 "$OUT/avd-create.log" || true
+  exit 2
+}
+"$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx nexus_stage26 || {
+  echo 'BLOCKED: emulator does not resolve explicit AVD home'
+  exit 2
+}
 
 if [ -c /dev/kvm ] && [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
   ACCEL='on'
