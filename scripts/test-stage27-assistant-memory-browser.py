@@ -54,6 +54,10 @@ window.addEventListener('load',async()=>{
     'encrypted-profile-and-scoped-memory-survive-reload');
   assert(el('assistant-memory').value.includes(MARK)&&el('assistant-instructions').value===INSTRUCTION,
     'profile-memory-editor-renders-restored-state');
+  assert(el('assistant-style').value==='detailed'&&el('assistant-name').value==='My Source Analyst',
+    'custom-style-and-name-resume-from-encrypted-storage');
+  assert(current.tasks.length===1&&current.tasks[0].status==='todo',
+    'encrypted-profile-reopen-cannot-complete-a-task');
   fill('assistant-memory',Array(9).fill('synthetic preference').join('\n'));
   el('edit-project').click();
   assert(current.memory.length===2&&projectDraft,'overlimit-edit-refused-atomically');
