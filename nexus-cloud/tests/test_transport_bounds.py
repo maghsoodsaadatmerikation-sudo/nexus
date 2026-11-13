@@ -149,8 +149,9 @@ def test_slow_request_body_has_total_deadline(monkeypatch):
     async def receive():
         await anyio.sleep(1)
         return {"type": "http.request", "body": b"x", "more_body": False}
-    request = Request({"type": "http", "method": "POST", "path": "/v1/requests", "headers": [(b"authorization", b"Bearer opaque")]}, receive)
+    request = Request({"type": "http", "method": "POST", "path": "/v1/requests", "app": main.app, "headers": [(b"authorization", b"Bearer opaque")]}, receive)
     async def run():
+        main.app.state.gateway_limiter = anyio.CapacityLimiter(16)
         with pytest.raises(HTTPException) as error:
             await main.delegate_to_constitutional_gateway("requests", request)
         assert error.value.status_code == 408

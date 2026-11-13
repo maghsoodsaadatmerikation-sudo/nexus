@@ -92,3 +92,19 @@ Deploy from the repository root to include the optional `/studio` HTML page.
 A gateway-only deployment may use an explicitly configured `NEXUS_STUDIO_ORIGIN`
 with Studio hosted separately. There is no provisioned model or live provider
 quality test in this repository's synthetic acceptance suite.
+
+## Gateway capacity and deadlines
+
+Each worker admits at most 16 concurrent `/v1/*` requests, including callers
+still uploading bodies. Excess callers receive `503`, `Retry-After: 1` and
+`Cache-Control: no-store` before the adapter reads their bodies. Capacity is
+released on completion, validation errors, disconnection and cancellation.
+This is a per-worker resource bound, not a per-user rate limit.
+
+Body ingestion has a 30-second deadline. A separate 30-second total upstream
+deadline covers connection-pool wait, connection, response headers and the
+complete response body; progress cannot extend it indefinitely. Existing
+1 MiB request and 4 MiB response limits still apply. An upstream timeout returns
+a generic `503`; the adapter never automatically retries an opaque operation.
+A timeout does not prove that the core did not accept a mutation; callers must
+reconcile request state before deciding to resubmit.
