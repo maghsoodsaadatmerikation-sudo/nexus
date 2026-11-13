@@ -37,6 +37,7 @@ python3 scripts/verify_test_matrix.py
 python3 scripts/test-data-snapshot.py
 python3 scripts/test-workspace-backup.py
 python3 scripts/test-workspace-restore.py
+python3 scripts/test-stage-d-private-observation.py
 node scripts/test-workspace-ui.mjs
 python3 scripts/test-browser-runner-failures.py
 python3 scripts/test-workspace-browser.py

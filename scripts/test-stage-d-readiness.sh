@@ -8,6 +8,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 E="$TMP/evidence"
 mkdir -p "$E"
+chmod 0700 "$E" # Stage D now rejects public operator evidence roots.
 COMMIT="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 RUN_ID="123456"
 
@@ -54,6 +55,30 @@ NEXUS_REPLACEMENT_EVENT_ID='render-deploy-fixture-123' \
 NEXUS_REPLACEMENT_AT_UTC='2026-09-03T10:00:00Z' \
 NEXUS_REPLACEMENT_COMMIT="$COMMIT" \
   bash scripts/stage-d-evidence.sh record-replacement "$E" >/dev/null
+
+# Completed lifecycle markers are immutable; repeat attempts cannot overwrite
+# the real operator event, even when all current env inputs are syntactically valid.
+saved_replacement="$(sha256sum "$E/replacement-event.txt" | awk '{print $1}')"
+if NEXUS_REPLACEMENT_EVENT_ID='alternate-repeat' \
+   NEXUS_REPLACEMENT_AT_UTC='2026-09-03T10:01:00Z' \
+   NEXUS_REPLACEMENT_COMMIT="$COMMIT" \
+   bash scripts/stage-d-evidence.sh record-replacement "$E" >"$TMP/repeated.out" 2>"$TMP/repeated.err"; then
+  echo 'Stage D lifecycle proof was overwritten' >&2
+  exit 1
+fi
+test "$(sha256sum "$E/replacement-event.txt" | awk '{print $1}')" = "$saved_replacement"
+
+# Public/readable folders cannot be used to write or re-record operator evidence.
+chmod 0755 "$E"
+if NEXUS_REPLACEMENT_EVENT_ID='public-root' \
+   NEXUS_REPLACEMENT_AT_UTC='2026-09-03T10:02:00Z' \
+   NEXUS_REPLACEMENT_COMMIT="$COMMIT" \
+   bash scripts/stage-d-evidence.sh record-replacement "$E" >"$TMP/public.out" 2>"$TMP/public.err"; then
+  echo 'Stage D accepted a world-readable evidence root' >&2
+  exit 1
+fi
+chmod 0700 "$E"
+
 
 cat > "$E/absence-response.json" <<'EOF'
 {"error":"workspace_not_found"}
