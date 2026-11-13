@@ -31,7 +31,7 @@ judgment workspace or migrate the separate Android prototype's local archives.
 | Long conversation handling | Session cap | The model receives a bounded recent path, with omitted earlier-message count shown; no fabricated summary |
 | Generative text model | Deterministic guide, no model | Optional authenticated server bridge; requires an operator-configured real provider |
 | Stop and late-response isolation | No model transport | Abort waiting and reject stale responses after edits, project changes or lock |
-| English/Persian accessibility | Existing bilingual offline tools | English-first Studio with complete Persian labels and RTL; inert text rendering |
+| English/Persian accessibility | Existing bilingual offline tools | English-first Studio, Persian/RTL and a complete local interface language-pack importer/template; inert text rendering |
 | Read aloud | Existing browser adapters | Explicit read-aloud using an available local device voice only |
 
 The model bridge is **implemented but not provisioned with a real model** by this
@@ -54,7 +54,7 @@ pretends a reflection prompt is an AI answer.
 | Third-party app actions/MCP | Constitutional capability types are not authenticated connectors | Per-service OAuth, scoped tokens, concrete tools, revocation and action review |
 | Shared projects and live collaboration | Single browser owner only | User accounts, tenancy, encrypted sync, access control and conflict resolution |
 | Cross-device automatic history sync | Portable encrypted file only | An authenticated sync service and account recovery design |
-| All-language reviewed localization | English/Persian Studio only | Reviewed translation packs and accessibility testing for additional languages |
+| All-language reviewed localization | English/Persian bundled; other interface languages accept complete local packs | Reviewed bundled translation packs and accessibility testing for additional languages |
 | Native Android release | Existing Stage 27 test APK is separate | Maintained native source, stable signing identity, real emulator/device acceptance and publishing |
 
 ## Privacy and persistence
@@ -101,7 +101,7 @@ artifact:
 | `NEXUS_MODEL_URL` | Exact Chat Completions-compatible endpoint; HTTPS, or literal loopback HTTP for a separately running local model |
 | `NEXUS_MODEL_ID` | Exact model ID supported by that provider |
 | `NEXUS_MODEL_API_KEY` | Optional provider credential, held on the server; unnecessary for a provider that legitimately requires no key |
-| `NEXUS_STUDIO_TOKEN` | Separate gateway access credential, entered transiently in Studio; never forwarded to the model |
+| `NEXUS_STUDIO_TOKEN` | Separate gateway access credential of at least 32 characters, entered transiently in Studio; never forwarded to the model |
 | `NEXUS_STUDIO_ORIGIN` | Optional exact allowed Studio origin when UI and gateway are hosted on different origins |
 
 The cloud deployment must include the repository's `web/studio.html` to serve
@@ -130,7 +130,7 @@ that a remote provider stops computing or reverses charges. No retry is automati
 - 40 synthetic state/encryption checks, including immutable branch preservation,
   malformed imports, memory isolation, bounded long context, wrong passwords,
   authenticated ciphertext, revision conflict, lock cancellation and erase.
-- 57 Python transport/model tests, including real loopback HTTP with a synthetic
+- 58 Python transport/model tests, including real loopback HTTP with a synthetic
   compatible provider. No real model or provider key was used.
 - Narrow and wide real Chromium acceptance covers history, branches, source text,
   inert rendering, approved model-context transport with a fixture, regeneration,

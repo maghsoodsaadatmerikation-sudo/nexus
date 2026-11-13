@@ -56,6 +56,12 @@ window.addEventListener('load',async()=>{
   fill('passphrase','long private password 123');$('unlock').click();await wait(()=>snapshot().projects.length===1);assert(current().id===projectId&&current().documents[0].versions.at(-1).text==='UNSAVED CANVAS','encrypted-reopen-restores-chats-memory-and-canvas');
   const oldId=current().id;fill('project-title','SECOND PROJECT');$('new-project').click();$('new-thread').click();assert(current().id!==oldId&&current().memories.length===0&&!$('use-memory').checked,'new-project-isolates-memory-and-context');
   change('language','fa');assert(document.documentElement.dir==='rtl'&&$('guide').textContent.includes('محلی'),'persian-rtl-interface');
+  const unchanged=JSON.stringify(snapshot());
+  const labels={};document.querySelectorAll('[data-t]').forEach(n=>labels[n.dataset.t]=n.textContent);
+  // The template includes status/action labels not currently rendered in the page.
+  Object.assign(labels,EN);
+  const languageTransfer=new DataTransfer();languageTransfer.items.add(new File([JSON.stringify({schema:'nexus.studio.locale.v1',code:'es',dir:'ltr',messages:{...labels,conversation:'Conversación'}})],'spanish-labels.json',{type:'application/json'}));$('language-file').files=languageTransfer.files;$('language-file').dispatchEvent(new Event('change'));
+  await wait(()=>document.documentElement.lang==='es');assert($('conversation-card').textContent.includes('Conversación'),'complete-local-language-pack');assert(JSON.stringify(snapshot())===unchanged,'language-import-does-not-touch-projects');
   assert(document.documentElement.scrollWidth<=innerWidth+2,'no-horizontal-overflow');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}

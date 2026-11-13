@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 import main
 import studio_model as model
 
-TOKEN='studio-access-token'
+TOKEN='studio-access-token-01234567890123456789'
 AUTH={'authorization':'Bearer '+TOKEN}
 BODY={'consent':True,'configuration_id':model.configuration_id(('https://provider.example/v1/chat/completions','configured-test-model')),'messages':[{'role':'user','content':'Reviewed exact prompt'}]}
 
@@ -140,3 +140,9 @@ def test_real_loopback_http_provider_transport(monkeypatch):
         assert seen[0][0]=='/v1/chat/completions' and seen[0][1]=='Bearer loopback-provider-key'
         assert seen[0][2]['messages'][0]['content']==model.POLICY
     finally:server.shutdown();server.server_close();thread.join(timeout=2)
+
+
+def test_short_gateway_credentials_leave_model_disabled(monkeypatch):
+    with configured(monkeypatch):
+        monkeypatch.setenv('NEXUS_STUDIO_TOKEN','short')
+        assert model.config() is None

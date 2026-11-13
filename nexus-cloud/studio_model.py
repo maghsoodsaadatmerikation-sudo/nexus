@@ -52,7 +52,7 @@ def config():
         _ = p.port
     except ValueError:
         return None
-    if (not model or len(model) > 150 or not token or not p.hostname
+    if (not model or len(model) > 150 or len(token) < 32 or not p.hostname
         or p.username is not None or p.password is not None or p.query or p.fragment
         or any(c.isspace() for c in endpoint)
         or not (p.scheme == "https" or (p.scheme == "http" and p.hostname in {"127.0.0.1", "::1"}))):
@@ -136,7 +136,7 @@ def register(app):
                 message = choice["message"]
                 content = message["content"]
                 if (not isinstance(content, str) or not content.strip() or len(content) > 24000
-                    or message.get("tool_calls") or choice.get("finish_reason") not in {"stop", "length"}):
+                    or message.get("tool_calls") or message.get("function_call") or choice.get("finish_reason") not in {"stop", "length"}):
                     raise ValueError()
             except (KeyError, IndexError, TypeError, ValueError):
                 raise HTTPException(502, "Invalid text-only model response") from None
