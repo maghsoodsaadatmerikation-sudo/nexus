@@ -5,10 +5,17 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
+
+import anyio
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response, status
+
+
+MAX_REQUEST_BYTES = 1024 * 1024
+MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+BODY_TIMEOUT_SECONDS = 30.0
 
 
 def _core_url() -> str | None:
@@ -45,9 +52,12 @@ def _core_url() -> str | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    app.state.client = httpx.AsyncClient(timeout=30.0, trust_env=False)
-    yield
-    await app.state.client.aclose()
+    async with httpx.AsyncClient(
+        timeout=30.0, trust_env=False, follow_redirects=False,
+        limits=httpx.Limits(max_connections=32, max_keepalive_connections=16),
+    ) as client:
+        app.state.client = client
+        yield
 
 
 app = FastAPI(
@@ -96,28 +106,60 @@ async def delegate_to_constitutional_gateway(path: str, request: Request) -> Res
             detail="NEXUS constitutional core is not securely configured",
         )
 
-    headers = {"authorization": authorization}
+    # Starlette decodes the path before handing it to this route. Re-encode
+    # reserved characters so they cannot become upstream query/fragment syntax.
+    if any(segment in {".", ".."} for segment in path.split("/")):
+        raise HTTPException(status_code=400, detail="Invalid delegated path")
+
+    declared = request.headers.get("content-length")
+    if declared is not None:
+        if not declared.isascii() or not declared.isdecimal():
+            raise HTTPException(status_code=400, detail="Invalid Content-Length")
+        if len(declared) > 10 or int(declared) > MAX_REQUEST_BYTES:
+            raise HTTPException(status_code=413, detail="Request body is too large")
+    body = bytearray()
+    try:
+        with anyio.fail_after(BODY_TIMEOUT_SECONDS):
+            async for chunk in request.stream():
+                if len(body) + len(chunk) > MAX_REQUEST_BYTES:
+                    raise HTTPException(status_code=413, detail="Request body is too large")
+                body.extend(chunk)
+    except TimeoutError as exc:
+        raise HTTPException(status_code=408, detail="Request body timed out") from exc
+
+    headers = {"authorization": authorization, "accept-encoding": "identity"}
     if content_type := request.headers.get("content-type"):
         headers["content-type"] = content_type
+    if encoding := request.headers.get("content-encoding"):
+        headers["content-encoding"] = encoding
+    response_headers = {"cache-control": "no-store"}
+    content = bytearray()
     try:
-        upstream = await request.app.state.client.request(
+        async with request.app.state.client.stream(
             method=request.method,
-            url=f"{core_url}/v1/{path}",
-            params=request.query_params,
+            url=f"{core_url}/v1/{quote(path, safe='/')}",
+            params=request.query_params.multi_items(),
             headers=headers,
-            content=await request.body(),
-        )
-    except httpx.RequestError as exc:
+            content=bytes(body),
+            follow_redirects=False,
+        ) as upstream:
+            # Never invoke an unbounded decompressor on an opaque core response.
+            # The core receives Accept-Encoding: identity; fail closed if ignored.
+            if upstream.headers.get("content-encoding", "identity").lower() != "identity":
+                raise HTTPException(status_code=502, detail="Encoded core response is unsupported")
+            with anyio.fail_after(BODY_TIMEOUT_SECONDS):
+                async for chunk in upstream.aiter_bytes(chunk_size=65536):
+                    if len(content) + len(chunk) > MAX_RESPONSE_BYTES:
+                        raise HTTPException(status_code=502, detail="Core response is too large")
+                    content.extend(chunk)
+            for name in ("content-type", "www-authenticate", "retry-after"):
+                if value := upstream.headers.get(name):
+                    response_headers[name] = value
+            upstream_status = upstream.status_code
+    except (httpx.RequestError, TimeoutError) as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="NEXUS constitutional core is unavailable",
         ) from exc
 
-    response_headers = {}
-    if content_type := upstream.headers.get("content-type"):
-        response_headers["content-type"] = content_type
-    return Response(
-        content=upstream.content,
-        status_code=upstream.status_code,
-        headers=response_headers,
-    )
+    return Response(content=bytes(content), status_code=upstream_status, headers=response_headers)
