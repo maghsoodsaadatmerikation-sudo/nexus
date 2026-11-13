@@ -323,12 +323,17 @@ fn directory_aliases_are_rejected_but_missing_repositories_remain_empty() {
     disk.save(engine().snapshot()).unwrap();
     let original = fs::read(dir.join("77.json")).unwrap();
     symlink(&dir, &alias).unwrap();
-    let mut aliased = FileWorkspaceRepository::new(&alias);
-    assert_eq!(aliased.load("w"), Err(DurableWorkspaceError::Io));
-    assert_eq!(
-        aliased.save(engine().snapshot()),
-        Err(DurableWorkspaceError::Io)
-    );
+    for spelling in [
+        alias.clone(),
+        PathBuf::from(format!("{}/", alias.display())),
+    ] {
+        let mut aliased = FileWorkspaceRepository::new(spelling);
+        assert_eq!(aliased.load("w"), Err(DurableWorkspaceError::Io));
+        assert_eq!(
+            aliased.save(engine().snapshot()),
+            Err(DurableWorkspaceError::Io)
+        );
+    }
     assert_eq!(fs::read(dir.join("77.json")).unwrap(), original);
     fs::remove_file(alias).unwrap();
     fs::remove_dir_all(dir).unwrap();

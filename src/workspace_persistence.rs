@@ -106,6 +106,9 @@ impl SnapshotDirectory {
                 .map_err(|_| DurableWorkspaceError::Io)?
                 .join(root)
         };
+        // A trailing slash otherwise makes the kernel follow a final symlink
+        // before O_NOFOLLOW/symlink_metadata can inspect it as the final entry.
+        let root: PathBuf = root.components().collect();
         if create {
             fs::create_dir_all(&root).map_err(|_| DurableWorkspaceError::Io)?;
         }
