@@ -171,3 +171,17 @@ def test_deepseek_modes_bind_review_and_forward_real_flag(monkeypatch,mode,expec
 def test_modes_and_budgets_fail_before_upstream(monkeypatch,fields):
     with configured(monkeypatch,lambda _:pytest.fail('unsupported input reached provider')) as c:
         assert c.post('/studio-api/respond',json={**BODY,**fields},headers=AUTH).status_code==422
+
+
+@pytest.mark.parametrize('raw',[
+    b'[' * 40000 + b'0' + b']' * 40000,
+    b'{"choices":[{"message":{"content":"\\ud800"},"finish_reason":"stop"}]}',
+],ids=['deeply-nested-json','invalid-unicode-text'])
+def test_malformed_provider_output_is_contained_and_capacity_recovers(monkeypatch,raw):
+    replies=iter([httpx.Response(200,content=raw),httpx.Response(200,json={
+        'choices':[{'message':{'content':'Recovered draft'},'finish_reason':'stop'}]})])
+    with configured(monkeypatch,lambda _:next(replies)) as c:
+        r=c.post('/studio-api/respond',json=BODY,headers=AUTH)
+        assert r.status_code==502
+        assert r.json()['detail']=='Invalid text-only model response'
+        assert c.post('/studio-api/respond',json=BODY,headers=AUTH).json()['text']=='Recovered draft'

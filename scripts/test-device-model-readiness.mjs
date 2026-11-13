@@ -28,4 +28,21 @@ await assert.rejects(engine.load({consent:true}),/worker-start-failed/);assert.e
 globalThis.Worker=class{constructor(){instance=this}postMessage(){}terminate(){}};
 const failure=engine.load({consent:true});instance.onerror();await assert.rejects(failure,/worker-failed/);assert.equal(engine.state,'idle');
 const retry=engine.load({consent:true});instance.onmessage({data:{type:'ready',model:'synthetic-model',configuration_id:'a'.repeat(64)}});await retry;engine.unload();
+// A synchronous postMessage failure must settle immediately and permit retry.
+globalThis.Worker=class{constructor(){instance=this}postMessage(){throw Error('PRIVATE_POST_FAILURE')}terminate(){this.terminated=true}};
+await assert.rejects(engine.load({consent:true}),/worker-start-failed/);
+assert.equal(engine.state,'idle');assert.equal(engine.worker,null);assert(instance.terminated);
+globalThis.Worker=class{constructor(){instance=this}postMessage(data){this.sent=data}terminate(){this.terminated=true}};
+const retryLoad=engine.load({consent:true});instance.onmessage({data:{type:'ready',model:'synthetic-model',configuration_id:'a'.repeat(64)}});await retryLoad;
+instance.postMessage=()=>{throw Error('PRIVATE_CLONE_FAILURE')};
+const abortController=new AbortController();
+await assert.rejects(engine.generate(body,abortController.signal),/worker-send-failed/);
+assert.equal(engine.state,'idle');assert.equal(engine.worker,null);assert(instance.terminated);
+assert.equal(engine.report().generation_observed,false);
+// Deserialization errors must also settle pending work and release the Worker.
+const decodeLoad=engine.load({consent:true});instance.onmessageerror();await assert.rejects(decodeLoad,/worker-message-failed/);
+assert.equal(engine.state,'idle');
+const finalLoad=engine.load({consent:true});instance.onmessage({data:{type:'ready',model:'synthetic-model',configuration_id:'a'.repeat(64)}});await finalLoad;
+const decodeGeneration=engine.generate(body);instance.onmessageerror();await assert.rejects(decodeGeneration,/worker-message-failed/);
+assert.equal(engine.state,'idle');engine.unload();
 console.log(JSON.stringify({status:'PASS',scope:'readiness-report-privacy-and-recovery',real_model_tested:false}));

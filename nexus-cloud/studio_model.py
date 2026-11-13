@@ -154,7 +154,9 @@ def register(app):
                 if (not isinstance(content, str) or not content.strip() or len(content) > 24000
                     or message.get("tool_calls") or message.get("function_call") or choice.get("finish_reason") not in {"stop", "length"}):
                     raise ValueError()
-            except (KeyError, IndexError, TypeError, ValueError):
+                # JSON permits lone surrogate escapes that cannot be sent as UTF-8.
+                content.encode("utf-8")
+            except (KeyError, IndexError, TypeError, ValueError, RecursionError):
                 raise HTTPException(502, "Invalid text-only model response") from None
             return JSONResponse({"text": content, "origin": "model", "model": c[1],
                                  "mode": data.mode, "max_output_tokens": data.max_output_tokens,
