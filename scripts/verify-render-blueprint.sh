@@ -33,7 +33,7 @@ required = [
     'region: frankfurt',
     'dockerfilePath: ./Dockerfile',
     "autoDeployTrigger: 'off'",
-    'healthCheckPath: /readyz',
+    'healthCheckPath: /livez',
     'numInstances: 1',
     'mountPath: /data',
     'sizeGB: 1',
