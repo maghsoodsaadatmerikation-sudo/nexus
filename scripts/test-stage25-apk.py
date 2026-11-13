@@ -31,9 +31,9 @@ def audit(apk: Path,badging: str,permissions: str,public_cert: str,
     need("package: name='org.nexus.offline.stage25'" in badging,"unexpected-package-id")
     need("targetSdkVersion:'35'" in badging,"bad-target-sdk")
     need("E: uses-sdk" in manifest_tree,"binary-uses-sdk-missing")
-    need(re.search(r"(?m)^\\s+A: http://schemas.android.com/apk/res/android:minSdkVersion\\(0x[0-9a-f]+\\)=26\\s*$",manifest_tree) is not None,
+    need(re.search(r"(?m)^\s+A: http://schemas.android.com/apk/res/android:minSdkVersion\(0x[0-9a-f]+\)=26\s*$",manifest_tree) is not None,
          "binary-min-sdk-not-26")
-    need(re.search(r"(?m)^\\s+A: http://schemas.android.com/apk/res/android:targetSdkVersion\\(0x[0-9a-f]+\\)=35\\s*$",manifest_tree) is not None,
+    need(re.search(r"(?m)^\s+A: http://schemas.android.com/apk/res/android:targetSdkVersion\(0x[0-9a-f]+\)=35\s*$",manifest_tree) is not None,
          "binary-target-sdk-not-35")
     need(not re.search(r"(?m)^uses-permission",permissions),"manifest-requests-permissions")
     need("Signer #1 certificate SHA-256 digest" in public_cert,"signer-digest-missing")
