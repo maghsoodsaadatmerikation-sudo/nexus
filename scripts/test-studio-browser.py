@@ -6,6 +6,8 @@ import shutil
 import subprocess
 import tempfile
 
+MIN_CHECKS=30
+
 WITNESS=r"""
 window.addEventListener('load',async()=>{
  const $=id=>document.getElementById(id),checks=[];
@@ -85,7 +87,7 @@ def main():
    if r.returncode:raise RuntimeError('browser-runner-failed-'+r.stderr[-1000:])
    report=json.loads(r.stdout)
    if report.get('status')!='PASS':raise RuntimeError(json.dumps(report))
-   if len(report['checks'])<30:raise RuntimeError('missing-witness-checks')
+   if len(report['checks'])<MIN_CHECKS:raise RuntimeError('missing-witness-checks')
    reports.append({'layout':label,**report})
  print(json.dumps({'status':'PASS','reports':reports}))
 if __name__=='__main__':main()

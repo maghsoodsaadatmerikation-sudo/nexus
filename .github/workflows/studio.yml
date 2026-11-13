@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'web/studio*'
+      - 'web/vendor/**'
       - 'scripts/*studio*'
       - 'nexus-cloud/**'
       - 'artifact-05/src/lib.rs'
@@ -11,6 +12,7 @@ on:
     branches: [main]
     paths:
       - 'web/studio*'
+      - 'web/vendor/**'
       - 'scripts/*studio*'
       - '.github/workflows/studio.yml'
   workflow_dispatch:
@@ -34,6 +36,9 @@ jobs:
           node --check web/studio-lab-ui.js
           node --check web/studio-astrology.js
           node --check web/studio-astrology-ui.js
+          node --check web/studio-sky.js
+          node --check web/studio-sky-ui.js
+          node scripts/test-studio-sky.mjs
           node scripts/test-studio-astrology.mjs
           node scripts/test-studio-core.mjs
           node scripts/test-studio-lab.mjs
@@ -41,6 +46,8 @@ jobs:
         run: python3 scripts/test-studio-browser.py
       - name: Exercise opt-in astrology and encrypted profile lifecycle
         run: python3 scripts/test-studio-astrology-browser.py
+      - name: Exercise offline sky computation and general presentation
+        run: python3 scripts/test-studio-sky-browser.py
       - name: Exercise actual isolated code and local network sentinel
         run: python3 scripts/test-studio-lab-browser.py
       - name: Capture synthetic empty Studio layout for review
