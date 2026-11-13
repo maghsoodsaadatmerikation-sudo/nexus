@@ -82,6 +82,7 @@ python3 scripts/test-stage25-apk.py \
   --badging "$OUT/badging.txt" \
   --permissions "$OUT/manifest-permissions.txt" \
   --public-cert "$OUT/apksigner-public-cert.txt" \
+  --manifest-tree "$OUT/manifest-tree.txt" \
   --out "$OUT/nexus-stage25-apk-evidence.json"
 rm -f "$OUT/unsigned.apk" "$OUT/aligned.apk"
 cleanup
