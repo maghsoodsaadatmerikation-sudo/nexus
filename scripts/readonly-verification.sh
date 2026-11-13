@@ -257,7 +257,11 @@ cleanup
 docker run --rm --user 0 --entrypoint sh \
   -v "$smoke_data:/data" nexus-ci-smoke \
   -c ': > /data/requests/63692d756e6365727461696e'
-python3 scripts/data-snapshot.py backup "$smoke_data" "$volume_snapshot" --offline
+# Snapshot files are private to runtime UID 10001. Read this stopped,
+# synthetic-only mount with operator privileges; keep the resulting private
+# archive owned by the CI operator for later digest verification.
+sudo python3 scripts/data-snapshot.py backup "$smoke_data" "$volume_snapshot" --offline
+sudo chown "$(id -u):$(id -g)" "$volume_snapshot"
 # Prove the recovery-point gap: admit an ID after capture, then lose that volume.
 start_container
 code="$(curl -sS -o "$http_body" -w '%{http_code}' -X POST "$base_url/v1/requests" \
