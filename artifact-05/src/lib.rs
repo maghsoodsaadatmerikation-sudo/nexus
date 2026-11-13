@@ -315,6 +315,7 @@ where
 {
     Router::new()
         .route("/", get(web_workspace))
+        .route("/studio", get(studio_workspace))
         .route("/livez", get(liveness))
         .route("/readyz", get(readiness::<D>))
         .route("/v1/requests", post(submit::<D>))
@@ -419,6 +420,13 @@ async fn readiness<D: ConstitutionalDelegate>(State(state): State<AppState<D>>) 
     } else {
         health_response(StatusCode::OK, "ready")
     }
+}
+
+async fn studio_workspace() -> impl IntoResponse {
+    (
+        [(header::CACHE_CONTROL, "no-store")],
+        Html(include_str!("../../web/studio.html")),
+    )
 }
 
 async fn web_workspace() -> Html<&'static str> {
