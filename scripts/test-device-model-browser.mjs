@@ -18,7 +18,7 @@ const assert=(v,reason)=>{if(!v)throw Error(reason)};
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const profile=await mkdtemp(path.join(tmpdir(),'nexus-pwa-private-'));
 const child=spawn(browser,[
- '--headless','--no-sandbox','--disable-dev-shm-usage','--disable-extensions',
+ '--headless','--disable-gpu','--no-sandbox','--disable-dev-shm-usage','--disable-extensions',
  '--disable-background-networking','--no-first-run','--no-default-browser-check',
  '--remote-debugging-address=127.0.0.1','--remote-debugging-port=0',
  '--user-data-dir='+profile,'--window-size=420,1000','about:blank'
