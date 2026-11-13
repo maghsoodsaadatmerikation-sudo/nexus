@@ -92,3 +92,25 @@ Deploy from the repository root to include the optional `/studio` HTML page.
 A gateway-only deployment may use an explicitly configured `NEXUS_STUDIO_ORIGIN`
 with Studio hosted separately. There is no provisioned model or live provider
 quality test in this repository's synthetic acceptance suite.
+
+## Operational readiness and model dispatch budgets
+
+- `GET /healthz` reports **adapter liveness only**.
+- `GET /core-readyz` returns 200 only after a credential-free, no-redirect,
+  byte-capped (512 B), 2-second probe sees HTTP 200 and `{"status":"ready"}`
+  from the configured Rust gateway's `/readyz`. Otherwise it returns a
+  generic, no-store 503. Two non-queuing probe slots isolate this route from
+  delegated traffic. It does not establish persisted-data recovery or validate
+  constitutional authority. The Rust readiness endpoint retains its own
+  documented limited scope.
+- Delegated API requests have 32 non-queuing core slots, separate from probe
+  and optional model slots. The adapter rejects saturation before body reading.
+- `NEXUS_MODEL_MAX_CALLS_PER_HOUR`: positive integer, default 60, max 1,000,000.
+- `NEXUS_MODEL_OUTPUT_TOKENS_PER_HOUR`: positive integer, default 131,072,
+  max 100,000,000. It reserves the **requested maximum output tokens** before
+  dispatch, not the eventual token usage. Invalid operator settings fail closed.
+  An exhausted budget responds HTTP 429 with `Retry-After`.
+- The model budget is **per process**, reset by restart, and counts attempts
+  that may have reached the provider even when they fail or time out. It does
+  not include input tokens, prices, retries outside NEXUS or other replicas.
+  Configure hard spending limits and monitoring at the provider as well.
