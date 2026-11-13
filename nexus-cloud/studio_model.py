@@ -22,6 +22,7 @@ from time import monotonic
 
 DEFAULT_CALLS_PER_HOUR = 60
 DEFAULT_OUTPUT_TOKENS_PER_HOUR = 131072
+DEFAULT_INPUT_BYTES_PER_HOUR = 1048576
 BUDGET_WINDOW_SECONDS = 3600
 
 
@@ -38,9 +39,11 @@ def usage_limits():
     calls = positive("NEXUS_MODEL_MAX_CALLS_PER_HOUR", DEFAULT_CALLS_PER_HOUR, 1000000)
     tokens = positive("NEXUS_MODEL_OUTPUT_TOKENS_PER_HOUR",
                       DEFAULT_OUTPUT_TOKENS_PER_HOUR, 100000000)
-    if calls is None or tokens is None:
+    input_bytes = positive("NEXUS_MODEL_INPUT_BYTES_PER_HOUR",
+                           DEFAULT_INPUT_BYTES_PER_HOUR, 100000000)
+    if calls is None or tokens is None or input_bytes is None:
         return None
-    return calls, tokens
+    return calls, tokens, input_bytes
 
 
 class ModelBudget:
@@ -51,9 +54,11 @@ class ModelBudget:
         self.started = monotonic()
         self.calls = 0
         self.tokens = 0
+        self.input_bytes = 0
 
-    def reserve(self, requested_tokens: int, max_calls: int,
-                max_tokens: int, now: float | None = None) -> int:
+    def reserve(self, requested_tokens: int, requested_input_bytes: int,
+                max_calls: int, max_tokens: int, max_input_bytes: int,
+                now: float | None = None) -> int:
         """Return 0 when admitted, else integer seconds before retry."""
         current = monotonic() if now is None else now
         with self.lock:
@@ -61,14 +66,17 @@ class ModelBudget:
                 self.started = current
                 self.calls = 0
                 self.tokens = 0
+                self.input_bytes = 0
             if (self.calls >= max_calls or
-                    requested_tokens > max_tokens - self.tokens):
+                    requested_tokens > max_tokens - self.tokens or
+                    requested_input_bytes > max_input_bytes - self.input_bytes):
                 # An impossible one-call budget must not spin/retry rapidly.
                 remaining = max(1, int(BUDGET_WINDOW_SECONDS -
                                        max(0.0, current - self.started)))
                 return remaining
             self.calls += 1
             self.tokens += requested_tokens
+            self.input_bytes += requested_input_bytes
             return 0
 
 
@@ -182,8 +190,11 @@ def register(app):
             limits = usage_limits()
             if limits is None:
                 raise HTTPException(503, "Model usage budget is misconfigured")
+            # Include server policy bytes; this is a conservative byte allowance,
+            # not the provider's token count or a guarantee of price ceilings.
+            outbound_input_bytes = len(body) + len(POLICY.encode("utf-8"))
             retry_after = request.app.state.model_budget.reserve(
-                data.max_output_tokens, *limits
+                data.max_output_tokens, outbound_input_bytes, *limits
             )
             if retry_after:
                 raise HTTPException(
