@@ -1,0 +1,79 @@
+name: NEXUS Operational Merge Rehearsal (no publication)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/integration-merge-rehearsal.py'
+      - 'scripts/test-integration-merge-rehearsal.py'
+      - '.github/workflows/integration-merge-rehearsal.yml'
+      - 'docs/INTEGRATION-REHEARSAL-2026-11-13.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-candidate-rehearsal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout disposable candidate at immutable commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Confirm no deployment or data credentials are exposed
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          git diff --exit-code
+
+      - name: Validate parser failure-contract tests
+        run: python3 scripts/test-integration-merge-rehearsal.py
+
+      - name: Fetch immutable candidate refs without merging remote branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/pull/129/head:refs/remotes/origin/rehearsal-129 \
+            +refs/pull/134/head:refs/remotes/origin/rehearsal-134 \
+            +refs/pull/153/head:refs/remotes/origin/rehearsal-153 \
+            +refs/pull/155/head:refs/remotes/origin/rehearsal-155 \
+            +refs/pull/157/head:refs/remotes/origin/rehearsal-157
+
+      - name: Read-only exact-head merge-tree analysis
+        run: python3 scripts/integration-merge-rehearsal.py --output integration-rehearsal.json
+
+      - name: Verify report never authorizes deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          o=json.loads(Path("integration-rehearsal.json").read_text())
+          assert o["status"] == "REHEARSAL_COMPLETE_PRODUCTION_BLOCKED"
+          assert o["merge_executed"] is False
+          assert o["production_deployed"] is False
+          assert o["durable_restore_proven"] is False
+          assert o["render_autodeploy_safe"] is False
+          assert o["release_authorized"] is False
+          assert len(o["candidates"]) == 5
+          print("MERGE REHEARSAL EVIDENCE BOUNDARY: PASS")
+          PY
+
+      - name: Upload path-only rehearsal observation
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-operational-merge-rehearsal
+          path: integration-rehearsal.json
+          if-no-files-found: ignore
+          retention-days: 14
