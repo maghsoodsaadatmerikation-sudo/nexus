@@ -63,7 +63,7 @@ def assemble(page, core):
     page = one(page, ASSIST_BEGIN,
                '<section class="full" hidden aria-hidden="true"><h2 data-k="assist">',
                "remote-assist-panel")
-    first, remainder = page.split(CHAT_BEGIN, 1)
+    if page.count(CHAT_BEGIN) != 1:\n        raise BuildBlocked("remote-assist-handler-changed")\n    first, remainder = page.split(CHAT_BEGIN, 1)
     if remainder.count(CHAT_END) != 1:
         raise BuildBlocked("remote-assist-handler-changed")
     _transport, remainder = remainder.split(CHAT_END, 1)
