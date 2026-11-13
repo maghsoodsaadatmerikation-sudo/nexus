@@ -160,7 +160,7 @@ for(const [layout,width,prefix] of [['mobile',500,'/'],['nested',1280,'/nexus-st
    checked(state.keys===4&&!state.private,'cache-excludes-project-content');
    // Tampered online HTML must never be accepted by the installed worker.
    tamper=true;
-   await rpc('Page.reload',{ignoreCache:true});
+   await rpc('Page.reload',{ignoreCache:false});
    await poll("document.readyState==='complete'&&"+
               "document.getElementById('mobile-pwa')!==null",15000,'tampered-online-reload');
    const tampered=await evaluate("document.documentElement.outerHTML.includes('INVALID_UNVERIFIED_PUBLIC_HTML')");
@@ -170,7 +170,7 @@ for(const [layout,width,prefix] of [['mobile',500,'/'],['nested',1280,'/nexus-st
    await rpc('Network.setCacheDisabled',{cacheDisabled:true});
    await rpc('Network.emulateNetworkConditions',
       {offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
-   await rpc('Page.reload',{ignoreCache:true});
+   await rpc('Page.reload',{ignoreCache:false});
    await poll("document.readyState==='complete'&&"+
               "document.getElementById('mobile-pwa')!==null",15000,'actual-offline-reload');
    checked(await evaluate("document.getElementById('portable-mode')!==null"),
