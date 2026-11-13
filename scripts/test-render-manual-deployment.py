@@ -59,11 +59,11 @@ class ManualDeploymentBoundaryTests(unittest.TestCase):
             "    autoDeployTrigger: 'off'\n",
             "    autoDeployTrigger: 'off'\n    buildFilter: {}\n"))
 
-    def test_root_page_is_not_a_readiness_signal(self):
+    def test_render_health_check_is_nonrestarting_liveness(self):
         self.assert_rejected(self.valid.replace(
-            "healthCheckPath: /readyz", "healthCheckPath: /"))
+            "healthCheckPath: /livez", "healthCheckPath: /"))
         self.assert_rejected(self.valid.replace(
-            "healthCheckPath: /readyz", "healthCheckPath: /livez"))
+            "healthCheckPath: /livez", "healthCheckPath: /readyz"))
 
     def test_disk_removed_or_changed_is_rejected(self):
         self.assert_rejected(self.valid.replace("      mountPath: /data", "      mountPath: /tmp"))
