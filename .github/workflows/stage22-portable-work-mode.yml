@@ -1,0 +1,68 @@
+name: NEXUS Stage 22 — Portable Offline Work Mode
+on:
+  pull_request:
+    branches:
+      - feat/work-mode-20261113
+    paths:
+      - '.github/workflows/stage22-portable-work-mode.yml'
+      - 'scripts/build-work-mode-portable.py'
+      - 'scripts/test-work-mode-portable.py'
+      - 'scripts/test-work-mode-portable-browser.py'
+      - 'docs/STAGE-22-PORTABLE-OFFLINE-WORK-MODE.md'
+      - 'web/work-mode.html'
+      - 'web/work-mode-core.js'
+
+permissions:
+  contents: read
+
+jobs:
+  portable-offline-work-mode:
+    name: portable-offline-work-mode
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact proposed revision without persisted credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Reject privileged environment and check exact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -m py_compile scripts/build-work-mode-portable.py scripts/test-work-mode-portable.py scripts/test-work-mode-portable-browser.py
+
+      - name: Adversarial offline privacy and build source tests
+        run: python3 scripts/test-work-mode-portable.py
+
+      - name: Build reproducible self-contained HTML and integrity receipt
+        run: |
+          set -euo pipefail
+          python3 scripts/build-work-mode-portable.py --out build/nexus-work-mode-portable.html --manifest build/nexus-work-mode-portable.integrity.json
+          python3 scripts/build-work-mode-portable.py --out build/nexus-work-mode-portable.html --manifest build/nexus-work-mode-portable.integrity.json --check
+          sha256sum build/nexus-work-mode-portable.html
+
+      - name: Real Chromium portable file protocol acceptance — narrow and wide
+        run: python3 scripts/test-work-mode-portable-browser.py
+
+      - name: Keep release, backup and host authority separate
+        run: |
+          echo 'NEXUS STAGE22: synthetic offline browser / work-mode only'
+          echo 'No original Railway volume, live provider search, mobile hardware, cloud sync or server deployment tested.'
+          echo 'No model chat, app network call, production merge, release Seal or independent offhost backup claimed.'
+
+      - name: Upload opt-in, non-secret development artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-stage22-portable-work-mode
+          path: |
+            build/nexus-work-mode-portable.html
+            build/nexus-work-mode-portable.integrity.json
+          if-no-files-found: error
+          retention-days: 30
