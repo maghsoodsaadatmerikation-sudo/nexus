@@ -79,3 +79,16 @@ the secure upstream through `NEXUS_CORE_URL`.
 - `main.py` - non-authoritative FastAPI transport adapter
 - `tests/test_contract.py` - transport-boundary contract tests
 - `pyproject.toml` / `uv.lock` - locked Python environment
+
+## Optional Studio model bridge
+
+This adapter also exposes `/studio-api/status` and `/studio-api/respond`. Model
+use is disabled unless `NEXUS_MODEL_URL`, `NEXUS_MODEL_ID` and the separate
+`NEXUS_STUDIO_TOKEN` are configured by the operator. The optional provider key
+`NEXUS_MODEL_API_KEY` remains on the server. The endpoint accepts only reviewed
+text messages and has no tools. See [Studio setup and limits](../docs/STUDIO-CAPABILITIES.md).
+
+Deploy from the repository root to include the optional `/studio` HTML page.
+A gateway-only deployment may use an explicitly configured `NEXUS_STUDIO_ORIGIN`
+with Studio hosted separately. There is no provisioned model or live provider
+quality test in this repository's synthetic acceptance suite.

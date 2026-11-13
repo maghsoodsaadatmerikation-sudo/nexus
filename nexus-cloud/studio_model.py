@@ -70,7 +70,7 @@ def register(app):
         path = Path(__file__).resolve().parent.parent / "web/studio.html"
         if not path.is_file():
             raise HTTPException(503, "Studio HTML is not packaged; deploy from repository root")
-        return FileResponse(path, media_type="text/html", headers={"Cache-Control": "no-store"})
+        return FileResponse(path, media_type="text/html", headers={"Cache-Control": "no-store", "Content-Security-Policy": "frame-ancestors 'none'"})
 
     @app.get("/studio-api/status")
     async def model_status():

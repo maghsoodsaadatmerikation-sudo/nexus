@@ -147,3 +147,38 @@ async fn import_revalidates_snapshot_before_acceptance() {
         StatusCode::UNPROCESSABLE_ENTITY
     );
 }
+
+#[tokio::test]
+async fn studio_is_available_without_claiming_a_configured_model() {
+    use http_body_util::BodyExt;
+    let app = router(AppState::authenticated(ProductDelegate, "secret"));
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/studio")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    let html = response.into_body().collect().await.unwrap().to_bytes();
+    let html = std::str::from_utf8(&html).unwrap();
+    assert!(html.contains("NEXUS Studio") && html.contains("nexus.studio.v1"));
+    let status = app
+        .oneshot(
+            Request::builder()
+                .uri("/studio-api/status")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(status.status(), StatusCode::OK);
+    let bytes = status.into_body().collect().await.unwrap().to_bytes();
+    let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(value["configured"], false);
+    assert_eq!(value["authority"], "none");
+}

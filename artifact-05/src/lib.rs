@@ -316,6 +316,7 @@ where
     Router::new()
         .route("/", get(web_workspace))
         .route("/studio", get(studio_workspace))
+        .route("/studio-api/status", get(studio_model_status))
         .route("/livez", get(liveness))
         .route("/readyz", get(readiness::<D>))
         .route("/v1/requests", post(submit::<D>))
@@ -422,9 +423,22 @@ async fn readiness<D: ConstitutionalDelegate>(State(state): State<AppState<D>>) 
     }
 }
 
-async fn studio_workspace() -> impl IntoResponse {
+async fn studio_model_status() -> impl IntoResponse {
     (
         [(header::CACHE_CONTROL, "no-store")],
+        Json(serde_json::json!({
+            "configured": false, "configuration_id": null, "model": null,
+            "provider_host": null, "authority": "none"
+        })),
+    )
+}
+
+async fn studio_workspace() -> impl IntoResponse {
+    (
+        [
+            (header::CACHE_CONTROL, "no-store"),
+            (header::CONTENT_SECURITY_POLICY, "frame-ancestors 'none'"),
+        ],
         Html(include_str!("../../web/studio.html")),
     )
 }
