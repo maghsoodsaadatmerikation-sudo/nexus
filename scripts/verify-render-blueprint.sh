@@ -16,6 +16,10 @@ test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 test -f render.yaml
 test -f docs/RENDER-STAGE-D.md
 
+# Prove the manual deployment boundary with negative fixtures, not just text grep.
+python3 scripts/test-render-manual-deployment.py
+python3 scripts/verify-render-manual-deployment.py
+
 python3 - <<'PY'
 from pathlib import Path
 import re
@@ -28,7 +32,7 @@ required = [
     'plan: 0.5c-512mb',
     'region: frankfurt',
     'dockerfilePath: ./Dockerfile',
-    'autoDeployTrigger: checksPass',
+    'autoDeployTrigger: off',
     'healthCheckPath: /',
     'numInstances: 1',
     'mountPath: /data',
@@ -75,7 +79,7 @@ Verified Commit: ${GITHUB_SHA}
 Run ID: ${GITHUB_RUN_ID}
 Provider Profile: Render paid single-instance web service
 Persistent Mount: /data
-Auto Deploy Gate: checksPass
+Auto Deploy Mode: off (manual)
 Secret Material Recorded: NO
 Authority Claim: NONE
 Epistemic Claim: DEPLOYMENT-CONFIG-ONLY
@@ -91,6 +95,7 @@ grep -Fx 'Secret Material Recorded: NO' render-deployment-manifest.txt
 grep -Fx 'Authority Claim: NONE' render-deployment-manifest.txt
 grep -Fx 'Epistemic Claim: DEPLOYMENT-CONFIG-ONLY' render-deployment-manifest.txt
 grep -Fx 'Stage D Claim: NOT SATISFIED' render-deployment-manifest.txt
+grep -Fx 'Auto Deploy Mode: off (manual)' render-deployment-manifest.txt
 
 test "$(sha256sum render.yaml | awk '{print $1}')" = "$render_sha"
 test "$(sha256sum docs/RENDER-STAGE-D.md | awk '{print $1}')" = "$runbook_sha"
