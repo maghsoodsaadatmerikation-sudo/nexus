@@ -30,7 +30,7 @@ else
 fi
 "$ANDROID_HOME/emulator/emulator" \
   -avd nexus_stage26 -no-window -no-audio -no-boot-anim \
-  -no-snapshot -no-metrics -gpu swiftshader_indirect \
+  -no-snapshot -gpu software \
   -accel "$ACCEL" -camera-back none -camera-front none \
   > "$OUT/emulator-start.log" 2>&1 &
 EMULATOR_PID=$!
@@ -46,6 +46,7 @@ for i in $(seq 1 90); do
   if [ "$(adb get-state 2>/dev/null || true)" = device ]; then DEVICE_READY=1; break; fi
   if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
     echo 'BLOCKED: emulator process exited before attaching to ADB'
+    tail -n 35 "$OUT/emulator-start.log" | sed -E 's#(/home/runner/[^[:space:]]+)#<runner-path>#g' || true
     exit 3
   fi
   sleep 2
