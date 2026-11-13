@@ -1,0 +1,114 @@
+name: NEXUS Stage 26 — Actual Android Emulator Acceptance
+on:
+  pull_request:
+    branches:
+      - feat/work-mode-20261113
+    paths:
+      - '.github/workflows/stage26-android-emulator.yml'
+      - 'android/stage26/**'
+      - 'android/stage25/**'
+      - 'scripts/build-stage26-test-apks.sh'
+      - 'scripts/test-stage26-build-pair.py'
+      - 'scripts/run-stage26-android-emulator.sh'
+      - 'scripts/test-stage26-emulator-witness.py'
+      - 'scripts/test-stage26-source.py'
+      - 'scripts/build-stage25-apk.sh'
+      - 'scripts/build-stage25-android-assets.py'
+      - 'scripts/test-stage25-apk.py'
+      - 'scripts/test-stage25-android-assets.py'
+      - 'scripts/build-mobile-work-pwa.py'
+      - 'scripts/build-work-mode-portable.py'
+      - 'web/work-mode.html'
+      - 'web/work-mode-core.js'
+      - 'public/icons/nexus-192.png'
+      - 'docs/STAGE-26-ANDROID-EMULATOR-ACCEPTANCE.md'
+
+permissions:
+  contents: read
+
+jobs:
+  real-android-emulator:
+    name: real-android-emulator-offline-vault
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact proposed head, never persist credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Enforce read-only permissions, SDK and no production credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${ANDROID_SIGNING_KEY:-}"
+          test -n "${ANDROID_HOME:-}"
+          test -x "$ANDROID_HOME/build-tools/35.0.1/apksigner"
+          command -v javac
+          command -v keytool
+          command -v sdkmanager
+          command -v avdmanager
+          command -v adb
+          python3 -m py_compile scripts/test-stage26-source.py \
+            scripts/test-stage26-build-pair.py scripts/test-stage26-emulator-witness.py
+          bash -n scripts/build-stage26-test-apks.sh
+          bash -n scripts/run-stage26-android-emulator.sh
+
+      - name: Negative-proof fixtures and read-only authority tests
+        run: python3 scripts/test-stage26-source.py
+
+      - name: Reverify original native static source and permission invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/test-stage25-android-assets.py
+          python3 scripts/test-mobile-work-pwa.py
+
+      - name: Compile target app and real Android instrumentation APKs
+        shell: bash
+        run: bash scripts/build-stage26-test-apks.sh
+
+      - name: Install official emulator and Android 35 Google APIs system image
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses > /dev/null 2>&1 || true
+          sdkmanager --sdk_root="$ANDROID_HOME" --install \
+            'emulator' 'system-images;android-35;google_apis;x86_64'
+          test -x "$ANDROID_HOME/emulator/emulator"
+          test -c /dev/kvm
+          sudo chmod a+rw /dev/kvm
+
+      - name: Boot guest Android, test actual WebView encrypted vault and SAF intents
+        shell: bash
+        run: bash scripts/run-stage26-android-emulator.sh
+
+      - name: Publish synthetic-only Android runtime acceptance, no APK private key
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-stage26-real-android-emulator-witness
+          path: |
+            build/stage26-emulator/stage26-emulator-witness.json
+            build/stage26-emulator/stage26-emulator-apk-pair.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Confirm no device or production release was claimed
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          d=json.load(open("build/stage26-emulator/stage26-emulator-witness.json"))
+          assert d["status"]=="ANDROID_EMULATOR_SYNTHETIC_ACCEPTANCE_PASS"
+          assert d["runtime_checks"]>=15
+          assert d["android_real_hardware_tested"] is False
+          assert d["SAF_actual_document_bytes_written_and_read"] is False
+          assert d["production_distribution_signed"] is False
+          print("PASS: real emulator only; owner Android device NOT tested")
+          PY
