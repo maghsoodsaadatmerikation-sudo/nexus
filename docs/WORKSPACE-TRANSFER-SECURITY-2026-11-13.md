@@ -27,11 +27,12 @@ making the credential visible in process listings on affected hosts.
 - An atomic hard link publishes to a new filename only; existing files,
   symlinks and names concurrently created during transfer are never
   overwritten. A second run must choose a **new output filename**.
-- `workspace-restore.sh` validates a single regular, non-hardlinked,
-  non-symlinked JSON file (also maximum 64 MiB), rejects duplicate keys
-  and plain HTTP on non-loopback origins. It provides curl with bearer
-  credentials through standard input (`-H @-`) instead of argv and
-  accepts only HTTP **201** from the import endpoint.
+- `workspace-restore.sh` now delegates to `workspace-restore.py`.
+  It reads from a pinned file descriptor, rejects symlinks, hardlinks,
+  duplicate keys and invalid schema shape, and enforces the **64 MiB** size
+  limit. The exact validated bytes, not a second read of a mutable path,
+  are POSTed in one in-process HTTP request with no redirect or proxy.
+  A remote target must use HTTPS; only HTTP **201** is accepted.
 - The existing offline recovery and constitutional authorization
   boundaries remain unchanged. A snapshot import still goes through
   the gateway's existing core revalidation.
@@ -43,7 +44,7 @@ python3 scripts/test-workspace-backup.py
 python3 scripts/test-workspace-restore.py
 ```
 
-The 20 synthetic tests cover concurrent final-name creation,
+The 22 synthetic tests cover concurrent final-name creation,
 symlinks, hardlinks, duplicate keys, malformed responses, output mode,
 byte caps, unexpected statuses, HTTPS-origin hygiene, optimized Python
 and two real loopback HTTP test servers. All tests use synthetic tokens
@@ -79,9 +80,12 @@ reviewed restore plan. Tests invoke only disposable loopback servers.
   this utility cannot stop writers or independently prove cross-store
   transaction consistency.
 - Source-code changes do not reconfigure a live Render/Railway service.
-- Curl restore reopens its path after file validation, so untrusted local
-  writers able to change the operator's source directory are out of scope.
-  Keep that source directory private and immutable through transfer.
+- The import process holds up to 64 MiB in memory so the bytes validated
+  are exactly the bytes sent; constrained mobile hosts may need a smaller
+  private snapshot. A hostile actor with permission to rewrite the source
+  directory or its ancestors still lies outside this local operator model.
+  The gateway's snapshot validation, not the CLI file shape, remains the
+  content-integrity and authorization boundary.
 - Credentials remain in the running process memory and environment.
   No tool can guarantee confidentiality from the same OS account, root
   users, a compromised gateway, malware, crash dumps or hostile shell
