@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod connections;
+pub mod generative_chat;
 mod request_store;
 pub mod research_chat;
 mod workspace_api;
@@ -216,6 +217,7 @@ pub struct AppState<D> {
     safety_config: SafetyConfig,
     safety_state: Arc<Mutex<SafetyState>>,
     research_chat: Arc<research_chat::ResearchChat>,
+    pub(crate) model_service: Arc<generative_chat::ModelService>,
     connections: Arc<connections::Connections>,
     body_read_timeout: Duration,
     execution_slots: Arc<tokio::sync::Semaphore>,
@@ -232,6 +234,7 @@ impl<D> Clone for AppState<D> {
             safety_config: self.safety_config,
             safety_state: Arc::clone(&self.safety_state),
             research_chat: Arc::clone(&self.research_chat),
+            model_service: Arc::clone(&self.model_service),
             connections: Arc::clone(&self.connections),
             body_read_timeout: self.body_read_timeout,
             execution_slots: Arc::clone(&self.execution_slots),
@@ -250,6 +253,8 @@ impl<D: ConstitutionalDelegate> AppState<D> {
             safety_config: SafetyConfig::default(),
             safety_state: Arc::new(Mutex::new(SafetyState::default())),
             research_chat: Arc::new(research_chat::ResearchChat::default()),
+            model_service: Arc::new(generative_chat::ModelService::default()),
+            model_service: Arc::new(generative_chat::ModelService::default()),
             connections: Arc::new(connections::Connections::disabled()),
             body_read_timeout: Duration::from_secs(15),
             execution_slots: Arc::new(tokio::sync::Semaphore::new(32)),
@@ -326,6 +331,10 @@ impl<D: ConstitutionalDelegate> AppState<D> {
         self
     }
 
+    pub fn with_model_service(mut self, service:generative_chat::ModelService)->Self{
+        self.model_service=Arc::new(service);
+        self
+    }
     pub fn with_research_chat(mut self, service: research_chat::ResearchChat) -> Self {
         self.research_chat = Arc::new(service);
         self
@@ -362,6 +371,8 @@ where
         .route("/v1/connections", get(connections::catalog::<D>))
         .route("/v1/connections/invoke", post(connections::invoke::<D>))
         .route("/research-chat", get(research_chat::page))
+        .route("/model-chat",get(generative_chat::page))
+        .route("/v1/model-chat",post(generative_chat::respond::<D>))
         .route(
             "/research-chat-history.js",
             get(research_chat::history_script),
@@ -410,6 +421,8 @@ async fn private_api_cache_boundary(request: Request, next: Next) -> Response {
     let private_api = path == "/v1/connections"
         || path == "/v1/connections/invoke"
         || path == "/v1/research-chat"
+        || path == "/v1/model-chat"
+        || path == "/v1/model-chat"
         || path == "/v1/requests"
         || path.starts_with("/v1/requests/")
         || path == "/v1/workspaces"
