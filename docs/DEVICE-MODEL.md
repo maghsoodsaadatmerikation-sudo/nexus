@@ -61,7 +61,7 @@ browser storage retention and compatible hardware.
 `device-model.yml` runs a real pinned-weights WASM inference witness in a fresh
 headless Chromium profile, plus a synthetic Studio transport witness for consent,
 policy review, provenance, late-response rejection and lock behavior. The real
-witness checks a simple English answer, capacity rejection, cancellation and
+witness checks an English answer grounded in an explicitly supplied fact, capacity rejection, cancellation and
 scoped cache removal. This is an execution smoke check, not a general quality,
 medical accuracy, alignment or multilingual evaluation. Physical Android speed,
 memory and reliability need device acceptance; a successful desktop browser
@@ -77,3 +77,8 @@ Primary upstream references:
 Downloaded Transformers.js/Jinja code is Apache-2.0/MIT as attributed in its
 upstream distributions; ONNX Runtime is MIT. License texts are shipped with the
 runtime. Model licensing is Apache-2.0 according to the upstream model card.
+
+During development, an ungrounded color question produced a misleading answer
+about interpretation. This model is therefore presented as limited text drafting
+from supplied information, not verified independent factual question answering.
+Passing the grounded execution smoke does not certify general knowledge.
