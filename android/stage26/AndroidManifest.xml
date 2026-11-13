@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="org.nexus.offline.stage26.test">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/>
+    <application android:label="NEXUS Stage26 Disposable Instrumentation"
+                 android:allowBackup="false"
+                 android:usesCleartextTraffic="false">
+        <uses-library android:name="android.test.runner" android:required="false"/>
+    </application>
+    <instrumentation android:name=".Stage26Instrumentation"
+                     android:targetPackage="org.nexus.offline.stage25"
+                     android:label="NEXUS isolated real Android emulator witness"
+                     android:functionalTest="true"
+                     android:handleProfiling="false"/>
+</manifest>
