@@ -1,0 +1,45 @@
+name: NEXUS Studio Verification
+on:
+  pull_request:
+    paths:
+      - 'web/studio*'
+      - 'scripts/*studio*'
+      - 'nexus-cloud/**'
+      - 'artifact-05/src/lib.rs'
+      - '.github/workflows/studio.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'web/studio*'
+      - 'scripts/*studio*'
+      - '.github/workflows/studio.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  studio:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify deterministic bundle and bounded state
+        run: |
+          python3 scripts/build-studio.py --check
+          node --check web/studio-core.js
+          node --check web/studio-app.js
+          node scripts/test-studio-core.mjs
+      - name: Exercise Studio in disposable narrow and wide Chromium
+        run: python3 scripts/test-studio-browser.py
+      - name: Capture synthetic empty Studio layout for review
+        run: |
+          chrome="$(command -v google-chrome || command -v chromium)"
+          "$chrome" --headless --no-sandbox --disable-dev-shm-usage --no-first-run --hide-scrollbars --screenshot=studio-narrow.png --window-size=420,1000 "file://${PWD}/web/studio.html"
+          "$chrome" --headless --no-sandbox --disable-dev-shm-usage --no-first-run --hide-scrollbars --screenshot=studio-wide.png --window-size=1280,1000 "file://${PWD}/web/studio.html"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: studio-synthetic-layout-review
+          path: studio-*.png
+          retention-days: 7

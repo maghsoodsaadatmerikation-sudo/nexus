@@ -14,6 +14,15 @@ The system separates human authority, evidence, machine analysis, execution auth
 A_out <= A_in
 ```
 
+## NEXUS Studio: private conversations and writing
+
+The Rust gateway now serves `/studio`: project conversation history, search,
+non-destructive branches, reviewed project memory, local source passages and a
+versioned writing canvas, with explicit encrypted browser saving and portable
+backups. A separate optional server-side model bridge requires a real configured
+provider; the local guide is labeled non-generative. No provider has been funded
+or provisioned by this implementation. [Features, comparison, setup and limits](docs/STUDIO-CAPABILITIES.md).
+
 ## Try NEXUS on the web (static, no account)
 
 The English-first multilingual mobile pilot is hosted at

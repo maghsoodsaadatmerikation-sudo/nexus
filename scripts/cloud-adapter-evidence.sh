@@ -21,11 +21,12 @@ fi
 (
   cd nexus-cloud
   uv sync --frozen
-  uv run --frozen python -m compileall -q main.py tests
+  uv run --frozen python -m compileall -q main.py studio_model.py tests
   uv run --frozen pytest -q
 )
 echo 'NEXUS CLOUD ADAPTER CONTRACT: PASS'
 
+studio_model_sha="$(sha256sum nexus-cloud/studio_model.py | awk '{print $1}')"
 main_sha="$(sha256sum nexus-cloud/main.py | awk '{print $1}')"
 tests_sha="$(find nexus-cloud/tests -type f -name '*.py' -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
 pyproject_sha="$(sha256sum nexus-cloud/pyproject.toml | awk '{print $1}')"
@@ -47,6 +48,7 @@ printf '%s\n' \
   'Authority Claim: NONE' \
   'Epistemic Claim: TRANSPORT-CONTRACT-ONLY' \
   'Stage D Claim: NOT SATISFIED' \
+  "Studio model bridge SHA-256: ${studio_model_sha}" \
   "Cloud main.py SHA-256: ${main_sha}" \
   "Cloud tests SHA-256: ${tests_sha}" \
   "Cloud pyproject.toml SHA-256: ${pyproject_sha}" \
@@ -63,6 +65,7 @@ grep -Fx 'Authority Claim: NONE' "$manifest"
 grep -Fx 'Epistemic Claim: TRANSPORT-CONTRACT-ONLY' "$manifest"
 grep -Fx 'Stage D Claim: NOT SATISFIED' "$manifest"
 test "$(git rev-parse HEAD)" = "$VERIFIED_COMMIT"
+test "$(sha256sum nexus-cloud/studio_model.py | awk '{print $1}')" = "$studio_model_sha"
 test "$(sha256sum nexus-cloud/main.py | awk '{print $1}')" = "$main_sha"
 test "$(find nexus-cloud/tests -type f -name '*.py' -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')" = "$tests_sha"
 test "$(sha256sum nexus-cloud/pyproject.toml | awk '{print $1}')" = "$pyproject_sha"
@@ -76,6 +79,7 @@ bundle='nexus-cloud-verification-bundle.tar.gz'
 tar -czf "$bundle" \
   "$manifest" \
   nexus-cloud/main.py \
+  nexus-cloud/studio_model.py \
   nexus-cloud/tests \
   nexus-cloud/pyproject.toml \
   nexus-cloud/uv.lock \
