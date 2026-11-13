@@ -185,6 +185,15 @@ public final class Stage26Instrumentation extends Instrumentation {
     }
 
     private void testDocumentPickers(Activity activity,WebView view) throws Exception {
+        JSONObject nativeBridge=json(view,
+            "({present:!!window.NEXUS_NATIVE_EXPORT," +
+            "callable:typeof(window.NEXUS_NATIVE_EXPORT&&" +
+            "window.NEXUS_NATIVE_EXPORT.save)==='function'," +
+            "origin:location.href})");
+        check(nativeBridge.getBoolean("present") &&
+              nativeBridge.getBoolean("callable") &&
+              URL.equals(nativeBridge.getString("origin")),
+              "native-export-bridge-not-bound");
         IntentFilter write=new IntentFilter(Intent.ACTION_CREATE_DOCUMENT);
         ActivityMonitor outbound=addMonitor(write,
             new ActivityResult(Activity.RESULT_CANCELED,null),true);
@@ -192,7 +201,24 @@ public final class Stage26Instrumentation extends Instrumentation {
             evaluate(view,
                 "NEXUS_NATIVE_EXPORT.save('nexus-stage26.synthetic.json'," +
                 "btoa('offline-synthetic-encrypted-export'))");
-            waitForHits(outbound,"native-save-picker-approval-required");
+            for(int i=0;i<100 && outbound.getHits()<1;i++)
+                SystemClock.sleep(100);
+            if(outbound.getHits()<1) {
+                AtomicReference<Boolean> exportPending=new AtomicReference<>(false);
+                AtomicReference<Boolean> exactOrigin=new AtomicReference<>(false);
+                runOnMainSync(()->{
+                    try {
+                        Field field=activity.getClass().getDeclaredField("pendingExport");
+                        field.setAccessible(true);
+                        exportPending.set(field.get(activity)!=null);
+                        exactOrigin.set(URL.equals(view.getUrl()));
+                    } catch(Exception ignored) {}
+                });
+                throw new IllegalStateException(
+                    "stage26-save-picker-missing-pending_" +
+                    exportPending.get()+"_origin_"+exactOrigin.get());
+            }
+            check(true,"native-save-picker-approval-required");
         } finally {
             removeMonitor(outbound);
         }
