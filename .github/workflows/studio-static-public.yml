@@ -25,6 +25,10 @@ jobs:
         run: |
           export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
           node scripts/test-studio-static-browser.mjs --public > studio-public-browser.json
+      - name: Generate with the real pinned model on the public origin
+        run: |
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
+          node scripts/test-device-model-browser.mjs --public > studio-public-model.json
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
