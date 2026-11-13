@@ -1,0 +1,81 @@
+name: NEXUS Stage 27 — Custom Assistant and Encrypted Project Memory
+on:
+  pull_request:
+    branches:
+      - feat/work-mode-20261113
+    paths:
+      - '.github/workflows/stage27-project-assistant-memory.yml'
+      - 'web/work-mode-core.js'
+      - 'web/work-mode.html'
+      - 'scripts/test-stage27-assistant-memory.mjs'
+      - 'scripts/test-stage27-assistant-memory-browser.py'
+      - 'docs/STAGE-27-CHATGPT-GAP-AND-PROJECT-PERSONALIZATION.md'
+
+permissions:
+  contents: read
+
+jobs:
+  project-customization:
+    name: project-assistant-memory-privacy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Exact unprivileged source, no persisted GitHub credential
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Assert source identity, no provider credentials or write authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          node --check web/work-mode-core.js
+          node --check scripts/test-stage27-assistant-memory.mjs
+          python3 -m py_compile scripts/test-stage27-assistant-memory-browser.py
+
+      - name: Test legacy archives and 10 adversarial customization/memory contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test scripts/test-stage27-assistant-memory.mjs
+
+      - name: Reverify existing Work Mode cryptographic and authority contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test scripts/test-work-mode.mjs
+          python3 scripts/test-work-mode-portable.py
+          python3 scripts/test-mobile-work-pwa.py
+          python3 scripts/test-stage25-android-assets.py
+
+      - name: Run real disposable Chromium bilingual encrypted memory acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_STAGE27_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          test -n "$NEXUS_STAGE27_CHROME"
+          python3 scripts/test-stage27-assistant-memory-browser.py
+
+      - name: Enforce truth in generated offline artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build-stage25-android-assets.py --out build/stage27-android-assets
+          python3 scripts/build-stage25-android-assets.py --out build/stage27-android-assets --check
+          python3 - <<'PY'
+          from pathlib import Path
+          x=Path('build/stage27-android-assets/nexus/index.html').read_text()
+          for t in ('assistant-profile','assistant-name','assistant-memory',
+                    "assistant_profile:assistantProfile", "connect-src 'none'",
+                    "NEXUS_NATIVE_EXPORT.save"):
+              assert t in x,t
+          assert "fetch(" not in x
+          assert "navigator.serviceWorker" not in x
+          assert "URL.createObjectURL" not in x
+          print('PASS: offline Android carries encrypted scoped preferences, no network')
+          PY

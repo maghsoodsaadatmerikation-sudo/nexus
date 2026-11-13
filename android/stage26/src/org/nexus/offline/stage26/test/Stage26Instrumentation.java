@@ -128,7 +128,10 @@ public final class Stage26Instrumentation extends Instrumentation {
             "const v=new W.Vault();" +
             "await v.create(pass);" +
             "let project=W.create({title:'" + MARK + "',goal:'Synthetic offline goal'," +
-            "criteria:['Human review required'],steps:['Synthetic task']});" +
+            "criteria:['Human review required'],steps:['Synthetic task']," +
+            "assistant_profile:{name:'Stage27 verifier'," +
+            "instructions:'SYNTHETIC_STAGE27_PROFILE',style:'concise'}," +
+            "memory:['SYNTHETIC_STAGE27_MEMORY']});" +
             "const task=project.tasks[0];let denied=false;" +
             "try{W.update(project,'edit_task',{id:task.id,title:task.title," +
             "status:'done',dependencies:[],evidence:'',file_ids:[],reviewed:false});}" +
@@ -139,7 +142,10 @@ public final class Stage26Instrumentation extends Instrumentation {
             "file_ids:[],reviewed:true});" +
             "await v.save(project);" +
             "const raw=await v.backup();" +
-            "if(raw.includes('" + MARK + "'))throw Error('plaintext-backup');" +
+            "if(raw.includes('" + MARK + "')||" +
+            "raw.includes('SYNTHETIC_STAGE27_MEMORY')||" +
+            "raw.includes('SYNTHETIC_STAGE27_PROFILE'))" +
+            "throw Error('plaintext-backup');" +
             "v.lock();" +
             "return {saved:true,done:project.tasks[0].status==='done'," +
             "reviewed:project.tasks[0].reviewed===true,denied:denied," +
@@ -167,6 +173,12 @@ public final class Stage26Instrumentation extends Instrumentation {
             "if(project.title!=='" + MARK + "'||project.tasks.length!==1||" +
             "project.tasks[0].status!=='done'||!project.tasks[0].reviewed)" +
             "throw Error('saved-project-changed');" +
+            "if(project.assistant_profile.name!=='Stage27 verifier'||" +
+            "project.assistant_profile.style!=='concise'||" +
+            "project.assistant_profile.instructions!=='SYNTHETIC_STAGE27_PROFILE'||" +
+            "project.memory.length!==1||" +
+            "project.memory[0]!=='SYNTHETIC_STAGE27_MEMORY')" +
+            "throw Error('custom-profile-or-memory-lost-after-reopen');" +
             "let env=JSON.parse(await v.backup());" +
             "env.ciphertext='AA'+env.ciphertext.slice(2);" +
             "let tamperDenied=false;" +
@@ -174,12 +186,16 @@ public final class Stage26Instrumentation extends Instrumentation {
             "catch(e){tamperDenied=true}" +
             "if(!tamperDenied)throw Error('tampered-archive-accepted');" +
             "return {reopened:true,wrongDenied,tamperDenied," +
-            "stillDone:v.get(all[0].id).tasks[0].status==='done'};";
+            "stillDone:v.get(all[0].id).tasks[0].status==='done'," +
+            "profileMemoryReopened:v.get(all[0].id).memory[0]===" +
+            "'SYNTHETIC_STAGE27_MEMORY'};";
         JSONObject result=asyncScript(view,js);
         check(result.getBoolean("reopened"), "independent-activity-reopen");
         check(result.getBoolean("wrongDenied"), "wrong-password-refused");
         check(result.getBoolean("tamperDenied"), "tampered-backup-refused");
         check(result.getBoolean("stillDone"), "failed-restore-keeps-project");
+        check(result.getBoolean("profileMemoryReopened"),
+              "encrypted-custom-assistant-and-project-memory-survive-Android-reopen");
     }
 
     private void confirmActualSystemDocumentPicker(String name) throws Exception {
@@ -225,6 +241,29 @@ public final class Stage26Instrumentation extends Instrumentation {
             "NEXUS_NATIVE_EXPORT.save('nexus-stage26.synthetic.json'," +
             "btoa('offline-synthetic-encrypted-export'))");
         confirmActualSystemDocumentPicker("native-save-picker-approval-required");
+
+        // Android DocumentsUI closes asynchronously. The native Activity
+        // must receive RESULT_CANCELED before it may open a different picker.
+        // Never bypass the production guard; wait until it really clears.
+        AtomicReference<Boolean> exportReleased=new AtomicReference<>(false);
+        for(int i=0;i<120;i++) {
+            runOnMainSync(()->{
+                try {
+                    Field field=activity.getClass().getDeclaredField("pendingExport");
+                    field.setAccessible(true);
+                    Field chooserField=activity.getClass().getDeclaredField("chooser");
+                    chooserField.setAccessible(true);
+                    exportReleased.set(field.get(activity)==null &&
+                                       chooserField.get(activity)==null);
+                } catch(Exception exception) {
+                    exportReleased.set(false);
+                }
+            });
+            if(Boolean.TRUE.equals(exportReleased.get()))break;
+            SystemClock.sleep(100);
+        }
+        check(Boolean.TRUE.equals(exportReleased.get()),
+              "android-document-export-cancellation-clears-native-pending-state");
 
         AtomicReference<Boolean> importHook=new AtomicReference<>(false);
         runOnMainSync(()->{

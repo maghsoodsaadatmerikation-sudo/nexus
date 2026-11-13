@@ -5,6 +5,9 @@ on:
       - '.github/workflows/research-chat.yml'
       - 'artifact-05/**'
       - 'web/research-chat.html'
+      - 'web/model-chat.html'
+      - 'scripts/test-stage28-model-chat-browser.py'
+      - 'docs/STAGE-28-GENERATIVE-MODEL-ADAPTER.md'
       - 'web/chat-history.js'
       - 'web/connections.html'
       - 'web/work-mode.html'
@@ -27,6 +30,9 @@ on:
       - '.github/workflows/research-chat.yml'
       - 'artifact-05/**'
       - 'web/research-chat.html'
+      - 'web/model-chat.html'
+      - 'scripts/test-stage28-model-chat-browser.py'
+      - 'docs/STAGE-28-GENERATIVE-MODEL-ADAPTER.md'
       - 'web/chat-history.js'
       - 'web/connections.html'
       - 'web/work-mode.html'
@@ -75,3 +81,5 @@ jobs:
         run: node --test scripts/test-work-mode.mjs
       - name: Exercise real Chromium project work, resume, files and chat consent
         run: python3 scripts/test-work-mode-browser.py
+      - name: Exercise model-provider consent and absence of silent network calls in real Chromium
+        run: python3 scripts/test-stage28-model-chat-browser.py
