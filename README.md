@@ -19,7 +19,9 @@ A_out <= A_in
 The Rust gateway now serves `/studio`: project conversation history, search,
 non-destructive branches, reviewed project memory, local source passages and a
 versioned writing canvas, with explicit encrypted browser saving and portable
-backups. A separate optional server-side model bridge requires a real configured
+backups. Studio also provides explicit Wikipedia/Crossref retrieval, an isolated
+local JavaScript lab and JSON-to-PNG charts. [Lab details and bounds](docs/RESEARCH-CODE-LAB.md).
+A separate optional server-side model bridge requires a real configured
 provider; the local guide is labeled non-generative. No provider has been funded
 or provisioned by this implementation. [Features, comparison, setup and limits](docs/STUDIO-CAPABILITIES.md).
 

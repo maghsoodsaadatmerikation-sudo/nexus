@@ -33,6 +33,9 @@ judgment workspace or migrate the separate Android prototype's local archives.
 | Stop and late-response isolation | No model transport | Abort waiting and reject stale responses after edits, project changes or lock |
 | English/Persian accessibility | Existing bilingual offline tools | English-first Studio, Persian/RTL and a complete local interface language-pack importer/template; inert text rendering |
 | Read aloud | Existing browser adapters | Explicit read-aloud using an available local device voice only |
+| Live source retrieval | Provider search destinations only | Explicit direct Wikipedia excerpts and Crossref metadata, with source/provenance cards |
+| Local code execution | Inert text only | Explicit JavaScript execution in an opaque-origin Worker, with network/storage isolation, timeout and output bounds |
+| Data charts | Separate local analysis tools | Validated bar/line JSON to local Canvas and explicit PNG export |
 
 The model bridge is **implemented but not provisioned with a real model** by this
 change. A synthetic HTTP provider verifies the transport contract, not reasoning
@@ -45,11 +48,11 @@ pretends a reflection prompt is an AI answer.
 | ChatGPT capability | NEXUS boundary after this change | Required next dependency |
 | --- | --- | --- |
 | Hosted frontier-model reasoning | No hosted model/key supplied | A funded/authorized provider or a separately hosted local model with sufficient compute |
-| Live web retrieval / deep research | Existing search destinations open provider pages; Studio retrieves local text | A reviewed retrieval service, search APIs, source verification and source-quality evaluations |
+| Live web retrieval / deep research | Explicit Wikipedia/Crossref retrieval and local text; no autonomous multi-step research | Broader search APIs, source verification, model/tool orchestration and source-quality evaluations |
 | Image understanding / OCR | Studio imports text, not images/PDF OCR | A vision/OCR provider, image limits and actual image-quality tests |
 | Image/video generation | Not implemented | A connected generation provider, usage authorization and media QA |
 | Real-time voice conversation | Device adapters/read aloud are not real-time model audio | A real-time audio provider, microphone permissions, interruption tests and device QA |
-| Sandboxed Python/code execution | Canvas edits code as inert text | An isolated execution service with resource/network limits and reproducibility checks |
+| Sandboxed Python/code execution | JavaScript Worker lab available; no Python or OS execution | An isolated Python/OS execution service with resource/network limits and reproducibility checks |
 | Scheduled unattended work and push notifications | No scheduler or push delivery | A durable job runner, delivery channel and user-specific authorization |
 | Third-party app actions/MCP | Constitutional capability types are not authenticated connectors | Per-service OAuth, scoped tokens, concrete tools, revocation and action review |
 | Shared projects and live collaboration | Single browser owner only | User accounts, tenancy, encrypted sync, access control and conflict resolution |
@@ -141,3 +144,11 @@ that a remote provider stops computing or reverses charges. No retry is automati
 
 Physical Android, actual provider output quality, unattended background execution,
 notifications, live collaboration and a new signed APK are not verified here.
+
+## Research and code/data lab follow-up
+
+See [the operating contract and verification](RESEARCH-CODE-LAB.md) for direct
+public source retrieval, isolated local JavaScript execution and chart rendering.
+Source text remains unverified; code execution is explicit, local and separate
+from the writing canvas. These tools do not provision a language model or a
+Python/OS environment.
