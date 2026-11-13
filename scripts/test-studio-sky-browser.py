@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('studio_browser',ROOT/'scripts/test-studio-browser.py')
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+module.MIN_CHECKS=20
 module.WITNESS=r"""
 window.addEventListener('load',async()=>{
  const $=id=>document.getElementById(id),checks=[];
