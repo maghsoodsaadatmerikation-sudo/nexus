@@ -13,7 +13,8 @@ def need(condition, label):
         raise ValueError(label)
 
 
-def audit(apk: Path,badging: str,permissions: str,public_cert: str):
+def audit(apk: Path,badging: str,permissions: str,public_cert: str,
+          manifest_tree: str):
     source=Path("build/stage25-android/generated/nexus/index.html").read_bytes()
     with zipfile.ZipFile(apk) as archive:
         names=set(archive.namelist())
@@ -28,9 +29,12 @@ def audit(apk: Path,badging: str,permissions: str,public_cert: str):
         need(dex.startswith(b"dex\n"), "bad-dex-header")
         need(len(dex)>2000, "dex-too-small")
     need("package: name='org.nexus.offline.stage25'" in badging,"unexpected-package-id")
-    need("sdkVersion:'26'" in badging and "targetSdkVersion:'35'" in badging,
-         "bad-min-target-sdk:"+"|".join(line[:130] for line in badging.splitlines()
-            if line.startswith(("sdkVersion:","targetSdkVersion:")))[:320])
+    need("targetSdkVersion:'35'" in badging,"bad-target-sdk")
+    need("E: uses-sdk" in manifest_tree,"binary-uses-sdk-missing")
+    need(re.search(r"(?m)^\\s+A: http://schemas.android.com/apk/res/android:minSdkVersion\\(0x[0-9a-f]+\\)=26\\s*$",manifest_tree) is not None,
+         "binary-min-sdk-not-26")
+    need(re.search(r"(?m)^\\s+A: http://schemas.android.com/apk/res/android:targetSdkVersion\\(0x[0-9a-f]+\\)=35\\s*$",manifest_tree) is not None,
+         "binary-target-sdk-not-35")
     need(not re.search(r"(?m)^uses-permission",permissions),"manifest-requests-permissions")
     need("Signer #1 certificate SHA-256 digest" in public_cert,"signer-digest-missing")
     need(len(apk.read_bytes())>15000,"apk-too-small")
@@ -60,11 +64,12 @@ def main():
     p.add_argument("--badging",type=Path,required=True)
     p.add_argument("--permissions",type=Path,required=True)
     p.add_argument("--public-cert",type=Path,required=True)
+    p.add_argument("--manifest-tree",type=Path,required=True)
     p.add_argument("--out",type=Path,required=True)
     a=p.parse_args()
     try:
         result=audit(a.apk,a.badging.read_text(),a.permissions.read_text(),
-                     a.public_cert.read_text())
+                     a.public_cert.read_text(),a.manifest_tree.read_text())
         a.out.write_text(json.dumps(result,sort_keys=True,indent=2)+"\n")
         print("PASS: signed standalone APK, no declared Android permissions, exact offline HTML")
     except (OSError,AssertionError,ValueError,KeyError,AttributeError,
