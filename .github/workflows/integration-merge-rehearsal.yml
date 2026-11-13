@@ -122,6 +122,34 @@ jobs:
           # cumulative reviewed gateway implementation for this scratch test.
           # This override is NOT a production merge resolution.
           git show refs/remotes/origin/rehearsal-134:artifact-05/src/lib.rs > artifact-05/src/lib.rs
+          # Bring forward the two post-stack Studio public routes from main,
+          # rather than losing them when selecting PR #134's feature router.
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          target = Path("artifact-05/src/lib.rs")
+          feature = target.read_text()
+          main = subprocess.run(
+              ["git", "show", "refs/remotes/origin/main:artifact-05/src/lib.rs"],
+              check=True, capture_output=True, text=True,
+          ).stdout
+          start = main.index("async fn studio_model_status()")
+          end = main.index("async fn web_workspace()", start)
+          handlers = main[start:end]
+          assert 'async fn studio_workspace()' in handlers
+          assert 'async fn studio_model_status()' in handlers
+          anchor = '        .route("/", get(web_workspace))'
+          assert feature.count(anchor) == 1
+          feature = feature.replace(
+              anchor,
+              anchor + '\\n        .route("/studio", get(studio_workspace))'
+                     + '\\n        .route("/studio-api/status", get(studio_model_status))',
+          )
+          anchor = "async fn web_workspace()"
+          assert feature.count(anchor) == 1
+          feature = feature.replace(anchor, handlers + anchor)
+          target.write_text(feature)
+          PY
           test -s artifact-05/src/lib.rs
           test "$(git rev-list --count "$main_sha"..HEAD)" -ge 6
           echo "DISPOSABLE_STACK_BASE_SHA=$main_sha" >> "$GITHUB_ENV"
