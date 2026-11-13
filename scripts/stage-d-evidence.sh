@@ -41,7 +41,22 @@ if [[ -z "$mode" || -z "$evidence_dir" ]]; then
   exit 2
 fi
 
+# Operator witness artifacts contain private workspace data. Existing roots
+# must already be private. Never silently chmod or follow symlink ancestors.
+umask 077
 mkdir -p "$evidence_dir"
+python3 - "$evidence_dir" <<'PYPRIVATE'
+import os, stat, sys
+from pathlib import Path
+path = Path(sys.argv[1]).absolute()
+for node in (path, *path.parents):
+    if node.is_symlink():
+        raise SystemExit('Stage D evidence root may not use symlink ancestors')
+info = path.lstat()
+if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+    raise SystemExit('Stage D evidence root must be operator-owned and mode 0700')
+PYPRIVATE
+
 
 require_network_env() {
   : "${NEXUS_BASE_URL:?NEXUS_BASE_URL is required}"
@@ -254,11 +269,8 @@ EOF
     before="$evidence_dir/before.json"
     workspace_id="$(snapshot_workspace_id "$before")"
     after="$evidence_dir/after-survival.json"
-    curl --fail --silent --show-error \
-      -H "authorization: Bearer ${NEXUS_API_TOKEN}" \
-      "${NEXUS_BASE_URL%/}/v1/workspaces/${workspace_id}" \
-      > "$after"
-    python3 -m json.tool "$after" >/dev/null
+    NEXUS_WORKSPACE_ID="$workspace_id" \
+      python3 "$(dirname "$0")/stage-d-private-observation.py" snapshot "$after" >/dev/null
     canonical_equal "$before" "$after"
     sha="$(snapshot_sha "$before")"
     test "$sha" = "$(tr -d '\r\n' < "$evidence_dir/before.sha256")"
@@ -282,20 +294,10 @@ EOF
     before="$evidence_dir/before.json"
     workspace_id="$(snapshot_workspace_id "$before")"
     body="$evidence_dir/absence-response.json"
-    status="$(curl --silent --show-error --output "$body" --write-out '%{http_code}' \
-      -H "authorization: Bearer ${NEXUS_API_TOKEN}" \
-      "${NEXUS_BASE_URL%/}/v1/workspaces/${workspace_id}")"
-    [[ "$status" == "404" ]] || {
-      echo "destructive absence check returned ${status}, expected 404" >&2
-      exit 1
-    }
-    python3 - "$body" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding='utf-8') as f:
-    data = json.load(f)
-if data != {'error': 'workspace_not_found'}:
-    raise SystemExit('unexpected absence response body')
-PY
+    # Exact-origin, authenticated JSON 404 only; private, no-clobber output.
+    # No bearer token is ever placed on a subprocess argv.
+    NEXUS_WORKSPACE_ID="$workspace_id" \
+      python3 "$(dirname "$0")/stage-d-private-observation.py" absence "$body" >/dev/null
     sha="$(snapshot_sha "$before")"
     cat > "$evidence_dir/destructive-event.txt" <<EOF
 Lifecycle Event: destructive-backing-state-removal
@@ -327,11 +329,8 @@ EOF
     NEXUS_BASE_URL="$NEXUS_BASE_URL" NEXUS_API_TOKEN="$NEXUS_API_TOKEN" \
       bash "$(dirname "$0")/workspace-restore.sh" "$before" >/dev/null
     restored="$evidence_dir/after-restore.json"
-    curl --fail --silent --show-error \
-      -H "authorization: Bearer ${NEXUS_API_TOKEN}" \
-      "${NEXUS_BASE_URL%/}/v1/workspaces/${workspace_id}" \
-      > "$restored"
-    python3 -m json.tool "$restored" >/dev/null
+    NEXUS_WORKSPACE_ID="$workspace_id" \
+      python3 "$(dirname "$0")/stage-d-private-observation.py" snapshot "$restored" >/dev/null
     canonical_equal "$before" "$restored"
     sha="$(snapshot_sha "$before")"
     test "$sha" = "$(tr -d '\r\n' < "$evidence_dir/before.sha256")"
