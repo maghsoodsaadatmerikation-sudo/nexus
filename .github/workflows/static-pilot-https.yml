@@ -34,9 +34,9 @@ jobs:
         run: |
           set -euo pipefail
           # Live Render autoDeploy is OFF. Compare *all* events against the
-          # last independently verified DEPLOYED source, never silently
+          # independently verified published-asset source, never silently
           # against a newer unpromoted main-branch candidate.
-          baseline="d43f783e8c3966625e4cb836a8a2b72cdc70956e"
+          baseline="35be3d4b0da0d0f21e04a4a8a61f45e316a0058e"
           git show "$baseline:web/offline-pilot.html" > /tmp/nexus-current-deployed-pilot.html
           python3 scripts/verify-public-static-pilot.py \
             --expected /tmp/nexus-current-deployed-pilot.html > static-pilot-https-report.json
@@ -46,8 +46,9 @@ jobs:
           p=Path("static-pilot-https-report.json")
           report=json.loads(p.read_text())
           candidate_hash=hashlib.sha256(Path("web/offline-pilot.html").read_bytes()).hexdigest()
-          report["verified_basis"]="pinned_live_deployment"
-          report["deployed_source_commit"]="d43f783e8c3966625e4cb836a8a2b72cdc70956e"
+          report["verified_basis"]="pinned_public_assets"
+          report["asset_source_commit"]="35be3d4b0da0d0f21e04a4a8a61f45e316a0058e"
+          report["provider_deployment_commit_verified"]=False
           report["source_candidate_sha256"]=candidate_hash
           report["source_candidate_currently_live"]=(candidate_hash==report.get("observed_sha256"))
           p.write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
@@ -65,8 +66,8 @@ jobs:
           assert report["authority"]=="none"
           assert report["production_mutation"] is False
           assert report["authenticated_live_user"] is False
-          assert report["verified_basis"]=="pinned_live_deployment"
-          assert report["deployed_source_commit"]=="d43f783e8c3966625e4cb836a8a2b72cdc70956e"
+          assert report["verified_basis"]=="pinned_public_assets"
+          assert report["asset_source_commit"]=="35be3d4b0da0d0f21e04a4a8a61f45e316a0058e"
           print("NEXUS STATIC PILOT: PASS exact currently deployed HTTPS HTML")
           PY
       - name: Upload sanitized read-only report

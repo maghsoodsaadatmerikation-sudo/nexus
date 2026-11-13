@@ -27,5 +27,5 @@ $('chart-use').onclick=()=>{if(result!==null){$('chart-json').value=result;chart
 $('chart-json').addEventListener('input',()=>{chartData=null;$('chart').hidden=true});
 $('chart-draw').onclick=()=>{try{chartData=L.draw($('chart'),JSON.parse($('chart-json').value));$('chart').hidden=false;$('chart-status').textContent=''}catch{chartData=null;$('chart').hidden=true;$('chart-status').textContent=t('chartFailed')}};
 $('chart-export').onclick=()=>{if(!chartData||!confirm(t('plain')))return;const scope=epoch,snapshot=chartData;$('chart').toBlob(blob=>{if(!blob||scope!==epoch||snapshot!==chartData)return;const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download='nexus-chart.png';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)},'image/png')};
-window.NexusLabUI=Object.freeze({cancel,clear,render:renderCards});applyLanguage();
+window.NexusLabUI=Object.freeze({cancel,clear,render:renderCards,setChart:value=>{const checked=L.chart(value);$('chart-json').value=JSON.stringify(checked);$('chart-draw').click()}});applyLanguage();
 })();

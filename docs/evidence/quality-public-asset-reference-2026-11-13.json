@@ -1,0 +1,69 @@
+{
+  "asset_source_commit": "35be3d4b0da0d0f21e04a4a8a61f45e316a0058e",
+  "authenticated_rust_tested": false,
+  "authority": "none",
+  "candidate_promoted": false,
+  "observed_at": "2026-11-13T12:13:58.320433+00:00",
+  "origin": "https://nexus-offline-pilot.onrender.com",
+  "original_volume_restore_proven": false,
+  "production_mutation": false,
+  "provider_deployment_commit_verified": false,
+  "resources": {
+    "/": {
+      "bytes": 232381,
+      "exact_byte_match": true,
+      "expected_sha256": "273447e47c84c0ff293f7161de1efa01b468de9234d04fdeb258b0bad842a8e7",
+      "http_status": 200,
+      "mime_type": "text/html",
+      "ok": true,
+      "sha256": "273447e47c84c0ff293f7161de1efa01b468de9234d04fdeb258b0bad842a8e7"
+    },
+    "/icons/nexus-192.png": {
+      "bytes": 703,
+      "exact_byte_match": false,
+      "expected_sha256": "b6f466a5ca3e026ab56cd0e8b68a562ba38546b8f403d1d7c270e6bd673ddf14",
+      "http_status": 200,
+      "mime_type": "image/png",
+      "observed_rgba_sha256": "0fe4ccf56bbc283ec148567d8465faadae28274d240ab0e8910e036c0d13faab",
+      "ok": true,
+      "pixel_match": true,
+      "sha256": "f206583004bfe7cb394c22129ae99e2289edf8a82625d39afda0e25c638f73ed",
+      "source_rgba_sha256": "0fe4ccf56bbc283ec148567d8465faadae28274d240ab0e8910e036c0d13faab"
+    },
+    "/icons/nexus-512.png": {
+      "bytes": 1559,
+      "exact_byte_match": false,
+      "expected_sha256": "3f9e0f840461189f55b9732fa98215e5e5115492480ac48a7dc015aa13d1fc48",
+      "http_status": 200,
+      "mime_type": "image/png",
+      "observed_rgba_sha256": "8da28b019ed8d52136125b193f5e76347cdf2ac733ce2768a5a1082286f9bc74",
+      "ok": true,
+      "pixel_match": true,
+      "sha256": "e5ec6b6407b376704c1aa50f484f063a48a336b5d37ae357bc588c01c43bd8f1",
+      "source_rgba_sha256": "8da28b019ed8d52136125b193f5e76347cdf2ac733ce2768a5a1082286f9bc74"
+    },
+    "/manifest.json": {
+      "bytes": 602,
+      "exact_byte_match": true,
+      "expected_sha256": "f905138cbb0b0e20b5eb30019e7233890102f80755763e068160f01dab10f92e",
+      "http_status": 200,
+      "mime_type": "application/json",
+      "ok": true,
+      "sha256": "f905138cbb0b0e20b5eb30019e7233890102f80755763e068160f01dab10f92e"
+    },
+    "/service-worker.js": {
+      "bytes": 2688,
+      "exact_byte_match": true,
+      "expected_sha256": "c2a5923404bdf6fdd147e1082f6e989465786ba265936da84ef049da3e84afc2",
+      "http_status": 200,
+      "mime_type": "application/javascript",
+      "ok": true,
+      "sha256": "c2a5923404bdf6fdd147e1082f6e989465786ba265936da84ef049da3e84afc2"
+    }
+  },
+  "schema": "nexus.pilot-12.public-assets-witness.v1",
+  "server_credentials_used": false,
+  "status": "PASS",
+  "user_data_seen": false,
+  "verified_resources": 5
+}
