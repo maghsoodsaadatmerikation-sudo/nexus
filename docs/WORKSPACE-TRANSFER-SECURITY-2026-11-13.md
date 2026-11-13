@@ -37,6 +37,24 @@ making the credential visible in process listings on affected hosts.
   boundaries remain unchanged. A snapshot import still goes through
   the gateway's existing core revalidation.
 
+## Durable-state CI compatibility repair
+
+The first hosted PR verification exposed a stale v1.2 static contract:
+`v1.2-durable-state-resilience.sh` searched for workspace ID, JSON
+validation and import URL *inside the old shell wrappers*, then rejected
+their safe Python delegation. This failure was real, not a passing CI.
+
+The repaired contract validates the shell-to-Python entrypoints, source
+identity/atomicity/authentication guards and the real backup/restore test
+calls. It **preserves** all previously enforced bounded destructive
+Docker data-drill, container readiness, quarantine, full-data recovery and
+indeterminate storage-failure assertions. The mutation test fixture now
+includes the Python modules and rejects 11 new malicious boundary
+changes, increasing its negative mutation set from 20 to **31**.
+
+This is an engineering check. It cannot replace observed success of the
+complete hosted PR verification for the exact latest SHA.
+
 ## Verification
 
 ```sh
