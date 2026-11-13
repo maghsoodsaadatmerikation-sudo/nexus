@@ -45,6 +45,11 @@ s=p.read_text()
 anchor='edition = "2021"\n'
 assert s.count(anchor)==1 and 'rust-version =' not in s
 p.write_text(s.replace(anchor,anchor+'rust-version = "1.85"\n'))
+# Clean one trailing empty line present in the historical Stage 24 workflow.
+# This is source whitespace only; no workflow behavior is changed.
+p=Path('.github/workflows/stage24-static-site.yml')
+assert p.is_file()
+p.write_text(p.read_text().rstrip()+'\n')
 PY
 export CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback
 image='rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e'
@@ -57,6 +62,7 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e CARGO_HOME=/tmp/
  -v "$PWD:/app" -w /app "$image" cargo test --manifest-path artifact-05/Cargo.toml --locked
 git add -A
 git commit -m 'Review-only integration: six PRs, new gateway routes and Studio preservation'
+git diff --check "$main_sha" HEAD
 mkdir -p nexus-candidate
 git diff --binary --no-ext-diff "$main_sha" HEAD > nexus-candidate/candidate.patch
 test -s nexus-candidate/candidate.patch
