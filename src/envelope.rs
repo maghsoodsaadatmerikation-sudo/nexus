@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::{actions::Action, authority::Authority};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RequestEnvelope {
@@ -10,7 +10,17 @@ pub struct RequestEnvelope {
 }
 
 impl RequestEnvelope {
-    pub fn new(request_id: impl Into<String>, authority: Authority, action: Action, payload: impl Into<String>) -> Self {
-        Self { request_id: request_id.into(), authority, action, payload: payload.into() }
+    pub fn new(
+        request_id: impl Into<String>,
+        authority: Authority,
+        action: Action,
+        payload: impl Into<String>,
+    ) -> Self {
+        Self {
+            request_id: request_id.into(),
+            authority,
+            action,
+            payload: payload.into(),
+        }
     }
 }
