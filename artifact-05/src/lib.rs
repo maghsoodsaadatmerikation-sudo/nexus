@@ -371,6 +371,7 @@ where
         .route("/v1/connections", get(connections::catalog::<D>))
         .route("/v1/connections/invoke", post(connections::invoke::<D>))
         .route("/research-chat", get(research_chat::page))
+        .route("/research-workbench", get(research_chat::workbench_page))
         .route("/model-chat", get(generative_chat::page))
         .route("/v1/model-chat", post(generative_chat::respond::<D>))
         .route(
