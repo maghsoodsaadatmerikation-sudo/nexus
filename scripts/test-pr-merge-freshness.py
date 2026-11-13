@@ -62,6 +62,7 @@ class ProtectionTests(unittest.TestCase):
         self.assertEqual(report["status"], "PASS")
         self.assertEqual(report["observed_main_sha"], SHA)
         self.assertFalse(report["production_release_authorized"])
+        self.assertEqual(report["bypass_actor_visibility"], "observed_none")
 
     def test_current_real_ruleset_setting_is_blocked(self):
         self.ruleset["rules"][-1]["parameters"]["strict_required_status_checks_policy"] = False
@@ -97,6 +98,14 @@ class ProtectionTests(unittest.TestCase):
         self.ruleset["bypass_actors"] = [{"actor_id": 1}]
         with self.assertRaises(gate.Hold):
             self.check()
+
+    def test_readonly_github_token_may_redact_bypass_actors(self):
+        # GitHub intentionally hides this field from tokens without
+        # ruleset write access. Missing means unknown, never 'observed none'.
+        del self.ruleset["bypass_actors"]
+        report = self.check()
+        self.assertEqual(report["bypass_actor_visibility"],
+                         "redacted_not_verified")
 
     def test_inactive_or_wrong_scoped_ruleset_is_blocked(self):
         for path, value in (("enforcement", "disabled"),
