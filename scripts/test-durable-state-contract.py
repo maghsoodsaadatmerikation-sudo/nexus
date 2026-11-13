@@ -12,7 +12,9 @@ files = [
     "scripts/verify-storage-full.py", "docs/gateway-storage-full.md",
     "scripts/verify-storage-failure-http.py", "docs/gateway-storage-failure.md",
     "Dockerfile", "docs/DEPLOYMENT.md", "scripts/workspace-backup.sh",
-    "scripts/workspace-restore.sh", "scripts/readonly-verification.sh",
+    "scripts/workspace-restore.sh", "scripts/workspace-backup.py",
+    "scripts/workspace-restore.py", "scripts/test-workspace-backup.py",
+    "scripts/test-workspace-restore.py", "scripts/readonly-verification.sh",
     "scripts/v1.2-durable-state-resilience.sh",
     "scripts/data-snapshot.py", "docs/full-data-recovery.md", "artifact-05/src/main.rs",
     "artifact-05/src/lib.rs", "scripts/verify-data-recovery-http.py", "docs/gateway-health.md",
@@ -52,6 +54,35 @@ with tempfile.TemporaryDirectory(prefix="nexus-contract-") as tmp:
          '("/readyz", 200 if args.quarantined else 200,'),
         ("artifact-05/src/lib.rs", '.route("/readyz", get(readiness::<D>))',
          '.route("/obsolete-readyz", get(readiness::<D>))'),
+        # Transfer adapter and behavioral-test guardrails: fail if the
+        # compatibility entrypoints, identity/recovery boundaries or tests
+        # are removed. Synthetic-only fixture; production is never used.
+        ("scripts/workspace-backup.sh",
+         'exec python3 "$ROOT/scripts/workspace-backup.py" "$@"',
+         'true # skipped export'),
+        ("scripts/workspace-restore.sh",
+         'exec python3 "$ROOT/scripts/workspace-restore.py" "$@"',
+         'true # skipped import'),
+        ("scripts/workspace-backup.py",
+         'os.O_EXCL', 'os.O_TRUNC'),
+        ("scripts/workspace-backup.py",
+         'NEXUS_WORKSPACE_ID', 'NEXUS_WORKSPACE_OTHER_ID'),
+        ("scripts/workspace-backup.py",
+         'follow_symlinks=False', 'follow_symlinks=True'),
+        ("scripts/workspace-restore.py",
+         "getattr(os, 'O_NOFOLLOW', 0)", "0"),
+        ("scripts/workspace-restore.py",
+         'object_pairs_hook=no_duplicates', 'object_pairs_hook=None'),
+        ("scripts/workspace-restore.py",
+         'data=raw', "data=b'{}'"),
+        ("scripts/workspace-restore.py",
+         'status == 201', 'status == 200'),
+        ("scripts/readonly-verification.sh",
+         'python3 scripts/test-workspace-backup.py',
+         'true # removed private-export tests'),
+        ("scripts/readonly-verification.sh",
+         'python3 scripts/test-workspace-restore.py',
+         'true # removed private-import tests'),
     ])
     originals = {name: (fixture / name).read_text() for name in files}
     for name, old, new in mutations:
@@ -70,4 +101,4 @@ with tempfile.TemporaryDirectory(prefix="nexus-contract-") as tmp:
         else:
             assert result.returncode != 0, "unsafe cleanup passed"
             assert "BLOCKED" in result.stderr
-print("DURABLE WITNESS CLEANUP CONTRACT: PASS (valid + 20 rejected mutations)")
+print("DURABLE WITNESS CLEANUP CONTRACT: PASS (valid + 31 rejected mutations)")

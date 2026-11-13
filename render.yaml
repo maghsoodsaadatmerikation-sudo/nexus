@@ -5,8 +5,8 @@ services:
     plan: 0.5c-512mb
     region: frankfurt
     dockerfilePath: ./Dockerfile
-    autoDeployTrigger: checksPass
-    healthCheckPath: /
+    autoDeployTrigger: 'off'
+    healthCheckPath: /livez
     numInstances: 1
     maxShutdownDelaySeconds: 30
     envVars:
