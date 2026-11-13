@@ -28,7 +28,9 @@ def audit(apk: Path,badging: str,permissions: str,public_cert: str):
         need(dex.startswith(b"dex\n"), "bad-dex-header")
         need(len(dex)>2000, "dex-too-small")
     need("package: name='org.nexus.offline.stage25'" in badging,"unexpected-package-id")
-    need("sdkVersion:'26'" in badging and "targetSdkVersion:'35'" in badging,"bad-min-target-sdk")
+    need("sdkVersion:'26'" in badging and "targetSdkVersion:'35'" in badging,
+         "bad-min-target-sdk:"+"|".join(line[:130] for line in badging.splitlines()
+            if line.startswith(("sdkVersion:","targetSdkVersion:")))[:320])
     need(not re.search(r"(?m)^uses-permission",permissions),"manifest-requests-permissions")
     need("Signer #1 certificate SHA-256 digest" in public_cert,"signer-digest-missing")
     need(len(apk.read_bytes())>15000,"apk-too-small")
