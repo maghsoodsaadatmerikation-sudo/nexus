@@ -1,0 +1,28 @@
+name: NEXUS Public Studio Witness
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-browser:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[verify-studio-public]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Compare public HTTPS assets against this exact source
+        run: python3 scripts/verify-studio-public.py > studio-public-assets.json
+      - name: Exercise actual public-origin offline navigation with synthetic data
+        run: |
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
+          node scripts/test-studio-static-browser.mjs --public > studio-public-browser.json
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: studio-public-witness
+          path: studio-public-*.json
+          if-no-files-found: error

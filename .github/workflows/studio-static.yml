@@ -1,0 +1,40 @@
+name: NEXUS Static Studio Acceptance
+on:
+  pull_request:
+    paths:
+      - 'public/studio/**'
+      - 'web/studio*'
+      - 'scripts/*studio*'
+      - 'scripts/verify-public-pwa-assets.py'
+      - 'scripts/png_pixels.py'
+      - '.github/workflows/studio-static.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'public/studio/**'
+      - 'web/studio*'
+      - 'scripts/*studio*'
+      - '.github/workflows/studio-static.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  local-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - run: python3 scripts/build-studio-static.py --check
+      - run: python3 scripts/verify-studio-public.py --self-test
+      - name: Verify opt-in cache, encrypted offline reopen and corrupted-cache rejection
+        run: |
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
+          node scripts/test-studio-static-browser.mjs > studio-static-local.json
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: studio-static-local-witness
+          path: studio-static-local.json
+          if-no-files-found: error
