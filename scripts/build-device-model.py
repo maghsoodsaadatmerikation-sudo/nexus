@@ -12,7 +12,7 @@ def artifacts():
     assert manifest['schema']=='nexus.device-model.v1'
     assert len(manifest['revision'])==40 and manifest['download_bytes']==sum(x['bytes'] for x in manifest['assets'])
     assert manifest['download_bytes']<180000000
-    files={'model-manifest.json':raw,'device-engine.js':(source/'device-engine.js').read_bytes(),
+    files={'device-ui.js':(source/'device-ui.js').read_bytes(),'model-manifest.json':raw,'device-engine.js':(source/'device-engine.js').read_bytes(),
            'device-worker.js':(source/'device-worker.js').read_text().replace('__MANIFEST_SHA__',hashlib.sha256(raw).hexdigest()).encode()}
     for name,digest in manifest['vendor'].items():
         content=(source/'vendor'/name).read_bytes();assert hashlib.sha256(content).hexdigest()==digest,name

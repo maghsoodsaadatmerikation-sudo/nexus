@@ -17,9 +17,9 @@ export class DeviceEngine{
    worker.onerror=()=>{if(this.worker===worker)this.unload()};
    worker.onmessage=event=>{
     if(this.worker!==worker)return;const data=event.data;
-    if(data.type==='download'){this.onStatus(data);return}
+    if(data.type==='download'||data.type==='phase'){this.onStatus(data);return}
     if(data.type==='ready'){this.state='ready';this.details=data;this.pending=null;done(resolve,this.info());this.onStatus(data)}
-    else if(data.type==='error'){this.pending?.reject(Error(data.code));this.pending=null;if(data.phase==='loading')this.unload();else{this.state='ready';this.onStatus(data)}}
+    else if(data.type==='error'){this.onStatus(data);this.pending?.reject(Error(data.code));this.pending=null;if(data.phase==='loading')this.unload();else{this.state='ready';this.onStatus(data)}}
     else if(data.type==='result'&&this.pending?.id===data.id){const pending=this.pending;this.pending=null;this.state='ready';pending.resolve(data);this.onStatus({type:'ready',...this.details})}
    };
    worker.postMessage({type:'load',consent:true});

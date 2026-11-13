@@ -60,10 +60,10 @@ try{
  socket.addEventListener('message',e=>{const msg=JSON.parse(e.data),p=pending.get(msg.id);if(!p)return;pending.delete(msg.id);msg.error?p.reject(Error('cdp-failure')):p.resolve(msg.result)});
  await rpc('Page.enable');await rpc('Network.enable');await rpc('Page.navigate',{url:ORIGIN});
  await poll(()=>retryJs("document.readyState==='complete'"),10000,'page-load');
- stage='consent';await js("(async()=>{const {DeviceEngine}=await import('/device/device-engine.js');window.engine=new DeviceEngine({workerURL:new URL('/device/device-worker.js',location.href),onStatus:s=>window.lastModelStatus=s});try{await engine.load({consent:false})}catch(e){window.refused=e.message}return true})()");
+ stage='consent';await js("(async()=>{const {DeviceEngine}=await import('/device/device-engine.js');window.engine=new DeviceEngine({workerURL:new URL('/device/device-worker.js',location.href),onStatus:s=>{window.lastModelStatus=s;if(s.type==='phase')window.lastModelPhase=s.stage}});try{await engine.load({consent:false})}catch(e){window.refused=e.message}return true})()");
  assert(await js("window.refused==='explicit-consent-required'&&engine.state==='idle'"),'unapproved-model-download');checks.push('no-download-without-explicit-consent');
  stage='real-weights';await js("window.loadFailure=null;window.loaded=false;engine.load({consent:true}).then(()=>window.loaded=true).catch(e=>window.loadFailure=e.message);true");
- await poll(async()=>{const state=await retryJs("({ready:window.loaded,error:window.loadFailure,status:window.lastModelStatus?.type})");if(state?.error)throw Error('model-load-'+state.error);return state?.ready},300000,'real-weights-timeout');checks.push('real-pinned-q8-weights-loaded-in-wasm');
+ let lastArtifact=null;await poll(async()=>{const state=await retryJs("({ready:window.loaded,error:window.loadFailure,status:window.lastModelStatus,phase:window.lastModelPhase})");if(state?.phase&&state.phase!==lastArtifact&&state.status?.type==='phase'){lastArtifact=state.phase;process.stderr.write(JSON.stringify({event:'model-load-phase',phase:state.phase})+'\n')}if(state?.status?.file&&state.status.file!==lastArtifact){lastArtifact=state.status.file;process.stderr.write(JSON.stringify({event:'public-artifact-progress',...state.status})+'\n')}if(state?.error)throw Error('model-load-'+state.error);return state?.ready},300000,'real-weights-timeout');checks.push('real-pinned-q8-weights-loaded-in-wasm');
  const info=await js("engine.info()");assert(info.model===manifest.model&&info.max_input_tokens===768,'model-fingerprint');
  stage='inference';await js("window.answer=null;window.generationFailure=null;engine.generate({consent:true,configuration_id:engine.info().configuration_id,messages:[{role:'user',content:'Answer in one word: What color is grass?'}],max_output_tokens:16},new AbortController().signal).then(r=>window.answer=r).catch(e=>window.generationFailure=e.message);true");
  await poll(async()=>{const state=await retryJs("({answer:window.answer,error:window.generationFailure})");if(state?.error)throw Error('generation-'+state.error);return state?.answer},120000,'generation-timeout');
@@ -73,7 +73,8 @@ try{
  stage='erase';await js("(async()=>{await caches.open('unrelated-cache-sentinel');await engine.erase();return true})()");assert(await js("caches.keys().then(keys=>keys.includes('unrelated-cache-sentinel')&&!keys.includes('nexus-device-artifacts-v1'))"),'erase-touched-unrelated-storage');checks.push('model-cache-erasure-is-scoped');
  process.stdout.write(JSON.stringify({status:'PASS',checks,real_model_tested:true,model:manifest.model,revision:manifest.revision,runtime:manifest.runtime,download_bytes:manifest.download_bytes,output:answer.text,real_android_hardware:false,authority:'none'})+'\n');
 }catch(error){
- process.stderr.write(JSON.stringify({event:'pwa-browser-fail-closed',stage,checks,
+ let detail=null;try{if(stage==='real-weights')detail=await js('({status:window.lastModelStatus,phase:window.lastModelPhase})')}catch{}
+ process.stderr.write(JSON.stringify({event:'pwa-browser-fail-closed',stage,checks,detail,
   reason:String(error?.message||'unknown').replace(/[^A-Za-z0-9-]/g,'').slice(0,90),
   production_verified:false,authority:'none'})+'\n');
  throw error;

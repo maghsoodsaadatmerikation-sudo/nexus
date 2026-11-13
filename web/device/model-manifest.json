@@ -43,7 +43,14 @@
   "vendor": {
     "ort-wasm-simd-threaded.jsep.mjs": "08fb86ec433c78bfb032c5d84a68b8e8e5a8d81268fa39e24314179a5767a5b9",
     "LICENSE-transformers.txt": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-    "transformers-3.8.1.min.js": "aa5002b70e789798da263f5f99c62bd3e8fcd0c119258a493c40c180648365fa"
+    "transformers-3.8.1.min.js": "aa5002b70e789798da263f5f99c62bd3e8fcd0c119258a493c40c180648365fa",
+    "LICENSE-onnxruntime.txt": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
   },
-  "download_bytes": 160853313
+  "download_bytes": 160853313,
+  "vendor_sizes": {
+    "ort-wasm-simd-threaded.jsep.mjs": 44484,
+    "LICENSE-transformers.txt": 11358,
+    "transformers-3.8.1.min.js": 888173,
+    "LICENSE-onnxruntime.txt": 1073
+  }
 }
