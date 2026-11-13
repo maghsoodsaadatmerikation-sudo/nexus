@@ -40,8 +40,18 @@ cleanup(){
   wait "$EMULATOR_PID" 2>/dev/null || true
 }
 trap cleanup EXIT
-adb wait-for-device
-for i in $(seq 1 240); do
+adb start-server >/dev/null
+DEVICE_READY=0
+for i in $(seq 1 90); do
+  if [ "$(adb get-state 2>/dev/null || true)" = device ]; then DEVICE_READY=1; break; fi
+  if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
+    echo 'BLOCKED: emulator process exited before attaching to ADB'
+    exit 3
+  fi
+  sleep 2
+done
+test "$DEVICE_READY" = 1 || { echo 'BLOCKED: emulator never attached to ADB'; exit 3; }
+for i in $(seq 1 180); do
   value="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
   if [ "$value" = 1 ]; then break; fi
   if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
@@ -66,7 +76,8 @@ adb shell pm clear org.nexus.offline.stage25 >/dev/null
 
 # The platform instrumentation result is our only actual runtime witness.
 # The app and test APKs have no Android INTERNET permission.
-adb shell am instrument -w -r \
+timeout --signal=TERM --kill-after=10 240 \
+  adb shell am instrument -w -r \
   org.nexus.offline.stage26.test/.Stage26Instrumentation \
   > "$OUT/stage26-emulator-acceptance.txt"
 python3 scripts/test-stage26-emulator-witness.py \
