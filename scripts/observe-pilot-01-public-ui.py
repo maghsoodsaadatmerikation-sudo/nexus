@@ -22,9 +22,10 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def inspect_page(body, pinned, current):
     if len(body) > LIMIT:
         return "BODY_OVERSIZE"
-    # Historical pinned pages have onclick handlers but no stable button IDs;
-    # byte equality to the immutable pinned source is the stronger invariant.
-    if body != pinned:
+    # Admit only exact bytes from an immutable historical reference OR from
+    # this CI checkout's current source. This is UI-byte observation only:
+    # matching current HTML never attests the server executable or provider SHA.
+    if body != pinned and body != current:
         return "PINNED_UI_MISMATCH"
     if (b"<title>NEXUS" not in body or b'id="token"' not in body or
             b'onclick="createWorkspace()"' not in body or
@@ -80,6 +81,10 @@ def main():
         "public_origin": args.origin.rstrip("/"),
         "http_status": code,
         "pinned_deployed_commit": args.deployed_commit,
+        "pinned_reference_is_live_source_proof": False,
+        "current_html_byte_match": body is not None and body == current,
+        "historical_html_byte_match": body is not None and body == pinned,
+        "runtime_binary_attested": False,
         "pinned_html_sha256": hashlib.sha256(pinned).hexdigest(),
         "current_main_html_sha256": hashlib.sha256(current).hexdigest(),
         "observed_html_sha256": hashlib.sha256(body).hexdigest() if body is not None else None,
