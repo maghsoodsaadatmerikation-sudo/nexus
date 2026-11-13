@@ -1,0 +1,41 @@
+{
+  "actual_mobile_tested": false,
+  "assets": {
+    ".nojekyll": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "icons/nexus-192.png": {
+      "bytes": 1185,
+      "sha256": "b6f466a5ca3e026ab56cd0e8b68a562ba38546b8f403d1d7c270e6bd673ddf14"
+    },
+    "icons/nexus-512.png": {
+      "bytes": 2114,
+      "sha256": "3f9e0f840461189f55b9732fa98215e5e5115492480ac48a7dc015aa13d1fc48"
+    },
+    "index.html": {
+      "bytes": 52153,
+      "sha256": "cf1940cee5cbf3f3ecdfd7248f2e02271d08106269a154f7f7df3266433d5287"
+    },
+    "manifest.json": {
+      "bytes": 574,
+      "sha256": "210914216e2e740d0d25ea1ae768effdf38dd11e07e1ba60a682e4338589285d"
+    },
+    "service-worker.js": {
+      "bytes": 3338,
+      "sha256": "8f9b5742b06d29ba67681fd82e743b898784a150ab0d8ebb37e8f1c80b080bdd"
+    }
+  },
+  "authority": "human",
+  "background_worker_registration": false,
+  "browser_storage": "opt_in_AES_GCM_separate_mobile_namespace",
+  "private_api_calls": false,
+  "public_deployment_proven": false,
+  "railway_original_volume_restored": false,
+  "release_seal": false,
+  "requires_host": "HTTPS_or_localhost",
+  "schema": "nexus.stage23.mobile-pwa.v1",
+  "source_portable_sha256": "83b7f1e3f9f50f2a0ed87f6ea28dc61b1b10a53f708beadb962ca2d23547b186",
+  "status": "STATIC_ARTIFACT_NOT_HOSTED",
+  "uses_network_only_for": "four_public_pinned_static_assets"
+}

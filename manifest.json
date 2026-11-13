@@ -1,0 +1,26 @@
+{
+  "name": "NEXUS — Private Work Mode",
+  "short_name": "NEXUS Work",
+  "description": "Evidence-aware human-controlled project work, offline.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f1f6f5",
+  "theme_color": "#14675a",
+  "icons": [
+    {
+      "src": "icons/nexus-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/nexus-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
