@@ -33,6 +33,7 @@ export class DeviceEngine{
    const done=(fn,value)=>{clearTimeout(timer);fn(value)};
    this.pending={reject:error=>done(reject,error)};
    worker.onerror=()=>{if(this.worker===worker)this.unload('worker-failed')};
+   worker.onmessageerror=()=>{if(this.worker===worker)this.unload('worker-message-failed')};
    worker.onmessage=event=>{
     if(this.worker!==worker)return;const data=event.data;
     if(data.type==='download'||data.type==='phase'){this.onStatus(data);return}
@@ -40,7 +41,7 @@ export class DeviceEngine{
     else if(data.type==='error'){this.onStatus(data);this.pending?.reject(Error(data.code));this.pending=null;if(data.phase==='loading')this.unload();else{this.state='ready';this.onStatus(data)}}
     else if(data.type==='result'&&this.pending?.id===data.id){const pending=this.pending;this.pending=null;this.state='ready';this.evidence={generated:true,inputTokens:Number.isSafeInteger(data.input_tokens)?data.input_tokens:null,budget:this.evidence.budget,elapsed:Math.max(0,Math.round(performance.now()-this.evidence.started))};pending.resolve(data);this.onStatus({type:'ready',...this.details})}
    };
-   worker.postMessage({type:'load',consent:true});
+   try{worker.postMessage({type:'load',consent:true})}catch{this.unload('worker-start-failed')}
   });
  }
  generate(body,signal){
@@ -50,7 +51,9 @@ export class DeviceEngine{
    const abort=()=>this.unload(),timer=setTimeout(()=>this.unload('generation-timeout'),120000);
    const cleanup=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort)};
    this.pending={id,resolve:value=>{cleanup();resolve(value)},reject:error=>{cleanup();reject(error)}};
-   signal?.addEventListener('abort',abort,{once:true});this.worker.postMessage({type:'generate',id,body});this.onStatus({type:'generating'});
+   signal?.addEventListener('abort',abort,{once:true});
+   try{this.worker.postMessage({type:'generate',id,body})}catch{this.unload('worker-send-failed');return}
+   this.onStatus({type:'generating'});
   });
  }
  async erase(){this.unload();await caches.delete(CACHE)}

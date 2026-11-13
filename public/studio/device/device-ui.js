@@ -52,6 +52,8 @@ $('device-report').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.str
 function recovery(code){const messages={
  'generation-timeout':['Generation timed out and the model was stopped. Shorten the request and reload.','مهلت تولید تمام شد و مدل متوقف شد؛ درخواست را کوتاه و مدل را دوباره بارگذاری کن.'],
  'worker-start-failed':['The model process could not start. Check browser permissions and retry.','پردازش مدل شروع نشد؛ مجوزهای مرورگر را بررسی و دوباره تلاش کن.'],
+ 'worker-send-failed':['The request could not reach the local model. Reload the model and prepare the request again.','درخواست به مدل محلی نرسید؛ مدل را دوباره بارگذاری و درخواست را دوباره آماده کن.'],
+ 'worker-message-failed':['Local model communication failed and the model was stopped. Reload and retry.','ارتباط با مدل محلی ناموفق بود و مدل متوقف شد؛ دوباره بارگذاری و تلاش کن.'],
  'worker-failed':['The model process stopped unexpectedly. Unload and retry; check memory.','پردازش مدل ناگهان متوقف شد؛ مدل را خارج و دوباره بارگذاری کن و رم را بررسی کن.'],
  'load-timeout':['Loading timed out. Reconnect and retry; complete verified files can be reused.','مهلت بارگذاری تمام شد؛ اتصال را بررسی و دوباره تلاش کن. فایل‌های کامل بررسی‌شده قابل استفادهٔ مجددند.'],
  'insufficient-device-memory':['Reported memory is below 4 GB; use another device or the local guide.','رم گزارش‌شده کمتر از ۴ گیگابایت است؛ از دستگاه دیگر یا راهنمای محلی استفاده کن.'],
