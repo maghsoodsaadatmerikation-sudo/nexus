@@ -1,10 +1,11 @@
-name: NEXUS Stage 24 — Publish Isolated Reviewed Mobile Snapshot
+name: NEXUS Stage 24 — Read-Only Publication Review
 on:
   pull_request:
     branches:
       - feat/work-mode-20261113
     paths:
       - '.github/workflows/stage24-static-site.yml'
+      - '.github/workflows/stage24-publish-branch.yml'
       - 'scripts/stage24-static-publish-check.py'
       - 'scripts/test-stage24-static-publish.py'
       - 'docs/STAGE-24-STATIC-SNAPSHOT-AND-PAGES.md'
