@@ -4,6 +4,7 @@ on:
     paths:
       - 'public/studio/**'
       - 'web/studio*'
+      - 'web/device/**'
       - 'scripts/*studio*'
       - 'scripts/verify-public-pwa-assets.py'
       - 'scripts/png_pixels.py'
@@ -13,6 +14,7 @@ on:
     paths:
       - 'public/studio/**'
       - 'web/studio*'
+      - 'web/device/**'
       - 'scripts/*studio*'
       - '.github/workflows/studio-static.yml'
   workflow_dispatch:

@@ -17,8 +17,8 @@ async function checked(asset,{persist=true}={}){
  const reader=response.body.getReader(),chunks=[];let size=0;
  try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>asset.bytes)fail('artifact-size');chunks.push(value);postMessage({type:'download',file:new URL(asset.url).pathname.split('/').at(-1),loaded:size,total:asset.bytes})}}finally{await reader.cancel().catch(()=>{})}
  if(size!==asset.bytes)fail('artifact-size');const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength}
- if(await hex(bytes)!==asset.sha256)fail('artifact-integrity');
- if(cache)await cache.put(asset.url,new Response(bytes));return bytes.buffer;
+ postMessage({type:'phase',stage:'verify:'+new URL(asset.url).pathname.split('/').at(-1)});if(await hex(bytes)!==asset.sha256)fail('artifact-integrity');
+ if(cache){postMessage({type:'phase',stage:'cache:'+new URL(asset.url).pathname.split('/').at(-1)});await cache.put(asset.url,new Response(bytes))}postMessage({type:'phase',stage:'ready:'+new URL(asset.url).pathname.split('/').at(-1)});return bytes.buffer;
 }
 async function load(){
  if(phase!=='idle')fail('model-busy');phase='loading';postMessage({type:'phase',stage:'manifest'});
@@ -30,7 +30,7 @@ async function load(){
  const runtimeURL=await vendor('transformers-3.8.1.min.js'),moduleURL=await vendor('ort-wasm-simd-threaded.jsep.mjs');
  const {pipeline,env}=await import(runtimeURL);
  env.allowLocalModels=false;env.allowRemoteModels=true;env.useBrowserCache=false;env.useFSCache=false;
- env.backends.onnx.wasm.numThreads=1;env.backends.onnx.wasm.proxy=false;
+ env.backends.onnx.wasm.initTimeout=30000;env.backends.onnx.wasm.numThreads=1;env.backends.onnx.wasm.proxy=false;
  env.backends.onnx.wasm.wasmPaths={mjs:moduleURL};
  postMessage({type:'phase',stage:'wasm-bytes'});
  const wasm=manifest.assets.find(a=>a.url.endsWith('.wasm'));env.backends.onnx.wasm.wasmBinary=new Uint8Array(await checked(wasm));
@@ -42,7 +42,7 @@ async function load(){
   return new Response(await checked(asset),{headers:{'content-type':url.endsWith('.json')?'application/json':'application/octet-stream'}});
  };
  postMessage({type:'phase',stage:'model-session'});
- pipe=await pipeline('text-generation',manifest.model,{revision:manifest.revision,device:'wasm',dtype:'q8'});
+ pipe=await pipeline('text-generation',manifest.model,{revision:manifest.revision,device:'wasm',dtype:'q8',session_options:{graphOptimizationLevel:'disabled'}});
  phase='ready';postMessage({type:'ready',configuration_id:MANIFEST_SHA,model:manifest.model,policy:POLICY,max_output_tokens:manifest.max_output_tokens,max_input_tokens:manifest.max_input_tokens});
 }
 async function generate(id,body){

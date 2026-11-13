@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'web/device/**'
+      - 'web/studio-app.js'
+      - 'scripts/build-studio-static.py'
       - 'public/studio/device/**'
       - 'scripts/*device-model*'
       - '.github/workflows/device-model.yml'
@@ -18,6 +20,8 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 scripts/build-device-model.py --check
+      - name: Exercise reviewed local transport and stale-response isolation
+        run: python3 scripts/test-device-model-ui.py
       - name: Run actual pinned small model in a disposable browser
         run: |
           export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"

@@ -34,6 +34,8 @@ def sanity():
     assert {icon['src'] for icon in manifest['icons']}=={'./icons/nexus-192.png','./icons/nexus-512.png'}
 
 
+for name in ['device-engine.js','device-worker.js','device-ui.js','model-manifest.json']:
+    observer.ASSETS['/device/'+name]=('public/studio/device/'+name,'application/json' if name.endswith('.json') else 'javascript')
 observer.source_sanity=sanity
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--self-test',action='store_true');parser.add_argument('--attempts',type=int,default=1);args=parser.parse_args()

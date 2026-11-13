@@ -41,7 +41,7 @@ not erase user data. Closing the last controlled tab completes worker removal.
 
 ## Verification and limits
 
-The worker caches exactly the public index page and checks its SHA-256 before
+The worker caches the public index page and four pinned device-model control files and checks its SHA-256 before
 installation and before returning an offline fallback. It intercepts only
 same-origin GET navigation to the entry page or index.html, without query
 parameters. It never caches model responses, source passages, user uploads,
@@ -62,3 +62,6 @@ voice support and browser retention vary by device. This static site provides
 no hosted model, user accounts, cross-device sync, server-side execution or
 Stage D durable-core attestation. Live web sources and remote models still need
 network access. No paid service or model is requested by this static package.
+
+The optional [device model](DEVICE-MODEL.md) is an explicit local download, not
+a hosted provider. The model artifact cache remains separate from the app shell.
