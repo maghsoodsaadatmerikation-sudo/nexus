@@ -23,8 +23,15 @@ class PilotUIClassificationTests(unittest.TestCase):
     def test_exact_current_pinned_html_is_recognized(self):
         self.assertEqual(observer.inspect_page(CURRENT, CURRENT, CURRENT), "CURRENT_MAIN_UI")
 
-    def test_mismatched_runtime_html_fails_closed(self):
-        self.assertEqual(observer.inspect_page(CURRENT, LEGACY, CURRENT), "PINNED_UI_MISMATCH")
+    def test_current_checkout_html_is_accepted_as_current_ui_only(self):
+        self.assertEqual(observer.inspect_page(CURRENT, LEGACY, CURRENT), "CURRENT_MAIN_UI")
+
+    def test_unrelated_runtime_html_still_fails_closed(self):
+        unrelated = CURRENT + b'<script>unexpected source</script>'
+        self.assertEqual(observer.inspect_page(unrelated, LEGACY, CURRENT), "PINNED_UI_MISMATCH")
+
+    def test_historical_pin_remains_recognizable_if_main_changes(self):
+        self.assertEqual(observer.inspect_page(LEGACY, LEGACY, CURRENT), "OLDER_PINNED_UI")
 
     def test_invalid_exact_html_fails_closed(self):
         self.assertEqual(observer.inspect_page(b"<title>NEXUS</title>", b"<title>NEXUS</title>", CURRENT),
