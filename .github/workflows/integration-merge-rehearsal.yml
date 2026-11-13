@@ -142,8 +142,8 @@ jobs:
           assert feature.count(anchor) == 1
           feature = feature.replace(
               anchor,
-              anchor + '\\n        .route("/studio", get(studio_workspace))'
-                     + '\\n        .route("/studio-api/status", get(studio_model_status))',
+              anchor + '\n        .route("/studio", get(studio_workspace))'
+                     + '\n        .route("/studio-api/status", get(studio_model_status))',
           )
           anchor = "async fn web_workspace()"
           assert feature.count(anchor) == 1
