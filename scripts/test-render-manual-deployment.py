@@ -31,33 +31,33 @@ class ManualDeploymentBoundaryTests(unittest.TestCase):
         for mode in ("checksPass", "commit", "yes", "true", "false"):
             with self.subTest(mode=mode):
                 self.assert_rejected(self.valid.replace(
-                    "autoDeployTrigger: off", f"autoDeployTrigger: {mode}"))
+                    "autoDeployTrigger: 'off'", f"autoDeployTrigger: {mode}"))
 
     def test_omitted_deploy_guard_is_rejected(self):
-        self.assert_rejected(self.valid.replace("    autoDeployTrigger: off\n", ""))
+        self.assert_rejected(self.valid.replace("    autoDeployTrigger: 'off'\n", ""))
 
     def test_duplicate_deploy_guard_is_rejected(self):
         self.assert_rejected(self.valid.replace(
-            "    autoDeployTrigger: off\n",
-            "    autoDeployTrigger: off\n    autoDeployTrigger: checksPass\n"))
+            "    autoDeployTrigger: 'off'\n",
+            "    autoDeployTrigger: 'off'\n    autoDeployTrigger: checksPass\n"))
 
     def test_legacy_auto_deploy_key_is_rejected(self):
         self.assert_rejected(self.valid.replace(
-            "    autoDeployTrigger: off\n",
-            "    autoDeployTrigger: off\n    autoDeploy: true\n"))
+            "    autoDeployTrigger: 'off'\n",
+            "    autoDeployTrigger: 'off'\n    autoDeploy: true\n"))
 
     def test_comment_with_fake_guard_is_rejected(self):
         self.assert_rejected(self.valid.replace(
-            "    autoDeployTrigger: off\n",
-            "    autoDeployTrigger: checksPass\n    # autoDeployTrigger: off\n"))
+            "    autoDeployTrigger: 'off'\n",
+            "    autoDeployTrigger: checksPass\n    # autoDeployTrigger: 'off'\n"))
 
     def test_second_service_is_rejected(self):
-        self.assert_rejected(self.valid + "  - type: web\n    autoDeployTrigger: off\n")
+        self.assert_rejected(self.valid + "  - type: web\n    autoDeployTrigger: 'off'\n")
 
     def test_unreviewed_service_override_is_rejected(self):
         self.assert_rejected(self.valid.replace(
-            "    autoDeployTrigger: off\n",
-            "    autoDeployTrigger: off\n    buildFilter: {}\n"))
+            "    autoDeployTrigger: 'off'\n",
+            "    autoDeployTrigger: 'off'\n    buildFilter: {}\n"))
 
     def test_disk_removed_or_changed_is_rejected(self):
         self.assert_rejected(self.valid.replace("      mountPath: /data", "      mountPath: /tmp"))
@@ -71,7 +71,7 @@ class ManualDeploymentBoundaryTests(unittest.TestCase):
 
     def test_inline_yaml_and_aliases_are_rejected(self):
         self.assert_rejected(self.valid.replace(
-            "    autoDeployTrigger: off", "    autoDeployTrigger: &mode off"))
+            "    autoDeployTrigger: 'off'", "    autoDeployTrigger: &mode off"))
         self.assert_rejected(self.valid.replace(
             "services:", "services: []"))
 
@@ -84,7 +84,7 @@ class ManualDeploymentBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "render.yaml"
             path.write_text(self.valid.replace(
-                "autoDeployTrigger: off", "autoDeployTrigger: checksPass"),
+                "autoDeployTrigger: 'off'", "autoDeployTrigger: checksPass"),
                 encoding="utf-8")
             result = subprocess.run(
                 [sys.executable, "-O", str(MODULE_PATH), str(path)],
