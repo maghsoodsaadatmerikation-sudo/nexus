@@ -331,8 +331,8 @@ impl<D: ConstitutionalDelegate> AppState<D> {
         self
     }
 
-    pub fn with_model_service(mut self, service:generative_chat::ModelService)->Self{
-        self.model_service=Arc::new(service);
+    pub fn with_model_service(mut self, service: generative_chat::ModelService) -> Self {
+        self.model_service = Arc::new(service);
         self
     }
     pub fn with_research_chat(mut self, service: research_chat::ResearchChat) -> Self {
@@ -371,8 +371,8 @@ where
         .route("/v1/connections", get(connections::catalog::<D>))
         .route("/v1/connections/invoke", post(connections::invoke::<D>))
         .route("/research-chat", get(research_chat::page))
-        .route("/model-chat",get(generative_chat::page))
-        .route("/v1/model-chat",post(generative_chat::respond::<D>))
+        .route("/model-chat", get(generative_chat::page))
+        .route("/v1/model-chat", post(generative_chat::respond::<D>))
         .route(
             "/research-chat-history.js",
             get(research_chat::history_script),
@@ -476,7 +476,7 @@ async fn recovery_boundary<D: ConstitutionalDelegate>(
         && (path == "/v1/connections"
             || path == "/v1/connections/invoke"
             || path == "/v1/research-chat"
-        || path == "/v1/model-chat"
+            || path == "/v1/model-chat"
             || path == "/v1/workspaces"
             || path.starts_with("/v1/workspaces/"))
     {
