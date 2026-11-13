@@ -142,7 +142,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test -z "$(git ls-remote --heads origin "refs/heads/$SITE_BRANCH")"
           git switch --orphan "$SITE_BRANCH"
-          git rm --cached -r -q -- .
+          test -z "$(git ls-files)"
           cp -a "$RUNNER_TEMP/nexus-stage24-verified-site/." .
           git add -f -- .nojekyll index.html manifest.json service-worker.js \
             icons/nexus-192.png icons/nexus-512.png nexus-stage23-integrity.json
