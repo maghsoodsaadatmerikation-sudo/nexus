@@ -36,6 +36,12 @@ window.addEventListener('load',async()=>{
   const preview=NexusWorkMode.context(current,current.tasks[0].id);
   assert(preview.includes(INSTRUCTION)&&preview.includes(MARK)&&preview.includes('Current task'),
      'only-reviewed-project-context-with-task');
+  assert(el('local-brief').disabled===false&&!el('local-brief-content').textContent,
+    'offline-briefing-requires-user-interaction');
+  el('local-brief').click();
+  assert(el('local-brief-content').textContent.includes(INSTRUCTION)&&
+         el('local-brief-content').textContent.includes(MARK),
+    'local-briefing-includes-opted-in-preferences-without-network');
   el('prepare').click();
   assert(el('prompt').value.includes(INSTRUCTION)&&calls.length===0&&el('share').checked===false,
     'prepared-context-does-not-auto-send');
@@ -47,6 +53,8 @@ window.addEventListener('load',async()=>{
      'archive-ciphertext-does-not-expose-memory-or-custom-name');
   assert(current.id===originalID,'save-does-not-replace-project');
   el('lock').click();assert(!vault.unlocked&&current===null,'explicit-lock-clears-unlocked-project');
+  assert(el('local-brief-content').textContent===''&&el('local-brief').disabled,
+    'locking-removes-any-visible-private-briefing');
   fill('pass',pass);el('unlock').click();await wait(()=>!busy);
   assert(vault.unlocked&&current===null,'unlock-does-not-open-project-automatically');
   el('projects').value=originalID;el('projects').dispatchEvent(new Event('change'));el('open').click();
@@ -58,7 +66,12 @@ window.addEventListener('load',async()=>{
     'custom-style-and-name-resume-from-encrypted-storage');
   assert(current.tasks.length===1&&current.tasks[0].status==='todo',
     'encrypted-profile-reopen-cannot-complete-a-task');
+  el('local-brief').click();
+  assert(el('local-brief-content').textContent.includes(MARK),
+    'reopened-private-briefing-requires-explicit-preview');
   fill('assistant-memory',Array(9).fill('synthetic preference').join('\n'));
+  assert(el('local-brief-content').textContent==='',
+    'editing-memory-clears-stale-visible-preview');
   el('edit-project').click();
   assert(current.memory.length===2&&projectDraft,'overlimit-edit-refused-atomically');
   fill('assistant-memory','Keep the structure minimal');
