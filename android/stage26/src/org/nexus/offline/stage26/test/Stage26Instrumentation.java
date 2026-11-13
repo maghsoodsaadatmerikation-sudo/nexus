@@ -85,7 +85,7 @@ public final class Stage26Instrumentation extends Instrumentation {
                     "({ready:document.readyState==='complete'&&" +
                     "!!document.getElementById('native-android')&&" +
                     "!!globalThis.NexusWorkMode," +
-                    "url:location.href,worker:!!navigator.serviceWorker})");
+                    "url:location.href})");
                 if (result.optBoolean("ready",false)) return result;
             } catch (Exception ignored) {
                 // WebView may not have committed the first document yet.
@@ -230,7 +230,13 @@ public final class Stage26Instrumentation extends Instrumentation {
             WebView page=webView(first);
             JSONObject initial=awaitPage(page);
             check(URL.equals(initial.getString("url")),"local-asset-origin");
-            check(!initial.getBoolean("worker"),"no-service-worker");
+            JSONObject workers=asyncScript(page,
+                "const sw=navigator.serviceWorker;" +
+                "const registrations=sw&&sw.getRegistrations?" +
+                "await sw.getRegistrations():[];" +
+                "return {installed:registrations.length,controlled:!!(sw&&sw.controller)};");
+            check(workers.getInt("installed")==0 &&
+                  !workers.getBoolean("controlled"),"no-active-or-installed-service-worker");
             WebSettings settings=page.getSettings();
             check(!settings.getAllowFileAccess(),"no-arbitrary-file-access");
             check(!settings.getAllowContentAccess(),"no-ambient-provider-access");
