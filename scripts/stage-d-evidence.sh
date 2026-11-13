@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# No captured evidence or lifecycle receipt may overwrite prior proof.
+set -o noclobber
 
 usage() {
   cat <<'EOF'
