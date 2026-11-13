@@ -139,11 +139,17 @@ jobs:
           set -euo pipefail
           image='rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e'
           cp artifact-05/Cargo.lock "$RUNNER_TEMP/gateway-lock.before"
+          # Git's temporary merge pulled in reqwest. Declare the repository's
+          # pinned minimum compiler and enforce MSRV-aware dependency selection.
+          # Both changes are disposable; no manifest or lock is published.
+          sed -i '/^edition = "2021"$/a rust-version = "1.85"' artifact-05/Cargo.toml
+          export CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback
           # Only the scratch checkout is touched. New dependency resolutions
           # require exact package review before any publication.
           docker run --rm \
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp/home -e CARGO_HOME=/tmp/cargo \
+            -e CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
             -v "$PWD:/app" -w /app "$image" \
             cargo generate-lockfile --manifest-path artifact-05/Cargo.toml
           python3 - <<'PY'
