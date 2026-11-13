@@ -110,6 +110,9 @@ quality test in this repository's synthetic acceptance suite.
   max 100,000,000. It reserves the **requested maximum output tokens** before
   dispatch, not the eventual token usage. Invalid operator settings fail closed.
   An exhausted budget responds HTTP 429 with `Retry-After`.
+- `NEXUS_MODEL_INPUT_BYTES_PER_HOUR`: positive integer, default 1,048,576,
+  max 100,000,000. Counts request-body bytes plus the model policy bytes as
+  a conservative approximation to submitted input; it is not a token count.
 - The model budget is **per process**, reset by restart, and counts attempts
   that may have reached the provider even when they fail or time out. It does
   not include input tokens, prices, retries outside NEXUS or other replicas.
