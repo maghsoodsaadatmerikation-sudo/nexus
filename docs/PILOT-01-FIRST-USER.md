@@ -143,3 +143,31 @@ It also records the official, conditional in-browser Railway Console
 file-browser route and why it is **not yet verified as enabled** for this
 account. Neither diagnostic evidence nor a mobile-browser option closes the
 real production backup/recoverability or human acceptance gates above.
+
+
+## 13 November 2026 — current source observer correction
+
+The Pilot 01 public observer used to compare every public HTML body against
+only the old historical pinned reference, returning `PINNED_UI_MISMATCH`
+before considering the *current checked-out source*. This made the documented
+`CURRENT_MAIN_UI` state unreachable whenever main's HTML had changed.
+
+Run `43434511098` recorded public HTTP 200 and identical observed/current
+HTML SHA-256 `1d7ff0d25d9d2e7caca465fb524add9e6e63a3687a716fe9b2aa102a8857e27e`,
+but a different historical pinned SHA
+`bf98159eedb9259fa4f6f1921897f5db7defba54af3360685c57d79ea0e2d29d`.
+The old gate therefore failed despite its read-only observed page matching
+the exact current source bytes. The disposable browser job passed separately.
+
+The corrected observer accepts **only** exact bytes matching either the
+immutable historical Git source or the checkout's current `web/index.html`.
+Any third body remains `BLOCKED`; malformed or oversized HTML still fails.
+Reports explicitly mark current/historical match separately, and always mark
+binary attestation false, authenticated session untested, production mutation
+false and promotion readiness false. An HTML byte match is not proof of
+deployed source tree, server executable, authenticated request execution,
+backup recovery, availability after observation or permission to release.
+
+The workflow still checks public HTTPS without credentials or writes. This
+source repair is not a promise that a sleeping Railway service is always
+reachable, and no provider configuration changes are made.
