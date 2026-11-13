@@ -75,24 +75,28 @@ function draw(){
  }
  lockControls();
 }
+function mdSafe(value){
+ return String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+   .replace(/([\\`*_{|}\[\]()#+.!-])/g,'\\$1');
+}
 function markdown(){
- const out=['# NEXUS source-by-source research dossier','','Question: '+initialQuestion,
+ const out=['# NEXUS source-by-source research dossier','','Question: '+mdSafe(initialQuestion),
   'Status: user-curated, unverified evidence; not autonomous Deep Research',''];
  for(const step of record){
-  out.push('## Search '+step.number+': '+step.query,'');
+  out.push('## Search '+step.number+': '+mdSafe(step.query),'');
   if(!step.sources.length)out.push('No source excerpts returned.','');
   for(const item of step.sources){
-   out.push('### ['+step.number+':'+item.id+'] '+item.title,
+   out.push('### ['+step.number+':'+mdSafe(item.id)+'] '+mdSafe(item.title),
       'URL: '+item.url,
-      'Origin: '+item.origin+'; Provider: '+item.provider,
+      'Origin: '+mdSafe(item.origin)+'; Provider: '+mdSafe(item.provider),
       'Retrieved UTC: '+(item.retrieved_at_unix?new Date(item.retrieved_at_unix*1000).toISOString():'unknown'),
       'Excerpt (unverified):',
-      item.excerpt,'');
+      mdSafe(item.excerpt),'');
   }
-  out.push('Provider results: '+step.providers.join('; '),
-    'Uncertainties: '+step.unknowns.join('; '),'');
+  out.push('Provider results: '+mdSafe(step.providers.join('; ')),
+    'Uncertainties: '+mdSafe(step.unknowns.join('; ')),'');
  }
- out.push('## User interpretation (unverified)','',$('notes').value,
+ out.push('## User interpretation (unverified)','',mdSafe($('notes').value),
    '','No verified factual conclusion, automated judgment, model synthesis or source authenticity is claimed.');
  return out.join('\n').slice(0,100000);
 }
