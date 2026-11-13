@@ -4,7 +4,7 @@ from pathlib import Path
 import argparse
 root = Path(__file__).resolve().parents[1]
 shell = (root/'web/studio-shell.html').read_text()
-for marker, filename in [('/*STUDIO_CORE*/','studio-core.js'),('/*STUDIO_APP*/','studio-app.js')]:
+for marker, filename in [('/*STUDIO_CORE*/','studio-core.js'),('/*STUDIO_LAB*/','studio-lab.js'),('/*STUDIO_APP*/','studio-app.js'),('/*STUDIO_LAB_UI*/','studio-lab-ui.js')]:
     code = (root/'web'/filename).read_text()
     if '</script' in code.lower():
         raise ValueError('script closing sequence is not permitted in bundled sources')
