@@ -1,6 +1,6 @@
 /* Public Studio code only. Registration requires an explicit button click. */
 'use strict';
-const EXPECTED_SHA256='47281c15338d055766c66ddf76cac19a7770e31eb7b15a57ef4782f87cb85e15';
+const EXPECTED_SHA256='4dfd86ec3382fd476f3932d0b2ebe3b467375aa346abe6d90aa5cae6142dc70c';
 const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+EXPECTED_SHA256.slice(0,16);
 const ENTRY=new URL('./',self.location.href).href;
 async function verified(response){
@@ -9,11 +9,16 @@ async function verified(response){
  const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
  return digest===EXPECTED_SHA256;
 }
-self.addEventListener('install',event=>event.waitUntil((async()=>{
+async function cacheShell(){
  const response=await fetch(ENTRY,{cache:'no-store',credentials:'omit',redirect:'error'});
  if(!await verified(response))throw Error('studio-integrity-mismatch');
- const cache=await caches.open(CACHE);await cache.put(ENTRY,response);await self.skipWaiting();
-})()));
+ const cache=await caches.open(CACHE);await cache.put(ENTRY,response);
+}
+self.addEventListener('install',event=>event.waitUntil((async()=>{await cacheShell();await self.skipWaiting()})()));
+self.addEventListener('message',event=>{
+ if(event.data?.type!=='refresh-public-shell'||!event.ports[0])return;
+ event.waitUntil(cacheShell().then(()=>event.ports[0].postMessage({ok:true}),()=>event.ports[0].postMessage({ok:false})));
+});
 self.addEventListener('activate',event=>event.waitUntil((async()=>{
  await Promise.all((await caches.keys()).filter(n=>n.startsWith(PREFIX)&&n!==CACHE).map(n=>caches.delete(n)));
  await self.clients.claim();

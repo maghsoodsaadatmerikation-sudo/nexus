@@ -26,7 +26,8 @@ let changing=false;
 async function change(fn){if(changing)return;changing=true;$('studio-offline').disabled=$('studio-remove-offline').disabled=true;try{if(!isSecureContext||!('serviceWorker'in navigator))throw Error('unsupported');await fn()}catch{$('studio-offline-state').textContent=text('Offline setup failed. Reconnect and try again in a supported browser.','آماده‌سازی آفلاین انجام نشد؛ با اتصال اینترنت و مرورگر پشتیبانی‌شده دوباره تلاش کن.')}finally{changing=false;$('studio-offline').disabled=$('studio-remove-offline').disabled=false}}
 $('studio-offline').onclick=()=>change(async()=>{
  const registration=await navigator.serviceWorker.register(new URL('service-worker.js',base),{scope:base.href,updateViaCache:'none'});
- const limit=Date.now()+15000;while(!registration.active||registration.active.state!=='activated'){if(Date.now()>limit)throw Error('activation-timeout');await new Promise(r=>setTimeout(r,100))}
+ const limit=Date.now()+15000;while(registration.installing||registration.waiting||!registration.active||registration.active.state!=='activated'){if(Date.now()>limit)throw Error('activation-timeout');await new Promise(r=>setTimeout(r,100))}
+ await new Promise((resolve,reject)=>{const channel=new MessageChannel(),timer=setTimeout(()=>{channel.port1.close();reject(Error('cache-refresh-timeout'))},10000);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();event.data?.ok?resolve():reject(Error('cache-refresh-failed'))};registration.active.postMessage({type:'refresh-public-shell'},[channel.port2])});
  const names=(await caches.keys()).filter(n=>n.startsWith(prefix));let present=false;
  for(const name of names){const cache=await caches.open(name);if(await cache.match(base.href))present=true}
  if(!present)throw Error('missing-shell');
@@ -51,11 +52,16 @@ async function verified(response){
  const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
  return digest===EXPECTED_SHA256;
 }
-self.addEventListener('install',event=>event.waitUntil((async()=>{
+async function cacheShell(){
  const response=await fetch(ENTRY,{cache:'no-store',credentials:'omit',redirect:'error'});
  if(!await verified(response))throw Error('studio-integrity-mismatch');
- const cache=await caches.open(CACHE);await cache.put(ENTRY,response);await self.skipWaiting();
-})()));
+ const cache=await caches.open(CACHE);await cache.put(ENTRY,response);
+}
+self.addEventListener('install',event=>event.waitUntil((async()=>{await cacheShell();await self.skipWaiting()})()));
+self.addEventListener('message',event=>{
+ if(event.data?.type!=='refresh-public-shell'||!event.ports[0])return;
+ event.waitUntil(cacheShell().then(()=>event.ports[0].postMessage({ok:true}),()=>event.ports[0].postMessage({ok:false})));
+});
 self.addEventListener('activate',event=>event.waitUntil((async()=>{
  await Promise.all((await caches.keys()).filter(n=>n.startsWith(PREFIX)&&n!==CACHE).map(n=>caches.delete(n)));
  await self.clients.claim();
