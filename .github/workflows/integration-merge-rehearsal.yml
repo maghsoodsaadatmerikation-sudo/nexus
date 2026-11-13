@@ -77,3 +77,75 @@ jobs:
           path: integration-rehearsal.json
           if-no-files-found: ignore
           retention-days: 14
+
+  isolated-stack-build:
+    name: isolated-stack-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout proposed observer at exact SHA
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Assemble temporary integration candidate without remote writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin \\
+            +refs/heads/main:refs/remotes/origin/main \\
+            +refs/pull/129/head:refs/remotes/origin/rehearsal-129 \\
+            +refs/pull/130/head:refs/remotes/origin/rehearsal-130 \\
+            +refs/pull/131/head:refs/remotes/origin/rehearsal-131 \\
+            +refs/pull/132/head:refs/remotes/origin/rehearsal-132 \\
+            +refs/pull/133/head:refs/remotes/origin/rehearsal-133 \\
+            +refs/pull/134/head:refs/remotes/origin/rehearsal-134
+          for pair in '129 130' '130 131' '131 132' '132 133' '133 134'; do
+            set -- $pair
+            git merge-base --is-ancestor "refs/remotes/origin/rehearsal-$1" "refs/remotes/origin/rehearsal-$2"
+          done
+          main_sha="$(git rev-parse refs/remotes/origin/main)"
+          git config user.name "NEXUS Temporary Integration Lab"
+          git config user.email "nexus-lab@users.noreply.github.com"
+          git checkout --detach "$main_sha"
+          for n in 129 130 131 132 133 134; do
+            # Ours is used only for a disposable *hypothesis* about ambiguous
+            # regions. A green build is not proof that every feature survived.
+            git merge --no-ff --no-edit -s ort -X ours "refs/remotes/origin/rehearsal-$n"
+          done
+          test "$(git rev-list --count "$main_sha"..HEAD)" -ge 6
+          echo "DISPOSABLE_STACK_BASE_SHA=$main_sha" >> "$GITHUB_ENV"
+          echo "DISPOSABLE_STACK_HEAD_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo 'NEXUS DISPOSABLE STACK ASSEMBLY: COMPLETE (production blocked)'
+
+      - name: Compile, format and test core with pinned Rust image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e'
+          docker run --rm \\
+            --user "$(id -u):$(id -g)" \\
+            -e HOME=/tmp/home -e CARGO_HOME=/tmp/cargo \\
+            -v "$PWD:/app" -w /app "$image" \\
+            bash scripts/run_gates.sh
+
+      - name: Test gateway separately using its locked manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e'
+          docker run --rm \\
+            --user "$(id -u):$(id -g)" \\
+            -e HOME=/tmp/home -e CARGO_HOME=/tmp/cargo \\
+            -v "$PWD:/app" -w /app "$image" \\
+            cargo test --manifest-path artifact-05/Cargo.toml --locked
+
+      - name: Explicitly block remote publishing
+        run: |
+          echo 'Candidate compiled only in disposable CI.'
+          echo 'Ours-resolved conflicts require semantic diff review.'
+          echo 'No push, deploy, restore, authority or release Seal occurred.'
