@@ -5,8 +5,19 @@ on:
       - '.github/workflows/research-chat.yml'
       - 'artifact-05/**'
       - 'web/research-chat.html'
+      - 'web/research-workbench.html'
+      - 'scripts/test-stage29-research-workbench-browser.py'
+      - 'docs/STAGE-29-RESEARCH-DOSSIER.md'
+      - 'web/model-chat.html'
+      - 'scripts/test-stage28-model-chat-browser.py'
+      - 'docs/STAGE-28-GENERATIVE-MODEL-ADAPTER.md'
       - 'web/chat-history.js'
       - 'web/connections.html'
+      - 'web/work-mode.html'
+      - 'web/work-mode-core.js'
+      - 'scripts/test-work-mode.mjs'
+      - 'scripts/test-work-mode-browser.py'
+      - 'docs/WORK-MODE.md'
       - 'scripts/test-connections-browser.py'
       - 'docs/OPTIONAL-APP-CONNECTIONS.md'
       - 'scripts/test-chat-history.mjs'
@@ -22,8 +33,19 @@ on:
       - '.github/workflows/research-chat.yml'
       - 'artifact-05/**'
       - 'web/research-chat.html'
+      - 'web/research-workbench.html'
+      - 'scripts/test-stage29-research-workbench-browser.py'
+      - 'docs/STAGE-29-RESEARCH-DOSSIER.md'
+      - 'web/model-chat.html'
+      - 'scripts/test-stage28-model-chat-browser.py'
+      - 'docs/STAGE-28-GENERATIVE-MODEL-ADAPTER.md'
       - 'web/chat-history.js'
       - 'web/connections.html'
+      - 'web/work-mode.html'
+      - 'web/work-mode-core.js'
+      - 'scripts/test-work-mode.mjs'
+      - 'scripts/test-work-mode-browser.py'
+      - 'docs/WORK-MODE.md'
       - 'scripts/test-connections-browser.py'
       - 'docs/OPTIONAL-APP-CONNECTIONS.md'
       - 'scripts/test-chat-history.mjs'
@@ -61,3 +83,11 @@ jobs:
         run: python3 scripts/test-chat-history-browser.py
       - name: Exercise explicit app consent and disconnect in real Chromium
         run: python3 scripts/test-connections-browser.py
+      - name: Test project state, human review gates and encrypted persistence
+        run: node --test scripts/test-work-mode.mjs
+      - name: Exercise real Chromium project work, resume, files and chat consent
+        run: python3 scripts/test-work-mode-browser.py
+      - name: Exercise model-provider consent and absence of silent network calls in real Chromium
+        run: python3 scripts/test-stage28-model-chat-browser.py
+      - name: Exercise real Chromium multi-query source provenance and independent search approvals
+        run: python3 scripts/test-stage29-research-workbench-browser.py

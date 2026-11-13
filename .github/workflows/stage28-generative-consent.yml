@@ -1,0 +1,81 @@
+name: NEXUS Stage 28 — Authenticated, Opt-in Generative Model Boundary
+on:
+  pull_request:
+    branches:
+      - feat/work-mode-20261113
+      - stage27/custom-assistants-project-memory-20261113
+    paths:
+      - '.github/workflows/stage28-generative-consent.yml'
+      - 'artifact-05/src/generative_chat.rs'
+      - 'artifact-05/src/lib.rs'
+      - 'artifact-05/src/main.rs'
+      - 'web/model-chat.html'
+      - 'scripts/test-stage28-model-chat-browser.py'
+      - 'docs/STAGE-28-GENERATIVE-MODEL-ADAPTER.md'
+
+permissions:
+  contents: read
+
+jobs:
+  optional-model-boundary:
+    name: optional-model-strict-consent
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Exact source without persisted GitHub credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Confirm no external model or production token on runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${NEXUS_MODEL_API_KEY:-}"
+          test -z "${NEXUS_MODEL_PROVIDER:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          python3 -m py_compile scripts/test-stage28-model-chat-browser.py
+
+      - name: Rust tests, mock model only, and integration with existing gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --manifest-path artifact-05/Cargo.toml generative_chat -- --nocapture
+
+      - name: Chromium acceptance: English, Persian, approvals and cancellation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/test-stage28-model-chat-browser.py
+
+      - name: Source review — fixed endpoints, no authority or default provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          core=Path('artifact-05/src/generative_chat.rs').read_text()
+          gateway=Path('artifact-05/src/lib.rs').read_text()
+          page=Path('web/model-chat.html').read_text()
+          for token in ('https://api.openai.com/v1/chat/completions',
+                        'https://api.groq.com/openai/v1/chat/completions',
+                        'redirect(reqwest::redirect::Policy::none())',
+                        '.no_proxy()',
+                        'judgment_changed:false',
+                        'verified_facts:false',
+                        'actual_cost_known:false',
+                        'automatic_actions:false'):
+              assert token in core, token
+          for token in ('.route("/v1/model-chat"', 'path == "/v1/model-chat"',
+                        'private_api_cache_boundary', 'recovery_boundary'):
+              assert token in gateway,token
+          assert 'localStorage.setItem' not in page
+          assert 'sessionStorage.setItem' not in page
+          assert "connect-src 'self'" in page
+          assert "provider_requests:0" in Path('scripts/test-stage28-model-chat-browser.py').read_text()
+          print('PASS: strictly configured opt-in model route, no secrets or default provider')
+          PY

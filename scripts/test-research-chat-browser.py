@@ -71,8 +71,9 @@ def main(page_path="web/research-chat.html"):
     page=html.replace('</body>','<pre id="nexus-browser-result" hidden></pre><script>'+WITNESS+'</script></body>').encode()
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            body=(root/'web/chat-history.js').read_bytes() if self.path=='/research-chat-history.js' else page
-            self.send_response(200);self.send_header('content-type','text/javascript' if self.path=='/research-chat-history.js' else 'text/html;charset=utf-8');self.end_headers();self.wfile.write(body)
+            assets={'/research-chat-history.js':'web/chat-history.js','/work-mode-core.js':'web/work-mode-core.js'}
+            body=(root/assets[self.path]).read_bytes() if self.path in assets else page
+            self.send_response(200);self.send_header('content-type','text/javascript' if self.path in assets else 'text/html;charset=utf-8');self.end_headers();self.wfile.write(body)
         def log_message(self,*args):pass
     server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()

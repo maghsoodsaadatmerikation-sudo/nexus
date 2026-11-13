@@ -1,0 +1,113 @@
+name: NEXUS Stage 25 — Zero-Permission Android Offline APK
+on:
+  pull_request:
+    branches:
+      - feat/work-mode-20261113
+    paths:
+      - '.github/workflows/stage25-android-apk.yml'
+      - 'android/stage25/**'
+      - 'scripts/build-stage25-android-assets.py'
+      - 'scripts/test-stage25-android-assets.py'
+      - 'scripts/build-stage25-apk.sh'
+      - 'scripts/test-stage25-apk.py'
+      - 'scripts/build-mobile-work-pwa.py'
+      - 'scripts/build-work-mode-portable.py'
+      - 'web/work-mode.html'
+      - 'web/work-mode-core.js'
+      - 'public/icons/nexus-192.png'
+      - 'docs/STAGE-25-NATIVE-OFFLINE-ANDROID.md'
+
+permissions:
+  contents: read
+
+jobs:
+  android-offline-apk:
+    name: android-offline-apk-synthetic
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact PR head; do not persist GitHub token
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Inspect no-privilege environment and Android SDK installed on runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -n "${ANDROID_HOME:-}"
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/build-tools/35.0.1/aapt2"
+          test -x "$ANDROID_HOME/build-tools/35.0.1/apksigner"
+          command -v javac && command -v keytool && command -v zip
+          python3 -m py_compile scripts/build-stage25-android-assets.py \
+              scripts/test-stage25-android-assets.py scripts/test-stage25-apk.py
+          bash -n scripts/build-stage25-apk.sh
+
+      - name: Adversarial offline native adapter source tests
+        run: python3 scripts/test-stage25-android-assets.py
+
+      - name: Check original portable browser/work-mode security behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/test-work-mode-portable.py
+          python3 scripts/test-mobile-work-pwa.py
+
+      - name: Build actual APK with Android SDK, sign with ephemeral test key, verify
+        shell: bash
+        run: bash scripts/build-stage25-apk.sh
+
+      - name: Block unsigned, permissionful, modified or fake APK output
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s build/stage25-android/nexus-offline-stage25-test.apk
+          grep -F 'Verified using v2 scheme' build/stage25-android/apksigner-verify.txt
+          test ! -e build/stage25-android/aligned.apk
+          test ! -e build/stage25-android/unsigned.apk
+          test -z "$(find build/stage25-android -name '*.jks' -o -name '*.keystore')"
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          x=json.loads(Path('build/stage25-android/nexus-stage25-apk-evidence.json').read_text())
+          assert x['status']=='SIGNED_TEST_APK_STATIC_CHECKS_PASS'
+          assert x['manifest_permissions']==[]
+          assert not x['native_internet_permission']
+          assert not x['actual_android_hardware_tested']
+          assert not x['actual_android_emulator_tested']
+          assert not x['google_play_published']
+          assert x['signed_by_ephemeral_test_certificate']
+          print('PASS: static APK plus ephemeral signer; real hardware remains UNTESTED')
+          PY
+
+      - name: Deliver test-only installable APK; no secrets or production data
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-stage25-android-offline-test-apk
+          path: build/stage25-android/nexus-offline-stage25-test.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Deliver public static evidence without signer material
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-stage25-android-apk-witness
+          path: |
+            build/stage25-android/nexus-stage25-apk-evidence.json
+            build/stage25-android/apksigner-verify.txt
+            build/stage25-android/manifest-permissions.txt
+            build/stage25-android/generated/nexus-stage25-input-integrity.json
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: State correct security and release boundary
+        run: |
+          echo 'Stage25 only: offline Android test APK; ephemeral signer, no stable upgrade path.'
+          echo 'Not Play Store or a verified Android device run, no Railway or Render edits.'
+          echo 'No GitHub Pages configuration or production release authority.'

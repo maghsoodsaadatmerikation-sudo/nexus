@@ -2153,3 +2153,45 @@ async fn connection_ingestion_obeys_body_rate_and_quarantine_limits() {
     assert_eq!(response.headers()["cache-control"], "no-store");
     std::fs::remove_dir_all(path).unwrap();
 }
+
+#[tokio::test]
+async fn work_mode_page_and_core_are_local_resources_without_execution_or_storage_mutation() {
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::authenticated(delegate.clone(), "secret"));
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/work-mode")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["x-frame-options"], "DENY");
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    let bytes = axum::body::to_bytes(response.into_body(), 256 * 1024)
+        .await
+        .unwrap();
+    let html = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(html.contains("/work-mode-core.js"));
+    assert!(html.contains("/v1/research-chat"));
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/work-mode-core.js")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()["content-type"],
+        "text/javascript; charset=utf-8"
+    );
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    assert!(delegate.requests.lock().unwrap().is_empty());
+    assert!(delegate.workspaces.lock().unwrap().load("work").is_none());
+}
