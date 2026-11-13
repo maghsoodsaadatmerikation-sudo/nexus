@@ -86,7 +86,7 @@ try{
 
  await rpc('Page.enable');await rpc('Network.enable');await rpc('Network.setCacheDisabled',{cacheDisabled:true});
  stage='bootstrap';await rpc('Page.navigate',{url:ORIGIN});
- await poll(()=>retryJs("Boolean(document.getElementById('studio-offline'))"),15000,'studio-not-rendered');
+ await poll(()=>retryJs("document.readyState==='complete'&&Boolean(window.NexusStudioUI)&&Boolean(document.getElementById('studio-offline'))"),15000,'studio-not-rendered');
  assert(await js("document.documentElement.scrollWidth<=innerWidth+2"),'mobile-overflow');checks.push('responsive-studio-renders');
  assert(await js("navigator.serviceWorker.getRegistration(location.href).then(r=>!r)"),'unapproved-worker');checks.push('no-automatic-worker');
  await js("document.getElementById('check-model').click();true");
@@ -104,7 +104,7 @@ try{
  await poll(()=>retryJs("Boolean(navigator.serviceWorker.controller)"),10000,'worker-control');
  await js("window.__beforeOfflineReload=true;true");
  stage='true-offline';await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});await rpc('Page.reload',{ignoreCache:true});
- await poll(()=>retryJs("!window.__beforeOfflineReload&&Boolean(document.getElementById('studio-offline'))"),15000,'offline-reload');
+ await poll(()=>retryJs("!window.__beforeOfflineReload&&document.readyState==='complete'&&Boolean(window.NexusStudioUI)&&Boolean(document.getElementById('studio-offline'))"),15000,'offline-reload');
  assert(await js("NexusStudioUI.snapshot().projects.length===0"),'automatic-private-reopen');checks.push('true-offline-reload-still-locked');
  await js("document.getElementById('passphrase').value='synthetic secret phrase 123';document.getElementById('unlock').click();true");
  await poll(()=>retryJs("NexusStudioUI.snapshot().projects[0]?.title==='SYNTHETIC MOBILE PROJECT'"),12000,'offline-unlock');checks.push('offline-encrypted-reopen');
