@@ -18,6 +18,8 @@ import studio_model
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 BODY_TIMEOUT_SECONDS = 30.0
+UPSTREAM_TIMEOUT_SECONDS = 30.0
+MAX_DELEGATED_REQUESTS = 16
 
 
 def _core_url() -> str | None:
@@ -60,6 +62,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ) as client:
         app.state.client = client
         app.state.model_limiter = anyio.CapacityLimiter(4)
+        app.state.gateway_limiter = anyio.CapacityLimiter(MAX_DELEGATED_REQUESTS)
         yield
 
 
@@ -122,6 +125,25 @@ async def delegate_to_constitutional_gateway(path: str, request: Request) -> Res
     if any(segment in {".", ".."} for segment in path.split("/")):
         raise HTTPException(status_code=400, detail="Invalid delegated path")
 
+    # Admit before buffering bodies; never queue an unbounded number of callers.
+    limiter = request.app.state.gateway_limiter
+    try:
+        limiter.acquire_nowait()
+    except anyio.WouldBlock:
+        raise HTTPException(
+            status_code=503, detail="NEXUS gateway capacity is busy",
+            headers={"Retry-After": "1", "Cache-Control": "no-store"},
+        ) from None
+    try:
+        return await _forward_to_core(path, request, core_url, authorization)
+    finally:
+        # Includes malformed bodies, upstream errors and task cancellation.
+        limiter.release()
+
+
+async def _forward_to_core(
+    path: str, request: Request, core_url: str, authorization: str
+) -> Response:
     declared = request.headers.get("content-length")
     if declared is not None:
         if not declared.isascii() or not declared.isdecimal():
@@ -146,27 +168,28 @@ async def delegate_to_constitutional_gateway(path: str, request: Request) -> Res
     response_headers = {"cache-control": "no-store"}
     content = bytearray()
     try:
-        async with request.app.state.client.stream(
-            method=request.method,
-            url=f"{core_url}/v1/{quote(path, safe='/')}",
-            params=request.query_params.multi_items(),
-            headers=headers,
-            content=bytes(body),
-            follow_redirects=False,
-        ) as upstream:
-            # Never invoke an unbounded decompressor on an opaque core response.
-            # The core receives Accept-Encoding: identity; fail closed if ignored.
-            if upstream.headers.get("content-encoding", "identity").lower() != "identity":
-                raise HTTPException(status_code=502, detail="Encoded core response is unsupported")
-            with anyio.fail_after(BODY_TIMEOUT_SECONDS):
-                async for chunk in upstream.aiter_bytes(chunk_size=65536):
-                    if len(content) + len(chunk) > MAX_RESPONSE_BYTES:
-                        raise HTTPException(status_code=502, detail="Core response is too large")
-                    content.extend(chunk)
-            for name in ("content-type", "www-authenticate", "retry-after"):
-                if value := upstream.headers.get(name):
-                    response_headers[name] = value
-            upstream_status = upstream.status_code
+        with anyio.fail_after(UPSTREAM_TIMEOUT_SECONDS):
+            async with request.app.state.client.stream(
+                method=request.method,
+                url=f"{core_url}/v1/{quote(path, safe='/')}",
+                params=request.query_params.multi_items(),
+                headers=headers,
+                content=bytes(body),
+                follow_redirects=False,
+            ) as upstream:
+                # Never invoke an unbounded decompressor on an opaque core response.
+                # The core receives Accept-Encoding: identity; fail closed if ignored.
+                if upstream.headers.get("content-encoding", "identity").lower() != "identity":
+                    raise HTTPException(status_code=502, detail="Encoded core response is unsupported")
+                with anyio.fail_after(BODY_TIMEOUT_SECONDS):
+                    async for chunk in upstream.aiter_bytes(chunk_size=65536):
+                        if len(content) + len(chunk) > MAX_RESPONSE_BYTES:
+                            raise HTTPException(status_code=502, detail="Core response is too large")
+                        content.extend(chunk)
+                for name in ("content-type", "www-authenticate", "retry-after"):
+                    if value := upstream.headers.get(name):
+                        response_headers[name] = value
+                upstream_status = upstream.status_code
     except (httpx.RequestError, TimeoutError) as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
