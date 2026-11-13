@@ -81,6 +81,19 @@ def main():
         return 0
     except (Refused,OSError,ValueError) as exc:
         print("BLOCKED: Android runtime acceptance "+str(exc)[:100],file=sys.stderr)
+        if args.evidence.is_file():
+            # Only allowlisted synthetic Android instrumentation fields are printed.
+            # Never print generic logcat, passphrases, URLs, user files, or stacks.
+            lines=args.evidence.read_text(errors="replace").splitlines()
+            for line in lines:
+                if line.startswith(("INSTRUMENTATION_RESULT: status=",
+                                    "INSTRUMENTATION_RESULT: reason=",
+                                    "INSTRUMENTATION_RESULT: checks_before_failure=",
+                                    "INSTRUMENTATION_CODE: ")):
+                    import re
+                    print("STAGE26_SAFE_RUNTIME_DIAGNOSTIC: "+
+                          re.sub(r"[^a-zA-Z0-9_:\-= ]","_",line)[:180],
+                          file=sys.stderr)
         return 2
 
 if __name__=="__main__":
