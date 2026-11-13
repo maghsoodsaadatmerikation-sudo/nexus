@@ -1,0 +1,53 @@
+name: NEXUS Stage D Private Operator Evidence Hygiene
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/stage-d-private-operator-evidence.yml'
+      - 'scripts/stage-d-private-observation.py'
+      - 'scripts/test-stage-d-private-observation.py'
+      - 'scripts/stage-d-evidence.sh'
+      - 'scripts/test-stage-d-readiness.sh'
+      - 'scripts/workspace-backup.py'
+      - 'scripts/workspace-backup.sh'
+      - 'scripts/workspace-restore.py'
+      - 'scripts/workspace-restore.sh'
+      - 'docs/STAGE-D-EVIDENCE.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  private-observation-contract:
+    name: private-observation-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact proposed code without credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Run private offline and loopback HTTP boundary tests
+        run: |
+          set -euo pipefail
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          bash -n scripts/stage-d-evidence.sh
+          bash -n scripts/test-stage-d-readiness.sh
+          python3 -m py_compile scripts/stage-d-private-observation.py
+          python3 scripts/test-stage-d-private-observation.py
+          bash scripts/test-stage-d-readiness.sh
+
+      - name: Report evidence limitations without authority
+        run: |
+          printf '%s\n' 'STAGE D OPERATOR COLLECTOR TESTS: PASS' \
+            'Provider API/volume accessed: NO' \
+            'Actual private user workspace accessed: NO' \
+            'Production recovery verified: NO' \
+            'Release or deployment authorized: NO'
