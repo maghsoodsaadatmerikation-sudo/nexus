@@ -102,8 +102,9 @@ try{
  const cached=await js("(async()=>{const names=await caches.keys(),cache=await caches.open(names[0]),keys=await cache.keys();const response=await cache.match(location.origin+'/');const bytes=await response.arrayBuffer();return {names,entries:keys.map(k=>k.url),sha:Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join(''),private:new TextDecoder().decode(bytes).includes('SYNTHETIC PRIVATE QUESTION')}})()");
  assert(cached.names.length===1&&cached.names[0].startsWith('nexus-studio-shell-v1-')&&cached.entries.length===1&&cached.entries[0]===ORIGIN&&cached.sha===sourceDigest&&!cached.private,'cache-not-public-code-only');checks.push('opt-in-cache-exact-public-code-only');
  await poll(()=>retryJs("Boolean(navigator.serviceWorker.controller)"),10000,'worker-control');
+ await js("window.__beforeOfflineReload=true;true");
  stage='true-offline';await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});await rpc('Page.reload',{ignoreCache:true});
- await poll(()=>retryJs("Boolean(document.getElementById('studio-offline'))"),15000,'offline-reload');
+ await poll(()=>retryJs("!window.__beforeOfflineReload&&Boolean(document.getElementById('studio-offline'))"),15000,'offline-reload');
  assert(await js("NexusStudioUI.snapshot().projects.length===0"),'automatic-private-reopen');checks.push('true-offline-reload-still-locked');
  await js("document.getElementById('passphrase').value='synthetic secret phrase 123';document.getElementById('unlock').click();true");
  await poll(()=>retryJs("NexusStudioUI.snapshot().projects[0]?.title==='SYNTHETIC MOBILE PROJECT'"),12000,'offline-unlock');checks.push('offline-encrypted-reopen');
