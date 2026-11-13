@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from urllib.parse import quote, urlsplit
@@ -12,6 +13,7 @@ import anyio
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import studio_model
 
 
@@ -63,6 +65,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Bound authenticated delegated traffic before consuming request bodies.
         # A separate limiter keeps the model bridge capacity independent.
         app.state.core_limiter = anyio.CapacityLimiter(32)
+        app.state.probe_limiter = anyio.CapacityLimiter(2)
+        app.state.model_budget = studio_model.ModelBudget()
         yield
 
 
@@ -98,6 +102,65 @@ async def service_metadata() -> dict[str, str]:
 @app.get("/healthz", tags=["operations"])
 async def health() -> dict[str, str]:
     return {"status": "ok", "scope": "transport-liveness-only"}
+
+def _core_readiness_response(ready: bool) -> JSONResponse:
+    return JSONResponse(
+        {"status": "ready" if ready else "unavailable",
+         "scope": "core-readiness-only"},
+        status_code=200 if ready else 503,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/core-readyz", tags=["operations"])
+async def core_readiness(request: Request) -> JSONResponse:
+    """A bounded, unauthenticated public Rust readiness probe; never a seal.
+
+    Unlike /healthz this checks the upstream's /readyz response. No request
+    credential, private response content, redirect or core mutation is relayed.
+    """
+    core_url = _core_url()
+    if core_url is None:
+        return _core_readiness_response(False)
+    limiter = request.app.state.probe_limiter
+    try:
+        limiter.acquire_nowait()
+    except anyio.WouldBlock:
+        return _core_readiness_response(False)
+    try:
+        try:
+            with anyio.fail_after(2.0):
+                async with request.app.state.client.stream(
+                    "GET", f"{core_url}/readyz",
+                    headers={"accept-encoding": "identity"},
+                    follow_redirects=False,
+                ) as upstream:
+                    if upstream.status_code != 200 or (
+                        upstream.headers.get("content-encoding", "identity").lower()
+                        != "identity"
+                    ):
+                        return _core_readiness_response(False)
+                    size = upstream.headers.get("content-length")
+                    if size and (not size.isascii() or not size.isdecimal()
+                                 or int(size) > 512):
+                        return _core_readiness_response(False)
+                    body = bytearray()
+                    async for chunk in upstream.aiter_bytes(chunk_size=256):
+                        if len(body) + len(chunk) > 512:
+                            return _core_readiness_response(False)
+                        body.extend(chunk)
+            try:
+                status = json.loads(body)
+            except (ValueError, UnicodeError):
+                return _core_readiness_response(False)
+            return _core_readiness_response(
+                isinstance(status, dict) and status.get("status") == "ready"
+            )
+        except (httpx.RequestError, TimeoutError):
+            return _core_readiness_response(False)
+    finally:
+        limiter.release()
+
 
 
 @app.api_route(
