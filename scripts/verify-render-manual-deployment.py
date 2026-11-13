@@ -18,7 +18,7 @@ EXPECTED_FIELDS = {
     "region": "frankfurt",
     "dockerfilePath": "./Dockerfile",
     "autoDeployTrigger": "off",
-    "healthCheckPath": "/",
+    "healthCheckPath": "/readyz",
     "numInstances": "1",
     "maxShutdownDelaySeconds": "30",
 }
