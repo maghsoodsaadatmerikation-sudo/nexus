@@ -33,6 +33,17 @@ jobs:
           bash -n scripts/observe-stage-d-auth.sh
           python3 scripts/test-stage-d-auth.py
 
+      - name: Exercise adversarial PR merge-freshness tests
+        run: python3 scripts/test-pr-merge-freshness.py
+
+      - name: Require up-to-date PR base and strict GitHub ruleset
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXUS_PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          NEXUS_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 scripts/verify-pr-merge-freshness.py
+
       - name: Verify without publication or attestation authority
         env:
           RUST_IMAGE: ${{ env.RUST_IMAGE }}
