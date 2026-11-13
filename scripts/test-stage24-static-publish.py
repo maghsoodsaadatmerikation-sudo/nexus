@@ -42,6 +42,33 @@ class Stage24Tests(unittest.TestCase):
         self.assertEqual(self.files, builder.produce())
         self.assertTrue(all(len(v) == 40 for v in p.SOURCE_PINS.values()))
 
+    def test_orphan_snapshot_contains_only_reviewed_files(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            def git(*args):
+                return subprocess.check_output(
+                    ["git", "-C", str(root), *args],
+                    text=True, stderr=subprocess.STDOUT).strip()
+            git("init", "-q")
+            git("config", "user.email", "stage24@example.invalid")
+            git("config", "user.name", "Synthetic Stage24")
+            (root / "Cargo.toml").write_text("must-not-publish")
+            git("add", "Cargo.toml")
+            git("commit", "-qm", "synthetic parent source")
+            git("switch", "--orphan", "nexus-mobile-site-v24")
+            self.assertEqual(git("ls-files"), "")
+            self.populate(root, self.files)
+            approved = sorted(self.files)
+            git("add", "-f", "--", *approved)
+            self.assertEqual(set(git("diff", "--cached", "--name-only").splitlines()),
+                             set(approved))
+            git("commit", "-qm", "synthetic isolated snapshot")
+            self.assertEqual(git("log", "-1", "--format=%P"), "")
+            self.assertEqual(set(git("ls-tree", "-r", "--name-only", "HEAD").splitlines()),
+                             set(approved))
+            self.assertNotIn("Cargo.toml", git("ls-tree", "-r", "--name-only", "HEAD"))
+
     def test_no_app_source_leaked_to_static_branch(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
