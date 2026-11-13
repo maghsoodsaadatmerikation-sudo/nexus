@@ -11,6 +11,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parent.parent
+FIXTURE = ROOT / "tests/fixtures/legacy-runtime-core"
 SCRIPT = Path(__file__).with_name("stage-d-core-parity.py")
 spec = importlib.util.spec_from_file_location("nexus_stage_d_core_parity", SCRIPT)
 parity = importlib.util.module_from_spec(spec)
@@ -26,11 +27,15 @@ class CoreSourceParityTests(unittest.TestCase):
         for relative in parity.SOURCE_BLOBS:
             target = self.copy / relative
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(ROOT / relative, target)
+            shutil.copyfile(FIXTURE / relative, target)
 
-    def test_known_original_railway_deployed_sources_match_current_checkout(self):
-        self.assertEqual(parity.check(ROOT, parity.DEPLOYED_COMMIT),
+    def test_pinned_legacy_sources_match_observed_runtime(self):
+        self.assertEqual(parity.check(FIXTURE, parity.DEPLOYED_COMMIT),
                          len(parity.SOURCE_BLOBS))
+
+    def test_current_changed_core_cannot_claim_legacy_runtime_parity(self):
+        with self.assertRaises(parity.ParityError):
+            parity.check(ROOT, parity.DEPLOYED_COMMIT)
 
     def test_disposable_valid_source_copy_passes(self):
         self.assertEqual(parity.check(self.copy, parity.DEPLOYED_COMMIT),

@@ -8,8 +8,8 @@ pub mod authority;
 pub mod capability;
 pub mod decision;
 pub mod envelope;
-pub mod erasure;
 pub mod epistemic;
+pub mod erasure;
 pub mod executor;
 pub mod policy;
 pub mod workspace;
@@ -27,15 +27,17 @@ pub use analysis::{
 };
 pub use audit::{AuditEvent, AuditEventKind, AuditLog};
 pub use authority::{leq, Authority};
+pub use authorized::DelegatedAuthorizedRequest;
 pub use capability::{
     CapabilityAction, CapabilityAuditEvent, CapabilityAuditLog, CapabilityAuditOutcome,
     CapabilityDenial, CapabilityGrant, RevocationSet, CAPABILITY_SCHEMA_VERSION,
 };
 pub use decision::{DenialReason, PolicyDecision};
 pub use envelope::RequestEnvelope;
-pub use epistemic::{Alternative, Claim, ClaimOrigin, DecisionWorkspace, HumanJudgment, Uncertainty};
+pub use epistemic::{
+    Alternative, Claim, ClaimOrigin, DecisionWorkspace, HumanJudgment, Uncertainty,
+};
 pub use executor::{DelegatedExecutionDenial, ExecutionReceipt, Executor};
-pub use authorized::DelegatedAuthorizedRequest;
 pub use policy::PolicyEngine;
 pub use workspace::{
     InMemoryWorkspaceRepository, ProvenanceId, WorkspaceEngine, WorkspaceEvent, WorkspaceEventKind,

@@ -1,9 +1,12 @@
-use crate::{HumanJudgment, WorkspaceEventKind, WorkspaceSnapshot, WORKSPACE_SCHEMA_VERSION};
+use crate::WorkspaceSnapshot;
+use fs2::FileExt;
 use std::{
-    fs::{self, File},
+    fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
 };
+
+const MAX_SNAPSHOT_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DurableWorkspaceError {
@@ -18,6 +21,8 @@ pub enum DurableWorkspaceError {
     HistoryDivergence,
     Io,
     Serialization,
+    IdentityMismatch,
+    Capacity,
 }
 
 #[derive(Debug, Clone)]
@@ -39,23 +44,34 @@ impl FileWorkspaceRepository {
         fs::create_dir_all(&self.root).map_err(|_| DurableWorkspaceError::Io)?;
 
         let path = self.path_for(&snapshot.workspace.id);
-        if path.exists() {
-            let existing = self
-                .load(&snapshot.workspace.id)?
-                .ok_or(DurableWorkspaceError::Io)?;
+        // Lock the directory itself: no lock metadata enters the data tree or
+        // its strict recovery archives. This serializes cooperating writers
+        // across all workspaces; the kernel releases the lock on process exit.
+        let lock = File::open(&self.root).map_err(|_| DurableWorkspaceError::Io)?;
+        lock.lock_exclusive()
+            .map_err(|_| DurableWorkspaceError::Io)?;
+        if let Some(existing) = self.load(&snapshot.workspace.id)? {
             validate_history_extension(&existing, &snapshot)?;
         }
 
         let bytes = serde_json::to_vec_pretty(&snapshot)
             .map_err(|_| DurableWorkspaceError::Serialization)?;
-        let tmp = path.with_extension("json.tmp");
+        if bytes.len() as u64 > MAX_SNAPSHOT_BYTES {
+            return Err(DurableWorkspaceError::Capacity);
+        }
+        let (tmp, mut file) = temporary_file(&path)?;
+        let _cleanup = TemporaryFile(tmp.clone());
         {
-            let mut file = File::create(&tmp).map_err(|_| DurableWorkspaceError::Io)?;
             file.write_all(&bytes)
                 .map_err(|_| DurableWorkspaceError::Io)?;
             file.sync_all().map_err(|_| DurableWorkspaceError::Io)?;
         }
         fs::rename(&tmp, &path).map_err(|_| DurableWorkspaceError::Io)?;
+        // Persist the directory entry, not only the temporary file contents.
+        #[cfg(unix)]
+        File::open(&self.root)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|_| DurableWorkspaceError::Io)?;
         Ok(())
     }
 
@@ -64,17 +80,24 @@ impl FileWorkspaceRepository {
         workspace_id: &str,
     ) -> Result<Option<WorkspaceSnapshot>, DurableWorkspaceError> {
         let path = self.path_for(workspace_id);
-        if !path.exists() {
-            return Ok(None);
-        }
+        let file = match File::open(path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err(DurableWorkspaceError::Io),
+        };
         let mut bytes = Vec::new();
-        File::open(path)
-            .map_err(|_| DurableWorkspaceError::Io)?
+        file.take(MAX_SNAPSHOT_BYTES + 1)
             .read_to_end(&mut bytes)
             .map_err(|_| DurableWorkspaceError::Io)?;
-        let snapshot: WorkspaceSnapshot = serde_json::from_slice(&bytes)
-            .map_err(|_| DurableWorkspaceError::Serialization)?;
+        if bytes.len() as u64 > MAX_SNAPSHOT_BYTES {
+            return Err(DurableWorkspaceError::Capacity);
+        }
+        let snapshot: WorkspaceSnapshot =
+            serde_json::from_slice(&bytes).map_err(|_| DurableWorkspaceError::Serialization)?;
         validate_snapshot(&snapshot)?;
+        if snapshot.workspace.id != workspace_id {
+            return Err(DurableWorkspaceError::IdentityMismatch);
+        }
         Ok(Some(snapshot))
     }
 
@@ -83,108 +106,63 @@ impl FileWorkspaceRepository {
     }
 }
 
+struct TemporaryFile(PathBuf);
+impl Drop for TemporaryFile {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+fn temporary_file(path: &Path) -> Result<(PathBuf, File), DurableWorkspaceError> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    loop {
+        let tmp = path.with_extension(format!(
+            "json.tmp-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        match options.open(&tmp) {
+            Ok(file) => return Ok((tmp, file)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(_) => return Err(DurableWorkspaceError::Io),
+        }
+    }
+}
+
 fn validate_history_extension(
     existing: &WorkspaceSnapshot,
     candidate: &WorkspaceSnapshot,
 ) -> Result<(), DurableWorkspaceError> {
-    validate_snapshot(existing)?;
-    validate_snapshot(candidate)?;
-    if candidate.events.len() < existing.events.len() {
-        return Err(DurableWorkspaceError::HistoryRollback);
-    }
-    if candidate.events[..existing.events.len()] != existing.events[..] {
-        return Err(DurableWorkspaceError::HistoryDivergence);
-    }
-    Ok(())
+    crate::workspace::validate_history_extension(existing, candidate).map_err(map_validation_error)
 }
 
 fn validate_snapshot(snapshot: &WorkspaceSnapshot) -> Result<(), DurableWorkspaceError> {
-    if snapshot.schema_version != WORKSPACE_SCHEMA_VERSION {
-        return Err(DurableWorkspaceError::UnsupportedSchemaVersion {
-            found: snapshot.schema_version,
-            supported: WORKSPACE_SCHEMA_VERSION,
-        });
-    }
+    crate::workspace::validate_snapshot(snapshot).map_err(map_validation_error)
+}
 
-    if snapshot.events.is_empty()
-        || !matches!(snapshot.events[0].kind, WorkspaceEventKind::WorkspaceCreated)
-        || snapshot.events[1..]
-            .iter()
-            .any(|event| matches!(event.kind, WorkspaceEventKind::WorkspaceCreated))
-    {
-        return Err(DurableWorkspaceError::InvalidWorkspaceCreationEvent);
-    }
-
-    if snapshot
-        .events
-        .iter()
-        .enumerate()
-        .any(|(index, event)| event.sequence != index as u64)
-    {
-        return Err(DurableWorkspaceError::InvalidAuditSequence);
-    }
-
-    if snapshot
-        .events
-        .iter()
-        .any(|event| event.provenance_id.0.trim().is_empty())
-    {
-        return Err(DurableWorkspaceError::MissingProvenance);
-    }
-
-    let audited_claim_ids: Vec<&str> = snapshot
-        .events
-        .iter()
-        .filter_map(|event| match &event.kind {
-            WorkspaceEventKind::ClaimAdded { claim_id }
-            | WorkspaceEventKind::MachineAnalysisRecorded { claim_id, .. } => {
-                Some(claim_id.as_str())
-            }
-            _ => None,
-        })
-        .collect();
-    let workspace_claim_ids: Vec<&str> = snapshot
-        .workspace
-        .claims
-        .iter()
-        .map(|claim| claim.id.as_str())
-        .collect();
-    if audited_claim_ids != workspace_claim_ids {
-        return Err(DurableWorkspaceError::ClaimAuditMismatch);
-    }
-
-    let audited_alternative_ids: Vec<&str> = snapshot
-        .events
-        .iter()
-        .filter_map(|event| match &event.kind {
-            WorkspaceEventKind::AlternativeAdded { alternative_id } => Some(alternative_id.as_str()),
-            _ => None,
-        })
-        .collect();
-    let workspace_alternative_ids: Vec<&str> = snapshot
-        .workspace
-        .alternatives
-        .iter()
-        .map(|alternative| alternative.id.as_str())
-        .collect();
-    if audited_alternative_ids != workspace_alternative_ids {
-        return Err(DurableWorkspaceError::AlternativeAuditMismatch);
-    }
-
-    let mut audited_judgment: Option<HumanJudgment> = None;
-    for event in &snapshot.events {
-        if let WorkspaceEventKind::HumanJudgmentTransition { previous, current } = &event.kind {
-            if previous.as_ref() != audited_judgment.as_ref() {
-                return Err(DurableWorkspaceError::JudgmentAuditMismatch);
-            }
-            audited_judgment = Some(current.clone());
+fn map_validation_error(error: crate::WorkspaceStoreError) -> DurableWorkspaceError {
+    use crate::WorkspaceStoreError as E;
+    match error {
+        E::UnsupportedSchemaVersion { found, supported } => {
+            DurableWorkspaceError::UnsupportedSchemaVersion { found, supported }
         }
+        E::InvalidAuditSequence => DurableWorkspaceError::InvalidAuditSequence,
+        E::InvalidWorkspaceCreationEvent => DurableWorkspaceError::InvalidWorkspaceCreationEvent,
+        E::MissingProvenance => DurableWorkspaceError::MissingProvenance,
+        E::ClaimAuditMismatch => DurableWorkspaceError::ClaimAuditMismatch,
+        E::AlternativeAuditMismatch => DurableWorkspaceError::AlternativeAuditMismatch,
+        E::JudgmentAuditMismatch => DurableWorkspaceError::JudgmentAuditMismatch,
+        E::HistoryRollback => DurableWorkspaceError::HistoryRollback,
+        E::HistoryDivergence => DurableWorkspaceError::HistoryDivergence,
     }
-    if audited_judgment != snapshot.workspace.judgment {
-        return Err(DurableWorkspaceError::JudgmentAuditMismatch);
-    }
-
-    Ok(())
 }
 
 fn encode_id(value: &str) -> String {
@@ -241,7 +219,10 @@ mod tests {
         repo.save(first.clone()).unwrap();
         engine.add_claim(claim("c-1"), ProvenanceId::new("human:p"));
         repo.save(engine.snapshot()).unwrap();
-        assert_eq!(repo.save(first), Err(DurableWorkspaceError::HistoryRollback));
+        assert_eq!(
+            repo.save(first),
+            Err(DurableWorkspaceError::HistoryRollback)
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

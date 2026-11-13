@@ -1,6 +1,4 @@
-use nexus_constitutional_core::{
-    Action, Authority, Executor, PolicyEngine, RequestEnvelope,
-};
+use nexus_constitutional_core::{Action, Authority, Executor, PolicyEngine, RequestEnvelope};
 
 #[test]
 fn public_api_requires_policy_boundary_before_execution() {

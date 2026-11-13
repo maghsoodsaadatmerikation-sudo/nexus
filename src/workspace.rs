@@ -60,6 +60,9 @@ pub enum WorkspaceStoreError {
     ClaimAuditMismatch,
     AlternativeAuditMismatch,
     JudgmentAuditMismatch,
+    MissingProvenance,
+    HistoryRollback,
+    HistoryDivergence,
 }
 
 pub trait WorkspaceRepository {
@@ -75,6 +78,9 @@ pub struct InMemoryWorkspaceRepository {
 impl WorkspaceRepository for InMemoryWorkspaceRepository {
     fn save(&mut self, snapshot: WorkspaceSnapshot) -> Result<(), WorkspaceStoreError> {
         validate_snapshot(&snapshot)?;
+        if let Some(existing) = self.snapshots.get(&snapshot.workspace.id) {
+            validate_history_extension(existing, &snapshot)?;
+        }
         self.snapshots
             .insert(snapshot.workspace.id.clone(), snapshot);
         Ok(())
@@ -166,11 +172,7 @@ impl WorkspaceEngine {
         }
     }
 
-    pub fn record_human_judgment(
-        &mut self,
-        judgment: HumanJudgment,
-        provenance_id: ProvenanceId,
-    ) {
+    pub fn record_human_judgment(&mut self, judgment: HumanJudgment, provenance_id: ProvenanceId) {
         let previous = self.workspace.judgment.clone();
         self.workspace.record_human_judgment(judgment.clone());
         self.append_event(
@@ -200,7 +202,7 @@ impl WorkspaceEngine {
     }
 }
 
-fn validate_snapshot(snapshot: &WorkspaceSnapshot) -> Result<(), WorkspaceStoreError> {
+pub(crate) fn validate_snapshot(snapshot: &WorkspaceSnapshot) -> Result<(), WorkspaceStoreError> {
     if snapshot.schema_version != WORKSPACE_SCHEMA_VERSION {
         return Err(WorkspaceStoreError::UnsupportedSchemaVersion {
             found: snapshot.schema_version,
@@ -211,7 +213,10 @@ fn validate_snapshot(snapshot: &WorkspaceSnapshot) -> Result<(), WorkspaceStoreE
     if !matches!(
         snapshot.events.first().map(|event| &event.kind),
         Some(WorkspaceEventKind::WorkspaceCreated)
-    ) {
+    ) || snapshot.events[1..]
+        .iter()
+        .any(|event| matches!(event.kind, WorkspaceEventKind::WorkspaceCreated))
+    {
         return Err(WorkspaceStoreError::InvalidWorkspaceCreationEvent);
     }
 
@@ -222,6 +227,50 @@ fn validate_snapshot(snapshot: &WorkspaceSnapshot) -> Result<(), WorkspaceStoreE
         .any(|(index, event)| event.sequence != index as u64)
     {
         return Err(WorkspaceStoreError::InvalidAuditSequence);
+    }
+
+    if snapshot
+        .events
+        .iter()
+        .any(|event| event.provenance_id.0.trim().is_empty())
+    {
+        return Err(WorkspaceStoreError::MissingProvenance);
+    }
+    let mut claim_ids = std::collections::HashSet::new();
+    if snapshot
+        .workspace
+        .claims
+        .iter()
+        .any(|claim| claim.id.trim().is_empty() || !claim_ids.insert(&claim.id))
+    {
+        return Err(WorkspaceStoreError::ClaimAuditMismatch);
+    }
+    let mut alternative_ids = std::collections::HashSet::new();
+    if snapshot.workspace.alternatives.iter().any(|alternative| {
+        alternative.id.trim().is_empty() || !alternative_ids.insert(&alternative.id)
+    }) {
+        return Err(WorkspaceStoreError::AlternativeAuditMismatch);
+    }
+    // Machine provenance must survive serialization and re-import.
+    let claim_events = snapshot.events.iter().filter(|event| {
+        matches!(
+            event.kind,
+            WorkspaceEventKind::ClaimAdded { .. }
+                | WorkspaceEventKind::MachineAnalysisRecorded { .. }
+        )
+    });
+    for (event, claim) in claim_events.zip(&snapshot.workspace.claims) {
+        match &event.kind {
+            WorkspaceEventKind::MachineAnalysisRecorded {
+                adapter_id, run_id, ..
+            } if claim.origin != ClaimOrigin::MachineAnalysis
+                || adapter_id.trim().is_empty()
+                || run_id.trim().is_empty() =>
+            {
+                return Err(WorkspaceStoreError::ClaimAuditMismatch)
+            }
+            _ => {}
+        }
     }
 
     let audited_claim_ids: Vec<&str> = snapshot
@@ -249,7 +298,9 @@ fn validate_snapshot(snapshot: &WorkspaceSnapshot) -> Result<(), WorkspaceStoreE
         .events
         .iter()
         .filter_map(|event| match &event.kind {
-            WorkspaceEventKind::AlternativeAdded { alternative_id } => Some(alternative_id.as_str()),
+            WorkspaceEventKind::AlternativeAdded { alternative_id } => {
+                Some(alternative_id.as_str())
+            }
             _ => None,
         })
         .collect();
@@ -280,12 +331,37 @@ fn validate_snapshot(snapshot: &WorkspaceSnapshot) -> Result<(), WorkspaceStoreE
     Ok(())
 }
 
+/// All storage implementations enforce the same append-only contract. Event
+/// identifiers alone cannot bind the content of already-recorded claims.
+pub(crate) fn validate_history_extension(
+    existing: &WorkspaceSnapshot,
+    candidate: &WorkspaceSnapshot,
+) -> Result<(), WorkspaceStoreError> {
+    validate_snapshot(existing)?;
+    validate_snapshot(candidate)?;
+    if candidate.events.len() < existing.events.len() {
+        return Err(WorkspaceStoreError::HistoryRollback);
+    }
+    let old = &existing.workspace;
+    let new = &candidate.workspace;
+    if candidate.events[..existing.events.len()] != existing.events[..]
+        || old.id != new.id
+        || old.question != new.question
+        || old.goal != new.goal
+        || old.constraints != new.constraints
+        || old.values != new.values
+        || !new.claims.starts_with(&old.claims)
+        || !new.alternatives.starts_with(&old.alternatives)
+    {
+        return Err(WorkspaceStoreError::HistoryDivergence);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        AnalysisObservation, AnalysisObservationKind, ClaimOrigin, Uncertainty,
-    };
+    use crate::{AnalysisObservation, AnalysisObservationKind, ClaimOrigin, Uncertainty};
 
     #[test]
     fn audit_events_are_append_only_and_sequenced() {
@@ -332,7 +408,10 @@ mod tests {
         });
 
         assert_eq!(engine.workspace().claims.len(), 1);
-        assert_eq!(engine.workspace().claims[0].origin, ClaimOrigin::MachineAnalysis);
+        assert_eq!(
+            engine.workspace().claims[0].origin,
+            ClaimOrigin::MachineAnalysis
+        );
         assert!(!engine.workspace().has_human_judgment());
         assert!(matches!(
             &engine.events()[1].kind,

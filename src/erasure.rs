@@ -9,6 +9,10 @@ pub fn erase(envelope: RequestEnvelope) {
 pub struct ErasureProtocol;
 
 impl ErasureProtocol {
-    pub const fn new() -> Self { Self }
-    pub fn erase(&self, envelope: RequestEnvelope) { erase(envelope); }
+    pub const fn new() -> Self {
+        Self
+    }
+    pub fn erase(&self, envelope: RequestEnvelope) {
+        erase(envelope);
+    }
 }

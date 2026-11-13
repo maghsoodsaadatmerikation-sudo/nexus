@@ -12,7 +12,8 @@ pub struct EvidenceRecord {
 }
 
 pub trait EvidenceProvider: Send + Sync {
-    fn research(&self, workspace: &DecisionWorkspace) -> Result<Vec<EvidenceRecord>, AnalysisError>;
+    fn research(&self, workspace: &DecisionWorkspace)
+        -> Result<Vec<EvidenceRecord>, AnalysisError>;
 }
 
 pub struct ResearchEvidenceAdapter<P> {
@@ -32,7 +33,10 @@ impl<P> ResearchEvidenceAdapter<P> {
 impl<P: EvidenceProvider> AnalysisAdapter for ResearchEvidenceAdapter<P> {
     fn analyze(&self, workspace: &DecisionWorkspace) -> Result<AnalysisBatch, AnalysisError> {
         let records = self.provider.research(workspace)?;
-        if records.iter().any(|record| record.source_id.trim().is_empty()) {
+        if records
+            .iter()
+            .any(|record| record.source_id.trim().is_empty())
+        {
             return Err(AnalysisError {
                 message: "research evidence requires explicit source provenance".into(),
             });
@@ -64,7 +68,10 @@ pub struct ChallengeRecord {
 }
 
 pub trait ChallengeProvider: Send + Sync {
-    fn challenge(&self, workspace: &DecisionWorkspace) -> Result<Vec<ChallengeRecord>, AnalysisError>;
+    fn challenge(
+        &self,
+        workspace: &DecisionWorkspace,
+    ) -> Result<Vec<ChallengeRecord>, AnalysisError>;
 }
 
 pub struct AiChallengeAdapter<P> {
@@ -116,11 +123,14 @@ impl<P: ChallengeProvider> AnalysisAdapter for AiChallengeAdapter<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ClaimOrigin, WorkspaceEngine, ProvenanceId};
+    use crate::{ClaimOrigin, ProvenanceId, WorkspaceEngine};
 
     struct ResearchFixture;
     impl EvidenceProvider for ResearchFixture {
-        fn research(&self, _workspace: &DecisionWorkspace) -> Result<Vec<EvidenceRecord>, AnalysisError> {
+        fn research(
+            &self,
+            _workspace: &DecisionWorkspace,
+        ) -> Result<Vec<EvidenceRecord>, AnalysisError> {
             Ok(vec![EvidenceRecord {
                 id: "e-1".into(),
                 text: "A source-backed lead".into(),
@@ -132,7 +142,10 @@ mod tests {
 
     struct ChallengeFixture;
     impl ChallengeProvider for ChallengeFixture {
-        fn challenge(&self, _workspace: &DecisionWorkspace) -> Result<Vec<ChallengeRecord>, AnalysisError> {
+        fn challenge(
+            &self,
+            _workspace: &DecisionWorkspace,
+        ) -> Result<Vec<ChallengeRecord>, AnalysisError> {
             Ok(vec![ChallengeRecord {
                 id: "a-1".into(),
                 kind: AnalysisObservationKind::Counterargument,
@@ -149,7 +162,10 @@ mod tests {
         let batch = ResearchEvidenceAdapter::new(ResearchFixture, "r-1")
             .analyze(&workspace)
             .unwrap();
-        assert_eq!(batch.observations[0].source_ids, vec!["source:https://example.invalid/paper"]);
+        assert_eq!(
+            batch.observations[0].source_ids,
+            vec!["source:https://example.invalid/paper"]
+        );
         assert_eq!(batch.observations[0].uncertainty, Uncertainty::Medium);
         assert!(!workspace.has_human_judgment());
     }
@@ -161,13 +177,19 @@ mod tests {
             .analyze(engine.workspace())
             .unwrap();
         engine.record_analysis_batch(batch);
-        assert_eq!(engine.workspace().claims[0].origin, ClaimOrigin::MachineAnalysis);
+        assert_eq!(
+            engine.workspace().claims[0].origin,
+            ClaimOrigin::MachineAnalysis
+        );
         assert!(!engine.workspace().has_human_judgment());
     }
 
     struct MissingSource;
     impl EvidenceProvider for MissingSource {
-        fn research(&self, _workspace: &DecisionWorkspace) -> Result<Vec<EvidenceRecord>, AnalysisError> {
+        fn research(
+            &self,
+            _workspace: &DecisionWorkspace,
+        ) -> Result<Vec<EvidenceRecord>, AnalysisError> {
             Ok(vec![EvidenceRecord {
                 id: "bad".into(),
                 text: "Unprovenanced".into(),
