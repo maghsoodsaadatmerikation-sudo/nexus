@@ -1,0 +1,66 @@
+name: NEXUS Stage 21 — Stacked Integration Preflight
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/stage21-stack-integration.yml'
+      - 'scripts/stage21-stack-preflight.py'
+      - 'scripts/test-stage21-stack-preflight.py'
+      - 'docs/STAGE-21-INTEGRATION-AND-RELEASE-FREEZE.md'
+
+permissions:
+  contents: read
+  checks: read
+  pull-requests: read
+
+jobs:
+  read-only-exact-sha-preflight:
+    name: read-only-exact-sha-preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact PR revision without retained credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Ensure no production credentials and exact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -m py_compile scripts/stage21-stack-preflight.py scripts/test-stage21-stack-preflight.py
+
+      - name: Confirm Work Mode cumulative ancestor without merging anything
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin refs/heads/feat/work-mode-20261113:refs/remotes/origin/feat/work-mode-20261113
+          git merge-base --is-ancestor refs/remotes/origin/feat/work-mode-20261113 HEAD
+          test -f web/work-mode-core.js
+          test -f web/chat-history.js
+          test -f web/connections.html
+          test -f web/research-chat.html
+          test -f artifact-05/src/connections.rs
+
+      - name: Adversarial no-network gate tests
+        run: python3 scripts/test-stage21-stack-preflight.py
+
+      - name: Observe all six live PR heads and their exact-head checks (read only)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/stage21-stack-preflight.py --live
+
+      - name: Check workflow authority boundary
+        run: python3 scripts/verify-workflow-authority.py
+
+      - name: Explicitly refuse production-release claims
+        run: |
+          echo 'Development stack verified only; no Railway data accessed or changed.'
+          echo 'No backup, real restore, Render deployment, main merge or release Seal.'
+          echo 'Issues #104 and #70 remain separate unresolved acceptance gates.'
