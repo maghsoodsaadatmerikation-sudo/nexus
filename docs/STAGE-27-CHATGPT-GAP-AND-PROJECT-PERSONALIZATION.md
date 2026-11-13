@@ -94,6 +94,11 @@ implementation. The original independent real Railway-volume backup/restore
 - Apply changes, then Save to include them in the existing AES-256-GCM
   encrypted project archive. Unapplied editor fields are not saved; no
   automatic memory inference, background web request, server sync or provider.
+- The **Prepare local briefing** button is visible even in the native
+  offline Android edition. After user review it generates a read-only bounded
+  project/task instruction preview **without a network request**. Editing a
+  profile, task or goal invalidates that previously visible preview, and
+  locking/deleting the open project clears it. No model response is faked.
 - Prepare a task context explicitly to see a bounded **1500-character draft**
   with at most the last three memory items. Private project files, notes,
   API tokens, other projects and unreviewed editor text are excluded. The
