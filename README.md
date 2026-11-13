@@ -25,6 +25,20 @@ A separate optional server-side model bridge requires a real configured
 provider; the local guide is labeled non-generative. No provider has been funded
 or provisioned by this implementation. [Features, comparison, setup and limits](docs/STUDIO-CAPABILITIES.md).
 
+## Run Studio locally (Linux, one command)
+
+With Python 3.13 and `uv` installed, run from a complete checkout:
+
+```bash
+uv run --project nexus-cloud --frozen python scripts/run-local-studio.py
+```
+
+Open the `/studio` URL printed after the startup check. This supervised launcher
+binds only to loopback, keeps a private reusable gateway token and stops the
+server on Ctrl+C. The local reflection guide works without a model provider;
+actual model responses require explicit server configuration and per-request
+review in Studio. [Setup, credential handling and operational limits](docs/LOCAL-STUDIO.md).
+
 ## Try NEXUS on the web (static, no account)
 
 The English-first multilingual mobile pilot is hosted at

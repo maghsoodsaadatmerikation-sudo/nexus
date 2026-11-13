@@ -5,12 +5,18 @@ on:
     paths:
       - "nexus-cloud/**"
       - "scripts/cloud-adapter-evidence.sh"
+      - "scripts/run-local-studio.py"
+      - "scripts/run-local-pilot.py"
+      - "web/studio.html"
       - ".github/workflows/cloud-adapter.yml"
       - ".github/workflows/cloud-adapter-evidence.yml"
   pull_request:
     paths:
       - "nexus-cloud/**"
       - "scripts/cloud-adapter-evidence.sh"
+      - "scripts/run-local-studio.py"
+      - "scripts/run-local-pilot.py"
+      - "web/studio.html"
       - ".github/workflows/cloud-adapter.yml"
       - ".github/workflows/cloud-adapter-evidence.yml"
   workflow_dispatch:
