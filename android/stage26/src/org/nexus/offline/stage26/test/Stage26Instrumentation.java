@@ -237,9 +237,14 @@ public final class Stage26Instrumentation extends Instrumentation {
                 "return {installed:registrations.length,controlled:!!(sw&&sw.controller)};");
             check(workers.getInt("installed")==0 &&
                   !workers.getBoolean("controlled"),"no-active-or-installed-service-worker");
-            WebSettings settings=page.getSettings();
-            check(!settings.getAllowFileAccess(),"no-arbitrary-file-access");
-            check(!settings.getAllowContentAccess(),"no-ambient-provider-access");
+            AtomicReference<boolean[]> flags = new AtomicReference<>();
+            runOnMainSync(()->{
+                WebSettings settings=page.getSettings();
+                flags.set(new boolean[]{!settings.getAllowFileAccess(),
+                                        !settings.getAllowContentAccess()});
+            });
+            check(flags.get()[0],"no-arbitrary-file-access");
+            check(flags.get()[1],"no-ambient-provider-access");
             testPersistenceAndHumanReview(page);
             Activity old=first;
             runOnMainSync(old::finish);
