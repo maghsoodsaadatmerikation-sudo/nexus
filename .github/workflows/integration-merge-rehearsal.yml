@@ -117,6 +117,12 @@ jobs:
             # regions. A green build is not proof that every feature survived.
             git merge --no-ff --no-edit -s ort -X ours "refs/remotes/origin/rehearsal-$n"
           done
+          # The generic -X ours heuristic masks three feature-route
+          # registrations in the gateway's heavily changed router. Keep the
+          # cumulative reviewed gateway implementation for this scratch test.
+          # This override is NOT a production merge resolution.
+          git show refs/remotes/origin/rehearsal-134:artifact-05/src/lib.rs > artifact-05/src/lib.rs
+          test -s artifact-05/src/lib.rs
           test "$(git rev-list --count "$main_sha"..HEAD)" -ge 6
           echo "DISPOSABLE_STACK_BASE_SHA=$main_sha" >> "$GITHUB_ENV"
           echo "DISPOSABLE_STACK_HEAD_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
