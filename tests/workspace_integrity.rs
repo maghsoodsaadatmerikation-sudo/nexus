@@ -249,3 +249,92 @@ fn unchanged_and_append_only_saves_remain_supported() {
     assert_eq!(disk.load("w").unwrap(), Some(e.snapshot()));
     fs::remove_dir_all(dir).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn snapshot_symlinks_and_hardlinks_are_rejected_without_touching_targets() {
+    use std::os::unix::fs::symlink;
+    for kind in ["symlink", "hardlink", "dangling"] {
+        let dir = root();
+        fs::create_dir_all(&dir).unwrap();
+        let outside = dir.with_extension("outside");
+        let bytes = serde_json::to_vec(&engine().snapshot()).unwrap();
+        if kind != "dangling" {
+            fs::write(&outside, &bytes).unwrap();
+        }
+        if kind == "hardlink" {
+            fs::hard_link(&outside, dir.join("77.json")).unwrap();
+        } else {
+            symlink(&outside, dir.join("77.json")).unwrap();
+        }
+        let mut disk = FileWorkspaceRepository::new(&dir);
+        assert_eq!(disk.load("w"), Err(DurableWorkspaceError::Io));
+        assert_eq!(
+            disk.save(engine().snapshot()),
+            Err(DurableWorkspaceError::Io)
+        );
+        if kind != "dangling" {
+            assert_eq!(fs::read(&outside).unwrap(), bytes);
+        } else {
+            assert!(!outside.exists());
+        }
+        fs::remove_dir_all(dir).unwrap();
+        if kind != "dangling" {
+            fs::remove_file(outside).unwrap();
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn nonregular_snapshot_cannot_block_readers_or_be_replaced_by_save() {
+    use std::{ffi::CString, os::unix::ffi::OsStrExt, sync::mpsc, time::Duration};
+    let dir = root();
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("77.json");
+    let name = CString::new(path.as_os_str().as_bytes()).unwrap();
+    assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+    let (tx, rx) = mpsc::channel();
+    let reader_dir = dir.clone();
+    thread::spawn(move || {
+        let _ = tx.send(FileWorkspaceRepository::new(reader_dir).load("w"));
+    });
+    assert_eq!(
+        rx.recv_timeout(Duration::from_secs(2))
+            .expect("snapshot FIFO blocked a reader"),
+        Err(DurableWorkspaceError::Io)
+    );
+    assert_eq!(
+        FileWorkspaceRepository::new(&dir).save(engine().snapshot()),
+        Err(DurableWorkspaceError::Io)
+    );
+    assert!(!fs::symlink_metadata(path).unwrap().is_file());
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn directory_aliases_are_rejected_but_missing_repositories_remain_empty() {
+    use std::os::unix::fs::symlink;
+    let dir = root();
+    let alias = dir.with_extension("alias");
+    let mut disk = FileWorkspaceRepository::new(&dir);
+    assert_eq!(disk.load("w").unwrap(), None);
+    disk.save(engine().snapshot()).unwrap();
+    let original = fs::read(dir.join("77.json")).unwrap();
+    symlink(&dir, &alias).unwrap();
+    for spelling in [
+        alias.clone(),
+        PathBuf::from(format!("{}/", alias.display())),
+    ] {
+        let mut aliased = FileWorkspaceRepository::new(spelling);
+        assert_eq!(aliased.load("w"), Err(DurableWorkspaceError::Io));
+        assert_eq!(
+            aliased.save(engine().snapshot()),
+            Err(DurableWorkspaceError::Io)
+        );
+    }
+    assert_eq!(fs::read(dir.join("77.json")).unwrap(), original);
+    fs::remove_file(alias).unwrap();
+    fs::remove_dir_all(dir).unwrap();
+}

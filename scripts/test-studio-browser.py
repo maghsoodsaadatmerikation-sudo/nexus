@@ -31,6 +31,7 @@ window.addEventListener('load',async()=>{
   $('messages').querySelector('button').click();fill('message','BRANCHED QUESTION');$('guide').click();
   assert(current().threads[0].nodes.length===4&&$('branch').options.length===2,'editing-preserves-two-branches');
   change('branch',firstHead);assert($('messages').textContent.includes('ORIGINAL QUESTION')&&!$('messages').textContent.includes('BRANCHED QUESTION'),'branch-selector-restores-original');
+  fill('message','KEEP THIS DRAFT');window.confirm=()=>false;change('branch',current().threads[0].nodes.at(-1).id);assert($('branch').value===firstHead&&current().threads[0].head===firstHead&&$('message').value==='KEEP THIS DRAFT','declined-branch-change-restores-selection-and-draft');window.confirm=()=>true;fill('message','');
   $('rename-thread').click();assert(current().threads[0].title==='Renamed conversation','rename-chat');
   fill('search','BRANCHED');assert($('history').children.length===1,'search-includes-other-branches');
   fill('search','');$('archive-thread').click();assert($('history').children.length===0,'archive-hides-thread');
@@ -54,6 +55,7 @@ window.addEventListener('load',async()=>{
   const projectId=current().id;$('lock').click();assert(snapshot().projects.length===0&&$('gateway-token').value===''&&$('editor').value==='','lock-clears-working-data-and-credential');
   fill('passphrase','wrong password 123');$('unlock').click();await wait(()=>$('status').textContent.includes('Operation failed'));assert(snapshot().projects.length===0,'wrong-password-does-not-open');
   fill('passphrase','long private password 123');$('unlock').click();await wait(()=>snapshot().projects.length===1);assert(current().id===projectId&&current().documents[0].versions.at(-1).text==='UNSAVED CANVAS','encrypted-reopen-restores-chats-memory-and-canvas');
+  const unchangedDraftState=JSON.stringify(snapshot());fill('message','UNSENT PRIVATE DRAFT');fill('passphrase','long private password 123');window.confirm=()=>false;$('unlock').click();await sleep(30);assert($('message').value==='UNSENT PRIVATE DRAFT'&&JSON.stringify(snapshot())===unchangedDraftState&&$('passphrase').value==='long private password 123','unlock-requires-confirmation-for-unsent-draft');window.confirm=()=>true;fill('message','');fill('passphrase','');
   const oldId=current().id;fill('project-title','SECOND PROJECT');$('new-project').click();$('new-thread').click();assert(current().id!==oldId&&current().memories.length===0&&!$('use-memory').checked,'new-project-isolates-memory-and-context');
   change('language','fa');assert(document.documentElement.dir==='rtl'&&$('guide').textContent.includes('محلی'),'persian-rtl-interface');
   const unchanged=JSON.stringify(snapshot());
@@ -62,6 +64,8 @@ window.addEventListener('load',async()=>{
   Object.assign(labels,EN);
   const languageTransfer=new DataTransfer();languageTransfer.items.add(new File([JSON.stringify({schema:'nexus.studio.locale.v1',code:'es',dir:'ltr',messages:{...labels,conversation:'Conversación'}})],'spanish-labels.json',{type:'application/json'}));$('language-file').files=languageTransfer.files;$('language-file').dispatchEvent(new Event('change'));
   await wait(()=>document.documentElement.lang==='es');assert($('conversation-card').textContent.includes('Conversación'),'complete-local-language-pack');assert(JSON.stringify(snapshot())===unchanged,'language-import-does-not-touch-projects');
+  const nativeBuffer=File.prototype.arrayBuffer;let rejectFile;File.prototype.arrayBuffer=()=>new Promise((_,reject)=>rejectFile=reject);const pendingFile=new DataTransfer();pendingFile.items.add(new File(['pending'],'late.txt'));$('source-file').files=pendingFile.files;$('source-file').dispatchEvent(new Event('change'));await wait(()=>rejectFile);$('lock').click();const lockedFileStatus=$('status').textContent;rejectFile(Error('late file failure'));await sleep(40);File.prototype.arrayBuffer=nativeBuffer;assert($('status').textContent===lockedFileStatus&&snapshot().projects.length===0,'late-file-failure-cannot-change-locked-session-status');
+  let rejectStatus;window.fetch=()=>new Promise((_,reject)=>rejectStatus=reject);$('check-model').click();await wait(()=>rejectStatus);$('lock').click();const lockedStatus=$('status').textContent;rejectStatus(Error('late network failure'));await sleep(40);assert($('status').textContent===lockedStatus&&snapshot().projects.length===0,'late-failure-cannot-change-locked-session-status');
   assert(document.documentElement.scrollWidth<=innerWidth+2,'no-horizontal-overflow');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
