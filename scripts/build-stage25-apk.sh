@@ -73,6 +73,10 @@ keytool -genkeypair -noprompt \
   > "$OUT/manifest-permissions.txt"
 "$BT/aapt2" dump badging "$OUT/nexus-offline-stage25-test.apk" \
   > "$OUT/badging.txt"
+"$BT/aapt2" dump xmltree "$OUT/nexus-offline-stage25-test.apk" AndroidManifest.xml \
+  > "$OUT/manifest-tree.txt"
+echo "Android manifest public SDK fields:"
+grep -E 'uses-sdk|minSdkVersion|targetSdkVersion' "$OUT/manifest-tree.txt" | head -n 8 || true
 python3 scripts/test-stage25-apk.py \
   --apk "$OUT/nexus-offline-stage25-test.apk" \
   --badging "$OUT/badging.txt" \
