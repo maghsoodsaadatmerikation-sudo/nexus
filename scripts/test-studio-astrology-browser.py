@@ -13,7 +13,7 @@ window.addEventListener('load',async()=>{
  const $=id=>document.getElementById(id),checks=[];
  const assert=(v,label)=>{if(!v)throw Error(label);checks.push(label)};
  const fill=(id,value)=>{$(id).value=value;$(id).dispatchEvent(new Event('input',{bubbles:true}))};
- const check=(id,value)=>{$(id).checked=value;$(id).dispatchEvent(new Event('input',{bubbles:true}))};
+ const check=(id,value)=>{$(id).checked=value;$(id).dispatchEvent(new Event('input',{bubbles:true}));$(id).dispatchEvent(new Event('change',{bubbles:true}))};
  const wait=async fn=>{for(let i=0;i<400;i++){if(fn())return;await new Promise(r=>setTimeout(r,15))}throw Error('wait-timeout')};
  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const snapshot=()=>NexusStudioUI.snapshot(),project=()=>snapshot().projects.find(p=>p.id===$('projects').value);
