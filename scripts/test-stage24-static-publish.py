@@ -139,15 +139,23 @@ class Stage24Tests(unittest.TestCase):
                              "https://maghsoodsaadatmerikation-sudo.github.io/nexus/"+name)
 
     def test_privileged_publish_only_after_read_only_pr_verification(self):
-        workflow = (ROOT / ".github/workflows/stage24-static-site.yml").read_text()
-        self.assertIn("needs: verify-snapshot", workflow)
-        self.assertIn("github.event_name == 'push'", workflow)
-        self.assertIn("refs/heads/feat/work-mode-20261113", workflow)
-        self.assertIn("permissions:\n  contents: read", workflow)
-        self.assertIn("    permissions:\n      contents: write", workflow)
-        self.assertIn("git switch --orphan", workflow)
-        self.assertNotIn("git push --force", workflow)
-        self.assertIn("test -z \"$(git ls-remote --heads origin", workflow)
+        pr = (ROOT / ".github/workflows/stage24-static-site.yml").read_text()
+        push = (ROOT / ".github/workflows/stage24-publish-branch.yml").read_text()
+        self.assertIn("  pull_request:", pr)
+        self.assertNotIn("  push:", pr)
+        self.assertIn("permissions:\n  contents: read", pr)
+        self.assertNotIn("contents: write", pr)
+        self.assertNotIn("id-token: write", pr)
+        self.assertIn("  push:", push)
+        self.assertNotIn("  pull_request:", push)
+        self.assertIn("needs: verify-snapshot", push)
+        self.assertIn("github.event_name == 'push'", push)
+        self.assertIn("refs/heads/feat/work-mode-20261113", push)
+        self.assertIn("permissions:\n  contents: read", push)
+        self.assertIn("    permissions:\n      contents: write", push)
+        self.assertIn("git switch --orphan", push)
+        self.assertNotIn("git push --force", push)
+        self.assertIn("test -z \"$(git ls-remote --heads origin", push)
 
     def test_icon_binary_not_embedded_in_private_log(self):
         for name in ["icons/nexus-192.png","icons/nexus-512.png"]:
