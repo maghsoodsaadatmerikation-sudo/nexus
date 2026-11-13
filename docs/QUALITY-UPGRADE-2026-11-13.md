@@ -85,3 +85,19 @@ are still not supplied by these integrations.
 - Deterministic builders update both the standalone Studio bundle and the legacy
   offline app/service-worker content hash. Snapshot schemas, native APK files
   and production user records are not migrated or rewritten by this release.
+
+## Public observer repair
+
+The public static observer was still pinned to older source `d43f783...`.
+Independent HTTPS reads showed that the HTML/manifest/service worker and decoded
+icon pixels instead match the trusted pre-upgrade `35be3d4...` assets. The stored
+public-only receipt records all five matches. Read-only observers now pin that
+asset source and explicitly do **not** infer the Render deployment's full Git
+commit from matching asset bytes. They continue to reject mismatched bytes and
+test the published baseline, never silently promoting this candidate. This
+quality release's updated offline source is separately tested as a candidate;
+this observation did not deploy it to the public static host.
+
+The older disposable gateway/browser witness now reports only an allowlisted
+static failure code alongside its phase. Arbitrary error text, tokens, HTML and
+user data remain excluded. This improves diagnosis without bypassing assertions.

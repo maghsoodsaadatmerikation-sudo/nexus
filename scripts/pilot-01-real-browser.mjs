@@ -21,6 +21,7 @@ if (process.env.GITHUB_ACTIONS !== 'true' ||
     typeof WebSocket === 'undefined')
   throw new Error('Pilot 01 requires a disposable CI container, Node 22+, and ephemeral credentials');
 
+const SAFE_FAILURE_CODES=new Set(["original-ui-not-loaded", "unloaded-edit-enabled", "real-readiness", "create-workspace", "workspace-not-selected", "claim-record", "alternative-record", "silent-judgment", "explicit-judgment", "workspace-export", "export-not-confirmed", "server-reload-failed", "persisted-data-mismatch", "incorrect-viewport", "browser-exited", "browser-debugger-port", "browser-page-target", "nonlocal-debugger", "debugger-timeout", "debugger-error", "browser-rpc-failure", "browser-rpc-timeout", "browser-page-ready", "browser-closed", "real-browser-download-missing", "download-not-equal-to-server", "readiness-after-restart", "timed-out-ui-action", "fresh-browser-did-not-reset", "backend-allowed-missing-bearer", "missing-auth-granted-access", "UI-state-not-restored", "persisted-get", "human-judgment-lost", "viewport", "restart-changed-snapshot", "pilot-browser-assertion"]);
 const sha256 = data => createHash('sha256').update(data).digest('hex');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const deadline = async (fn, maxMs, label) => {
@@ -117,7 +118,7 @@ async function openBrowser(layout) {
       if (result.exceptionDetails || !result.result || result.result.value === undefined)
         throw new Error('pilot-browser-assertion');
       const data = result.result.value;
-      if (data?.status !== 'PASS') throw new Error('pilot-browser-assertion');
+      if (data?.status !== 'PASS') throw new Error(SAFE_FAILURE_CODES.has(data?.failure_code)?data.failure_code:'pilot-browser-assertion');
       return data;
     };
     await rpc('Page.setDownloadBehavior', {behavior: 'allow', downloadPath: downloads});
@@ -201,7 +202,7 @@ function createScript(workspace, layout) {
         'record-alternative','no-auto-judgment','explicit-human-judgment',
         'browser-json-export','authenticated-server-reload'],
         snapshot_sha256:digest, events:snapshot.events.length, width:actualWidth};
-    } catch (error) {return {status:'FAIL'};}
+    } catch (error) {return {status:'FAIL',failure_code:${JSON.stringify([...SAFE_FAILURE_CODES])}.includes(error?.message)?error.message:'pilot-browser-assertion'};}
   })()`;
 }
 function reloadScript(workspace, layout) {
@@ -253,7 +254,7 @@ function reloadScript(workspace, layout) {
       return {status:'PASS', checks:['missing-bearer-denied','browser-context-reloaded',
         'real-workspace-survived-restart','human-judgment-retained','audit-visible'],
         snapshot_sha256:digest, events:snapshot.events.length, width};
-    } catch (error) {return {status:'FAIL'};}
+    } catch (error) {return {status:'FAIL',failure_code:${JSON.stringify([...SAFE_FAILURE_CODES])}.includes(error?.message)?error.message:'pilot-browser-assertion'};}
   })()`;
 }
 let phase = 'bootstrap';
@@ -300,9 +301,9 @@ try {
     layouts:reports, live_railway_tested:false, human_user_tested:false,
     independent_production_backup_verified:false, deployment_changed:false,
     release_authority:'none', seal:false}) + '\n');
-} catch {
+} catch (error) {
   process.stdout.write(JSON.stringify({schema:'nexus.pilot-01.real-browser-gateway.v1',
-    status:'FAIL', stage:phase, scope:'synthetic-disposable-ci-only',
+    status:'FAIL', stage:phase, failure_code:SAFE_FAILURE_CODES.has(error?.message)?error.message:'pilot-browser-assertion', scope:'synthetic-disposable-ci-only',
     live_railway_tested:false, release_authority:'none', seal:false}) + '\n');
   process.exitCode = 1;
 }
