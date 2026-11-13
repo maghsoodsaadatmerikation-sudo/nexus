@@ -1,0 +1,30 @@
+name: NEXUS Real Device Model Acceptance
+on:
+  pull_request:
+    paths:
+      - 'web/device/**'
+      - 'public/studio/device/**'
+      - 'scripts/*device-model*'
+      - '.github/workflows/device-model.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-wasm-model:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - run: python3 scripts/build-device-model.py --check
+      - name: Run actual pinned small model in a disposable browser
+        run: |
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
+          node scripts/test-device-model-browser.mjs > device-model-browser.json
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: device-model-real-witness
+          path: device-model-browser.json
+          if-no-files-found: error
