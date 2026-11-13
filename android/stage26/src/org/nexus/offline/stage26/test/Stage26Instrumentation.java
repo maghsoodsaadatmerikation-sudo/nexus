@@ -242,6 +242,29 @@ public final class Stage26Instrumentation extends Instrumentation {
             "btoa('offline-synthetic-encrypted-export'))");
         confirmActualSystemDocumentPicker("native-save-picker-approval-required");
 
+        // Android DocumentsUI closes asynchronously. The native Activity
+        // must receive RESULT_CANCELED before it may open a different picker.
+        // Never bypass the production guard; wait until it really clears.
+        AtomicReference<Boolean> exportReleased=new AtomicReference<>(false);
+        for(int i=0;i<120;i++) {
+            runOnMainSync(()->{
+                try {
+                    Field field=activity.getClass().getDeclaredField("pendingExport");
+                    field.setAccessible(true);
+                    Field chooserField=activity.getClass().getDeclaredField("chooser");
+                    chooserField.setAccessible(true);
+                    exportReleased.set(field.get(activity)==null &&
+                                       chooserField.get(activity)==null);
+                } catch(Exception exception) {
+                    exportReleased.set(false);
+                }
+            });
+            if(Boolean.TRUE.equals(exportReleased.get()))break;
+            SystemClock.sleep(100);
+        }
+        check(Boolean.TRUE.equals(exportReleased.get()),
+              "android-document-export-cancellation-clears-native-pending-state");
+
         AtomicReference<Boolean> importHook=new AtomicReference<>(false);
         runOnMainSync(()->{
             WebChromeClient chrome=view.getWebChromeClient();
