@@ -1,0 +1,138 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer"><title>NEXUS · Source-by-source research dossier</title>
+<style>
+:root{font:16px/1.65 system-ui,sans-serif;color:#163d36;background:#eef5f2}
+*{box-sizing:border-box}body{margin:0}main{max-width:870px;margin:auto;padding:22px 15px}
+section{background:white;border:1px solid #c0d1c8;border-radius:14px;padding:16px;margin:15px 0}
+label{display:block;margin-top:12px}input,textarea,button,select{font:inherit;padding:10px;border:1px solid #a9bcb3;border-radius:8px;max-width:100%}
+input:not([type=checkbox]),textarea{width:100%}textarea{min-height:90px}
+button{background:#156a59;color:white;cursor:pointer}button:disabled{opacity:.5}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.help{color:#496b60}
+#sources .item{border-top:1px solid #dae6e0;padding:12px 0;overflow-wrap:anywhere}
+a{color:#057664}pre{white-space:pre-wrap;overflow-wrap:anywhere}
+</style></head><body><main>
+<div class="row"><a href="/research-chat">Source chat</a><a href="/model-chat">Optional model chat</a>
+<label for="language">Language <select id="language"><option value="en">English</option><option value="fa">فارسی</option></select></label></div>
+<h1 data-k="title">NEXUS · Research dossier</h1>
+<p data-k="description">User-steered public research in up to four separately approved searches, not autonomous deep research. Sources are unverified excerpts, not factual conclusions. NEXUS never makes your final judgment.</p>
+<section>
+<label for="token" data-k="token">Private NEXUS gateway token</label><input id="token" type="password" autocomplete="off">
+<label for="question" data-k="question">My overarching research question</label><textarea id="question" maxlength="1000"></textarea>
+<label for="query" data-k="query">Exact public query for this single search</label><input id="query" maxlength="250">
+<label class="row"><input id="consent" type="checkbox">
+<span data-k="consent">I approve sending precisely this query to Wikipedia and DuckDuckGo Instant Answers once.</span></label>
+<div class="row"><button id="search" data-k="search">Search this query once</button><button id="stop" data-k="stop" disabled>Stop waiting</button><button id="clear" data-k="clear">Clear dossier</button></div>
+<p id="status" role="status" aria-live="polite"></p>
+<p data-k="privacy" class="help">Only the explicit query is sent to public providers; the question, token and accumulated dossier stay at the NEXUS gateway or in this tab. Provider search may be incomplete; dates of retrieval are not publication dates.</p>
+</section>
+<section><h2 data-k="sources">Reviewed source ledger</h2><p id="count" role="status"></p><div id="sources"></div>
+<label for="notes" data-k="notes">My interpretation or unresolved disagreements (not verified by NEXUS)</label><textarea id="notes" maxlength="1500"></textarea>
+<div class="row"><button id="export" data-k="export" disabled>Download plaintext research dossier (Markdown)</button></div>
+<p data-k="notice" class="help">Exporting is plaintext. NEXUS does not claim source reliability, corroboration, scholarly peer review, or inferred citations.</p></section>
+</main><script>
+'use strict';const $=id=>document.getElementById(id);
+const record=[];let epoch=0,controller=null,busy=false,initialQuestion='';
+const L={
+ en:{title:'NEXUS · Research dossier',description:'Up to four separately approved public searches, not automated Deep Research. Source passages are unverified evidence and you retain judgment.',token:'Private NEXUS gateway token',question:'My overarching research question',query:'Exact public query for this single search',consent:'Approve sending exactly this query to Wikipedia and DuckDuckGo Instant Answers once',search:'Search this query once',stop:'Stop waiting',clear:'Clear dossier',privacy:'Only the exact query goes to public search providers; question/token/collected sources remain at the NEXUS gateway or inside this tab. Retrieval is not publication.',sources:'Source-by-source ledger',notes:'My interpretation or unresolved disagreements (not verified by NEXUS)',export:'Download plaintext research dossier (Markdown)',notice:'Plaintext export; source excerpts are not independent truth or citations inferred by a generative model.'},
+ fa:{title:'نکسوس · پروندهٔ پژوهشی',description:'حداکثر چهار جست‌وجوی عمومی با تأیید جداگانه؛ نه پژوهش عمیق خودکار. منابع گزیده‌هایی تأییدنشده‌اند و داوری نهایی با شماست.',token:'توکن خصوصی درگاه نکسوس',question:'پرسش کلی پژوهش من',query:'عبارت دقیق این جست‌وجوی عمومی',consent:'اجازهٔ یک‌باره برای ارسال دقیق همین عبارت به ویکی‌پدیا و پاسخ سریع داک‌داک‌گو',search:'یک بار جست‌وجوی این عبارت',stop:'توقف انتظار',clear:'پاک‌کردن پرونده',privacy:'فقط عبارت تأییدشده به جست‌وجوگرهای عمومی فرستاده می‌شود. پرسش، توکن و مجموعهٔ منابع ارسال نمی‌شوند. زمان بازیابی، تاریخ انتشار نیست.',sources:'دفتر ثبت منبع‌به‌منبع',notes:'برداشت یا تعارض‌های حل‌نشدهٔ من (بدون تأیید نکسوس)',export:'دریافت پروندهٔ پژوهشی به‌شکل Markdown ساده',notice:'خروجی متن ساده است؛ گزیده‌های منابع اثبات مستقل حقیقت یا استناد ساختهٔ مدل نیستند.'}
+};
+function label(key){return L[$('language').value][key]||key}
+function status(message){$('status').textContent=message}
+function lockControls(){$('search').disabled=busy||record.length>=4;$('stop').disabled=!busy;$('clear').disabled=busy;$('export').disabled=busy||record.length===0}
+function cancel(){epoch++;controller?.abort();controller=null;busy=false;$('consent').checked=false;lockControls()}
+function validUrl(value){try{const u=new URL(value);const host=u.hostname.toLowerCase();return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&
+ !u.hash&&host.includes('.')&&!host.endsWith('.internal')&&!host.endsWith('.local')&&!host.endsWith('.localhost')&&
+ !host.startsWith('[')&&!/^\d+(?:\.\d+){3}$/.test(host)&&!/[\x00-\x1f]/.test(value)&&value.length<=2048?u.href:null}catch{return null}}
+function plain(value,max){return typeof value==='string'?Array.from(value).slice(0,max).join(''):''}
+function source(raw){
+ if(!raw||typeof raw!=='object')return null;
+ const u=validUrl(raw.url);
+ if(!u||typeof raw.title!=='string'||typeof raw.excerpt!=='string')return null;
+ return {id:plain(raw.id,30),title:plain(raw.title,140),
+  url:u,excerpt:plain(raw.excerpt,1800),
+  origin:plain(raw.origin,60),provider:plain(raw.provider,50),
+  retrieved_at_unix:Number.isSafeInteger(raw.retrieved_at_unix)&&raw.retrieved_at_unix>0?raw.retrieved_at_unix:null};
+}
+function draw(){
+ $('sources').replaceChildren();$('count').textContent=record.length+'/4 searches';
+ for(const step of record){
+  const h=document.createElement('h3');h.textContent='Query '+step.number+': '+step.query;$('sources').append(h);
+  const s=document.createElement('p');s.textContent=step.sources.length+
+    ' reviewed-source records · statuses: '+step.providers.join(', ')+' · unknowns: '+step.unknowns.join('; ');
+  $('sources').append(s);
+  for(const item of step.sources){
+   const card=document.createElement('div');card.className='item';
+   const title=document.createElement('strong');title.textContent=item.title+' ['+step.number+':'+item.id+']';
+   const a=document.createElement('a');a.textContent=item.url;a.href=item.url;a.target='_blank';a.rel='noopener noreferrer';
+   const detail=document.createElement('p');detail.textContent=
+       'Provider: '+item.provider+' · Origin: '+item.origin+
+       ' · retrieved UTC: '+(item.retrieved_at_unix?new Date(item.retrieved_at_unix*1000).toISOString():'unknown');
+   const excerpt=document.createElement('p');excerpt.textContent=item.excerpt;
+   card.append(title,document.createElement('br'),a,detail,excerpt);$('sources').append(card);
+  }
+ }
+ lockControls();
+}
+function markdown(){
+ const out=['# NEXUS source-by-source research dossier','','Question: '+initialQuestion,
+  'Status: user-curated, unverified evidence; not autonomous Deep Research',''];
+ for(const step of record){
+  out.push('## Search '+step.number+': '+step.query,'');
+  if(!step.sources.length)out.push('No source excerpts returned.','');
+  for(const item of step.sources){
+   out.push('### ['+step.number+':'+item.id+'] '+item.title,
+      'URL: '+item.url,
+      'Origin: '+item.origin+'; Provider: '+item.provider,
+      'Retrieved UTC: '+(item.retrieved_at_unix?new Date(item.retrieved_at_unix*1000).toISOString():'unknown'),
+      'Excerpt (unverified):',
+      item.excerpt,'');
+  }
+  out.push('Provider results: '+step.providers.join('; '),
+    'Uncertainties: '+step.unknowns.join('; '),'');
+ }
+ out.push('## User interpretation (unverified)','',$('notes').value,
+   '','No verified factual conclusion, automated judgment, model synthesis or source authenticity is claimed.');
+ return out.join('\n').slice(0,100000);
+}
+$('language').onchange=()=>{cancel();document.documentElement.lang=$('language').value;document.documentElement.dir=$('language').value==='fa'?'rtl':'ltr';for(const el of document.querySelectorAll('[data-k]'))el.textContent=label(el.dataset.k);draw()};
+$('token').oninput=()=>{cancel();record.length=0;initialQuestion='';$('notes').value='';draw();status('Token changed; prior source context cleared')};
+for(const id of ['question','query'])$(id).addEventListener('input',()=>{$('consent').checked=false});
+$('stop').onclick=()=>{cancel();status('Local wait cancelled. Remote search may have completed.')};
+$('clear').onclick=()=>{cancel();record.length=0;initialQuestion='';$('question').value='';$('query').value='';$('notes').value='';draw();status('Dossier cleared')};
+$('search').onclick=async()=>{
+ if(busy||record.length>=4)return;
+ const token=$('token').value.trim(),question=$('question').value.trim(),query=$('query').value.trim();
+ if(!token||!question||Array.from(question).length>1000||!query||Array.from(query).length>250||!$('consent').checked||
+   (record.length&&question!==initialQuestion)){status('Exact question/query/consent and NEXUS token required; question cannot change midway.');return}
+ $('consent').checked=false;const own=new AbortController(),scope=++epoch;controller=own;busy=true;lockControls();
+ const timer=setTimeout(()=>own.abort(),17000);
+ try{
+  const response=await fetch('/v1/research-chat',{method:'POST',
+   headers:{'content-type':'application/json',authorization:'Bearer '+token},
+   body:JSON.stringify({language:$('language').value,messages:[{role:'human',content:question.slice(0,1500)}],
+     search:true,consent:true,query,reviewed_sources:[],context_sources:[],history_context:null}),
+   credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer',signal:own.signal});
+  if(scope!==epoch)return;
+  if(!response.ok)throw Error('NEXUS search unavailable ('+response.status+').');
+  const value=await response.json();
+  if(scope!==epoch)return;
+  if(value.schema!=='nexus.research-chat.v1'||value.authority!=='none'||value.judgment_changed!==false||
+     !Array.isArray(value.sources)||value.sources.length>8||!Array.isArray(value.providers)||!Array.isArray(value.unknowns))
+       throw Error('Unexpected research response.');
+  const sources=value.sources.map(source).filter(Boolean);
+  if(!record.length)initialQuestion=question;
+  record.push({number:record.length+1,query,sources,
+    providers:value.providers.slice(0,4).map(x=>plain(x.provider,40)+':'+plain(x.status,40)),
+    unknowns:value.unknowns.slice(0,6).map(x=>plain(x,150))});
+  draw();status('Search saved locally. Review the sources; the next query requires fresh consent.');
+ }catch(e){if(scope===epoch)status(e.name==='AbortError'?'Search timed out or was cancelled.':String(e.message||e).slice(0,130))}
+ finally{clearTimeout(timer);if(scope===epoch){controller=null;busy=false;lockControls()}}
+};
+$('export').onclick=()=>{if(!record.length||busy||!confirm('Download this UNENCRYPTED dossier with research excerpts and your notes?'))return;
+ const url=URL.createObjectURL(new Blob([markdown()],{type:'text/markdown;charset=utf-8'}));
+ const a=document.createElement('a');a.href=url;a.download='nexus-research-dossier.md';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200);
+};
+draw();
+</script></body></html>
