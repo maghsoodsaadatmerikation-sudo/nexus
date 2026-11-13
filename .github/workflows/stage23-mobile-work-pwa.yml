@@ -26,7 +26,7 @@ jobs:
       - name: Checkout exact proposed revision without saved credentials
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: \${{ github.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Validate exact source, no production credentials
@@ -34,10 +34,10 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test -z "\${RAILWAY_TOKEN:-}"
-          test -z "\${RAILWAY_API_TOKEN:-}"
-          test -z "\${NEXUS_API_TOKEN:-}"
-          test -z "\${RENDER_API_KEY:-}"
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
           python3 -m py_compile scripts/build-mobile-work-pwa.py scripts/test-mobile-work-pwa.py
           node --check scripts/test-mobile-work-pwa-browser.mjs
 
