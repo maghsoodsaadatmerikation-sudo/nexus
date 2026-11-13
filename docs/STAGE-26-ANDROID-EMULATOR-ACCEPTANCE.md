@@ -36,9 +36,12 @@ synthetic data only:
 - An incorrect archive password is rejected, and a tampered encrypted
   backup cannot overwrite the successfully saved project.
 - The Android system ACTION_CREATE_DOCUMENT and ACTION_OPEN_DOCUMENT
-  intents are invoked from the native user-mediated export/import bridges.
-  The test cancels these pickers; it does **not** claim that actual
-  document bytes were written and successfully imported.
+  flows are initiated by the native user-mediated export/import bridges.
+  The test uses Android UiAutomation to **observe real DocumentsUI windows**
+  and cancels them with a system Back action. An ActivityMonitor on the
+  instrumentation did not intercept these cross-process launches; observing
+  the actual OS picker is the stronger evidence. No claim that actual
+  document bytes were written and successfully imported is made.
 
 All checks run with zero app INTERNET permissions; no provider SDK, token,
 network search, plugin or backend account is installed.
