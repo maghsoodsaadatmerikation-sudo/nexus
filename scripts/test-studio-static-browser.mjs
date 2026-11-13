@@ -102,6 +102,7 @@ try{
  await poll(()=>retryJs("document.readyState==='complete'&&Boolean(window.NexusStudioUI)&&Boolean(document.getElementById('studio-offline'))"),15000,'studio-not-rendered');
  assert(await js("document.documentElement.scrollWidth<=innerWidth+2"),'mobile-overflow');checks.push('responsive-studio-renders');
  assert(await js("navigator.serviceWorker.getRegistration(location.href).then(r=>!r)"),'unapproved-worker');checks.push('no-automatic-worker');
+ await poll(()=>retryJs('Boolean(window.NexusDevice)'),10000,'device-controls-not-ready');await js("document.getElementById('device-check').click();true");await poll(()=>retryJs("document.getElementById('device-readiness').textContent.includes('not been verified')"),10000,'readiness-not-rendered');assert(await js("NexusDevice.worker===null&&NexusDevice.report().generation_observed===false"),'readiness-started-model');checks.push('readiness-does-not-load-model-or-claim-execution');
  await js("document.getElementById('check-model').click();true");
  assert(await js("document.getElementById('model-status').textContent.includes('No model hosted here')&&performance.getEntriesByType('resource').every(r=>!r.name.includes('/studio-api/'))"),'static-model-truthfulness');checks.push('no-model-no-api-contact');
  await js("document.getElementById('project-title').value='SYNTHETIC MOBILE PROJECT';document.getElementById('new-project').click();document.getElementById('new-thread').click();document.getElementById('message').value='SYNTHETIC PRIVATE QUESTION';document.getElementById('guide').click();true");

@@ -82,3 +82,22 @@ During development, an ungrounded color question produced a misleading answer
 about interpretation. This model is therefore presented as limited text drafting
 from supplied information, not verified independent factual question answering.
 Passing the grounded execution smoke does not certify general knowledge.
+
+## Readiness and local execution reports
+
+**Check device readiness** makes no model request and starts no Worker. It checks
+basic secure-context/Worker/WASM/cache/crypto availability, the browser's coarse
+memory hint, and `navigator.storage.estimate()` when available. The storage
+headroom suggestion is three times the pinned download size; it is an advisory
+browser-quota estimate, not measured free RAM. Missing estimates remain unknown.
+Low storage is advisory so an already cached model is not falsely blocked.
+Passing these checks does not certify actual model execution or Android support.
+
+**Download local execution report** explicitly exports an allowlisted JSON report
+from this tab: current model state, configuration fingerprint, observed generation,
+input/output token budget and elapsed time. It excludes input/answer text, project
+names, source excerpts, passwords and access tokens. The report is not uploaded,
+not saved automatically, and not an independent attestation or quality evaluation.
+Lock/unload/erasure clears the in-memory observation. A model process that cannot
+start, crashes or exceeds its deadline returns to a retryable idle state with a
+specific non-sensitive recovery code.

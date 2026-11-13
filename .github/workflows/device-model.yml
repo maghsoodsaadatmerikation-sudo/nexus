@@ -20,6 +20,7 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 scripts/build-device-model.py --check
+      - run: node scripts/test-device-model-readiness.mjs
       - name: Exercise reviewed local transport and stale-response isolation
         run: python3 scripts/test-device-model-ui.py
       - name: Run actual pinned small model in a disposable browser
