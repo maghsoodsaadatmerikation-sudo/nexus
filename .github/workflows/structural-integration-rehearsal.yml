@@ -43,6 +43,8 @@ jobs:
           python3 scripts/test-render-readiness.py
           python3 scripts/test-workspace-backup.py
           python3 scripts/test-workspace-restore.py
+          python3 scripts/test-stage-d-private-observation.py
+          bash scripts/test-stage-d-readiness.sh
           bash scripts/v1.2-durable-state-resilience.sh
           python3 scripts/test-durable-state-contract.py
 
