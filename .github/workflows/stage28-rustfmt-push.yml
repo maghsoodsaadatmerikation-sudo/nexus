@@ -1,0 +1,60 @@
+name: NEXUS Stage 28 — Safe Rustfmt on Single Development Branch
+on:
+  push:
+    branches:
+      - stage28/operator-llm-consent-20261113
+    paths:
+      - 'artifact-05/src/generative_chat.rs'
+      - 'artifact-05/src/lib.rs'
+      - 'artifact-05/src/main.rs'
+      - '.github/workflows/stage28-rustfmt-push.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  one-branch-format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Only exact reviewed Stage28 branch and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/stage28/operator-llm-consent-20261113
+          test "$GITHUB_EVENT_NAME" = push
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${NEXUS_MODEL_API_KEY:-}"
+          test -z "${RENDER_API_KEY:-}"
+
+      - name: Checkout exact pushed revision using the confined repository token
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: true
+
+      - name: Format Rust source and refuse all unexpected path changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          cargo fmt --manifest-path artifact-05/Cargo.toml --all
+          git diff --name-only > /tmp/stage28-rustfmt.paths
+          if [ ! -s /tmp/stage28-rustfmt.paths ]; then
+            echo 'Already formatted'
+            exit 0
+          fi
+          while IFS= read -r path; do
+            case "$path" in
+              artifact-05/src/generative_chat.rs|artifact-05/src/lib.rs|artifact-05/src/main.rs) ;;
+              *) echo "BLOCKED: rustfmt changed unexpected file"; exit 2 ;;
+            esac
+          done < /tmp/stage28-rustfmt.paths
+          git diff --check
+          git add -- artifact-05/src/generative_chat.rs artifact-05/src/lib.rs artifact-05/src/main.rs
+          git -c user.name='nexus-stage28-formatter' \
+              -c user.email='noreply@users.noreply.github.com' \
+              commit -m 'chore(stage28): apply rustfmt to reviewed optional model integration'
+          git push origin HEAD:refs/heads/stage28/operator-llm-consent-20261113
+          echo 'Stage28 formatting pushed only to experimental feature branch.'
