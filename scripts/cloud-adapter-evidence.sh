@@ -26,6 +26,7 @@ fi
 )
 echo 'NEXUS CLOUD ADAPTER CONTRACT: PASS'
 
+launcher_inputs_sha="$(sha256sum scripts/run-local-studio.py scripts/run-local-pilot.py web/studio.html | sha256sum | awk '{print $1}')"
 studio_model_sha="$(sha256sum nexus-cloud/studio_model.py | awk '{print $1}')"
 main_sha="$(sha256sum nexus-cloud/main.py | awk '{print $1}')"
 tests_sha="$(find nexus-cloud/tests -type f -name '*.py' -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
@@ -48,6 +49,7 @@ printf '%s\n' \
   'Authority Claim: NONE' \
   'Epistemic Claim: TRANSPORT-CONTRACT-ONLY' \
   'Stage D Claim: NOT SATISFIED' \
+  "Local Studio launcher inputs SHA-256: ${launcher_inputs_sha}" \
   "Studio model bridge SHA-256: ${studio_model_sha}" \
   "Cloud main.py SHA-256: ${main_sha}" \
   "Cloud tests SHA-256: ${tests_sha}" \
@@ -73,6 +75,7 @@ test "$(sha256sum nexus-cloud/uv.lock | awk '{print $1}')" = "$lock_sha"
 test "$(sha256sum .github/workflows/cloud-adapter.yml | awk '{print $1}')" = "$contract_workflow_sha"
 test "$(sha256sum .github/workflows/cloud-adapter-evidence.yml | awk '{print $1}')" = "$evidence_workflow_sha"
 test "$(sha256sum scripts/cloud-adapter-evidence.sh | awk '{print $1}')" = "$evidence_script_sha"
+test "$(sha256sum scripts/run-local-studio.py scripts/run-local-pilot.py web/studio.html | sha256sum | awk '{print $1}')" = "$launcher_inputs_sha"
 echo 'NEXUS CLOUD ADAPTER EVIDENCE SELF-AUDIT: PASS'
 
 bundle='nexus-cloud-verification-bundle.tar.gz'
@@ -83,6 +86,9 @@ tar -czf "$bundle" \
   nexus-cloud/tests \
   nexus-cloud/pyproject.toml \
   nexus-cloud/uv.lock \
+  scripts/run-local-studio.py \
+  scripts/run-local-pilot.py \
+  web/studio.html \
   scripts/cloud-adapter-evidence.sh \
   .github/workflows/cloud-adapter.yml \
   .github/workflows/cloud-adapter-evidence.yml
