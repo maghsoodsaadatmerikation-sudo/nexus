@@ -1,10 +1,10 @@
 /* Reviewed public Studio application code only; model bytes use a separate opt-in cache. */
 'use strict';
 const EXPECTED_SHA256='7121c2bd7fa8c365a6facd9bdcbc5b9685775d499f65b32923d3d5bb005bb139';
-const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'ba0c53ac03ea536c';
+const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'e574d0e2c70f9021';
 const ENTRY=new URL('./',self.location.href).href;
 const HTML={url:ENTRY,bytes:272678,sha256:EXPECTED_SHA256,kind:'html'};
-const CODE=[{"path":"device/device-engine.js","bytes":2860,"sha256":"6fb0d40efe36509dfc99cb60e0cac412c0375a6ca4c5af046ca75398219cd873","kind":"javascript"},{"path":"device/device-worker.js","bytes":7746,"sha256":"48d9ce4f2ac1fe44a18114485816affbad985c0ad4cd66cb8f3bf70bd6dade82","kind":"javascript"},{"path":"device/device-ui.js","bytes":3860,"sha256":"fd02a4a50f35bd870c1f8aeb148fe1591f1d038289e85e003c5bdb2a9903dff6","kind":"javascript"},{"path":"device/model-manifest.json","bytes":2935,"sha256":"e5c53d0ab77f71698028487c5dd569529266d916c35cc931e85c9ca74ca61f5e","kind":"json"}].map(a=>({...a,url:new URL(a.path,ENTRY).href}));
+const CODE=[{"path":"device/device-engine.js","bytes":2860,"sha256":"6fb0d40efe36509dfc99cb60e0cac412c0375a6ca4c5af046ca75398219cd873","kind":"javascript"},{"path":"device/device-worker.js","bytes":7888,"sha256":"bdac489fa1aefc8c93df2494f22f4aedfba7f96acb963e5f1fd7c9db919dfb15","kind":"javascript"},{"path":"device/device-ui.js","bytes":3860,"sha256":"fd02a4a50f35bd870c1f8aeb148fe1591f1d038289e85e003c5bdb2a9903dff6","kind":"javascript"},{"path":"device/model-manifest.json","bytes":2935,"sha256":"e5c53d0ab77f71698028487c5dd569529266d916c35cc931e85c9ca74ca61f5e","kind":"json"}].map(a=>({...a,url:new URL(a.path,ENTRY).href}));
 async function verified(response,asset=HTML){
  if(!response||response.status!==200||response.redirected||response.type!=='basic')return false;
  const mime=(response.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();

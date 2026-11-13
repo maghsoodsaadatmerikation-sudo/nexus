@@ -60,7 +60,8 @@ async function generate(id,body){
  if(!Array.isArray(messages)||!messages.length||messages.length>42||messages.at(-1)?.role!=='user'||!Number.isInteger(budget)||budget<1||budget>64)fail('invalid-review');
  if(messages.some(m=>!m||!['user','assistant'].includes(m.role)||typeof m.content!=='string'||!m.content.trim())||JSON.stringify(messages).length>6000)fail('context-too-large');
  const context=[{role:'system',content:POLICY},...messages];
- const tokens=pipe.tokenizer.apply_chat_template(context,{tokenize:true,return_tensor:false,add_generation_prompt:true});
+ const tokens=pipe.tokenizer.apply_chat_template(context,{tokenize:true,return_tensor:false,return_dict:false,add_generation_prompt:true});
+ if(!Array.isArray(tokens)||!tokens.length||tokens.some(t=>!Number.isSafeInteger(t)||t<0))fail('invalid-tokenizer-result');
  if(tokens.length>manifest.max_input_tokens)fail('context-too-large');
  phase='generating';
  const output=await pipe(context,{max_new_tokens:budget,do_sample:false,return_full_text:false});
