@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Private, loopback-only tests for single-workspace import hardening."""
 import json
+import importlib.util
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import os
 from pathlib import Path
@@ -74,6 +75,45 @@ class RestoreTests(unittest.TestCase):
         self.assertEqual(json.loads(data), SNAPSHOT)
         self.assertNotIn(TOKEN, result.stdout + result.stderr)
         self.assertIn('single-workspace import only', result.stdout)
+
+    def test_import_sends_exact_bytes_even_after_local_source_changes(self):
+        module_path = Path(__file__).with_name('workspace-restore.py')
+        spec = importlib.util.spec_from_file_location('nexus_restore_test', module_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        original, wid = module.snapshot_bytes(self.snapshot)
+        self.assertEqual(wid, 'ci-restored')
+        self.snapshot.write_text('untrusted replacement')
+
+        class Response:
+            status = 201
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def geturl(self):
+                return 'https://example.org/v1/workspaces/import'
+
+        class Opener:
+            request = None
+            def open(self, request, timeout):
+                self.request = request
+                return Response()
+
+        opener = Opener()
+        module.import_snapshot('https://example.org', TOKEN, original, opener)
+        self.assertEqual(opener.request.data, original)
+        self.assertNotEqual(opener.request.data, self.snapshot.read_bytes())
+
+    def test_symlink_or_malformed_filename_never_used_for_snapshot(self):
+        module_path = Path(__file__).with_name('workspace-restore.py')
+        spec = importlib.util.spec_from_file_location('nexus_restore_test', module_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(module.snapshot_bytes(self.snapshot)[1], 'ci-restored')
+        self.snapshot.write_text('{"schema_version":1,"workspace":{"id":"a","id":"b"},"events":[]}')
+        with self.assertRaises(module.RestoreBlocked):
+            module.snapshot_bytes(self.snapshot)
 
     def test_remote_plain_http_must_not_receive_token(self):
         result = self.run_script(env_overrides={'NEXUS_BASE_URL': 'http://evil.example.org'})
