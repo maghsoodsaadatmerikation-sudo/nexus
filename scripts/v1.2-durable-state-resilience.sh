@@ -9,7 +9,7 @@ fail() {
   exit 1
 }
 
-for f in Dockerfile scripts/workspace-backup.sh scripts/workspace-restore.sh scripts/readonly-verification.sh docs/DEPLOYMENT.md scripts/data-snapshot.py docs/full-data-recovery.md artifact-05/src/main.rs artifact-05/src/lib.rs scripts/verify-data-recovery-http.py docs/gateway-health.md; do
+for f in Dockerfile scripts/workspace-backup.sh scripts/workspace-backup.py scripts/workspace-restore.sh scripts/workspace-restore.py scripts/test-workspace-backup.py scripts/test-workspace-restore.py scripts/readonly-verification.sh docs/DEPLOYMENT.md scripts/data-snapshot.py docs/full-data-recovery.md artifact-05/src/main.rs artifact-05/src/lib.rs scripts/verify-data-recovery-http.py docs/gateway-health.md; do
   [[ -f "$f" ]] || fail "missing $f"
 done
 
@@ -17,16 +17,47 @@ done
 grep -F 'ENV NEXUS_DATA_DIR=/data' Dockerfile >/dev/null || fail 'Docker runtime persistence boundary is not /data'
 grep -F 'persistent volume mounted at `/data`' docs/DEPLOYMENT.md >/dev/null || fail 'deployment contract no longer requires /data persistence'
 
-# Operator backup/restore paths must remain authenticated and JSON-validating.
-grep -F 'NEXUS_WORKSPACE_ID' scripts/workspace-backup.sh >/dev/null || fail 'backup is not scoped to an explicit workspace witness'
-grep -F 'python3 -m json.tool' scripts/workspace-backup.sh >/dev/null || fail 'backup JSON validation missing'
-grep -F 'python3 -m json.tool' scripts/workspace-restore.sh >/dev/null || fail 'restore input JSON validation missing'
-grep -F '/v1/workspaces/import' scripts/workspace-restore.sh >/dev/null || fail 'restore no longer delegates to server-side import/revalidation'
+# Operator backup/restore entrypoints now delegate to the reviewed Python
+# implementation. Keep the protected paths, no-overwrite publication, strict
+# snapshot identity, and no redirected bearer-token requests all exercised.
+# Source strings are only supplementary guardrails: dynamic adversarial
+# tests below are the behavioral authority for this module.
+python3 - <<'PYCHECK_TRANSFER' || fail 'workspace transfer boundary weakened'
+from pathlib import Path
 
-# Backup tooling must never print or persist the bearer token itself.
-if grep -E 'printf .*NEXUS_API_TOKEN|echo .*NEXUS_API_TOKEN|>.*NEXUS_API_TOKEN' scripts/workspace-backup.sh scripts/workspace-restore.sh >/dev/null; then
-  fail 'backup/restore tooling may expose bearer token'
-fi
+backup_shell = Path('scripts/workspace-backup.sh').read_text()
+restore_shell = Path('scripts/workspace-restore.sh').read_text()
+backup = Path('scripts/workspace-backup.py').read_text()
+restore = Path('scripts/workspace-restore.py').read_text()
+harness = Path('scripts/readonly-verification.sh').read_text()
+
+assert 'exec python3 "$ROOT/scripts/workspace-backup.py" "$@"' in backup_shell
+assert 'exec python3 "$ROOT/scripts/workspace-restore.py" "$@"' in restore_shell
+for boundary in (
+    'NEXUS_WORKSPACE_ID', 'NEXUS_API_TOKEN',
+    'https', '/v1/workspaces/', 'json.load',
+    'os.O_EXCL', 'os.fchmod', 'os.fsync', 'os.link',
+    'follow_symlinks=False', 'NoRedirect',
+    'ProxyHandler({})', 'MAX_BYTES',
+):
+    assert boundary in backup, boundary
+for boundary in (
+    'NEXUS_API_TOKEN', '/v1/workspaces/import',
+    'snapshot_bytes', 'os.O_NOFOLLOW', 'os.fstat',
+    'object_pairs_hook=no_duplicates', 'data=raw',
+    'status == 201', 'backup.NoRedirect', 'ProxyHandler({})',
+):
+    assert boundary in restore, boundary
+assert 'python3 scripts/test-workspace-backup.py' in harness
+assert 'python3 scripts/test-workspace-restore.py' in harness
+assert harness.index('python3 scripts/test-workspace-backup.py') < harness.index('bash scripts/verify-docker.sh')
+assert harness.index('python3 scripts/test-workspace-restore.py') < harness.index('bash scripts/verify-docker.sh')
+assert 'bash scripts/workspace-backup.sh "$backup"' in harness
+assert 'bash scripts/workspace-restore.sh "$backup"' in harness
+for shell in (backup_shell, restore_shell):
+    assert 'curl' not in shell
+    assert 'NEXUS_API_TOKEN' not in shell
+PYCHECK_TRANSFER
 
 # CI restore validation must be isolated from user data and prove JSON-equivalent recovery.
 grep -F 'smoke_data="$RUNNER_TEMP/nexus-smoke-data-${GITHUB_RUN_ID}"' scripts/readonly-verification.sh >/dev/null \
