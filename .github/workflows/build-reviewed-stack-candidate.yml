@@ -1,0 +1,81 @@
+name: NEXUS Tested Dev Integration Branch
+
+on:
+  push:
+    branches:
+      - ops/build-reviewed-stack-20261113
+
+permissions:
+  contents: read
+
+jobs:
+  build-without-write-token:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact development source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Run pinned core and gateway tests in disposable source
+        run: bash scripts/build-reviewed-stack-candidate.sh
+      - name: Upload exact candidate patch and non-release receipt
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-tested-stack-candidate
+          path: |
+            nexus-candidate/candidate.patch
+            nexus-candidate/manifest.json
+          retention-days: 7
+
+  publish-only-new-development-ref:
+    needs: build-without-write-token
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    if: github.repository == 'maghsoodsaadatmerikation-sudo/nexus' && github.ref == 'refs/heads/ops/build-reviewed-stack-20261113'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout original main with scoped repository token
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Load exact passing artifact without executing its code
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: nexus-tested-stack-candidate
+          path: candidate
+      - name: Verify source frozen and push only a new development branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          d=Path('candidate')
+          m=json.loads((d/'manifest.json').read_text())
+          assert m['schema']=='nexus.integration.review-candidate.v1'
+          assert m['status']=='SYNTHETIC_CORE_GATEWAY_PASS_PRODUCTION_BLOCKED'
+          for field in ('release_authorized','provider_changed','production_backup_recovered','semantic_security_review_complete'):
+              assert m[field] is False
+          assert hashlib.sha256((d/'candidate.patch').read_bytes()).hexdigest()==m['patch_sha256']
+          PY
+          expected="$(python3 -c 'import json;print(json.load(open("candidate/manifest.json"))["base_main_sha"])')"
+          test "$(git rev-parse HEAD)" = "$expected"
+          git fetch --no-tags origin refs/heads/main
+          test "$(git rev-parse FETCH_HEAD)" = "$expected"
+          target='integration/nexus-reviewed-stack-20261113'
+          test -z "$(git ls-remote --heads origin "refs/heads/$target")"
+          git apply --check candidate/candidate.patch
+          git apply --index candidate/candidate.patch
+          git diff --cached --check
+          git config user.name 'NEXUS Review Candidate'
+          git config user.email 'nexus-review@users.noreply.github.com'
+          git commit -m 'Review-only NEXUS stacked integration; no release authority'
+          git push origin "HEAD:refs/heads/$target"
+          echo "CREATED DEVELOPMENT BRANCH: $target"
