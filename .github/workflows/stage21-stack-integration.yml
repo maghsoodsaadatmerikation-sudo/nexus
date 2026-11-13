@@ -1,6 +1,8 @@
 name: NEXUS Stage 21 — Stacked Integration Preflight
 on:
   pull_request:
+    branches:
+      - feat/work-mode-20261113
     paths:
       - '.github/workflows/stage21-stack-integration.yml'
       - 'scripts/stage21-stack-preflight.py'
