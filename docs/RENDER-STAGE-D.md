@@ -11,6 +11,7 @@ The repository root `render.yaml` defines a single paid Docker web service in Fr
 - `NEXUS_DATA_DIR=/data`,
 - `NEXUS_BIND_ADDR=0.0.0.0:3000`,
 - public HTTPS managed by Render,
+- HTTP health check on `/readyz` rather than the root HTML page (it detects recovery quarantine, but not every disk/operation failure),
 - `autoDeployTrigger: off` (manual deployment only; CI success is not release permission),
 - `NEXUS_API_TOKEN` supplied interactively as a secret (`sync: false`).
 
