@@ -422,7 +422,6 @@ async fn private_api_cache_boundary(request: Request, next: Next) -> Response {
         || path == "/v1/connections/invoke"
         || path == "/v1/research-chat"
         || path == "/v1/model-chat"
-        || path == "/v1/model-chat"
         || path == "/v1/requests"
         || path.starts_with("/v1/requests/")
         || path == "/v1/workspaces"
@@ -450,6 +449,7 @@ async fn recovery_boundary<D: ConstitutionalDelegate>(
     if (path == "/v1/connections"
         || path == "/v1/connections/invoke"
         || path == "/v1/research-chat"
+        || path == "/v1/model-chat"
         || path == "/v1/workspaces"
         || path.starts_with("/v1/workspaces/"))
         && !transport_authorized(&state, request.headers())
@@ -476,6 +476,7 @@ async fn recovery_boundary<D: ConstitutionalDelegate>(
         && (path == "/v1/connections"
             || path == "/v1/connections/invoke"
             || path == "/v1/research-chat"
+        || path == "/v1/model-chat"
             || path == "/v1/workspaces"
             || path.starts_with("/v1/workspaces/"))
     {
