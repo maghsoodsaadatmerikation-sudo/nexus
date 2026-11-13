@@ -88,7 +88,7 @@ def test_invalid_budget_config_fails_closed(monkeypatch, name, value):
     with configured(monkeypatch, lambda _: pytest.fail("invalid config dispatched")) as client:
         result = client.post("/studio-api/respond", json=body(), headers=AUTH)
     assert result.status_code == 503
-    assert value not in result.text if value else result.status_code == 503
+    assert result.json()["detail"] == "Model usage budget is misconfigured"
 
 
 def test_unreviewed_or_unauthenticated_request_does_not_consume_budget(monkeypatch):
