@@ -65,7 +65,7 @@ class Stage26Source(unittest.TestCase):
                       "ActivityMonitor",
                       "ACTION_CREATE_DOCUMENT",
                       "ACTION_OPEN_DOCUMENT",
-                      "vault",
+                      "new W.Vault()",
                       "work-review-required",
                       "work-unlock-failed",
                       "tampered-archive-accepted"):
