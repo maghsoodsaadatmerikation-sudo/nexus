@@ -119,6 +119,7 @@ def check(sources: dict[str, str]) -> None:
             ".nexus-volume-identity" in identity and
             "O_NOFOLLOW" in identity and
             "VOLUME_IDENTITY_MARKER" in snapshot and
+            "elif name == VOLUME_IDENTITY_MARKER:" in snapshot and
             "invalid volume identity marker" in snapshot and
             "if os.listdir(fd)" in enrollment and
             "os.O_EXCL" in enrollment,
