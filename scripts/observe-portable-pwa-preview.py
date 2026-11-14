@@ -23,7 +23,7 @@ BUILDER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(BUILDER)
 
 ORIGIN = "https://nexus-merikation-pwa-preview.onrender.com/"
-RELEASE_SHA = "26aab8d7a27f7329199e0e0e8d3fe21f055e377e"
+RELEASE_SHA = "4b4f32ab54fa6ce8bf4a7f0c1a428c6237307d42"
 MAX_RESPONSE = 500_000
 ATTEMPTS = 3
 
