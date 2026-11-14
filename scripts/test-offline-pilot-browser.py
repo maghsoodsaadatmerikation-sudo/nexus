@@ -146,6 +146,7 @@ window.addEventListener('load', async () => {
     assert(byId('claims').querySelector('img') === null && !window.testXss, 'xss-as-html');
     checks.push('source-required-and-html-escaped');
     fill('origin','machine_analysis'); fill('claim','فقط تحلیل آزمایشی');
+    fill('source','synthetic:model/report;unverified');
     await submit('claim-form');
     assert(byId('decision-view').textContent.includes('هیچ تصمیم انسانی'), 'machine-turned-into-decision');
     checks.push('machine-analysis-non-authority');
