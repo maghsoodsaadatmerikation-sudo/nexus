@@ -94,8 +94,30 @@ async function encrypt(v,key,salt){const e={schema:SCHEMA,iterations:310000,revi
 async function decrypt(raw,pass){const e=envelope(raw),salt=un64(e.salt,16),key=await keyFor(pass,salt);let bytes;try{bytes=await crypto.subtle.decrypt({name:'AES-GCM',iv:un64(e.iv,12),additionalData:aad(e)},key,un64(e.ciphertext,MAX+16))}catch{fail('wrong-passphrase-or-damaged-archive')}return {data:state(JSON.parse(dec.decode(bytes))),key,salt,raw}}
 class IndexedStore{
  async db(){return new Promise((resolve,reject)=>{const r=indexedDB.open('nexus-studio-v1',1);r.onupgradeneeded=()=>r.result.createObjectStore('vault');r.onsuccess=()=>resolve(r.result);r.onerror=r.onblocked=()=>reject(Error('storage'))})}
- async read(){const db=await this.db();try{return await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readonly'),r=tx.objectStore('vault').get('archive');let value=null;r.onsuccess=()=>value=r.result||null;tx.oncomplete=()=>resolve(value);tx.onabort=()=>reject(Error('storage'))})}finally{db.close()}}
- async commit(expected,raw,guard){const db=await this.db();try{return await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readwrite'),s=tx.objectStore('vault');let error='storage';const r=s.get('archive');r.onsuccess=()=>{if(!guard()){error='locked';tx.abort();return}const rev=r.result?envelope(r.result).revision:null;if(rev!==expected){error='conflict';tx.abort();return}if(raw===null)s.delete('archive');else s.put(raw,'archive')};tx.oncomplete=resolve;tx.onabort=()=>reject(Error(error))})}finally{db.close()}}
+ async read(){
+  const db=await this.db();try{return await new Promise((resolve,reject)=>{
+   const tx=db.transaction('vault','readonly'),r=tx.objectStore('vault').get('archive');let value=null,error='storage';
+   r.onsuccess=()=>{
+    // Only an absent key is empty; falsy or malformed stored records are damage.
+    if(r.result===undefined)return;
+    try{envelope(r.result);value=r.result}catch{error='archive-damaged';tx.abort()}
+   };
+   tx.oncomplete=()=>resolve(value);tx.onabort=()=>reject(Error(error));
+  })}finally{db.close()}
+ }
+ async commit(expected,raw,guard){
+  const db=await this.db();try{return await new Promise((resolve,reject)=>{
+   const tx=db.transaction('vault','readwrite'),s=tx.objectStore('vault');let error='storage';const r=s.get('archive');
+   r.onsuccess=()=>{try{
+    if(!guard()){error='locked';tx.abort();return}
+    let rev=null;
+    if(r.result!==undefined){try{rev=envelope(r.result).revision}catch{error='archive-damaged';tx.abort();return}}
+    if(rev!==expected){error='conflict';tx.abort();return}
+    if(raw===null)s.delete('archive');else s.put(raw,'archive');
+   }catch{error='storage';tx.abort()}};
+   tx.oncomplete=resolve;tx.onabort=()=>reject(Error(error));
+  })}finally{db.close()}
+ }
 }
 class Vault{
  constructor(store=new IndexedStore()){this.store=store;this.epoch=0;this.tail=Promise.resolve();this.lock()}
