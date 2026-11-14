@@ -1,3 +1,5 @@
+mod listener;
+
 use axum::{routing::get, Json};
 use nexus_artifact_05_gateway::{
     router, AppState, ConstitutionalDelegate, DelegateError, SafetyConfig, Submission,
@@ -217,9 +219,9 @@ async fn main() {
             .expect("open durable request store"),
     )
     .route("/v1/runtime-identity", get(runtime_identity));
-    let listener = tokio::net::TcpListener::bind(addr)
+    let listener = listener::open(addr)
         .await
-        .expect("bind gateway");
+        .expect("open gateway listener");
     if let Err(error) = axum::serve(listener, app).await {
         eprintln!("NEXUS_OP event=server_exit error={error}");
         std::process::exit(1);

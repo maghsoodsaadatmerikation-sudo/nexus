@@ -83,6 +83,7 @@ def main():
         token = helpers.stored_token(token_path)
         # Reserve the exact socket before spawning: no port-selection/probe race.
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         listener.bind(("127.0.0.1", args.port))
         listener.listen(128)
         port = listener.getsockname()[1]
@@ -99,10 +100,10 @@ def main():
             env=env, cwd=ROOT, pass_fds=(listener.fileno(), lock_fd),
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
-        # Only the child retains the listening socket and operator lock copy.
-        listener.close()
-        listener = None
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        # Retain the reserved socket through startup and supervision, so even a
+        # child exit cannot redirect probes to a replacement listener. The child
+        # independently retains the socket and operator lock if this process dies.
+        opener = helpers.local_opener()
         deadline = time.monotonic() + 10
         while not stopped and time.monotonic() < deadline:
             if process.poll() is not None:

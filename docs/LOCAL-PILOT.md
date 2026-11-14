@@ -40,7 +40,8 @@ token file path, never the token. Read that file locally and enter the token in
 the browser's in-memory API token field. Do not share the token or commit it.
 Use Ctrl-C to stop; restarting the same command retains token and data.
 `--state-dir /private/path` selects a different installation, `--port 3001`
-selects another loopback port, and `--binary /path/to/nexus` selects an executable.
+selects another loopback port, `--port 0` atomically reserves an available port,
+and `--binary /path/to/nexus` selects an executable.
 No option binds a public interface.
 
 The launcher rejects insecure existing directories/files and token symlinks
@@ -117,3 +118,19 @@ production data. A checksum establishes byte integrity, not trust or authority.
 A_out <= A_in, evidence != authority, AuthorizedRequest,
 CT-001..020 and Bootstrap versus Verify separation remain required; both
 Cargo.lock files are unchanged. No new release authority is introduced.
+
+
+The supervisor reserves the exact loopback listener before reading the saved
+credential and passes it to the matching Rust gateway using `NEXUS_LISTEN_FD`.
+It retains its own listener reference throughout probing and supervision. An
+occupied port blocks startup before any request or bearer token is sent. An old
+or incompatible custom binary that cannot adopt the listener fails startup; use
+the gateway and supervisor from the same verified artifact. There is no fallback
+to probing an unrelated listener.
+
+Startup probes bypass proxies and refuse redirects. The readiness body must
+exactly match `{"status":"ready"}` for HTTP 200 or `{"status":"quarantined"}` for
+HTTP 503, within a 4 KiB bound. A status code alone cannot establish readiness.
+The Studio supervisor uses the same no-redirect loopback opener and retains its
+reserved listener as well. Both supervisors allow immediate reuse of the same
+loopback port after their child has stopped.

@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import secrets
 import signal
+import socket
 import stat
 import subprocess
 import sys
@@ -60,12 +61,37 @@ def stored_token(path):
     return value
 
 
+class RejectRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def local_opener():
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), RejectRedirect())
+
+
+def readiness_status(response):
+    status = response.status
+    if status not in (200, 503):
+        raise OSError('readiness probe failed')
+    body = response.read(4097)
+    try:
+        valid = len(body) <= 4096 and json.loads(body) == {
+            'status': 'ready' if status == 200 else 'quarantined'}
+    except (UnicodeError, json.JSONDecodeError):
+        valid = False
+    if not valid:
+        raise OSError('readiness probe returned unexpected metadata')
+    return status
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary', type=Path, default=Path(__file__).resolve().with_name('nexus'))
     parser.add_argument('--state-dir', type=Path,
         default=Path.home() / '.local' / 'share' / 'nexus-local-pilot')
-    parser.add_argument('--port', type=int, default=3000)
+    parser.add_argument('--port', type=int, default=3000,
+                        help='loopback port, or 0 to reserve an available port')
     operation = parser.add_mutually_exclusive_group()
     operation.add_argument('--backup', type=Path, metavar='ARCHIVE',
         help='capture complete data while holding the operator lock; never overwrite')
@@ -79,10 +105,11 @@ def main():
         parser.error('backup/restore requires --offline after stopping every writer')
     if args.offline and not maintenance:
         parser.error('--offline applies only to --backup or --restore')
-    if not 1024 <= args.port <= 65535:
-        parser.error('port must be between 1024 and 65535')
+    if args.port != 0 and not 1024 <= args.port <= 65535:
+        parser.error('port must be 0 or between 1024 and 65535')
     process = None
     lock_fd = None
+    listener = None
     stopped = False
 
     def request_stop(signum, frame):
@@ -115,22 +142,29 @@ def main():
                 *command, '--offline'], pass_fds=(lock_fd,))
             return result.returncode
         binary = args.binary.resolve(strict=True)
+        # Reserve the exact listener before any credential is read or sent.
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(('127.0.0.1', args.port))
+        listener.listen(128)
+        port = listener.getsockname()[1]
         token_path = state / 'api-token'
         token = stored_token(token_path)
         data = state / 'data'
         private_directory(data)
         env = dict(os.environ, NEXUS_API_TOKEN=token, NEXUS_DATA_DIR=str(data),
-                   NEXUS_BIND_ADDR='127.0.0.1:' + str(args.port))
+                   NEXUS_BIND_ADDR='127.0.0.1:' + str(port),
+                   NEXUS_LISTEN_FD=str(listener.fileno()))
         signal.signal(signal.SIGTERM, request_stop)
         signal.signal(signal.SIGINT, request_stop)
         # Keep the advisory lock alive in the child if the supervisor is killed.
-        process = subprocess.Popen([str(binary)], env=env, pass_fds=(lock_fd,),
+        process = subprocess.Popen([str(binary)], env=env, pass_fds=(lock_fd, listener.fileno()),
                                    stdout=sys.stderr, stderr=sys.stderr)
         if stopped:
             process.terminate()
             return 0
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        base = 'http://127.0.0.1:' + str(args.port)
+        opener = local_opener()
+        base = 'http://127.0.0.1:' + str(port)
         deadline = time.monotonic() + 10
         while not stopped and time.monotonic() < deadline:
             if process.poll() is not None:
@@ -150,9 +184,7 @@ def main():
                 except urllib.error.HTTPError as error:
                     response = error
                 with response:
-                    readiness = response.status
-                    if readiness not in (200, 503):
-                        raise OSError('readiness probe failed')
+                    readiness = readiness_status(response)
                 if process.poll() is not None:
                     raise ValueError('gateway exited during startup')
                 print(json.dumps({'url': base, 'gateway_pid': process.pid,
@@ -167,7 +199,7 @@ def main():
                     except subprocess.TimeoutExpired:
                         continue
                 return 0
-            except OSError:
+            except (OSError, json.JSONDecodeError):
                 time.sleep(.05)
         if stopped:
             return 0
@@ -178,6 +210,8 @@ def main():
         print('NEXUS LOCAL PILOT: BLOCKED (' + message + ')', file=sys.stderr)
         return 1
     finally:
+        if listener is not None:
+            listener.close()
         if process is not None and process.poll() is None:
             process.terminate()
             try:

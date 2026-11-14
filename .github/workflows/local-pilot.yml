@@ -7,6 +7,7 @@ on:
       - 'scripts/verify-local-pilot.py'
       - 'scripts/run-local-pilot.py'
       - 'scripts/test-local-pilot-launcher.py'
+      - 'scripts/test-inherited-listener.py'
       - 'scripts/data-snapshot.py'
       - 'src/**'
       - 'artifact-05/**'
@@ -21,6 +22,7 @@ on:
       - 'scripts/verify-local-pilot.py'
       - 'scripts/run-local-pilot.py'
       - 'scripts/test-local-pilot-launcher.py'
+      - 'scripts/test-inherited-listener.py'
       - 'scripts/data-snapshot.py'
       - 'src/**'
       - 'artifact-05/**'
@@ -50,6 +52,7 @@ jobs:
           set -euo pipefail
           mkdir -p local-pilot
           docker run --rm -v "$PWD:/workspace" -w /workspace "$RUST_IMAGE" bash -euc '
+            cargo test --manifest-path artifact-05/Cargo.toml --locked --bin nexus-artifact-05-gateway listener::tests
             rustup target add x86_64-unknown-linux-musl
             export RUSTFLAGS="-C linker=$(rustc --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-lld"
             export NEXUS_SOURCE_TREE_SHA256=$(bash scripts/source-tree-digest.sh)
@@ -60,6 +63,8 @@ jobs:
           cp scripts/data-snapshot.py scripts/verify-local-pilot.py scripts/run-local-pilot.py scripts/test-local-pilot-launcher.py local-pilot/
           cp docs/LOCAL-PILOT.md local-pilot/README.md
           printf 'commit=%s\nrun_id=%s\nsource_tree_sha256=%s\nscope=synthetic-local-pilot-only\nauthority=none\nseal=unsealed\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$(bash scripts/source-tree-digest.sh)" > local-pilot/build.txt
+      - name: Verify inherited listener identity and invalid descriptor rejection
+        run: python3 scripts/test-inherited-listener.py local-pilot/nexus > local-pilot/inherited-listener-acceptance.json
       - name: Verify real HTTP persistence and quarantined recovery
         run: python3 scripts/verify-local-pilot.py local-pilot/nexus > local-pilot/acceptance.json
       - name: Verify private supervised launcher and single-writer guard
