@@ -34,6 +34,8 @@ jobs:
           python3 scripts/build-studio.py --check
           node --check web/studio-core.js
           node --check web/studio-app.js
+          node --check web/studio-locales.js
+          node scripts/test-studio-locales.mjs
           node --check web/studio-tasks.js
           node --check web/studio-tasks-ui.js
           node scripts/test-studio-tasks.mjs
@@ -52,6 +54,8 @@ jobs:
           node scripts/test-studio-storage.mjs
           node scripts/test-studio-vault-cancellation.mjs
           node scripts/test-studio-lab.mjs
+      - name: Exercise retained locale packs and asynchronous language imports
+        run: python3 scripts/test-studio-locales-browser.py
       - name: Exercise archive corruption and transaction recovery in real IndexedDB
         run: python3 scripts/test-studio-storage-browser.py
       - name: Exercise destructive cancellation and stale archive completions
