@@ -49,7 +49,7 @@ class SnapshotTests(unittest.TestCase):
         self.assertFalse(list(self.root.glob(".nexus-restore-*")))
 
     def test_volume_identity_is_preserved_by_full_backup_and_quarantined_restore(self):
-        identity = b"nexus.volume-identity.v1\\n1234567890abcdef1234567890abcdef\\n"
+        identity = b"nexus.volume-identity.v1\n1234567890abcdef1234567890abcdef\n"
         marker = self.source / snapshot.VOLUME_IDENTITY_MARKER
         marker.write_bytes(identity)
         self.capture()
@@ -69,10 +69,10 @@ class SnapshotTests(unittest.TestCase):
     def test_invalid_volume_identity_backup_is_refused_without_publishing(self):
         marker = self.source / snapshot.VOLUME_IDENTITY_MARKER
         for corrupt in (
-            b"", b"nexus.volume-identity.v1\\nmissing\\n",
-            b"nexus.volume-identity.v1\\n" + b"z" * 32 + b"\\n",
-            b"nexus.volume-identity.v1\\n" + b"a" * 32,
-            b"nexus.volume-identity.v1\\n" + b"a" * 32 + b"\\nextra",
+            b"", b"nexus.volume-identity.v1\nmissing\n",
+            b"nexus.volume-identity.v1\n" + b"z" * 32 + b"\n",
+            b"nexus.volume-identity.v1\n" + b"a" * 32,
+            b"nexus.volume-identity.v1\n" + b"a" * 32 + b"\nextra",
         ):
             with self.subTest(corrupt=corrupt):
                 marker.write_bytes(corrupt)
