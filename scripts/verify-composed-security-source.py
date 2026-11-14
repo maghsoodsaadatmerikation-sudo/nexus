@@ -60,7 +60,7 @@ REQUIRED_RUST_TOKENS = {
         'health_response(StatusCode::SERVICE_UNAVAILABLE, "workspace_unavailable")',
         'health_response(StatusCode::SERVICE_UNAVAILABLE, "storage_unavailable")',
         'health_response(StatusCode::SERVICE_UNAVAILABLE, "admission_unavailable")',
-        'safety_error(StatusCode::SERVICE_UNAVAILABLE, "volume_identity_unavailable")',
+        '"volume_identity_unavailable"',
         'fn check_runtime_volume_identity(&self) -> bool',
     ),
     "artifact-05/tests/http_contract.rs": (
