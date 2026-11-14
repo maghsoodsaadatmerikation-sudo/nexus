@@ -33,6 +33,11 @@ jobs:
           bash -n scripts/observe-stage-d-auth.sh
           python3 scripts/test-stage-d-auth.py
 
+      - name: Test Stage D operator bearer transport security
+        run: |
+          python3 -m py_compile ops/stage_d_transport.py ops/stage_d_operator.py
+          python3 scripts/test-stage-d-operator-transport.py
+
       - name: Verify without publication or attestation authority
         env:
           RUST_IMAGE: ${{ env.RUST_IMAGE }}
