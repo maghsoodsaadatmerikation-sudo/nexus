@@ -745,6 +745,113 @@ fn durable_root() -> std::path::PathBuf {
 }
 
 #[tokio::test]
+async fn runtime_readiness_tracks_pinned_storage_loss_replacement_and_recovery() {
+    use std::os::unix::fs::symlink;
+
+    let root = durable_root();
+    let moved = root.with_extension("temporarily-unavailable");
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret")
+            .with_request_store(&root)
+            .unwrap(),
+    );
+
+    for (status, expected) in [
+        (StatusCode::OK, "ready"),
+        (StatusCode::OK, "ready"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), status);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        let bytes = axum::body::to_bytes(response.into_body(), 128).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+            serde_json::json!({"status": expected})
+        );
+    }
+
+    // The actual durable ledger is moved while the process remains alive.
+    std::fs::rename(&root, &moved).unwrap();
+    // A look-alike replacement directory must not mask the lost pinned inode.
+    std::fs::create_dir(&root).unwrap();
+    for _ in 0..2 {
+        let response = app
+            .clone()
+            .oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        let bytes = axum::body::to_bytes(response.into_body(), 128).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+            serde_json::json!({"status":"storage_unavailable"})
+        );
+    }
+    assert_eq!(
+        app.clone()
+            .oneshot(Request::builder().uri("/livez").body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    // A missing or replaced ledger continues to reject new durable requests.
+    assert_eq!(
+        app.clone()
+            .oneshot(submit_request("storage-offline", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert!(delegate.requests.lock().unwrap().is_empty());
+
+    // Even replacing the path with a symlink to the original inode must fail.
+    std::fs::remove_dir(&root).unwrap();
+    symlink(&moved, &root).unwrap();
+    assert_eq!(
+        app.clone()
+            .oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    std::fs::remove_file(&root).unwrap();
+
+    // Restore the original inode and require that /readyz recovers without
+    // touching the gateway's request counters or restarting the listener.
+    std::fs::rename(&moved, &root).unwrap();
+    let response = app
+        .clone()
+        .oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), 128).await.unwrap();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+        serde_json::json!({"status":"ready"})
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(submit_request("storage-restored", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::ACCEPTED
+    );
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
 async fn durable_acceptance_survives_reopen_and_blocks_replay() {
     let root = durable_root();
     let delegate = RecordingDelegate::default();
