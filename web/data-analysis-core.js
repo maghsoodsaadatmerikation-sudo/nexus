@@ -25,7 +25,7 @@
       clearAnalysis();analysisStatus('m382');
     }
   }
-  const {parseDelimited,normalizedTable,parseJsonTable}=NexusTable;
+  const {normalizedTable}=NexusTable;
   async function parseXlsxTable(bytes){
     const zip=zipReader(bytes);
     const worksheets=zip.names.filter(n=>/^xl\/worksheets\/sheet\d+\.xml$/.test(n))
@@ -74,12 +74,7 @@
     const ext=item.name.split('.').pop().toLowerCase();
     if(ext==='xlsx')return parseXlsxTable(bytes);
     const text=decodeFileText(bytes).replace(/^\uFEFF/,'');
-    if(ext==='json')return parseJsonTable(text);
-    if(ext==='csv'||ext==='tsv'){
-      const sep=ext==='tsv'?'\t':',';
-      const rows=parseDelimited(text,sep);
-      return normalizedTable(rows[0]||[],rows.slice(1).filter(row=>row.some(x=>x!=='')));
-    }
+    if(['json','csv','tsv'].includes(ext))return NexusTable.parse(text,ext);
     throw Error('unsupported-analysis');
   }
   const {strictNumeric,numberStats,histogram,analyseTable}=NexusTable;
