@@ -58,6 +58,20 @@ impl FileWorkspaceRepository {
         Ok(self)
     }
 
+    /// Read-only operational probe for a gateway-lifetime pinned workspace
+    /// store. Missing, replaced or symlinked roots fail closed. This checks
+    /// directory identity/accessibility, not disk writability or full-data
+    /// integrity; an unpinned library instance has no runtime identity to
+    /// certify and is deliberately rejected.
+    pub fn check_runtime_readiness(&self) -> Result<(), DurableWorkspaceError> {
+        if self.pinned_root.is_none() {
+            return Err(DurableWorkspaceError::Io);
+        }
+        let directory = self.open_directory(false)?.ok_or(DurableWorkspaceError::Io)?;
+        directory.verify()?;
+        self.verify_pin()
+    }
+
     fn verify_pin(&self) -> Result<(), DurableWorkspaceError> {
         if let Some(pinned) = &self.pinned_root {
             let linked = fs::symlink_metadata(&self.root).map_err(|_| DurableWorkspaceError::Io)?;
