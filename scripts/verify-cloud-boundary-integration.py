@@ -104,7 +104,7 @@ def require_shape(value):
 
 def git_blob_sha(content: bytes) -> str:
     return hashlib.sha1(b"blob " + str(len(content)).encode("ascii")
-                        + b"\\x00" + content).hexdigest()
+                        + b"\x00" + content).hexdigest()
 
 
 def verify_files(root: pathlib.Path):
