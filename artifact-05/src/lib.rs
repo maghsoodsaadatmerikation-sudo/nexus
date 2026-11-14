@@ -244,9 +244,12 @@ impl<D: ConstitutionalDelegate> AppState<D> {
 
     pub fn authenticated(delegate: D, token: impl Into<String>) -> Self {
         let token = token.into();
+        // An invisible whitespace/control/non-ASCII token cannot be used
+        // reliably as an HTTP Bearer field. Fail at configuration time,
+        // rather than booting a seemingly healthy but inaccessible gateway.
         assert!(
-            !token.trim().is_empty(),
-            "authentication token must not be empty"
+            !token.is_empty() && token.bytes().all(|byte| byte.is_ascii_graphic()),
+            "authentication token must be nonempty printable ASCII without whitespace"
         );
         Self {
             delegate: Arc::new(delegate),
@@ -642,15 +645,38 @@ async fn status<D: ConstitutionalDelegate>(
     }
 }
 
+/// Accept only one unambiguous credential. Some HTTP intermediaries select
+/// the first or last occurrence of a repeated Authorization field. The
+/// constitutional gateway must not authenticate one value while another hop
+/// interprets a different value.
 pub(crate) fn transport_authorized<D>(state: &AppState<D>, headers: &HeaderMap) -> bool {
     let Some(expected) = state.auth_token.as_deref() else {
+        // Explicit unauthenticated/local mode remains the caller's choice.
         return true;
     };
-    headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
+    let mut supplied = headers.get_all(header::AUTHORIZATION).iter();
+    let Some(value) = supplied.next() else {
+        return false;
+    };
+    if supplied.next().is_some() {
+        return false;
+    }
+    value
+        .to_str()
+        .ok()
         .and_then(|value| value.strip_prefix("Bearer "))
-        .is_some_and(|provided| provided.as_bytes() == expected.as_bytes())
+        .is_some_and(|provided| bearer_token_eq(provided.as_bytes(), expected.as_bytes()))
+}
+
+/// Scan every configured token byte without early-exit prefix comparison.
+/// There is no proof of machine-level constant-time behavior; this is a
+/// best-effort guard and not a substitute for short-lived bearer credentials.
+fn bearer_token_eq(provided: &[u8], expected: &[u8]) -> bool {
+    let mut mismatch = provided.len() ^ expected.len();
+    for (index, byte) in expected.iter().enumerate() {
+        mismatch |= usize::from(*byte ^ provided.get(index).copied().unwrap_or_default());
+    }
+    mismatch == 0
 }
 
 fn transport_unauthorized() -> axum::response::Response {
