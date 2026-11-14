@@ -56,7 +56,7 @@ class PublicPreviewObserverTests(unittest.TestCase):
                          "https://nexus-merikation-pwa-preview.onrender.com/")
         self.assertEqual(observer.RELEASE_SHA,
                          "4b4f32ab54fa6ce8bf4a7f0c1a428c6237307d42")
-        self.assertEqual(len(observer.BUILDER.expected(observer.RELEASE_SHA)), 8)
+        self.assertEqual(len(observer.BUILDER.expected(observer.RELEASE_SHA)), 9)
 
 
 if __name__ == "__main__":
