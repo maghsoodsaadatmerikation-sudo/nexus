@@ -3,7 +3,7 @@
 
 Exact Git blob identities establish that unchanged code was copied from tested
 source PR heads. They are NOT signatures, runtime assurance or release authority.
-The two intentionally merged Rust files are validated by Cargo/HTTP regression.
+The intentionally merged Rust files are validated by Cargo/HTTP regression.
 """
 from __future__ import annotations
 
@@ -30,6 +30,15 @@ EXPECTED_BLOBS = {
     "src/workspace_persistence.rs": "12b0c8198aec596825147160c6f78cc2c6af815e",
     "docs/gateway-health.md": "866652bf8b175961566403345837e6682603261a",
     "scripts/verify-storage-failure-http.py": "7d51a52eadafdc4f9aee3eed549c14b85f562e6b",
+    # PR #188 exact unmodified freeze-preflight source:
+    "scripts/production-freeze-preflight.py": "67004efa104f9932bcf262e53c8e497c8fd81d4d",
+    "scripts/test-production-freeze-preflight.py": "1802953a0671bef7464bc5f18eaf58759570686f",
+    "docs/PRODUCTION-FREEZE-PREFLIGHT.md": "758da07b0c7d4d9b605626d9aab3a3c814fe8db9",
+    ".github/workflows/production-freeze-preflight.yml": "e5e14092b1685b9246a31324f0c45983308ecb59",
+    # PR #189 exact unmodified synthetic recovery source:
+    "scripts/pilot-cross-runner-recovery.py": "b4113ca9d7301dd48510a8433c681e2376d739a9",
+    "docs/PILOT-CROSS-RUNNER-RECOVERY.md": "bd76958b5beeb363ed11f29b775bf794a28c19c4",
+    ".github/workflows/pilot-cross-runner-recovery.yml": "07688b9ef3cfbef7ae79611f37c17bb1a4833b45",
 }
 
 # Source files modified *only* to compose upstream Rust fixes. Mandatory Rust
