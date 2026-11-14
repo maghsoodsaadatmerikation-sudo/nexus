@@ -1,5 +1,6 @@
 mod health;
 mod listener;
+mod volume_identity;
 
 use axum::{routing::get, Json};
 use nexus_artifact_05_gateway::{
@@ -202,6 +203,16 @@ async fn main() {
     let data_root = std::env::var_os("NEXUS_DATA_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("nexus-data"));
+    // Explicit opt-in. The operator must have enrolled the existing persistent
+    // volume OFFLINE first. Never enroll or create a missing volume on startup.
+    let expected_volume_id = std::env::var_os("NEXUS_EXPECTED_VOLUME_ID")
+        .map(|value| value.into_string().expect("volume ID must be UTF-8"));
+    if let Some(expected) = &expected_volume_id {
+        volume_identity::verify(&data_root, expected).expect("enrolled data volume identity");
+        eprintln!("NEXUS_OP event=volume_identity_guard status=verified");
+    } else {
+        eprintln!("NEXUS_OP event=volume_identity_guard status=disabled");
+    }
     let bind_addr =
         std::env::var("NEXUS_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".to_owned());
     let addr: SocketAddr = bind_addr.parse().expect("valid NEXUS_BIND_ADDR");
@@ -233,6 +244,11 @@ async fn main() {
             .expect("open durable request store"),
     )
     .route("/v1/runtime-identity", get(runtime_identity));
+    // Validate again after opening workspace/ledger handles to reject a root
+    // changed during startup. Directory pinning covers later root swaps.
+    if let Some(expected) = &expected_volume_id {
+        volume_identity::verify(&data_root, expected).expect("data volume changed at startup");
+    }
     let listener = listener::open(addr).await.expect("open gateway listener");
     if let Err(error) = axum::serve(listener, app).await {
         eprintln!("NEXUS_OP event=server_exit error={error}");
