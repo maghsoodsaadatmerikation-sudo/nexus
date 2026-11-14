@@ -32,10 +32,11 @@ def main():
         children = []
         gateway_handles = []
 
-        def command(directory):
-            with socket.socket() as listener:
-                listener.bind(('127.0.0.1', 0))
-                port = listener.getsockname()[1]
+        def command(directory, port=None):
+            if port is None:
+                with socket.socket() as listener:
+                    listener.bind(('127.0.0.1', 0))
+                    port = listener.getsockname()[1]
             return [sys.executable, str(script), '--binary', str(binary),
                     '--state-dir', str(directory), '--port', str(port)]
 
@@ -43,8 +44,8 @@ def main():
             return subprocess.run([sys.executable, str(script), '--state-dir', str(directory),
                 *map(str, arguments)], capture_output=True, text=True, timeout=10)
 
-        def start(directory, expected):
-            process = subprocess.Popen(command(directory), stdout=subprocess.PIPE,
+        def start(directory, expected, port=None):
+            process = subprocess.Popen(command(directory, port), stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE, text=True)
             children.append(process)
             assert select.select([process.stdout], [], [], 15)[0], 'launcher startup timeout'
@@ -88,7 +89,8 @@ def main():
             denied = subprocess.run(command(state), capture_output=True, text=True, timeout=5)
             assert denied.returncode != 0 and 'already in use' in denied.stderr
             stop(process, token)
-            process, base, same_token = start(state, 'ready')
+            same_port = int(base.rsplit(':', 1)[1])
+            process, base, same_token = start(state, 'ready', same_port)
             assert same_token == token
             assert call(base, token, 'POST', body) == 409
             # SIGKILL cannot free a lock still inherited by a live child.
@@ -171,7 +173,7 @@ def main():
                     os.close(handle)
     print(json.dumps({'status': 'PASS', 'scope': 'synthetic-local-launcher-only',
         'private_persistent_token': True, 'duplicate_launcher_rejected': True,
-        'orphan_child_preserves_lock': True, 'restart_preserves_request': True,
+        'orphan_child_preserves_lock': True, 'restart_preserves_request': True, 'same_port_restart': True,
         'quarantine_not_resumed': True, 'insecure_state_and_symlink_rejected': True,
         'maintenance_rejects_live_and_orphan_writers': True,
         'backup_excludes_credentials_and_keeps_request_ledger': True,

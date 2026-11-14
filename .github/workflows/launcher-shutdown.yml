@@ -6,6 +6,7 @@ on:
       - 'scripts/run-local-pilot.py'
       - 'scripts/run-local-studio.py'
       - 'scripts/test-launcher-shutdown.py'
+      - 'scripts/test-startup-port-ownership.py'
   push:
     branches: [main]
     paths:
@@ -13,6 +14,7 @@ on:
       - 'scripts/run-local-pilot.py'
       - 'scripts/run-local-studio.py'
       - 'scripts/test-launcher-shutdown.py'
+      - 'scripts/test-startup-port-ownership.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -27,3 +29,5 @@ jobs:
           persist-credentials: false
       - name: Stop real cooperative and resistant children without leaking credentials or locks
         run: python3 scripts/test-launcher-shutdown.py
+      - name: Reject occupied startup ports and redirected or invalid readiness probes
+        run: python3 scripts/test-startup-port-ownership.py

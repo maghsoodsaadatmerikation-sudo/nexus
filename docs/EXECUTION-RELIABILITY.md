@@ -38,3 +38,24 @@ no longer consumes the browser acceptance job's remaining time.
 
 Cargo references: [network configuration](https://doc.rust-lang.org/cargo/reference/config.html)
 and [fetch followed by offline commands](https://doc.rust-lang.org/cargo/commands/cargo-fetch.html).
+
+
+## Startup socket ownership
+
+The Rust pilot supervisor now reserves its listener before reading the saved
+token, passes that descriptor to the Rust gateway, and retains a reference until
+cleanup. The gateway accepts `NEXUS_LISTEN_FD` only for a listening socket whose
+local address exactly matches `NEXUS_BIND_ADDR`; standard I/O, missing descriptors,
+regular files, datagrams and connected non-listening sockets are rejected. On
+Unix it owns a close-on-exec duplicate, configures nonblocking I/O and closes the
+validated original after Tokio adoption. Without `NEXUS_LISTEN_FD`, direct binding
+still works as before. An inherited descriptor is unsupported on non-Unix builds.
+The optional Studio supervisor also retains its reserved listener during probing.
+
+Both launchers bypass proxies and refuse HTTP redirects. Rust readiness requires
+matching bounded JSON and HTTP status, rather than accepting any 200/503 response.
+`test-startup-port-ownership.py` exercises an unrelated real local HTTP listener,
+checks that it receives no startup request or saved bearer, checks rejected
+readiness payloads and verifies that redirects never forward the startup bearer.
+The local-pilot CI additionally exercises Rust inherited listeners over real HTTP,
+invalid descriptor rejection, normal direct binding and same-port restarts.

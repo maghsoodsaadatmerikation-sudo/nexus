@@ -31,8 +31,8 @@ def command(state, port=0):
 
 
 @contextmanager
-def launch(state, **changes):
-    process = subprocess.Popen(command(state), env=environment(**changes),
+def launch(state, port=0, **changes):
+    process = subprocess.Popen(command(state, port), env=environment(**changes),
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         assert select.select([process.stdout], [], [], 15)[0], "startup timed out"
@@ -189,3 +189,14 @@ def test_server_retains_lock_when_supervisor_is_killed(tmp_path):
             except ProcessLookupError:
                 pass
             os.close(child_handle)
+
+
+def test_same_port_restart_preserves_local_identity(tmp_path):
+    state = tmp_path / "studio"
+    with launch(state) as (first, first_token):
+        port = int(first["url"].removesuffix("/studio").rsplit(":", 1)[1])
+        assert get(first["url"])[0] == 200
+    with launch(state, port=port) as (second, second_token):
+        assert second["url"] == first["url"]
+        assert second_token == first_token
+        assert get(second["url"])[0] == 200

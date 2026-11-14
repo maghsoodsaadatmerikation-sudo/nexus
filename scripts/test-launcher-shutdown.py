@@ -32,12 +32,12 @@ class Opener:
    if time.monotonic()>stop:raise OSError('child-not-armed')
    time.sleep(.01)
   url=request if isinstance(request,str) else request.full_url
-  data=({'status':'ok','scope':'transport-liveness-only'} if url.endswith('/healthz') else {'configured':False,'authority':'none'})
+  data=({'status':'ok','scope':'transport-liveness-only'} if url.endswith('/healthz') else {'status':'ready'} if url.endswith('/readyz') else {'configured':False,'authority':'none'})
   return Response(data)
 urllib.request.build_opener=lambda *args:Opener()
 sys.modules['uvicorn']=types.ModuleType('uvicorn')
 model=types.ModuleType('studio_model');model.config=lambda:None;sys.modules['studio_model']=model
-sys.argv=[script,'--state-dir',state]+(['--binary',sys.executable,'--port','3000'] if script.endswith('run-local-pilot.py') else ['--port','0'])
+sys.argv=[script,'--state-dir',state]+(['--binary',sys.executable,'--port','0'] if script.endswith('run-local-pilot.py') else ['--port','0'])
 runpy.run_path(script,run_name='__main__')
 '''
 
