@@ -415,12 +415,40 @@ async fn liveness() -> Response {
     health_response(StatusCode::OK, "alive")
 }
 
-async fn readiness<D: ConstitutionalDelegate>(State(state): State<AppState<D>>) -> Response {
+async fn readiness<D: ConstitutionalDelegate + WorkspaceDelegate>(
+    State(state): State<AppState<D>>,
+) -> Response {
     if state.recovery_required {
-        health_response(StatusCode::SERVICE_UNAVAILABLE, "quarantined")
-    } else {
-        health_response(StatusCode::OK, "ready")
+        return health_response(StatusCode::SERVICE_UNAVAILABLE, "quarantined");
     }
+    // The durable ledger may be removed/replaced after startup. The previous
+    // probe always reported ready in that case, even though admissions fail.
+    // This read-only check does not consume a request budget or acknowledge
+    // restored data, and must not be confused with a disk-write guarantee.
+    if state
+        .request_store
+        .as_ref()
+        .is_some_and(|store| store.check_readiness().is_err())
+    {
+        return health_response(StatusCode::SERVICE_UNAVAILABLE, "storage_unavailable");
+    }
+    // A functioning request ledger does not establish workspace-store health:
+    // a separately mounted or substituted workspace path must be rejected
+    // before declaring the runtime ready for new workspace operations.
+    if state.delegate.check_storage_readiness().is_err() {
+        return health_response(StatusCode::SERVICE_UNAVAILABLE, "workspace_unavailable");
+    }
+    // Exhausting the configured tracked-request budget permanently blocks
+    // new admissions until restart/reconfiguration. Do not advertise this
+    // instance as ready merely because its listener still answers requests.
+    let budget_exhausted = {
+        let safety = state.safety_state.lock().expect("safety lock poisoned");
+        safety.tracked_requests >= state.safety_config.max_tracked_requests
+    };
+    if budget_exhausted {
+        return health_response(StatusCode::SERVICE_UNAVAILABLE, "admission_unavailable");
+    }
+    health_response(StatusCode::OK, "ready")
 }
 
 async fn studio_model_status() -> impl IntoResponse {
