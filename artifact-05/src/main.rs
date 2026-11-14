@@ -219,9 +219,7 @@ async fn main() {
             .expect("open durable request store"),
     )
     .route("/v1/runtime-identity", get(runtime_identity));
-    let listener = listener::open(addr)
-        .await
-        .expect("open gateway listener");
+    let listener = listener::open(addr).await.expect("open gateway listener");
     if let Err(error) = axum::serve(listener, app).await {
         eprintln!("NEXUS_OP event=server_exit error={error}");
         std::process::exit(1);

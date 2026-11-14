@@ -119,6 +119,8 @@ mod tests {
         let server = TcpListener::bind("127.0.0.1:0").unwrap();
         let _client = TcpStream::connect(server.local_addr().unwrap()).unwrap();
         let (connected, _) = server.accept().unwrap();
-        assert!(duplicate_listener(connected.as_raw_fd(), connected.local_addr().unwrap()).is_err());
+        assert!(
+            duplicate_listener(connected.as_raw_fd(), connected.local_addr().unwrap()).is_err()
+        );
     }
 }
