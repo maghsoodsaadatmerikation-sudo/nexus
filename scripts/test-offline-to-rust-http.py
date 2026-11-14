@@ -95,7 +95,7 @@ def main():
     require(
         w["claims"][1]["origin"] == {
             "ExternalEvidence": {
-                "source": "offline-bridge:user-reported-machine-analysis-unattested"
+                "source": "offline-bridge:user-reported-machine-analysis-unattested;reported-source=synthetic%3Amodel%2Freport%3Bunverified"
             }
         }
         and snap["events"][2]["kind"].get("ClaimAdded") is not None
