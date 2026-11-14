@@ -10,6 +10,7 @@ import copy
 import hashlib
 import json
 import pathlib
+import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -39,6 +40,17 @@ EXPECTED_BOUNDARY = {
     "release_attestation": False,
     "claim": "source-composition-only",
 }
+# Only these source replacements and four integration-only audit files may
+# differ from the pinned base. An unexpected sidecar, workflow or executable
+# is an explicit failure, even if the seven expected blobs remain unchanged.
+EXPECTED_DELTA = frozenset({
+    path for source in EXPECTED.values() for path in source["files"]
+}) | frozenset({
+    "integration/cloud-boundary-195-196-manifest.json",
+    "scripts/verify-cloud-boundary-integration.py",
+    ".github/workflows/cloud-boundary-integration.yml",
+    "docs/CLOUD-HARDENING-INTEGRATION-2026-11-14.md",
+})
 
 
 def unique_pairs(pairs):
@@ -127,6 +139,29 @@ def verify_files(root: pathlib.Path):
                 raise ValueError(f"unexpected Git blob for {rel}")
 
 
+def require_exact_delta(paths):
+    if not isinstance(paths, list) or len(paths) != len(EXPECTED_DELTA):
+        raise ValueError("unexpected integration file count")
+    if any(not isinstance(path, str) for path in paths):
+        raise ValueError("invalid diff pathname")
+    if len(set(paths)) != len(paths) or set(paths) != EXPECTED_DELTA:
+        raise ValueError("unexpected integration path or missing source")
+
+
+def verify_delta():
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--no-renames", "--name-only",
+             EXPECTED_BASE, "HEAD", "--"],
+            cwd=ROOT, check=True, capture_output=True, text=True,
+            timeout=20,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            FileNotFoundError) as exc:
+        raise ValueError("unable to verify pinned-base file delta") from exc
+    require_exact_delta(result.stdout.splitlines())
+
+
 def self_test():
     base = parse_manifest(MANIFEST.read_bytes())
     require_shape(base)
@@ -149,6 +184,18 @@ def self_test():
         except ValueError:
             continue
         raise ValueError("tampered input was not rejected")
+    permitted = sorted(EXPECTED_DELTA)
+    require_exact_delta(permitted)
+    for rejected in (
+        permitted[:-1],
+        permitted + ["scripts/extra-unverified.py"],
+        permitted[:-1] + [permitted[0]],
+    ):
+        try:
+            require_exact_delta(rejected)
+        except ValueError:
+            continue
+        raise ValueError("unexpected source delta was accepted")
     for invalid in (
         b'{"schema":"x","schema":"y"}',
         b'{"nested":{"name":1,"name":2}}',
@@ -170,6 +217,7 @@ def main():
     manifest = parse_manifest(MANIFEST.read_bytes())
     require_shape(manifest)
     verify_files(ROOT)
+    verify_delta()
     if len(sys.argv) == 2:
         self_test()
     print("CLOUD SOURCE INTEGRATION: PASS (no production authority)")
