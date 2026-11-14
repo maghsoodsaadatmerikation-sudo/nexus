@@ -20,6 +20,7 @@ pub enum DurableWorkspaceError {
     JudgmentAuditMismatch,
     HistoryRollback,
     HistoryDivergence,
+    AlreadyExists,
     Io,
     Serialization,
     IdentityMismatch,
@@ -103,7 +104,26 @@ impl FileWorkspaceRepository {
         Ok(directory)
     }
 
+    /// Atomically create an ID exactly once, even when separate gateway
+    /// processes race. The existence check happens *inside* the same
+    /// cross-process directory lock as the durable rename, never before it.
+    pub fn create_new(
+        &mut self,
+        snapshot: WorkspaceSnapshot,
+    ) -> Result<(), DurableWorkspaceError> {
+        self.write_snapshot(snapshot, true)
+    }
+
+    /// Preserve audit-checked append/update semantics for existing workspaces.
     pub fn save(&mut self, snapshot: WorkspaceSnapshot) -> Result<(), DurableWorkspaceError> {
+        self.write_snapshot(snapshot, false)
+    }
+
+    fn write_snapshot(
+        &mut self,
+        snapshot: WorkspaceSnapshot,
+        must_be_absent: bool,
+    ) -> Result<(), DurableWorkspaceError> {
         validate_snapshot(&snapshot)?;
         let directory = self.open_directory(true)?.ok_or(DurableWorkspaceError::Io)?;
         let path = directory.path_for(&snapshot.workspace.id);
@@ -116,6 +136,9 @@ impl FileWorkspaceRepository {
             .map_err(|_| DurableWorkspaceError::Io)?;
         directory.verify()?;
         if let Some(existing) = directory.load(&snapshot.workspace.id)? {
+            if must_be_absent {
+                return Err(DurableWorkspaceError::AlreadyExists);
+            }
             validate_history_extension(&existing, &snapshot)?;
         }
 
@@ -420,6 +443,62 @@ mod tests {
             origin: ClaimOrigin::Human,
             uncertainty: Uncertainty::Unknown,
         }
+    }
+
+    #[test]
+    fn concurrent_creates_for_identical_workspace_id_have_one_winner() {
+        use std::sync::{Arc, Barrier};
+        use std::thread;
+
+        let root = temp_root("atomic-create-race");
+        fs::create_dir_all(&root).unwrap();
+        let initial = WorkspaceEngine::new(
+            "same-id",
+            "Original",
+            ProvenanceId::new("human"),
+        )
+        .snapshot();
+        let mut workers = Vec::new();
+        let start = Arc::new(Barrier::new(8));
+        for _ in 0..8 {
+            let root = root.clone();
+            let snapshot = initial.clone();
+            let start = Arc::clone(&start);
+            workers.push(thread::spawn(move || {
+                let mut repo = FileWorkspaceRepository::new(root).pin_root().unwrap();
+                start.wait();
+                repo.create_new(snapshot)
+            }));
+        }
+        let mut created = 0;
+        let mut duplicate = 0;
+        for handle in workers {
+            match handle.join().unwrap() {
+                Ok(()) => created += 1,
+                Err(DurableWorkspaceError::AlreadyExists) => duplicate += 1,
+                other => panic!("unexpected atomic create result: {other:?}"),
+            }
+        }
+        assert_eq!(created, 1);
+        assert_eq!(duplicate, 7);
+        let mut repository = FileWorkspaceRepository::new(&root).pin_root().unwrap();
+        assert_eq!(repository.load("same-id").unwrap(), Some(initial.clone()));
+        assert_eq!(
+            repository.create_new(initial.clone()),
+            Err(DurableWorkspaceError::AlreadyExists)
+        );
+        // Existing validated workspace history extension remains supported,
+        // while create-if-absent never replaces it.
+        let mut engine = WorkspaceEngine::from_snapshot(initial).unwrap();
+        engine.add_claim(claim("new-claim"), ProvenanceId::new("human"));
+        let extended = engine.snapshot();
+        repository.save(extended.clone()).unwrap();
+        assert_eq!(
+            repository.create_new(extended.clone()),
+            Err(DurableWorkspaceError::AlreadyExists)
+        );
+        assert_eq!(repository.load("same-id").unwrap(), Some(extended));
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
