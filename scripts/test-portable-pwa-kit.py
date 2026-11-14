@@ -68,9 +68,9 @@ class PortablePwaTests(unittest.TestCase):
     def test_worker_install_works_on_any_https_origin_not_insecure_http(self):
         html = kit.payloads()["index.html"].decode()
         self.assertIn(
-            "const allowedInstallOrigin=window.isSecureContext&&\\n"
-            "    (location.protocol==='https:'||\\n"
-            "     (location.protocol==='http:'&&\\n"
+            "const allowedInstallOrigin=window.isSecureContext&&\n"
+            "    (location.protocol==='https:'||\n"
+            "     (location.protocol==='http:'&&\n"
             "      (location.hostname==='127.0.0.1'||location.hostname==='localhost')));",
             html)
         self.assertNotIn(
