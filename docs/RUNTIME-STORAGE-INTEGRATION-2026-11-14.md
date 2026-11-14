@@ -16,7 +16,7 @@ before extending them in this integration:
   - `artifact-05/tests/http_contract.rs` — `a52ab2b2868569d27322b0e18eb04cc4213b65c5`
   - `docs/RUNTIME-STORAGE-READINESS-2026-11-14.md` — `654a1bf53d0de90e8ef33d4c10d55fba14c847dc`
   - `docs/gateway-health.md` — `e913880ec94df5e3f537d74f42009e831a43e97f`
-  - `scripts/verify-storage-failure-http.py` — `7d51a52eadafdc4f9aee3eed549a14b85f562e6b`
+  - `scripts/verify-storage-failure-http.py` — `7d51a52eadafdc4f9aee3eed549c14b85f562e6b`
 - PR #200 (`8fffb40a22ea4c6ef19fbc3e5136b89b399422c3`):
   - `artifact-05/src/main.rs` — `b5bdd217a3807a411c4c2e9fce6b708e91ee5f06`
   - `docs/WORKSPACE-RUNTIME-ROOT-IDENTITY-2026-11-14.md` — `5ecf5da74f847601ce8082991e12fb650ce36b4e`
