@@ -111,7 +111,7 @@ def witness():
                 time.sleep(2)
         results.append(record)
 
-    okay = len(results) == 8 and all(x["status"] == "PASS" for x in results)
+    okay = len(results) == 9 and all(x["status"] == "PASS" for x in results)
     return {
         "schema": "nexus.public-portable-pwa-preview.v1",
         "status": "PASS_PUBLIC_HTTPS_IDENTITY" if okay else "FAIL_CLOSED",
