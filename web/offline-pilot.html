@@ -1942,7 +1942,8 @@ root.NexusTable=Object.freeze({parse,parseDelimited,normalizedTable,parseJsonTab
       id:c.id,text:c.text,
       origin:c.origin==='external_evidence'?{ExternalEvidence:{source:c.source}}:
              c.origin==='machine_analysis'
-               ?{ExternalEvidence:{source:'offline-bridge:user-reported-machine-analysis-unattested'}}
+               ?{ExternalEvidence:{source:'offline-bridge:user-reported-machine-analysis-unattested' +
+                 (c.source?';reported-source='+encodeURIComponent(c.source):'')}}
                :'Human',
       uncertainty:uncertainty[c.uncertainty]
     }));
