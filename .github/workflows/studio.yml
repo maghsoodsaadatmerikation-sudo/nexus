@@ -48,6 +48,7 @@ jobs:
           node --check web/table-core.js
           node --check web/studio-quality-ui.js
           node scripts/test-studio-quality.mjs
+          node scripts/test-analysis-group-completeness.mjs
           node scripts/test-studio-sky.mjs
           node scripts/test-studio-astrology.mjs
           node scripts/test-studio-core.mjs

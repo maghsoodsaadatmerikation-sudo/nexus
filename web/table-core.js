@@ -1,6 +1,7 @@
 /* Shared bounded descriptive table engine; no DOM, execution or network. */
 (function(root){'use strict';
 const ANALYSIS_MAX_BYTES=1024*1024,ANALYSIS_MAX_ROWS=5000,ANALYSIS_MAX_COLUMNS=40;
+const GROUP_PREVIEW_LIMIT=12;
   function parseDelimited(text,delimiter){
     if(text.length>ANALYSIS_MAX_BYTES)throw Error('text-budget');
     const rows=[],row=[];let value='',quoted=false,justClosed=false;
@@ -110,10 +111,13 @@ const ANALYSIS_MAX_BYTES=1024*1024,ANALYSIS_MAX_ROWS=5000,ANALYSIS_MAX_COLUMNS=4
       'Values are not independently verified; missing, invalid and mixed columns can affect statistics.',
       'Numeric parsing accepts dot/Arabic decimal marks and local digits; unsafe plain integers stay categorical. Binary64 summaries are approximate. Non-finite results are null; labels may be shortened. Pearson uses pairwise complete cases and is not causation.']};
   }
-  function analysisGroups(table,index,metric){
+  function analysisGroups(table,index,metric,{limit=GROUP_PREVIEW_LIMIT}={}){
+    if(!Array.isArray(table?.columns)||!table.columns.length||table.columns.length>ANALYSIS_MAX_COLUMNS||!Array.isArray(table.rows)||table.rows.length>ANALYSIS_MAX_ROWS)throw Error('group-table');
+    if(!Number.isInteger(index)||index< -1||index>=table.columns.length||!Number.isInteger(metric)||metric< -1||metric>=table.columns.length||!Number.isInteger(limit)||limit<1||limit>ANALYSIS_MAX_ROWS)throw Error('group-selection');
     if(index<0)return [];
     const groups=new Map();
     for(const row of table.rows){
+      if(!Array.isArray(row)||row.length!==table.columns.length)throw Error('group-row');
       const key=String(row[index]).trim()||null,label=key===null?'(missing)':key;
       if(!groups.has(key))groups.set(key,{label,missing:key===null,count:0,values:[]});
       const item=groups.get(key);item.count++;
@@ -121,7 +125,11 @@ const ANALYSIS_MAX_BYTES=1024*1024,ANALYSIS_MAX_ROWS=5000,ANALYSIS_MAX_COLUMNS=4
     }
     return Array.from(groups.values()).map(g=>({label:g.label,missing:g.missing,count:g.count,
       metric_mean:metric<0?null:numberStats(g.values)?.mean??null,numeric_n:g.values.length}))
-      .sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label)).slice(0,12);
+      .sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label)).slice(0,limit);
+  }
+  function groupReport(table,index,metric){
+    const groups=analysisGroups(table,index,metric,{limit:ANALYSIS_MAX_ROWS});
+    return {group_by:index<0?null:table.columns[index],metric:metric<0?null:table.columns[metric],group_count:groups.length,groups_complete:true,groups};
   }
 function parse(text,extension){
  if(typeof text!=='string'||new TextEncoder().encode(text).length>ANALYSIS_MAX_BYTES)throw Error('text-budget');
@@ -131,5 +139,5 @@ function parse(text,extension){
  const rows=parseDelimited(text,kind==='tsv'?'\t':',');
  return normalizedTable(rows[0]||[],rows.slice(1).filter(row=>row.some(x=>x!=='')));
 }
-root.NexusTable=Object.freeze({parse,parseDelimited,normalizedTable,parseJsonTable,strictNumeric,numberStats,analyseTable,analysisGroups,MAX_BYTES:ANALYSIS_MAX_BYTES,MAX_ROWS:ANALYSIS_MAX_ROWS,MAX_COLUMNS:ANALYSIS_MAX_COLUMNS});
+root.NexusTable=Object.freeze({parse,parseDelimited,normalizedTable,parseJsonTable,strictNumeric,numberStats,analyseTable,analysisGroups,groupReport,GROUP_PREVIEW_LIMIT,MAX_BYTES:ANALYSIS_MAX_BYTES,MAX_ROWS:ANALYSIS_MAX_ROWS,MAX_COLUMNS:ANALYSIS_MAX_COLUMNS});
 })(globalThis);

@@ -78,6 +78,13 @@ window.addEventListener('load',async()=>{
     'pairwise-correlation-sample-count');
   assert(!Object.hasOwn(report,'raw_rows')&&!Object.hasOwn(report,'workspace')&&
     !Object.hasOwn(report,'judgment'),'analysis-output-is-aggregated-not-full-workspace');
+  const many='Group,Value\n'+Array.from({length:14},(_,i)=>'G'+String(i).padStart(2,'0')+','+i).join('\n');
+  await add([new File([many],'many-groups.csv',{type:'text/csv'})]);pick('many-groups.csv');await run(true);
+  select('analysis-group','0');select('analysis-metric','1');
+  assert($('analysis-summary').textContent.includes('12/14')&&$('analysis-bars').querySelectorAll('.analysis-track').length===12,'offline-group-preview-discloses-coverage');
+  $('analysis-download').click();const allGroups=JSON.parse(await downloads.at(-1).blob.text());
+  assert(allGroups.groups.length===14&&allGroups.group_count===14&&allGroups.groups_complete===true,'offline-json-export-retains-all-groups');
+  assert(allGroups.metric==='Value'&&allGroups.group_by==='Group'&&allGroups.groups.reduce((n,g)=>n+g.count,0)===14,'offline-group-export-identifies-metric-and-all-row-counts');
   select('ui-language','fa');
   assert(document.documentElement.dir==='rtl'&&$('analysis-title').textContent==='تحلیل محلی داده‌ها'&&
     $('analysis-summary').textContent.includes('ردیف × ستون'),'persian-analytics-without-recomputing-private-values');
