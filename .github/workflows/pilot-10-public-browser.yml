@@ -42,7 +42,9 @@ permissions:
 
 concurrency:
   group: nexus-public-browser-${{ github.ref }}
-  cancel-in-progress: false
+  # Superseded PR tests must not block the newest candidate behind stale
+  # public-browser checks. Preserve independent scheduled/manual observations.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   real-public-acceptance:
