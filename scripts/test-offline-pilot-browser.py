@@ -203,7 +203,8 @@ window.addEventListener('load', async () => {
        coreFixture.workspace.claims.length===2 &&
        coreFixture.workspace.claims[0].origin.ExternalEvidence.source==='test:synthetic' &&
        coreFixture.workspace.claims[0].uncertainty==='High' &&
-       coreFixture.workspace.claims[1].origin==='MachineAnalysis' &&
+       coreFixture.workspace.claims[1].origin.ExternalEvidence.source===
+         'offline-bridge:user-reported-machine-analysis-unattested' &&
        coreFixture.workspace.alternatives[0].consequences.length===2 &&
        coreFixture.workspace.judgment.decision===exported.workspace.judgment.decision &&
        coreFixture.events.length===5 &&
