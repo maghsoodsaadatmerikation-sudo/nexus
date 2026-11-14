@@ -111,7 +111,7 @@ def check(sources: dict[str, str]) -> None:
     # must preserve its existing marker, not auto-enroll a restored volume.
     require(main.count("volume_identity::verify(&data_root, expected)") == 2 and
             main.index("volume_identity::verify(&data_root, expected)") <
-            main.index("CoreDelegate::new(data_root.clone())") and
+            main.index("CoreDelegate::new_with_volume_id(data_root.clone(), expected_volume_id.clone())") and
             "NEXUS_EXPECTED_VOLUME_ID" in main and
             "NEXUS_EXPECTED_VOLUME_ID" in runbook and
             "legacy startup" in runbook and
