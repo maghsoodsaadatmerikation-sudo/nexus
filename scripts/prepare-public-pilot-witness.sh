@@ -7,8 +7,11 @@ test -n "${RUNNER_TEMP:-}"
 target="$RUNNER_TEMP/nexus-live-pilot"
 test ! -e "$target"
 mkdir -m 700 "$target"
-git archive "$baseline" web public | tar -x -C "$target"
-cp -R scripts "$target/scripts"
+# Public-browser assertions must come from the same immutable revision as
+# the HTML they exercise. Copying candidate scripts here would silently mix
+# a newer test contract with an older deployed app and produce a false red.
+# Candidate checks remain in their separate PR/offline CI workflows.
+git archive "$baseline" web public scripts | tar -x -C "$target"
 python3 - "$baseline" "$target" <<'PY'
 import hashlib,json,sys
 from pathlib import Path
