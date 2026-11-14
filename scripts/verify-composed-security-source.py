@@ -53,7 +53,7 @@ REQUIRED_RUST_TOKENS = {
 
 
 def git_blob_identity(contents: bytes) -> str:
-    preamble = b"blob " + str(len(contents)).encode("ascii") + b"\\x00"
+    preamble = b"blob " + str(len(contents)).encode("ascii") + b"\x00"
     return hashlib.sha1(preamble + contents).hexdigest()
 
 
