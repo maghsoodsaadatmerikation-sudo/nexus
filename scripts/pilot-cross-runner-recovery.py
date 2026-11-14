@@ -266,9 +266,14 @@ def target(scratch, sha, input_dir):
     exec_checked(["sudo", sys.executable, SNAPSHOT, "restore", archive,
                   store, "--offline", "--owner", "10001:10001"], timeout=35)
     marker = store / ".nexus-recovery-required"
-    require(marker.is_file() and marker.read_bytes() ==
-            b"snapshot-restored; replay-risk-not-acknowledged\n",
-            "recovery-quarantine-not-persistent")
+    # Restored files are deliberately owned by the gateway UID and mode 0600.
+    # Inspect using a constrained read-only sudo witness; the runner account
+    # must not gain permission to read private restored files.
+    exec_checked(["sudo", sys.executable, "-c",
+                  "from pathlib import Path; import sys; "
+                  "assert Path(sys.argv[1]).read_bytes() == "
+                  "b'snapshot-restored; replay-risk-not-acknowledged\\n'",
+                  marker], timeout=10)
     p = port()
     token = secrets.token_urlsafe(48)
     name = "nexus-cross-restore-" + os.environ["GITHUB_RUN_ID"]
