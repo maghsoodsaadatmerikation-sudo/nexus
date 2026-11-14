@@ -4,6 +4,7 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 const MAX_SNAPSHOT_BYTES: u64 = 16 * 1024 * 1024;
@@ -28,21 +29,69 @@ pub enum DurableWorkspaceError {
 #[derive(Debug, Clone)]
 pub struct FileWorkspaceRepository {
     root: PathBuf,
+    // Optional startup identity for a long-lived runtime. Short-lived
+    // library callers retain the existing per-transaction behavior.
+    pinned_root: Option<Arc<File>>,
 }
 
 impl FileWorkspaceRepository {
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self {
+            root: root.into(),
+            pinned_root: None,
+        }
     }
 
     pub fn root(&self) -> &Path {
         &self.root
     }
 
-    pub fn save(&mut self, snapshot: WorkspaceSnapshot) -> Result<(), DurableWorkspaceError> {
-        validate_snapshot(&snapshot)?;
+    /// Pin the writable data directory before accepting live traffic.
+    /// If a volume/path changes after startup, reject later operations
+    /// instead of silently creating a separate workspace history.
+    pub fn pin_root(mut self) -> Result<Self, DurableWorkspaceError> {
         let directory =
             SnapshotDirectory::open(&self.root, true)?.ok_or(DurableWorkspaceError::Io)?;
+        self.root = directory.root;
+        self.pinned_root = Some(Arc::new(directory.file));
+        self.verify_pin()?;
+        Ok(self)
+    }
+
+    fn verify_pin(&self) -> Result<(), DurableWorkspaceError> {
+        if let Some(pinned) = &self.pinned_root {
+            let linked = fs::symlink_metadata(&self.root).map_err(|_| DurableWorkspaceError::Io)?;
+            let original = pinned.metadata().map_err(|_| DurableWorkspaceError::Io)?;
+            if !linked.is_dir() || !original.is_dir() || !same_identity(&linked, &original) {
+                return Err(DurableWorkspaceError::Io);
+            }
+        }
+        Ok(())
+    }
+
+    fn open_directory(
+        &self,
+        create: bool,
+    ) -> Result<Option<SnapshotDirectory>, DurableWorkspaceError> {
+        self.verify_pin()?;
+        // Never recreate a missing pinned path on a replacement volume.
+        let directory =
+            SnapshotDirectory::open(&self.root, create && self.pinned_root.is_none())?;
+        if let Some(pinned) = &self.pinned_root {
+            let opened = directory.as_ref().ok_or(DurableWorkspaceError::Io)?;
+            let original = pinned.metadata().map_err(|_| DurableWorkspaceError::Io)?;
+            let current = opened.file.metadata().map_err(|_| DurableWorkspaceError::Io)?;
+            if !same_identity(&original, &current) {
+                return Err(DurableWorkspaceError::Io);
+            }
+            self.verify_pin()?;
+        }
+        Ok(directory)
+    }
+
+    pub fn save(&mut self, snapshot: WorkspaceSnapshot) -> Result<(), DurableWorkspaceError> {
+        validate_snapshot(&snapshot)?;
+        let directory = self.open_directory(true)?.ok_or(DurableWorkspaceError::Io)?;
         let path = directory.path_for(&snapshot.workspace.id);
         // Lock the directory itself: no lock metadata enters the data tree or
         // its strict recovery archives. This serializes cooperating writers
@@ -76,15 +125,20 @@ impl FileWorkspaceRepository {
             .file
             .sync_all()
             .map_err(|_| DurableWorkspaceError::Io)?;
-        directory.verify()
+        directory.verify()?;
+        self.verify_pin()
     }
 
     pub fn load(
         &self,
         workspace_id: &str,
     ) -> Result<Option<WorkspaceSnapshot>, DurableWorkspaceError> {
-        match SnapshotDirectory::open(&self.root, false)? {
-            Some(directory) => directory.load(workspace_id),
+        match self.open_directory(false)? {
+            Some(directory) => {
+                let result = directory.load(workspace_id)?;
+                self.verify_pin()?;
+                Ok(result)
+            }
             None => Ok(None),
         }
     }
@@ -425,6 +479,47 @@ mod tests {
             Err(DurableWorkspaceError::UnsupportedSchemaVersion { .. })
         ));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn gateway_pinned_root_rejects_substitution_then_accepts_exact_restoration() {
+        let parent = temp_root("runtime-root-identity");
+        let root = parent.join("workspaces");
+        let moved = parent.with_extension("moved");
+        let mut repo = FileWorkspaceRepository::new(&root).pin_root().unwrap();
+        let first = WorkspaceEngine::new("w", "Original", ProvenanceId::new("p")).snapshot();
+        repo.save(first.clone()).unwrap();
+        assert_eq!(repo.load("w").unwrap(), Some(first.clone()));
+
+        // A vanished mount/ancestor is replaced by another writable folder.
+        fs::rename(&parent, &moved).unwrap();
+        fs::create_dir_all(&root).unwrap();
+        let witness = root.join("sentinel");
+        fs::write(&witness, b"not the original store").unwrap();
+        let second = WorkspaceEngine::new("new", "Other", ProvenanceId::new("p")).snapshot();
+        assert_eq!(repo.load("w"), Err(DurableWorkspaceError::Io));
+        assert_eq!(repo.save(second.clone()), Err(DurableWorkspaceError::Io));
+        assert_eq!(fs::read(&witness).unwrap(), b"not the original store");
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+
+        // A symlink alias to the original directory must not be accepted
+        // as a recovery of the configured actual directory pathname.
+        fs::remove_dir_all(&parent).unwrap();
+        fs::create_dir_all(&parent).unwrap();
+        std::os::unix::fs::symlink(moved.join("workspaces"), &root).unwrap();
+        assert_eq!(repo.load("w"), Err(DurableWorkspaceError::Io));
+        assert_eq!(repo.save(second.clone()), Err(DurableWorkspaceError::Io));
+        fs::remove_file(&root).unwrap();
+        fs::remove_dir(&parent).unwrap();
+
+        // Returning the original inode to the configured path preserves its
+        // history and allows legitimate extensions and new workspaces.
+        fs::rename(&moved, &parent).unwrap();
+        assert_eq!(repo.load("w").unwrap(), Some(first));
+        repo.save(second.clone()).unwrap();
+        assert_eq!(repo.load("new").unwrap(), Some(second));
+        fs::remove_dir_all(parent).unwrap();
     }
 
     #[cfg(target_os = "linux")]
