@@ -161,7 +161,7 @@ def exercise(binary: Path):
                     marker.unlink()
                 else:
                     marker.write_bytes(
-                        b"nexus.volume-identity.v1\\n" + WRONG.encode() + b"\\n"
+                        b"nexus.volume-identity.v1\n" + WRONG.encode() + b"\n"
                     )
                 status, body = request(p, "GET", "/readyz")
                 require((status, body) == (503, {"status": "workspace_unavailable"}),
