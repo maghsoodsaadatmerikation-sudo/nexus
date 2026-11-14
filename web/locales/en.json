@@ -1,6 +1,6 @@
 {
   "schema": "nexus.ui-language.v1",
-  "source_sha256": "86f3b76533232011ea5331e781992196c1d876099a16abe20a29066448439f45",
+  "source_sha256": "e640a9094f9b58523a77502d1bf0589805bb4d5dd0118f40b4669c5070fb3f1e",
   "locale": "en",
   "name": "English",
   "direction": "ltr",
@@ -498,6 +498,10 @@
     "m490": "Speech never starts automatically and uses only an on-device voice.",
     "m491": "Clear this in-memory conversation? Registered workspace information will remain.",
     "m492": "Analysis unavailable: duplicate JSON field names. Give each field in an object a unique name, then try again.",
-    "m493": "Analysis unavailable: worksheet cell coordinates do not match their row. Check or re-export the workbook, then try again."
+    "m493": "Analysis unavailable: worksheet cell coordinates do not match their row. Check or re-export the workbook, then try again.",
+    "m494": "Analysis unavailable: workbook sheet relationships are missing, ambiguous or unsupported. Check or re-export the workbook, then try again.",
+    "m495": "Analyzed worksheet",
+    "m496": "Only the first sheet listed in the workbook is analyzed; other sheets are excluded.",
+    "m497": "The selected sheet is hidden in the workbook."
   }
 }

@@ -28,16 +28,51 @@
   const {normalizedTable}=NexusTable;
   async function parseXlsxTable(bytes){
     const zip=zipReader(bytes);
-    const worksheets=zip.names.filter(n=>/^xl\/worksheets\/sheet\d+\.xml$/.test(n))
-      .sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
-    if(!worksheets.length||worksheets.length>20)throw Error('sheets');
+    const mainNS=['http://schemas.openxmlformats.org/spreadsheetml/2006/main','http://purl.oclc.org/ooxml/spreadsheetml/main'];
+    const relNS=['http://schemas.openxmlformats.org/officeDocument/2006/relationships','http://purl.oclc.org/ooxml/officeDocument/relationships'];
+    const packageNS='http://schemas.openxmlformats.org/package/2006/relationships';
+    const fail=()=>{throw Error('xlsx-workbook')};
+    const children=(node,name,ns)=>Array.from(node.children).filter(n=>n.localName===name&&n.namespaceURI===ns);
+    if(!zip.names.includes('xl/workbook.xml')||!zip.names.includes('xl/_rels/workbook.xml.rels'))fail();
+    const workbook=xmlDocument(await zip.read('xl/workbook.xml')).documentElement;
+    if(workbook.localName!=='workbook'||!mainNS.includes(workbook.namespaceURI))fail();
+    const containers=children(workbook,'sheets',workbook.namespaceURI);
+    if(containers.length!==1)fail();
+    const sheets=children(containers[0],'sheet',workbook.namespaceURI);
+    if(!sheets.length||sheets.length>20)fail();
+    const ids=new Set();
+    const declared=sheets.map(sheet=>{
+      const namespacedIds=relNS.map(ns=>sheet.getAttributeNS(ns,'id')).filter(Boolean);
+      const name=sheet.getAttribute('name'),state=sheet.getAttribute('state')||'visible';
+      if(namespacedIds.length!==1||!name||name.length>160||!['visible','hidden','veryHidden'].includes(state)||ids.has(namespacedIds[0]))fail();
+      ids.add(namespacedIds[0]);return {id:namespacedIds[0],name,state};
+    });
+    const relRoot=xmlDocument(await zip.read('xl/_rels/workbook.xml.rels')).documentElement;
+    if(relRoot.localName!=='Relationships'||relRoot.namespaceURI!==packageNS)fail();
+    const rels=children(relRoot,'Relationship',packageNS),byId=new Map();
+    if(rels.length>200)fail();
+    for(const rel of rels){const id=rel.getAttribute('Id');if(!id||byId.has(id))fail();byId.set(id,rel)}
+    const partFor=(rel,kind)=>{
+      if(!rel||!relNS.some(ns=>rel.getAttribute('Type')===ns+'/'+kind)||!['','Internal'].includes(rel.getAttribute('TargetMode')||''))fail();
+      const target=rel.getAttribute('Target')||'';
+      if(!target||/[\\:%?#\x00-\x20]/.test(target)||target.startsWith('//'))fail();
+      const parts=target.startsWith('/')?[]:['xl'];
+      for(const piece of target.split('/')){if(!piece||piece==='.')continue;if(piece==='..'){if(!parts.length)fail();parts.pop()}else parts.push(piece)}
+      const part=parts.join('/');if(!part.endsWith('.xml')||!zip.names.includes(part))fail();return part;
+    };
+    // Workbook order and r:id define identity; archive filenames do not.
+    const selected=declared[0],part=partFor(byId.get(selected.id),'worksheet');
+    const stringRels=rels.filter(rel=>relNS.some(ns=>rel.getAttribute('Type')===ns+'/sharedStrings'));
+    if(stringRels.length>1)fail();
     let shared=[];
-    if(zip.names.includes('xl/sharedStrings.xml')){
-      shared=xmlElements(xmlDocument(await zip.read('xl/sharedStrings.xml')),'si')
-        .map(si=>xmlText(si,'t'));
+    if(stringRels.length){
+      const strings=xmlDocument(await zip.read(partFor(stringRels[0],'sharedStrings'))).documentElement;
+      if(strings.localName!=='sst'||strings.namespaceURI!==workbook.namespaceURI)fail();
+      shared=children(strings,'si',workbook.namespaceURI).map(si=>xmlText(si,'t'));
       if(shared.length>10000)throw Error('strings');
     }
-    const sheet=xmlDocument(await zip.read(worksheets[0])),lines=[];
+    const sheet=xmlDocument(await zip.read(part)).documentElement,lines=[];
+    if(sheet.localName!=='worksheet'||sheet.namespaceURI!==workbook.namespaceURI)fail();
     let cellCount=0,previousRow=0;
     for(const row of xmlElements(sheet,'row')){
       const rowNumber=Number(row.getAttribute('r')||lines.length+1);
@@ -66,7 +101,7 @@
       while(lines.length<rowNumber-1)lines.push([]);
       lines.push(cells);
     }
-    return normalizedTable(lines[0]||[],lines.slice(1));
+    return {...normalizedTable(lines[0]||[],lines.slice(1)),worksheet:{name:selected.name,part,sheet_count:declared.length,state:selected.state,selection:'first-listed-sheet'}};
   }
   async function readAnalysisFile(item){
     if(item.size===0||item.size>ANALYSIS_MAX_BYTES)throw Error('analysis-budget');
@@ -102,6 +137,7 @@
     const grouping=groupReport(table,group,metric),groups=grouping.groups.slice(0,GROUP_PREVIEW_LIMIT);
     const lines=[t('m386')+': '+report.rows+' × '+report.columns,
       t('m387')+': '+report.source.name+' / SHA-256 '+report.source.sha256,''];
+    if(report.source.worksheet){const w=report.source.worksheet;lines.splice(2,0,t('m495')+': '+w.name+' (1/'+w.sheet_count+')',t('m496'),...(w.state==='visible'?[]:[t('m497')]));}
     for(const column of report.column_stats){
       const base=column.name+': '+t('m388')+' '+column.missing+'; '+t('m389')+' '+column.distinct;
       const s=column.summary;
@@ -137,6 +173,7 @@
       if(job!==analysisJob||epoch!==fileEpoch||workspace!==state.workspace||
         !fileTray.some(x=>x.id===item.id&&x.sha===item.sha))return;
       const report=analyseTable(table,item);
+      if(table.worksheet)report.source.worksheet=table.worksheet;
       analysisData={table,report};analysisContext={id:item.id,sha:item.sha,epoch,workspace};
       const group=$('analysis-group'),metric=$('analysis-metric');
       group.replaceChildren();metric.replaceChildren();
@@ -151,7 +188,7 @@
       metric.value=metric.options.length>1?metric.options[1].value:'-1';
       renderAnalysisResults();$('analysis-download').disabled=false;$('analysis-claim').disabled=false;
       analysisStatus('m376');
-    }catch(error){if(job===analysisJob){clearAnalysis();analysisStatus(error.message==='json-duplicate-key'?'m492':error.message==='xlsx-cell-row'?'m493':'m377');}}
+    }catch(error){if(job===analysisJob){clearAnalysis();analysisStatus(error.message==='json-duplicate-key'?'m492':error.message==='xlsx-cell-row'?'m493':error.message==='xlsx-workbook'?'m494':'m377');}}
     finally{if(job===analysisJob)$('analysis-run').disabled=false;}
   });
   $('analysis-download').addEventListener('click',()=>{
