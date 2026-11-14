@@ -49,6 +49,7 @@ jobs:
           node --check web/studio-quality-ui.js
           node scripts/test-studio-quality.mjs
           node scripts/test-analysis-group-completeness.mjs
+          node scripts/test-analysis-numeric-boundaries.mjs
           node scripts/test-studio-sky.mjs
           node scripts/test-studio-astrology.mjs
           node scripts/test-studio-core.mjs
@@ -56,6 +57,8 @@ jobs:
           node scripts/test-studio-storage.mjs
           node scripts/test-studio-vault-cancellation.mjs
           node scripts/test-studio-lab.mjs
+      - name: Exercise exact JSON identifier and numeric range boundaries
+        run: python3 scripts/test-studio-numeric-boundaries-browser.py
       - name: Exercise complete group exports and early analysis cancellation
         run: python3 scripts/test-studio-group-reports-browser.py
       - name: Exercise atomic source batches and isolated late file completions

@@ -1,6 +1,6 @@
 {
   "schema": "nexus.ui-language.v1",
-  "source_sha256": "ede4823c2a0558e7ce53f8f48f063cccd65348d64fade5f81e9bc1c30ed79b9e",
+  "source_sha256": "a960ca83326863f2618697538053caaae8d45fa994853cb15629bcebb92ada7b",
   "locale": "en",
   "name": "English",
   "direction": "ltr",
@@ -373,7 +373,7 @@
     "m365": "Text",
     "m366": "Details",
     "m367": "Local data analysis",
-    "m368": "Analyze CSV, TSV, JSON object arrays and bounded XLSX in this browser tab. No upload, prediction or automatic judgment. Up to 1 MiB, 5,000 rows and 40 columns; numeric values use dot decimals. Do not enter sensitive records without reviewing browser and file privacy.",
+    "m368": "Analyze CSV, TSV, JSON object arrays and bounded XLSX in this browser tab. No upload, prediction or automatic judgment. Up to 1 MiB, 5,000 rows and 40 columns; numeric values use dot decimals. Do not enter sensitive records without reviewing browser and file privacy. Large integer JSON identifiers retain their digits; nonzero values that underflow to zero are excluded from numeric summaries.",
     "m369": "Source file",
     "m370": "Analyze locally",
     "m371": "Group by (optional)",

@@ -50,7 +50,7 @@ const GROUP_PREVIEW_LIMIT=12;
     return {columns,rows};
   }
   function parseJsonTable(text){
-    const data=JSON.parse(text);
+    let data=JSON.parse(text);
     if(!Array.isArray(data)||data.length===0||data.length>ANALYSIS_MAX_ROWS)throw Error('json-array');
     const columns=[];
     for(const row of data){
@@ -60,21 +60,48 @@ const GROUP_PREVIEW_LIMIT=12;
         if(!columns.includes(key)){columns.push(key);if(columns.length>ANALYSIS_MAX_COLUMNS)throw Error('json-columns');}
       }
     }
+    // Syntax is validated above before rewriting numeric value tokens. Quoted
+    // strings (including object keys and escapes) are copied without alteration.
+    const exact=text.replace(/"(?:\\[\s\S]|[^"\\])*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/g,token=>{
+      if(token[0]==='"')return token;
+      const n=Number(token);if(!Number.isFinite(n))throw Error('non-scalar');
+      let value=String(n);
+      if(/^-?\d+$/.test(token)&&!Number.isSafeInteger(n))value=token;
+      else if(n===0&&/[1-9]/.test(token.split(/[eE]/)[0]))value=token;
+      else if(Number.isInteger(n)&&!Number.isSafeInteger(n))value=n.toExponential();
+      return JSON.stringify(value);
+    });
+    data=JSON.parse(exact);
     return normalizedTable(columns,data.map(row=>columns.map(key=>Object.hasOwn(row,key)?row[key]:null)));
   }
   const strictNumeric=value=>{
     const s=String(value).trim().replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-1776)).replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-1632)).replace(/٫/g,'.');
     if(!/^[+-]?(?:(?:\d+(?:\.\d*)?)|(?:\.\d+))(?:[Ee][+-]?\d+)?$/.test(s))return null;
-    const n=Number(s);return Number.isFinite(n)&&!(/^[+-]?\d+$/.test(s)&&!Number.isSafeInteger(n))?n:null;
+    const n=Number(s);
+    if(n===0&&/[1-9]/.test(s.split(/[Ee]/)[0]))return null;
+    return Number.isFinite(n)&&!(/^[+-]?\d+$/.test(s)&&!Number.isSafeInteger(n))?n:null;
   };
   function numberStats(values){
     if(!Array.isArray(values)||values.some(x=>typeof x!=='number'||!Number.isFinite(x)))throw Error('finite-values-required');
     const nums=values.slice().sort((a,b)=>a-b),n=nums.length;if(!n)return null;
     const scale=Math.max(...nums.map(Math.abs))||1;let mean=0,m2=0;
     values.forEach((x,i)=>{const y=x/scale,d=y-mean;mean+=d/(i+1);m2+=d*(y-mean)});
-    const quantile=q=>{const p=(n-1)*q,lo=Math.floor(p),hi=Math.ceil(p),f=p-lo;return lo===hi?nums[lo]:(1-f)*nums[lo]+f*nums[hi]};
+    const quantile=q=>{
+      const p=(n-1)*q,lo=Math.floor(p),hi=Math.ceil(p),f=p-lo,a=nums[lo],b=nums[hi];
+      if(lo===hi||a===b)return a;
+      const local=Math.max(Math.abs(a),Math.abs(b))||1;
+      return ((1-f)*(a/local)+f*(b/local))*local;
+    };
     const finite=x=>Number.isFinite(x)?x:null;
     return {count:n,min:nums[0],max:nums[n-1],mean:finite(mean*scale),median:finite(quantile(.5)),q1:finite(quantile(.25)),q3:finite(quantile(.75)),sample_stddev:n>1?finite(Math.sqrt(Math.max(0,m2/(n-1)))*scale):null};
+  }
+  function histogram(values,bins=8){
+    if(!Array.isArray(values)||values.length>ANALYSIS_MAX_ROWS||values.some(n=>typeof n!=='number'||!Number.isFinite(n))||!Number.isInteger(bins)||bins<1||bins>50)throw Error('histogram-values');
+    if(!values.length)return [];
+    const lo=Math.min(...values),hi=Math.max(...values),scale=Math.max(Math.abs(lo),Math.abs(hi))||1,min=lo/scale,span=hi/scale-min;
+    const buckets=Array.from({length:bins},(_,i)=>({label:String(i+1),count:0}));
+    for(const value of values){const position=hi===lo?0:(value/scale-min)/span,index=Math.max(0,Math.min(bins-1,Math.floor(position*bins)));buckets[index].count++}
+    return buckets;
   }
   function analyseTable(table,source){
     const {columns,rows}=table,stats=[],numeric=[];
@@ -109,7 +136,7 @@ const GROUP_PREVIEW_LIMIT=12;
       rows:rows.length,columns:columns.length,column_stats:stats,correlations,notes:[
       'Exploratory descriptive analysis only; no causal inference, diagnosis, prediction or human judgment.',
       'Values are not independently verified; missing, invalid and mixed columns can affect statistics.',
-      'Numeric parsing accepts dot/Arabic decimal marks and local digits; unsafe plain integers stay categorical. Binary64 summaries are approximate. Non-finite results are null; labels may be shortened. Pearson uses pairwise complete cases and is not causation.']};
+      'Numeric parsing accepts dot/Arabic decimal marks and local digits; unsafe plain integers stay categorical and plain JSON integer digits are preserved. Nonzero inputs that underflow to zero are excluded. Binary64 summaries are approximate. Non-finite results are null; labels may be shortened. Pearson uses pairwise complete cases and is not causation.']};
   }
   function analysisGroups(table,index,metric,{limit=GROUP_PREVIEW_LIMIT}={}){
     if(!Array.isArray(table?.columns)||!table.columns.length||table.columns.length>ANALYSIS_MAX_COLUMNS||!Array.isArray(table.rows)||table.rows.length>ANALYSIS_MAX_ROWS)throw Error('group-table');
@@ -139,5 +166,5 @@ function parse(text,extension){
  const rows=parseDelimited(text,kind==='tsv'?'\t':',');
  return normalizedTable(rows[0]||[],rows.slice(1).filter(row=>row.some(x=>x!=='')));
 }
-root.NexusTable=Object.freeze({parse,parseDelimited,normalizedTable,parseJsonTable,strictNumeric,numberStats,analyseTable,analysisGroups,groupReport,GROUP_PREVIEW_LIMIT,MAX_BYTES:ANALYSIS_MAX_BYTES,MAX_ROWS:ANALYSIS_MAX_ROWS,MAX_COLUMNS:ANALYSIS_MAX_COLUMNS});
+root.NexusTable=Object.freeze({parse,parseDelimited,normalizedTable,parseJsonTable,strictNumeric,numberStats,histogram,analyseTable,analysisGroups,groupReport,GROUP_PREVIEW_LIMIT,MAX_BYTES:ANALYSIS_MAX_BYTES,MAX_ROWS:ANALYSIS_MAX_ROWS,MAX_COLUMNS:ANALYSIS_MAX_COLUMNS});
 })(globalThis);
