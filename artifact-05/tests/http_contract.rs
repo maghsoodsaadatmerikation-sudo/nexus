@@ -757,21 +757,25 @@ async fn runtime_readiness_tracks_pinned_storage_loss_replacement_and_recovery()
             .unwrap(),
     );
 
-    for (status, expected) in [
-        (StatusCode::OK, "ready"),
-        (StatusCode::OK, "ready"),
-    ] {
+    for _ in 0..2 {
         let response = app
             .clone()
-            .oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
-        assert_eq!(response.status(), status);
+        assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()["cache-control"], "no-store");
-        let bytes = axum::body::to_bytes(response.into_body(), 128).await.unwrap();
+        let bytes = axum::body::to_bytes(response.into_body(), 128)
+            .await
+            .unwrap();
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
-            serde_json::json!({"status": expected})
+            serde_json::json!({"status":"ready"})
         );
     }
 
@@ -782,12 +786,19 @@ async fn runtime_readiness_tracks_pinned_storage_loss_replacement_and_recovery()
     for _ in 0..2 {
         let response = app
             .clone()
-            .oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(response.headers()["cache-control"], "no-store");
-        let bytes = axum::body::to_bytes(response.into_body(), 128).await.unwrap();
+        let bytes = axum::body::to_bytes(response.into_body(), 128)
+            .await
+            .unwrap();
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
             serde_json::json!({"status":"storage_unavailable"})
@@ -795,7 +806,12 @@ async fn runtime_readiness_tracks_pinned_storage_loss_replacement_and_recovery()
     }
     assert_eq!(
         app.clone()
-            .oneshot(Request::builder().uri("/livez").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/livez")
+                    .body(Body::empty())
+                    .unwrap()
+            )
             .await
             .unwrap()
             .status(),
@@ -817,7 +833,12 @@ async fn runtime_readiness_tracks_pinned_storage_loss_replacement_and_recovery()
     symlink(&moved, &root).unwrap();
     assert_eq!(
         app.clone()
-            .oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap()
             .status(),
@@ -830,11 +851,18 @@ async fn runtime_readiness_tracks_pinned_storage_loss_replacement_and_recovery()
     std::fs::rename(&moved, &root).unwrap();
     let response = app
         .clone()
-        .oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap())
+        .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    let bytes = axum::body::to_bytes(response.into_body(), 128).await.unwrap();
+    let bytes = axum::body::to_bytes(response.into_body(), 128)
+        .await
+        .unwrap();
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
         serde_json::json!({"status":"ready"})
