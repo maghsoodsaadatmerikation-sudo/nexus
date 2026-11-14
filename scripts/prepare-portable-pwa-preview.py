@@ -69,7 +69,8 @@ def expected(commit):
     with zipfile.ZipFile(io.BytesIO(data), "r") as archive:
         infos = archive.infolist()
         names = [item.filename for item in infos]
-        KIT.require(len(names) == len(PUBLIC) and set(names) == PUBLIC,
+        packaged = PUBLIC - {"nexus/device-check.html"}
+        KIT.require(len(names) == len(packaged) and set(names) == packaged,
                     "unexpected-preview-asset")
         site = {"index.html": ENTRY, **{name: archive.read(name) for name in names}}
         site["nexus/device-check.html"] = device_check_page(site["nexus/index.html"])
