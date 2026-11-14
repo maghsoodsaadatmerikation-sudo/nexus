@@ -65,6 +65,19 @@ class PortablePwaTests(unittest.TestCase):
         self.assertNotIn("getRegistration('/')", html)
         self.assertIn("connect-src 'none'", html)
 
+    def test_worker_install_works_on_any_https_origin_not_insecure_http(self):
+        html = kit.payloads()["index.html"].decode()
+        self.assertIn(
+            "const allowedInstallOrigin=window.isSecureContext&&\\n"
+            "    (location.protocol==='https:'||\\n"
+            "     (location.protocol==='http:'&&\\n"
+            "      (location.hostname==='127.0.0.1'||location.hostname==='localhost')));",
+            html)
+        self.assertNotIn(
+            "(location.hostname==='nexus-offline-pilot.onrender.com'||",
+            html)
+        self.assertNotIn("location.protocol==='file:'", html)
+
     def test_worker_scope_and_cache_do_not_intercept_sibling_paths(self):
         worker = kit.payloads()["service-worker.js"].decode()
         self.assertIn("const ENTRY=new URL('./',self.location.href).href;", worker)
