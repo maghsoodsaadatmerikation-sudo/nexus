@@ -20,9 +20,27 @@ pub(crate) const MARKER_NAME: &str = ".nexus-volume-identity";
 pub(crate) const PREFIX: &str = "nexus.volume-identity.v1\n";
 const MAX_MARKER_BYTES: u64 = 128;
 
-/// Validate only a pinned existing root; a missing volume must NEVER be
-/// manufactured by an implicit create_dir_all.
+/// Unix identity pins the marker inode in addition to its exact bytes.
+/// The marker is not authentication; owner-controlled filesystem replacement
+/// can still race a read-only check, but ordinary same-content substitution
+/// is detected at the next API/ready probe.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct MarkerIdentity {
+    #[cfg(unix)]
+    device: u64,
+    #[cfg(unix)]
+    inode: u64,
+    #[cfg(not(unix))]
+    len: u64,
+}
+
+/// Preserve startup compatibility with existing callers and tests.
 pub(crate) fn verify(root: &Path, expected: &str) -> Result<(), &'static str> {
+    inspect(root, expected).map(|_| ())
+}
+
+/// Validate an existing root and return the exact marker file identity.
+pub(crate) fn inspect(root: &Path, expected: &str) -> Result<MarkerIdentity, &'static str> {
     if expected.len() != 32
         || !expected
             .bytes()
@@ -96,7 +114,14 @@ pub(crate) fn verify(root: &Path, expected: &str) -> Result<(), &'static str> {
     if !same_inode(&opened, &final_root) || !final_root.is_dir() {
         return Err("volume root replaced");
     }
-    Ok(())
+    Ok(MarkerIdentity {
+        #[cfg(unix)]
+        device: final_file.dev(),
+        #[cfg(unix)]
+        inode: final_file.ino(),
+        #[cfg(not(unix))]
+        len: final_file.len(),
+    })
 }
 
 fn same_inode(first: &fs::Metadata, second: &fs::Metadata) -> bool {
@@ -158,6 +183,24 @@ mod tests {
         enroll(&root);
         assert!(verify(&root, ID).is_ok());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn same_content_replaced_marker_has_new_file_identity() {
+        let root = root();
+        fs::create_dir(&root).unwrap();
+        enroll(&root);
+        let original = inspect(&root, ID).unwrap();
+        let retired = root.join(".previous-volume-marker");
+        fs::rename(root.join(MARKER_NAME), &retired).unwrap();
+        enroll(&root);
+        assert!(verify(&root, ID).is_ok());
+        assert_ne!(inspect(&root, ID).unwrap(), original);
+        fs::remove_file(root.join(MARKER_NAME)).unwrap();
+        fs::rename(retired, root.join(MARKER_NAME)).unwrap();
+        assert_eq!(inspect(&root, ID).unwrap(), original);
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[cfg(unix)]
