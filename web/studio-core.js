@@ -91,7 +91,12 @@ function envelope(raw){if(typeof raw!=='string'||enc.encode(raw).length>6*1024*1
 const aad=e=>enc.encode([SCHEMA,e.iterations,e.revision,e.salt].join('|'));
 async function keyFor(pass,salt){text(pass,512);if(Array.from(pass).length<12)fail('passphrase');const k=await crypto.subtle.importKey('raw',enc.encode(pass),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:310000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
 async function encrypt(v,key,salt){const e={schema:SCHEMA,iterations:310000,revision:uid(),salt:b64(salt),iv:b64(crypto.getRandomValues(new Uint8Array(12)))};e.ciphertext=b64(new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:un64(e.iv,12),additionalData:aad(e)},key,enc.encode(JSON.stringify(state(v))))));return JSON.stringify(e)}
-async function decrypt(raw,pass){const e=envelope(raw),salt=un64(e.salt,16),key=await keyFor(pass,salt);let bytes;try{bytes=await crypto.subtle.decrypt({name:'AES-GCM',iv:un64(e.iv,12),additionalData:aad(e)},key,un64(e.ciphertext,MAX+16))}catch{fail('wrong-passphrase-or-damaged-archive')}return {data:state(JSON.parse(dec.decode(bytes))),key,salt,raw}}
+async function decrypt(raw,pass,{signal}={}){
+ const current=()=>{if(signal?.aborted)fail('cancelled')};current();
+ const e=envelope(raw),salt=un64(e.salt,16),key=await keyFor(pass,salt);current();let bytes;
+ try{bytes=await crypto.subtle.decrypt({name:'AES-GCM',iv:un64(e.iv,12),additionalData:aad(e)},key,un64(e.ciphertext,MAX+16))}catch{fail('wrong-passphrase-or-damaged-archive')}
+ current();return {data:state(JSON.parse(dec.decode(bytes))),key,salt,raw};
+}
 class IndexedStore{
  async db(){return new Promise((resolve,reject)=>{const r=indexedDB.open('nexus-studio-v1',1);r.onupgradeneeded=()=>r.result.createObjectStore('vault');r.onsuccess=()=>resolve(r.result);r.onerror=r.onblocked=()=>reject(Error('storage'))})}
  async read(){
@@ -123,17 +128,37 @@ class Vault{
  constructor(store=new IndexedStore()){this.store=store;this.epoch=0;this.tail=Promise.resolve();this.lock()}
  lock(){this.epoch++;this.key=null;this.salt=null;this.raw=null;this.data=null}
  get unlocked(){return this.key!==null}
- run(fn){const e=this.epoch;const check=()=>{if(e!==this.epoch)fail('locked')};const result=this.tail.catch(()=>{}).then(async()=>{check();try{return await fn(check)}catch(x){if(x.message==='conflict'&&e===this.epoch)this.lock();throw x}});this.tail=result.catch(()=>{});return result}
- async create(pass){return this.run(async check=>{if(await this.store.read())fail('archive-exists');const salt=crypto.getRandomValues(new Uint8Array(16)),key=await keyFor(pass,salt),raw=await encrypt(empty(),key,salt);check();await this.store.commit(null,raw,()=>{try{check();return true}catch{return false}});check();Object.assign(this,{key,salt,raw})})}
- async unlock(pass){return this.run(async check=>{const raw=await this.store.read();if(!raw)fail('archive-missing');const opened=await decrypt(raw,pass);check();Object.assign(this,{key:opened.key,salt:opened.salt,raw:opened.raw});return copy(opened.data)})}
- async save(value){const data=state(value);return this.run(async check=>{if(!this.unlocked)fail('locked');const raw=await encrypt(data,this.key,this.salt);check();await this.store.commit(envelope(this.raw).revision,raw,()=>{try{check();return true}catch{return false}});check();this.raw=raw})}
- async export(value,pass){const data=state(value);return this.run(async check=>{const salt=crypto.getRandomValues(new Uint8Array(16)),key=await keyFor(pass,salt),raw=await encrypt(data,key,salt);check();return raw})}
- async erase({signal}={}){return this.run(async check=>{
-  const current=()=>{check();if(signal?.aborted)fail('cancelled')};current();if(!this.unlocked)fail('locked');
+ run(fn,{signal}={}){
+  const e=this.epoch,check=()=>{if(e!==this.epoch)fail('locked')},current=()=>{check();if(signal?.aborted)fail('cancelled')};
+  const result=this.tail.catch(()=>{}).then(async()=>{current();try{return await fn(check,current)}catch(x){if(x.message==='conflict'&&e===this.epoch)this.lock();throw x}});
+  this.tail=result.catch(()=>{});return result;
+ }
+ async create(pass,{signal}={}){return this.run(async(check,current)=>{
+  if(await this.store.read())fail('archive-exists');current();
+  const salt=crypto.getRandomValues(new Uint8Array(16)),key=await keyFor(pass,salt);current();const raw=await encrypt(empty(),key,salt);current();
+  await this.store.commit(null,raw,()=>{try{current();return true}catch{return false}});check();
+  if(signal?.aborted){this.lock();fail('cancelled')}
+  Object.assign(this,{key,salt,raw});
+ },{signal})}
+ async unlock(pass,{signal}={}){return this.run(async(check,current)=>{
+  const raw=await this.store.read();current();if(!raw)fail('archive-missing');const opened=await decrypt(raw,pass,{signal});current();
+  Object.assign(this,{key:opened.key,salt:opened.salt,raw:opened.raw});return copy(opened.data);
+ },{signal})}
+ async save(value,{signal}={}){const data=state(value);return this.run(async(check,current)=>{
+  if(!this.unlocked)fail('locked');const raw=await encrypt(data,this.key,this.salt);current();
+  await this.store.commit(envelope(this.raw).revision,raw,()=>{try{current();return true}catch{return false}});
+  // Once committed, keep the real revision even if cancellation arrived late.
+  check();this.raw=raw;
+ },{signal})}
+ async export(value,pass,{signal}={}){const data=state(value);return this.run(async(check,current)=>{
+  const salt=crypto.getRandomValues(new Uint8Array(16)),key=await keyFor(pass,salt);current();const raw=await encrypt(data,key,salt);current();return raw;
+ },{signal})}
+ async erase({signal}={}){return this.run(async(check,current)=>{
+  if(!this.unlocked)fail('locked');
   await this.store.commit(envelope(this.raw).revision,null,()=>{try{current();return true}catch{return false}});
   // A completed delete cannot be undone by a later cancellation; always clear its key.
   check();this.lock();
- })}
+ },{signal})}
 }
 root.NexusStudio=Object.freeze({SCHEMA,MAX,state,empty,project,thread,path,append,context,search,retrieve,guide,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
 })(globalThis);
