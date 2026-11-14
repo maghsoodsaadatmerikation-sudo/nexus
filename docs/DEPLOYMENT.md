@@ -14,6 +14,7 @@ Optional:
 
 - `NEXUS_DATA_DIR` — durable workspace directory. Default outside the container is `nexus-data`; the production container sets `/data`.
 - `NEXUS_BIND_ADDR` — socket address. Local default is `127.0.0.1:3000`; the production container sets `0.0.0.0:3000`.
+- `NEXUS_EXPECTED_VOLUME_ID` — **opt-in, strongly recommended before production admission**. Exactly 32 lowercase hexadecimal characters naming the pre-enrolled persistent data volume. When configured, NEXUS validates `/data/.nexus-volume-identity` **before any data-directory creation** and again after storage handles initialize. Missing, malformed, symlinked, hardlinked or mismatched identity blocks startup without trying to create or repair a replacement volume. A missing setting retains legacy startup for compatibility; legacy mode does **not** protect against an empty replacement volume after a full process restart.
 
 The data directory must be mounted on durable storage in any real deployment. The gateway uses the configured root for Workspace snapshots and the `requests/` ledger subdirectory. It pins the Workspace directory and the request ledger identity for its lifetime; a replaced or missing directory is an outage, **not** permission to initialize empty history. An ephemeral filesystem is not an acceptable durable-production configuration because DecisionWorkspace persistence is part of the verified product contract.
 
@@ -86,6 +87,44 @@ A hosting platform is acceptable only if it can provide all of the following:
 6. A lifecycle path that can be independently exercised for capture, replacement survival, destructive absence, and restore.
 
 The browser asks the operator for the bearer token at runtime and holds it only in page memory. Do not hard-code a production token into `web/index.html`.
+
+## Durable-volume identity: new installs versus existing data
+
+**New empty offline volume only:** after creating a physically separate and
+empty durable directory, generate an unpredictable non-secret volume ID, then
+enroll it explicitly **while all gateway writers are stopped**. The enrollment
+command is in the repository's operator scripts, not inside the runtime
+container image.
+
+```sh
+# Commands run on a trusted operator host with the real volume mounted;
+# do NOT run on an unrecognized replacement or an existing populated volume.
+VOLUME_ID="$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
+python3 scripts/enroll-new-volume.py /path/to/NEW-EMPTY-data-volume \
+  --volume-id "$VOLUME_ID" --offline \
+  --confirm 'I AM INITIALIZING A NEW EMPTY NEXUS DATA VOLUME'
+# Configure the same VOLUME_ID privately as NEXUS_EXPECTED_VOLUME_ID
+# in the gateway environment, and preserve it in protected recovery records.
+```
+
+A startup without this ID remains backward-compatible but cannot detect a
+lost original volume followed by startup on a new blank directory.
+**Never enroll a newly presented empty disk during an incident** simply to
+recover readiness; halt, locate the original volume or perform an independently
+verified full-data restore first. Existing populated volumes cannot be
+enrolled by the new-volume script: migration requires verified off-host
+backup, stopped writers, a separately reviewed offline enrollment procedure,
+and a restore rehearsal. No command in this repository automatically upgrades
+an existing production volume.
+
+The identity marker is copied into full-volume snapshots and preserved by
+isolated restore along with Workspace snapshots and the request ledger; the
+restore still creates the recovery quarantine marker. The volume ID is **not
+authentication**, a disk hardware serial, a cryptographic signature, an
+independent custody receipt, or permission to dismiss quarantine. A root can
+still be tampered with by actors who can rewrite both the volume and marker.
+The runtime identity check is scoped to **startup and root pinning**, not
+continuous cryptographic integrity or a guarantee of future disk writes.
 
 ## Security boundary
 
