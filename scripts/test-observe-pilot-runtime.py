@@ -14,9 +14,13 @@ DIGEST = 'a' * 64
 
 
 class Response(io.BytesIO):
-    def __init__(self, code, body=b''):
+    def __init__(self, code, body=b'', headers=None):
         super().__init__(body)
         self.code = code
+        self.headers = headers if headers is not None else {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'private, no-store',
+        }
 
 
 class RuntimeTests(unittest.TestCase):
@@ -27,14 +31,18 @@ class RuntimeTests(unittest.TestCase):
             calls.append(request)
             path = observer.urllib.parse.urlsplit(request.full_url).path
             if path in overrides:
-                code, body = overrides[path]
+                args = overrides[path]
             elif path == '/v1/runtime-identity':
-                code, body = 200, json.dumps({'schema': 'nexus.runtime-identity.v1',
+                args = (200, json.dumps({'schema': 'nexus.runtime-identity.v1',
                     'authority': 'non_authoritative_build_metadata',
-                    'source_tree_sha256': digest}).encode()
+                    'source_tree_sha256': digest}).encode())
+            elif path == '/livez':
+                args = (200, b'{"status":"alive"}')
+            elif path == '/readyz':
+                args = (200, b'{"status":"ready"}')
             else:
-                code, body = (200 if path in ('/livez', '/readyz') else 401), b''
-            return Response(code, body)
+                args = (401, b'')
+            return Response(*args)
         with patch('urllib.request.OpenerDirector.open', side_effect=open_request):
             result = observer.observe('https://example.test', DIGEST)
         self.assertEqual(len(calls), 5)
@@ -50,9 +58,10 @@ class RuntimeTests(unittest.TestCase):
         self.assertIn('candidate_not_observed', self.run_observation('b' * 64)['blockers'])
 
     def test_quarantine_and_exposed_route(self):
-        r = self.run_observation(overrides={'/readyz': (503, b''), '/v1/workspaces': (200, b'private')})
+        r = self.run_observation(overrides={'/readyz': (503, b'{"status":"quarantined"}'), '/v1/workspaces': (200, b'private')})
         self.assertIn('readyz_not_200', r['blockers'])
         self.assertIn('unauthenticated_get_not_401:/v1/workspaces', r['blockers'])
+        self.assertEqual(r['observations']['/readyz']['health_state'], 'quarantined')
         self.assertNotIn('private', json.dumps(r))
 
     def test_identity_bounded_and_malformed(self):
