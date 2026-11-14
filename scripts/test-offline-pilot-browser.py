@@ -158,7 +158,8 @@ window.addEventListener('load', async () => {
       earlyCore.events.some(e=>e.kind.ClaimAdded) &&
       earlyCore.events.every(e=>e.provenance_id==='offline-bridge:user-supplied-unattested'),
       'core-export-invented-early-human-judgment');
-    assert(earlyCore.workspace.claims[1].origin==='MachineAnalysis' &&
+    assert(earlyCore.workspace.claims[1].origin.ExternalEvidence.source===
+      'offline-bridge:user-reported-machine-analysis-unattested' &&
       !earlyCore.events.some(e=>e.kind.MachineAnalysisRecorded),
       'core-export-forged-machine-adapter');
     checks.push('core-bridge-before-human-choice-is-nonauthoritative');
