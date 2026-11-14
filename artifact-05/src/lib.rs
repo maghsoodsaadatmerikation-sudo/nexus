@@ -244,9 +244,12 @@ impl<D: ConstitutionalDelegate> AppState<D> {
 
     pub fn authenticated(delegate: D, token: impl Into<String>) -> Self {
         let token = token.into();
+        // An invisible whitespace/control/non-ASCII token cannot be used
+        // reliably as an HTTP Bearer field. Fail at configuration time,
+        // rather than booting a seemingly healthy but inaccessible gateway.
         assert!(
-            !token.trim().is_empty(),
-            "authentication token must not be empty"
+            !token.is_empty() && token.bytes().all(|byte| byte.is_ascii_graphic()),
+            "authentication token must be nonempty printable ASCII without whitespace"
         );
         Self {
             delegate: Arc::new(delegate),
