@@ -77,6 +77,22 @@ jobs:
       - name: Verify transport authentication behavior
         run: bash scripts/v2.5-transport-authentication-verification.sh
 
+      # Mandatory PR gate: test the operator freeze decision without provider
+      # credentials or pretending that synthetic evidence grants release authority.
+      - name: Test fail-closed Render and GitHub freeze preflight
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/production-freeze-preflight.py scripts/test-production-freeze-preflight.py
+          python3 scripts/test-production-freeze-preflight.py
+
+      # The full two-runner drill is exercised in its separate isolated
+      # workflow. Require its reject-invalid-input self-test here as well.
+      - name: Test isolated cross-runner recovery evidence contract
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/pilot-cross-runner-recovery.py
+          python3 scripts/pilot-cross-runner-recovery.py self-test
+
       - name: Verify workflow authority boundary
         run: python3 scripts/verify-workflow-authority.py
 
