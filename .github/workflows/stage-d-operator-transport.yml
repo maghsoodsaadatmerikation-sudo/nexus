@@ -1,0 +1,44 @@
+name: NEXUS Stage D Operator Transport Security
+on:
+  pull_request:
+    paths:
+      - 'ops/stage_d_operator.py'
+      - 'ops/stage_d_transport.py'
+      - 'ops/stage-d-operator.Dockerfile'
+      - 'scripts/test-stage-d-operator-transport.py'
+      - '.github/workflows/stage-d-operator-transport.yml'
+      - '.github/workflows/pr-verify.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'ops/stage_d_operator.py'
+      - 'ops/stage_d_transport.py'
+      - 'ops/stage-d-operator.Dockerfile'
+      - 'scripts/test-stage-d-operator-transport.py'
+      - '.github/workflows/stage-d-operator-transport.yml'
+permissions:
+  contents: read
+jobs:
+  operator-transport-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact candidate without persisted credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Assert no production operator credentials in CI
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+      - name: Run synthetic operator transport security tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile ops/stage_d_transport.py ops/stage_d_operator.py scripts/test-stage-d-operator-transport.py
+          python3 scripts/test-stage-d-operator-transport.py
