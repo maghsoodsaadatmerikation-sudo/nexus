@@ -125,6 +125,23 @@ def check(sources: dict[str, str]) -> None:
             "os.O_EXCL" in enrollment,
             "volume-identity-admission-or-recovery-guard-absent")
 
+    # Revalidate the opt-in marker during *live* request admission too.
+    # Unauthorized callers must not get a volume-outage oracle.
+    boundary = gateway.split("async fn recovery_boundary", 1)[1].split(
+        "fn health_response", 1
+    )[0]
+    require('volume_identity_unavailable' in boundary and
+            boundary.index("return transport_unauthorized()") <
+            boundary.index("check_runtime_volume_identity()") <
+            boundary.index("next.run(request).await") and
+            'fn check_runtime_volume_identity(&self) -> bool' in gateway and
+            "state.delegate.check_runtime_volume_identity()" in handler and
+            'fn check_runtime_volume_identity(&self) -> bool' in main and
+            "self.volume_identity_ready()" in main and
+            'volume_identity_unavailable' in runbook and
+            "before parsing their bodies" in runbook,
+            "live-volume-identity-admission-safety-missing")
+
     require("workspace_storage_unavailable" in api and
             "workspace_already_exists" in api and
             "StatusCode::CONFLICT" in api and
@@ -163,6 +180,10 @@ def self_test(sources: dict[str, str]) -> None:
          'data_root.join("untracked")'),
         ("artifact-05/src/main.rs", 'NEXUS_EXPECTED_VOLUME_ID',
          'NEXUS_UNUSED_VOLUME_ID'),
+        ("artifact-05/src/lib.rs", '"volume_identity_unavailable"',
+         '"volume_identity_ignored"'),
+        ("docs/DEPLOYMENT.md", 'before parsing their bodies',
+         'after parsing their bodies'),
         ("docs/DEPLOYMENT.md", "Never enroll", "Always enroll"),
         ("scripts/data-snapshot.py", 'elif name == VOLUME_IDENTITY_MARKER:',
          'elif name == "ignored-volume-identity":'),
