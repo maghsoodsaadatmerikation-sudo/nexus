@@ -261,11 +261,20 @@ pub(crate) fn validate_snapshot(snapshot: &WorkspaceSnapshot) -> Result<(), Work
     });
     for (event, claim) in claim_events.zip(&snapshot.workspace.claims) {
         match &event.kind {
+            // Machine-generated claims require an auditable analysis event with
+            // an adapter and a run ID. A generic ClaimAdded event cannot supply
+            // this provenance, even when its origin field says "MachineAnalysis".
+            WorkspaceEventKind::ClaimAdded { .. }
+                if claim.origin == ClaimOrigin::MachineAnalysis =>
+            {
+                return Err(WorkspaceStoreError::ClaimAuditMismatch)
+            }
             WorkspaceEventKind::MachineAnalysisRecorded {
                 adapter_id, run_id, ..
             } if claim.origin != ClaimOrigin::MachineAnalysis
                 || adapter_id.trim().is_empty()
-                || run_id.trim().is_empty() =>
+                || run_id.trim().is_empty()
+                || event.provenance_id.0 != format!("machine:{adapter_id}:{run_id}") =>
             {
                 return Err(WorkspaceStoreError::ClaimAuditMismatch)
             }
