@@ -38,6 +38,12 @@ on:
       - 'tests/fixtures/legacy-runtime-core/**'
       - 'src/bin/nexus-private-core-audit.rs'
       - 'src/workspace_persistence.rs'
+      - 'artifact-05/src/main.rs'
+      - 'artifact-05/src/volume_identity.rs'
+      - 'scripts/enroll-new-volume.py'
+      - 'scripts/test-enroll-new-volume.py'
+      - 'scripts/test-volume-identity-gateway.py'
+      - 'scripts/test-data-snapshot.py'
       - 'artifact-05/src/request_store.rs'
       - 'artifact-05/tests/http_contract.rs'
       - 'artifact-05/Cargo.toml'
@@ -177,6 +183,16 @@ jobs:
           cargo test --locked --manifest-path artifact-05/Cargo.toml request_store::tests
           # Confirm a replaced ledger directory never resumes HTTP delegation.
           cargo test --locked --manifest-path artifact-05/Cargo.toml --test http_contract durable_store_io_failure_never_delegates
+      - name: Exercise actual gateway process against swapped synthetic volumes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${RAILWAY_TOKEN:-}"
+          cargo build --locked --manifest-path artifact-05/Cargo.toml --bin nexus-artifact-05-gateway
+          python3 scripts/test-volume-identity-gateway.py --binary artifact-05/target/debug/nexus-artifact-05-gateway
+
       - name: Run real Rust semantic validation against synthetic copied data
         shell: bash
         run: |
