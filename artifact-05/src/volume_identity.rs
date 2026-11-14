@@ -133,7 +133,7 @@ mod tests {
         enroll(&root);
         assert!(verify(&root, ID).is_ok());
         assert!(verify(&root, "abcdef1234567890abcdef1234567890").is_err());
-        for candidate in ["", "foo", "1234567890ABCDEF1234567890ABCDEF", "a".repeat(33).as_str()] {
+        for candidate in ["", "foo", "1234567890ABCDEF1234567890ABCDEF", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] {
             assert!(verify(&root, candidate).is_err());
         }
         fs::write(root.join(MARKER_NAME), format!("{PREFIX}{ID}")).unwrap();
