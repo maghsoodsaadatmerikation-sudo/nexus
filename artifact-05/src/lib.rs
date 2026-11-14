@@ -430,6 +430,16 @@ async fn readiness<D: ConstitutionalDelegate>(State(state): State<AppState<D>>) 
     {
         return health_response(StatusCode::SERVICE_UNAVAILABLE, "storage_unavailable");
     }
+    // Exhausting the configured tracked-request budget permanently blocks
+    // new admissions until restart/reconfiguration. Do not advertise this
+    // instance as ready merely because its listener still answers requests.
+    let budget_exhausted = {
+        let safety = state.safety_state.lock().expect("safety lock poisoned");
+        safety.tracked_requests >= state.safety_config.max_tracked_requests
+    };
+    if budget_exhausted {
+        return health_response(StatusCode::SERVICE_UNAVAILABLE, "admission_unavailable");
+    }
     health_response(StatusCode::OK, "ready")
 }
 
