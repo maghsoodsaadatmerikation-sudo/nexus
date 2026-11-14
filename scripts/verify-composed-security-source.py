@@ -43,7 +43,7 @@ EXPECTED_BLOBS = {
     # Candidate-owned, reviewable volume-identity additions; they are NOT
     # claimed to be unchanged upstream PR #202 source. Startup/backup behavior
     # must also pass mandatory Rust/Python and live HTTP synthetic checks.
-    "artifact-05/src/volume_identity.rs": "9bff70be16e859f2560e5e2a0957b4bb0ee2ec6e",
+    "artifact-05/src/volume_identity.rs": "834ae8414f50e294b7f8b478b1582f550e936dac",
     "scripts/data-snapshot.py": "437b4c5ee90ca013ae8aaee84184035b0b06ddd7",
     "scripts/enroll-new-volume.py": "9cd129563ff0339726137c744059bb05166b2b9a",
     "scripts/test-enroll-new-volume.py": "0e348cdc432ec0ff3cd3a05b12d2858c2ce034aa",
