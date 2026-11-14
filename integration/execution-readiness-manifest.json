@@ -1,0 +1,111 @@
+{
+  "schema": "nexus.execution-readiness-assembly.v1",
+  "base_sha": "b7855b1a1bb9f3776e8f24b682d124cbe334543e",
+  "assembly": "unprivileged-source-only",
+  "inputs": [
+    {
+      "path": "docs/gateway-health.md",
+      "pr": 187,
+      "source_commit": "92bc3879bd102d0e9c05bdbc4bad8203af572c4c",
+      "blob_sha": "b37d1707538682f0c5bafa386b3d1098ee983e6f"
+    },
+    {
+      "path": "scripts/observe-pilot-runtime.py",
+      "pr": 187,
+      "source_commit": "92bc3879bd102d0e9c05bdbc4bad8203af572c4c",
+      "blob_sha": "ada0985b2d0c09b8bc2d3b449609849d9d94d86e"
+    },
+    {
+      "path": "scripts/test-observe-pilot-runtime.py",
+      "pr": 187,
+      "source_commit": "92bc3879bd102d0e9c05bdbc4bad8203af572c4c",
+      "blob_sha": "1720a569584ea35b4df80f0979b77a17004bc2fd"
+    },
+    {
+      "path": ".github/workflows/production-freeze-preflight.yml",
+      "pr": 188,
+      "source_commit": "851e68aec2416bd6a54ea3a0e734e0205347c685",
+      "blob_sha": "e5e14092b1685b9246a31324f0c45983308ecb59"
+    },
+    {
+      "path": "docs/PRODUCTION-FREEZE-PREFLIGHT.md",
+      "pr": 188,
+      "source_commit": "851e68aec2416bd6a54ea3a0e734e0205347c685",
+      "blob_sha": "758da07b0c7d4d9b605626d9aab3a3c814fe8db9"
+    },
+    {
+      "path": "scripts/production-freeze-preflight.py",
+      "pr": 188,
+      "source_commit": "851e68aec2416bd6a54ea3a0e734e0205347c685",
+      "blob_sha": "67004efa104f9932bcf262e53c8e497c8fd81d4d"
+    },
+    {
+      "path": "scripts/test-production-freeze-preflight.py",
+      "pr": 188,
+      "source_commit": "851e68aec2416bd6a54ea3a0e734e0205347c685",
+      "blob_sha": "1802953a0671bef7464bc5f18eaf58759570686f"
+    },
+    {
+      "path": ".github/workflows/pilot-cross-runner-recovery.yml",
+      "pr": 189,
+      "source_commit": "e0660f330ee80f6ed12db44730cb594cc7bf5703",
+      "blob_sha": "07688b9ef3cfbef7ae79611f37c17bb1a4833b45"
+    },
+    {
+      "path": "docs/PILOT-CROSS-RUNNER-RECOVERY.md",
+      "pr": 189,
+      "source_commit": "e0660f330ee80f6ed12db44730cb594cc7bf5703",
+      "blob_sha": "bd76958b5beeb363ed11f29b775bf794a28c19c4"
+    },
+    {
+      "path": "scripts/pilot-cross-runner-recovery.py",
+      "pr": 189,
+      "source_commit": "e0660f330ee80f6ed12db44730cb594cc7bf5703",
+      "blob_sha": "b4113ca9d7301dd48510a8433c681e2376d739a9"
+    },
+    {
+      "path": ".github/workflows/stage-d-operator-transport.yml",
+      "pr": 190,
+      "source_commit": "ede84d8bd3c98429e389feca656cee892eeaf14f",
+      "blob_sha": "1e7d4d7f5122a1d17de208a5d09722d4bf350bf9"
+    },
+    {
+      "path": "docs/STAGE-D-OPERATOR-TRANSPORT.md",
+      "pr": 190,
+      "source_commit": "ede84d8bd3c98429e389feca656cee892eeaf14f",
+      "blob_sha": "ce00ac0fdaa1c8aed4ebf5785601257041ebbe12"
+    },
+    {
+      "path": "ops/stage-d-operator.Dockerfile",
+      "pr": 190,
+      "source_commit": "ede84d8bd3c98429e389feca656cee892eeaf14f",
+      "blob_sha": "8cea1e1587f2b98a4a8dc245001dd4b4f00c1394"
+    },
+    {
+      "path": "ops/stage_d_operator.py",
+      "pr": 190,
+      "source_commit": "ede84d8bd3c98429e389feca656cee892eeaf14f",
+      "blob_sha": "445b0c7aef5bb1b6c496be70a1ae024452bf132e"
+    },
+    {
+      "path": "ops/stage_d_transport.py",
+      "pr": 190,
+      "source_commit": "ede84d8bd3c98429e389feca656cee892eeaf14f",
+      "blob_sha": "aee2c6033c00eabbb148be46598014b4d87bcd9c"
+    },
+    {
+      "path": "scripts/test-stage-d-operator-transport.py",
+      "pr": 190,
+      "source_commit": "ede84d8bd3c98429e389feca656cee892eeaf14f",
+      "blob_sha": "b15ef2bf765947781e72e3dee50fb9c86aec3fcd"
+    }
+  ],
+  "manually_reconciled": [
+    ".github/workflows/pr-verify.yml"
+  ],
+  "production_recovery_verified": false,
+  "render_autodeploy_disabled_verified": false,
+  "strict_ruleset_enabled_verified": false,
+  "release_authorized": false,
+  "authority": "none"
+}

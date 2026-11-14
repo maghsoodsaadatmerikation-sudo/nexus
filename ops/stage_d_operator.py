@@ -4,13 +4,13 @@ import json
 import os
 import subprocess
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
+import stage_d_transport
 
+# Validate the exact HTTPS origin before any operator evidence side effects.
+BASE = stage_d_transport.origin(os.environ["NEXUS_BASE_URL"])
 EVIDENCE = Path(os.environ.get("EVIDENCE_DIR", "/evidence"))
 EVIDENCE.mkdir(parents=True, exist_ok=True)
-BASE = os.environ["NEXUS_BASE_URL"].rstrip("/")
 TOKEN = os.environ["NEXUS_API_TOKEN"]
 WORKSPACE_ID = os.environ["NEXUS_WORKSPACE_ID"]
 COMMIT = os.environ["NEXUS_DEPLOYED_COMMIT"]
@@ -18,16 +18,8 @@ MODE = os.environ.get("STAGE_D_MODE", "prepare").lower()
 
 
 def request(path, method="GET", body=None, token=None):
-    data = None if body is None else json.dumps(body, separators=(",", ":")).encode("utf-8")
-    headers = {"content-type": "application/json"}
-    if token is not None:
-        headers["authorization"] = f"Bearer {token}"
-    req = urllib.request.Request(BASE + path, data=data, headers=headers, method=method)
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return resp.status, resp.read()
-    except urllib.error.HTTPError as exc:
-        return exc.code, exc.read()
+    # Bound redirects, response bytes and cache policy before operator acts on evidence.
+    return stage_d_transport.request(BASE, path, method, body, token)
 
 
 def write_text(name, text):

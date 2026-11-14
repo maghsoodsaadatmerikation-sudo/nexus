@@ -1,0 +1,59 @@
+name: NEXUS Execution Readiness Integration (Source Only)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/execution-readiness-integration.yml'
+      - '.github/workflows/pr-verify.yml'
+      - 'integration/execution-readiness-manifest.json'
+      - 'scripts/verify-execution-readiness-assembly.py'
+      - 'scripts/test-execution-readiness-assembly.py'
+      - 'scripts/observe-pilot-runtime.py'
+      - 'scripts/test-observe-pilot-runtime.py'
+      - 'scripts/production-freeze-preflight.py'
+      - 'scripts/test-production-freeze-preflight.py'
+      - 'ops/stage_d_transport.py'
+      - 'ops/stage_d_operator.py'
+      - 'scripts/test-stage-d-operator-transport.py'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/execution-readiness-integration.yml'
+      - 'integration/execution-readiness-manifest.json'
+      - 'scripts/verify-execution-readiness-assembly.py'
+      - 'scripts/test-execution-readiness-assembly.py'
+
+permissions:
+  contents: read
+
+jobs:
+  integrated-security-contract:
+    name: integrated-security-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact unprivileged candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Reject production operator credentials
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+      - name: Verify all exact source blobs and reconciled required checks
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-execution-readiness-assembly.py
+          python3 scripts/test-execution-readiness-assembly.py
+      - name: Test all retained health, freeze and operator contracts together
+        run: |
+          set -euo pipefail
+          python3 scripts/test-observe-pilot-runtime.py
+          python3 scripts/test-production-freeze-preflight.py
+          python3 scripts/test-stage-d-operator-transport.py
