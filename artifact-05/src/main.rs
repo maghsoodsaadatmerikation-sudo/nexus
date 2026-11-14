@@ -275,7 +275,6 @@ fn positive_env_u64(name: &str, default: u64) -> u64 {
         .expect("safety limit must be positive")
 }
 
-
 #[cfg(test)]
 mod operational_storage_tests {
     use super::*;
@@ -294,12 +293,21 @@ mod operational_storage_tests {
         let moved = root.with_extension("moved");
         let delegate = CoreDelegate::new(root.clone()).unwrap();
         delegate
-            .create_workspace("original".into(), "Question".into(), ProvenanceId::new("user"))
+            .create_workspace(
+                "original".into(),
+                "Question".into(),
+                ProvenanceId::new("user"),
+            )
             .unwrap();
         let app = router(AppState::authenticated(delegate, "test-secret"));
         let initial = app
             .clone()
-            .oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(initial.status(), StatusCode::OK);
@@ -310,7 +318,12 @@ mod operational_storage_tests {
         std::fs::create_dir(&root).unwrap();
         let response = app
             .clone()
-            .oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
@@ -323,7 +336,11 @@ mod operational_storage_tests {
 
         for (method, path, body) in [
             ("GET", "/v1/workspaces/original", ""),
-            ("POST", "/v1/workspaces", r#"{"workspace_id":"substitute","question":"Q","provenance_id":"p"}"#),
+            (
+                "POST",
+                "/v1/workspaces",
+                r#"{"workspace_id":"substitute","question":"Q","provenance_id":"p"}"#,
+            ),
         ] {
             let response = app
                 .clone()
@@ -338,7 +355,11 @@ mod operational_storage_tests {
                 )
                 .await
                 .unwrap();
-            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE, "{method} {path}");
+            assert_eq!(
+                response.status(),
+                StatusCode::SERVICE_UNAVAILABLE,
+                "{method} {path}"
+            );
             let bytes = to_bytes(response.into_body(), 128).await.unwrap();
             assert_eq!(
                 serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
@@ -348,7 +369,12 @@ mod operational_storage_tests {
         assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
         let alive = app
             .clone()
-            .oneshot(Request::builder().uri("/livez").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/livez")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(alive.status(), StatusCode::OK);
@@ -358,7 +384,12 @@ mod operational_storage_tests {
         std::fs::rename(&moved, &root).unwrap();
         let restored = app
             .clone()
-            .oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(restored.status(), StatusCode::OK);
