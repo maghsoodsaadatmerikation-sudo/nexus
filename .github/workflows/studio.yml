@@ -49,7 +49,10 @@ jobs:
           node scripts/test-studio-sky.mjs
           node scripts/test-studio-astrology.mjs
           node scripts/test-studio-core.mjs
+          node scripts/test-studio-storage.mjs
           node scripts/test-studio-lab.mjs
+      - name: Exercise archive corruption and transaction recovery in real IndexedDB
+        run: python3 scripts/test-studio-storage-browser.py
       - name: Exercise Studio in disposable narrow and wide Chromium
         run: python3 scripts/test-studio-browser.py
       - name: Exercise opt-in astrology and encrypted profile lifecycle
