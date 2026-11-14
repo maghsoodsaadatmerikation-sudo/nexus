@@ -1190,10 +1190,12 @@ root.NexusTable=Object.freeze({parse,parseDelimited,normalizedTable,parseJsonTab
     if(value===null||value===undefined)return '—';
     return typeof value==='number'?new Intl.NumberFormat(interfaceLang,{maximumFractionDigits:4}).format(value):String(value);
   }
-  function analysisBars(bars){
+  function analysisBars(bars,total=null){
     const host=$('analysis-bars');host.replaceChildren();
+    const shown=bars.slice(0,10);
+    if(total!==null&&shown.length)host.append(part('small',t('m391')+': '+shown.length+'/'+total));
     const max=Math.max(1,...bars.map(x=>x.count));
-    for(const item of bars.slice(0,10)){
+    for(const item of shown){
       const wrap=part('div','','entry');
       wrap.append(part('small',item.label+' — '+metricFormat(item.count)));
       const track=part('div','','analysis-track'),bar=part('div','','analysis-bar');
@@ -1221,7 +1223,7 @@ root.NexusTable=Object.freeze({parse,parseDelimited,normalizedTable,parseJsonTab
         lines.push(pair.left+' / '+pair.right+': r='+metricFormat(pair.pearson_r)+' (n='+pair.pairs+')');}
     lines.push('',t('m393'));
     $('analysis-summary').textContent=lines.join('\n');
-    if(groups.length)analysisBars(groups);
+    if(groups.length)analysisBars(groups,grouping.group_count);
     else if(metric>=0){
       const numbers=table.rows.map(r=>strictNumeric(r[metric])).filter(x=>x!==null);
       if(!numbers.length){analysisBars([]);return;}
