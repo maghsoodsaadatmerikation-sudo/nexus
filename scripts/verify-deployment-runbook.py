@@ -17,6 +17,9 @@ FILES = (
     "docs/gateway-health.md",
     "artifact-05/src/lib.rs",
     "artifact-05/src/main.rs",
+    "artifact-05/src/volume_identity.rs",
+    "scripts/data-snapshot.py",
+    "scripts/enroll-new-volume.py",
     "artifact-05/src/workspace_api.rs",
     "Dockerfile",
     "render.yaml",
@@ -50,6 +53,9 @@ def check(sources: dict[str, str]) -> None:
     health = sources["docs/gateway-health.md"]
     gateway = sources["artifact-05/src/lib.rs"]
     main = sources["artifact-05/src/main.rs"]
+    identity = sources["artifact-05/src/volume_identity.rs"]
+    snapshot = sources["scripts/data-snapshot.py"]
+    enrollment = sources["scripts/enroll-new-volume.py"]
     api = sources["artifact-05/src/workspace_api.rs"]
     docker = sources["Dockerfile"]
     blueprint = sources["render.yaml"]
@@ -100,6 +106,24 @@ def check(sources: dict[str, str]) -> None:
             "requests/" in runbook and
             "pins the Workspace directory" in runbook,
             "durable-data-layout-undocumented")
+    # The opt-in guard is deliberately checked before any startup code can
+    # construct missing data directories or request ledgers. Cold snapshots
+    # must preserve its existing marker, not auto-enroll a restored volume.
+    require(main.count("volume_identity::verify(&data_root, expected)") == 2 and
+            main.index("volume_identity::verify(&data_root, expected)") <
+            main.index("CoreDelegate::new(data_root.clone())") and
+            "NEXUS_EXPECTED_VOLUME_ID" in main and
+            "NEXUS_EXPECTED_VOLUME_ID" in runbook and
+            "legacy startup" in runbook and
+            "Never enroll" in runbook and
+            ".nexus-volume-identity" in identity and
+            "O_NOFOLLOW" in identity and
+            "VOLUME_IDENTITY_MARKER" in snapshot and
+            "invalid volume identity marker" in snapshot and
+            "if os.listdir(fd)" in enrollment and
+            "os.O_EXCL" in enrollment,
+            "volume-identity-admission-or-recovery-guard-absent")
+
     require("workspace_storage_unavailable" in api and
             "workspace_already_exists" in api and
             "StatusCode::CONFLICT" in api and
@@ -136,6 +160,11 @@ def self_test(sources: dict[str, str]) -> None:
          '"silently_ready"'),
         ("artifact-05/src/main.rs", 'data_root.join("requests")',
          'data_root.join("untracked")'),
+        ("artifact-05/src/main.rs", 'NEXUS_EXPECTED_VOLUME_ID',
+         'NEXUS_UNUSED_VOLUME_ID'),
+        ("docs/DEPLOYMENT.md", "Never enroll", "Always enroll"),
+        ("scripts/data-snapshot.py", 'elif name == VOLUME_IDENTITY_MARKER:',
+         'elif name == "ignored-volume-identity":'),
         ("Dockerfile", 'CMD ["/usr/local/bin/nexus", "--health-check"]',
          'CMD ["sh", "-c", "exit 0"]'),
         ("scripts/production-freeze-preflight.py",
