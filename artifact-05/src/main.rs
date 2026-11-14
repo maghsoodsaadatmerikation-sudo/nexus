@@ -33,20 +33,45 @@ struct CoreDelegate {
     workspaces: Mutex<FileWorkspaceRepository>,
     // Independent read-only probe: readiness must not wait for a writer's mutex.
     workspace_probe: FileWorkspaceRepository,
+    // Optional non-secret operator-enrolled volume ID. Rechecked before
+    // serving each private API request and every readiness probe.
+    expected_volume_id: Option<String>,
 }
 
 impl CoreDelegate {
     fn new(root: PathBuf) -> Result<Self, DurableWorkspaceError> {
+        Self::new_with_volume_id(root, None)
+    }
+
+    fn new_with_volume_id(
+        root: PathBuf,
+        expected_volume_id: Option<String>,
+    ) -> Result<Self, DurableWorkspaceError> {
+        if let Some(expected) = &expected_volume_id {
+            volume_identity::verify(&root, expected).map_err(|_| DurableWorkspaceError::Io)?;
+        }
         let repository = FileWorkspaceRepository::new(root).pin_root()?;
         let workspace_probe = repository.clone();
         Ok(Self {
             workspaces: Mutex::new(repository),
             workspace_probe,
+            expected_volume_id,
+        })
+    }
+
+    fn volume_identity_ready(&self) -> bool {
+        self.expected_volume_id.as_ref().is_none_or(|expected| {
+            self.workspace_probe.check_runtime_readiness().is_ok()
+                && volume_identity::verify(self.workspace_probe.root(), expected).is_ok()
         })
     }
 }
 
 impl ConstitutionalDelegate for CoreDelegate {
+    fn check_runtime_volume_identity(&self) -> bool {
+        self.volume_identity_ready()
+    }
+
     fn submit(&self, envelope: RequestEnvelope) -> Result<Submission, DelegateError> {
         let request = PolicyEngine::new()
             .authorize(envelope)
@@ -68,6 +93,9 @@ fn map_durable_error(error: DurableWorkspaceError) -> WorkspaceDelegateError {
 
 impl WorkspaceDelegate for CoreDelegate {
     fn check_storage_readiness(&self) -> Result<(), WorkspaceDelegateError> {
+        if !self.volume_identity_ready() {
+            return Err(WorkspaceDelegateError::StorageUnavailable);
+        }
         self.workspace_probe
             .check_runtime_readiness()
             .map_err(map_durable_error)
@@ -234,7 +262,9 @@ async fn main() {
     // Pin the workspace directory before serving. If the volume later
     // vanishes or gets replaced, its next operation must fail closed rather
     // than adopt the substitute directory as the workspace store.
-    let core_delegate = CoreDelegate::new(data_root.clone()).expect("pin workspace data root");
+    let core_delegate =
+        CoreDelegate::new_with_volume_id(data_root.clone(), expected_volume_id.clone())
+            .expect("pin enrolled workspace data root");
     let app = router(
         AppState::authenticated(core_delegate, token)
             .with_safety(safety)
