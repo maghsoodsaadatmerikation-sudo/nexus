@@ -119,6 +119,30 @@ try{
  const actual=await js("(async()=>{const ns=await caches.keys();const c=await caches.open(ns[0]);const r=await c.match(location.href);return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await r.arrayBuffer())),x=>x.toString(16).padStart(2,'0')).join('')})()");
  assert(actual===sourceDigest,'cached-shell-differs-from-reviewed-source');
  checks.push('installed-cache-sha256-is-exact-reviewed-html');
+ if(process.env.NEXUS_MOBILE_READINESS_PUBLIC==='true'){
+   stage='public-mobile-readiness';
+   const diag=await rpc('Page.navigate',{url:ORIGIN+'device-check.html'});
+   assert(!diag.errorText,'public-readiness-navigation-failed');
+   await poll(()=>retryJs("document.readyState==='complete'&&Boolean(window.__nexusDeviceReadiness)"),15000,'device-readiness-page-missing');
+   const check=await js("(async()=>{document.getElementById('run').click();for(let i=0;i<200&&document.getElementById('export').disabled;i++)await new Promise(r=>setTimeout(r,50));const API=window.__nexusDeviceReadiness;const report=API.report(await API.checks());return {enabled:!document.getElementById('export').disabled,rows:document.querySelectorAll('#results>div').length,report}})()");
+   assert(check.enabled&&check.rows===8&&
+      check.report.schema==='nexus.device-readiness.self-report.v1'&&
+      check.report.public_shell_sha256===sourceDigest&&
+      check.report.automatic.secure===true&&
+      check.report.automatic.worker_active===true&&
+      check.report.automatic.cached_shell_valid===true&&
+      Object.values(check.report.owner_self_attestation).every(x=>x===false)&&
+      check.report.private_information_collected===false&&
+      check.report.independent_android_hardware_verification===false&&
+      check.report.sent_to_server===false&&
+      check.report.release_authorized===false&&
+      check.report.authority==='none',
+      'public-mobile-readiness-privacy-or-integrity-failed');
+   checks.push('public-mobile-device-readiness-is-redacted-and-source-pinned');
+   const back=await rpc('Page.navigate',{url:ORIGIN});
+   assert(!back.errorText,'return-from-readiness-failed');
+   await poll(()=>retryJs("document.readyState==='complete'&&Boolean(document.getElementById('offline-install'))"),15000,'app-after-readiness-missing');
+ }
  await js("window.__nexusBeforeOfflineReload=true;true");
  stage='real-network-offline';
  await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
