@@ -8,8 +8,7 @@ use nexus_artifact_05_gateway::{
 };
 use nexus_constitutional_core::{
     Alternative, AnalysisBatch, Claim, DurableWorkspaceError, FileWorkspaceRepository,
-    HumanJudgment, PolicyEngine, ProvenanceId, RequestEnvelope, WorkspaceEngine,
-    WorkspaceSnapshot,
+    HumanJudgment, PolicyEngine, ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceSnapshot,
 };
 use serde::Serialize;
 use std::{net::SocketAddr, path::PathBuf, sync::Mutex, time::Duration};
@@ -220,8 +219,7 @@ async fn main() {
     // Pin the workspace directory before serving. If the volume later
     // vanishes or gets replaced, its next operation must fail closed rather
     // than adopt the substitute directory as the workspace store.
-    let core_delegate =
-        CoreDelegate::new(data_root.clone()).expect("pin workspace data root");
+    let core_delegate = CoreDelegate::new(data_root.clone()).expect("pin workspace data root");
     let app = router(
         AppState::authenticated(core_delegate, token)
             .with_safety(safety)
