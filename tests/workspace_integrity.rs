@@ -118,19 +118,25 @@ fn storage_rejects_content_edits_even_with_an_extended_event_log() {
             3 => changed.workspace.values.push("rewritten".into()),
             _ => changed.workspace.claims[0].origin = ClaimOrigin::MachineAnalysis,
         }
+        // Relabeling a ClaimAdded event as machine analysis now fails the
+        // provenance contract before the append-only history comparison.
+        let expected_memory = if variant == 4 {
+            WorkspaceStoreError::ClaimAuditMismatch
+        } else {
+            WorkspaceStoreError::HistoryDivergence
+        };
+        let expected_disk = if variant == 4 {
+            DurableWorkspaceError::ClaimAuditMismatch
+        } else {
+            DurableWorkspaceError::HistoryDivergence
+        };
         let mut memory = InMemoryWorkspaceRepository::default();
         memory.save(initial.clone()).unwrap();
-        assert_eq!(
-            memory.save(changed.clone()),
-            Err(WorkspaceStoreError::HistoryDivergence)
-        );
+        assert_eq!(memory.save(changed.clone()), Err(expected_memory));
         let dir = root();
         let mut disk = FileWorkspaceRepository::new(&dir);
         disk.save(initial.clone()).unwrap();
-        assert_eq!(
-            disk.save(changed),
-            Err(DurableWorkspaceError::HistoryDivergence)
-        );
+        assert_eq!(disk.save(changed), Err(expected_disk));
         assert_eq!(disk.load("w").unwrap(), Some(initial.clone()));
         fs::remove_dir_all(dir).unwrap();
     }
