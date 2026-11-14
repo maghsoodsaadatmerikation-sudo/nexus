@@ -102,7 +102,7 @@ def check(sources: dict[str, str]) -> None:
             "only one unambiguous" in runbook,
             "bearer-startup-validation-undocumented")
     require('with_request_store(data_root.join("requests"))' in main and
-            'CoreDelegate::new(data_root.clone())' in main and
+            'CoreDelegate::new_with_volume_id(data_root.clone(), expected_volume_id.clone())' in main and
             "requests/" in runbook and
             "pins the Workspace directory" in runbook,
             "durable-data-layout-undocumented")
