@@ -47,8 +47,9 @@
       for(const cell of xmlElements(row,'c')){
         if(++cellCount>5000||xmlElements(cell,'f').length)throw Error('xlsx-formula');
         const ref=cell.getAttribute('r')||'';
-        const match=/^([A-Z]{1,2})\d+$/.exec(ref);
+        const match=/^([A-Z]{1,2})(\d+)$/.exec(ref);
         if(!match)throw Error('xlsx-cell');
+        if(Number(match[2])!==rowNumber)throw Error('xlsx-cell-row');
         const col=Array.from(match[1]).reduce((n,c)=>n*26+c.charCodeAt(0)-64,0)-1;
         if(col>=ANALYSIS_MAX_COLUMNS||cells[col]!==undefined)throw Error('xlsx-width');
         let value='';
@@ -150,7 +151,7 @@
       metric.value=metric.options.length>1?metric.options[1].value:'-1';
       renderAnalysisResults();$('analysis-download').disabled=false;$('analysis-claim').disabled=false;
       analysisStatus('m376');
-    }catch(error){if(job===analysisJob){clearAnalysis();analysisStatus(error.message==='json-duplicate-key'?'m492':'m377');}}
+    }catch(error){if(job===analysisJob){clearAnalysis();analysisStatus(error.message==='json-duplicate-key'?'m492':error.message==='xlsx-cell-row'?'m493':'m377');}}
     finally{if(job===analysisJob)$('analysis-run').disabled=false;}
   });
   $('analysis-download').addEventListener('click',()=>{

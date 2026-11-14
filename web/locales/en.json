@@ -1,6 +1,6 @@
 {
   "schema": "nexus.ui-language.v1",
-  "source_sha256": "6230e3439a0d393b62885a5a92c3818aadcb25c4d1315f4ddc29860047a8c4a6",
+  "source_sha256": "86f3b76533232011ea5331e781992196c1d876099a16abe20a29066448439f45",
   "locale": "en",
   "name": "English",
   "direction": "ltr",
@@ -497,6 +497,7 @@
     "m489": "There is no guide reply to read.",
     "m490": "Speech never starts automatically and uses only an on-device voice.",
     "m491": "Clear this in-memory conversation? Registered workspace information will remain.",
-    "m492": "Analysis unavailable: duplicate JSON field names. Give each field in an object a unique name, then try again."
+    "m492": "Analysis unavailable: duplicate JSON field names. Give each field in an object a unique name, then try again.",
+    "m493": "Analysis unavailable: worksheet cell coordinates do not match their row. Check or re-export the workbook, then try again."
   }
 }
