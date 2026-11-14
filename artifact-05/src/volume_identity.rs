@@ -24,7 +24,9 @@ const MAX_MARKER_BYTES: u64 = 128;
 /// manufactured by an implicit create_dir_all.
 pub(crate) fn verify(root: &Path, expected: &str) -> Result<(), &'static str> {
     if expected.len() != 32
-        || !expected.bytes().all(|value| value.is_ascii_digit() || (b'a'..=b'f').contains(&value))
+        || !expected
+            .bytes()
+            .all(|value| value.is_ascii_digit() || (b'a'..=b'f').contains(&value))
     {
         return Err("invalid expected volume ID configuration");
     }
@@ -36,7 +38,9 @@ pub(crate) fn verify(root: &Path, expected: &str) -> Result<(), &'static str> {
     root_options.read(true);
     #[cfg(unix)]
     root_options.custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC);
-    let directory = root_options.open(root).map_err(|_| "volume root inaccessible")?;
+    let directory = root_options
+        .open(root)
+        .map_err(|_| "volume root inaccessible")?;
     let opened = directory.metadata().map_err(|_| "volume root unreadable")?;
     if !same_inode(&before, &opened) {
         return Err("volume root changed during verification");
@@ -61,8 +65,12 @@ pub(crate) fn verify(root: &Path, expected: &str) -> Result<(), &'static str> {
     options.read(true);
     #[cfg(unix)]
     options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC);
-    let mut file: File = options.open(&path).map_err(|_| "volume identity marker inaccessible")?;
-    let initial = file.metadata().map_err(|_| "volume identity marker unreadable")?;
+    let mut file: File = options
+        .open(&path)
+        .map_err(|_| "volume identity marker inaccessible")?;
+    let initial = file
+        .metadata()
+        .map_err(|_| "volume identity marker unreadable")?;
     if !initial.is_file() || !same_inode(&initial, &linked) || initial.len() != linked.len() {
         return Err("volume identity marker changed");
     }
@@ -74,7 +82,9 @@ pub(crate) fn verify(root: &Path, expected: &str) -> Result<(), &'static str> {
     if data != format!("{PREFIX}{expected}\n").as_bytes() {
         return Err("volume identity mismatch");
     }
-    let final_file = file.metadata().map_err(|_| "volume identity marker unreadable")?;
+    let final_file = file
+        .metadata()
+        .map_err(|_| "volume identity marker unreadable")?;
     let final_link = fs::symlink_metadata(&path).map_err(|_| "volume identity marker removed")?;
     if !same_inode(&initial, &final_file)
         || !same_inode(&initial, &final_link)
@@ -133,7 +143,12 @@ mod tests {
         enroll(&root);
         assert!(verify(&root, ID).is_ok());
         assert!(verify(&root, "abcdef1234567890abcdef1234567890").is_err());
-        for candidate in ["", "foo", "1234567890ABCDEF1234567890ABCDEF", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] {
+        for candidate in [
+            "",
+            "foo",
+            "1234567890ABCDEF1234567890ABCDEF",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ] {
             assert!(verify(&root, candidate).is_err());
         }
         fs::write(root.join(MARKER_NAME), format!("{PREFIX}{ID}")).unwrap();
@@ -176,7 +191,11 @@ mod tests {
         fs::create_dir(&root).unwrap();
         assert!(verify(&root, ID).is_err());
         // Even a perfectly formatted but wrong marker must not be accepted.
-        fs::write(root.join(MARKER_NAME), format!("{PREFIX}{}\n", "a".repeat(32))).unwrap();
+        fs::write(
+            root.join(MARKER_NAME),
+            format!("{PREFIX}{}\n", "a".repeat(32)),
+        )
+        .unwrap();
         assert!(verify(&root, ID).is_err());
         fs::remove_dir_all(&root).unwrap();
         symlink(&moved, &root).unwrap();
