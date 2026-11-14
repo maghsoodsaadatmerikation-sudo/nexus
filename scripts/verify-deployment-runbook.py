@@ -138,8 +138,16 @@ def check(sources: dict[str, str]) -> None:
             "state.delegate.check_runtime_volume_identity()" in handler and
             'fn check_runtime_volume_identity(&self) -> bool' in main and
             "self.volume_identity_ready()" in main and
+            "volume_identity_latched.swap(true, Ordering::AcqRel)" in main and
+            "pinned_marker_identity" in main and
+            "volume_identity::inspect(self.workspace_probe.root(), expected)" in main and
+            "struct MarkerIdentity" in identity and
+            "same_content_replaced_marker_has_new_file_identity" in identity and
             'volume_identity_unavailable' in runbook and
-            "before parsing their bodies" in runbook,
+            "before parsing their bodies" in runbook and
+            "does" in runbook and "clear the latch" in runbook and
+            "latched for this process" in health and
+            "restart" in health,
             "live-volume-identity-admission-safety-missing")
 
     require("workspace_storage_unavailable" in api and
@@ -185,6 +193,9 @@ def self_test(sources: dict[str, str]) -> None:
         ("docs/DEPLOYMENT.md", 'before parsing their bodies',
          'after parsing their bodies'),
         ("docs/DEPLOYMENT.md", "Never enroll", "Always enroll"),
+        ("artifact-05/src/main.rs", "volume_identity_latched.swap(true, Ordering::AcqRel)",
+         "volume_identity_latched.store(false, Ordering::Release)"),
+        ("docs/DEPLOYMENT.md", "clear the latch", "ignore the latch"),
         ("scripts/data-snapshot.py", 'elif name == VOLUME_IDENTITY_MARKER:',
          'elif name == "ignored-volume-identity":'),
         ("Dockerfile", 'CMD ["/usr/local/bin/nexus", "--health-check"]',
