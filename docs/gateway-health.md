@@ -5,9 +5,10 @@ Status: DEVELOPMENT / UNSEALED
 | Probe | HTTP response | Meaning |
 | --- | --- | --- |
 | GET /livez | 200, `{"status":"alive"}` | Listener/router responds |
-| GET /readyz | 200, `{"status":"ready"}` | Startup recovery quarantine is absent and the pinned request ledger is presently reachable (if configured) |
+| GET /readyz | 200, `{"status":"ready"}` | No recovery quarantine; configured request ledger and runtime-pinned workspace root pass the read-only identity probes; permanent admission capacity remains |
 | GET /readyz | 503, `{"status":"quarantined"}` | Recovery quarantine still blocks all mutations |
 | GET /readyz | 503, `{"status":"storage_unavailable"}` | Configured request ledger is missing, inaccessible or replaced after startup |
+| GET /readyz | 503, `{"status":"workspace_unavailable"}` | Runtime-pinned workspace root is missing, inaccessible or replaced after startup |
 | GET /readyz | 503, `{"status":"admission_unavailable"}` | Permanent tracked-request admission capacity is already exhausted |
 
 HEAD preserves the corresponding status and headers with no response body.
@@ -19,10 +20,12 @@ their transport authentication and constitutional authorization boundaries.
 
 Readiness reads the same startup-latched flag used by the mutation middleware,
 and checks the pinned durable request ledger's path identity and read-only
-directory enumeration whenever a ledger is configured. Moving, replacing or
-making that ledger inaccessible changes /readyz to 503 on the next probe,
-while /livez remains 200. Restoring the *original* pinned ledger directory
-recovers /readyz without a restart. No HTTP probe is allowed to create a
+directory enumeration whenever a ledger is configured. The runtime CoreDelegate
+independently checks the pinned workspace directory without taking the
+workspace writer mutex. Moving, replacing or making either configured
+store inaccessible changes /readyz to 503 on the next probe, while /livez
+remains 200. Restoring the *original* pinned directories can recover /readyz
+without a restart, as long as recovery quarantine is not latched. No HTTP probe is allowed to create a
 marker, mutate data, consume request budget or clear the replay-risk latch.
 A restored volume remains alive while not ready. Restart with the marker still
 present remains not ready. Removing the marker from a running process does not
@@ -42,13 +45,14 @@ Blueprint's root health path is a liveness/UI check; it does not establish this 
 admission-readiness condition. Repository verification of these routes does not
 prove a deployed provider's routing configuration.
 
-Readiness covers the startup recovery gate and the currently accessible,
-pinned request-ledger directory. A 200 response is not a promise that
+Readiness covers the startup recovery gate, the currently accessible pinned
+request ledger, the runtime-pinned workspace directory and the permanent
+tracked-request capacity. A 200 response is not a promise that
 the next request will pass auth, policy, temporary rate limits, filesystem
 operations or execution. Permanent tracked-request capacity is explicitly
 checked, but the result can still race with new admissions. The check does **not** write to storage, detect
-ENOSPC/disk exhaustion, inspect the workspace repository or independently
-validate full-volume recoverability. It does not measure throughput, establish
+ENOSPC/disk exhaustion, inspect every workspace record, validate snapshot
+contents or independently validate full-volume recoverability. It does not measure throughput, establish
 production availability, validate a recovery point, confer authority, or
 constitute attestation/Seal readiness. In particular, `pending` status still
 records acceptance rather than durable completion.
