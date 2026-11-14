@@ -740,6 +740,75 @@ async fn adversarial_fresh_state_has_no_durable_replay_guarantee() {
     assert_eq!(delegate.requests.lock().unwrap().len(), 2);
 }
 
+#[tokio::test]
+async fn capacity_exhaustion_disables_readiness_not_liveness_or_status() {
+    let delegate = RecordingDelegate::default();
+    let app = router(
+        AppState::authenticated(delegate.clone(), "secret")
+            .with_safety(safety(4096, 100, 1)),
+    );
+
+    let request = Request::builder()
+        .uri("/readyz")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(request).await.unwrap().status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(submit_request("capacity-first", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::ACCEPTED
+    );
+
+    // Every subsequent new ID is rejected by the permanent tracked-ID cap.
+    let request = Request::builder()
+        .uri("/readyz")
+        .body(Body::empty())
+        .unwrap();
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    let bytes = axum::body::to_bytes(response.into_body(), 128)
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+        serde_json::json!({"status":"admission_unavailable"})
+    );
+
+    let request = Request::builder()
+        .uri("/livez")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(request).await.unwrap().status(),
+        StatusCode::OK
+    );
+    let request = Request::builder()
+        .uri("/v1/requests/capacity-first")
+        .header("authorization", "Bearer secret")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(request).await.unwrap().status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(submit_request("capacity-second", Some("secret"), "opaque"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+}
+
 fn durable_root() -> std::path::PathBuf {
     std::env::temp_dir().join(format!("nexus-requests-{}", uuid::Uuid::new_v4()))
 }
