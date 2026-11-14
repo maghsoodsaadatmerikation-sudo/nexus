@@ -273,10 +273,8 @@ mod operational_storage_tests {
 
     #[tokio::test]
     async fn distinct_gateway_instances_never_both_create_same_workspace() {
-        let root = std::env::temp_dir().join(format!(
-            "nexus-atomic-gateway-{}",
-            uuid::Uuid::new_v4()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("nexus-atomic-gateway-{}", uuid::Uuid::new_v4()));
         // Separate CoreDelegate instances simulate separate gateway processes:
         // their in-process mutexes are unrelated but filesystem locks coordinate.
         let first = router(AppState::authenticated(
@@ -311,12 +309,8 @@ mod operational_storage_tests {
                 || (a == StatusCode::CONFLICT && b == StatusCode::CREATED),
             "create race should yield exactly one success: {a} and {b}"
         );
-        let snapshot = WorkspaceEngine::new(
-            "import-id",
-            "Original",
-            ProvenanceId::new("user"),
-        )
-        .snapshot();
+        let snapshot =
+            WorkspaceEngine::new("import-id", "Original", ProvenanceId::new("user")).snapshot();
         let imported = serde_json::to_string(&snapshot).unwrap();
         assert_eq!(
             post(first, "/v1/workspaces/import", imported.clone()).await,
