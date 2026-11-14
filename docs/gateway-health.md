@@ -8,8 +8,25 @@ Status: DEVELOPMENT / UNSEALED
 | GET /readyz | 200, `{"status":"ready"}` | No recovery quarantine; configured request ledger and runtime-pinned workspace root pass the read-only identity probes; permanent admission capacity remains |
 | GET /readyz | 503, `{"status":"quarantined"}` | Recovery quarantine still blocks all mutations |
 | GET /readyz | 503, `{"status":"storage_unavailable"}` | Configured request ledger is missing, inaccessible or replaced after startup |
-| GET /readyz | 503, `{"status":"workspace_unavailable"}` | Runtime-pinned workspace root is missing, inaccessible or replaced after startup |
+| GET /readyz | 503, `{"status":"workspace_unavailable"}` | Runtime-pinned workspace root is missing/replaced, or an enrolled volume-identity marker has been removed or changed after startup |
 | GET /readyz | 503, `{"status":"admission_unavailable"}` | Permanent tracked-request admission capacity is already exhausted |
+
+When `NEXUS_EXPECTED_VOLUME_ID` is configured, the gateway performs a
+read-only marker and pinned-root identity check at startup and again before
+every readiness probe and authenticated private Workspace/request API request.
+If the marker disappears or changes while the gateway remains running,
+`/readyz` returns 503 `workspace_unavailable` and authenticated private
+routes return 503 `{"error":"volume_identity_unavailable"}`. Invalid bearer
+credentials still produce 401 first; no marker failure details are disclosed
+to unauthenticated clients. `/livez` continues to return 200. Restoring
+the exact marker can restore readiness if the remaining gates pass. In
+legacy mode without an expected ID, this marker check is intentionally
+disabled; the runtime remains subject to the existing pinned-root safeguards.
+
+This check is **not** a transaction-spanning lock or a cryptographic proof
+of physical-disk identity. A concurrent marker modification between the
+check and a later filesystem operation is not eliminated. It neither
+changes provider-side restore authority nor guarantees a successful fsync.
 
 HEAD preserves the corresponding status and headers with no response body.
 Both routes are public, bounded, and return `Cache-Control: no-store`. They expose
