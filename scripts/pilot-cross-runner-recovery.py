@@ -195,7 +195,14 @@ def source(scratch, sha):
                 "source-ledger-missing")
         stop_container(name)  # All writers stopped BEFORE archive acquisition.
         archive = output / ARCHIVE_NAME
-        exec_checked([sys.executable, SNAPSHOT, "backup", store, archive, "--offline"])
+        # Gateway files are 0600 and owned by UID 10001. Backup requires
+        # a narrow operator-side root read after the gateway is stopped.
+        # Only the newly created SYNTHETIC archive is transferred to the
+        # runner identity; never chmod or expose the original data store.
+        exec_checked(["sudo", sys.executable, SNAPSHOT, "backup",
+                      store, archive, "--offline"])
+        exec_checked(["sudo", "chown",
+                      f"{os.getuid()}:{os.getgid()}", archive])
         inspection = subprocess.check_output(
             [sys.executable, str(SNAPSHOT), "inspect", str(archive)], text=True)
         metadata = json.loads(inspection, object_pairs_hook=unique)
