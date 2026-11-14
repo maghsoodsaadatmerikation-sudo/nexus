@@ -174,6 +174,7 @@ const GROUP_PREVIEW_LIMIT=12;
       rows:rows.length,columns:columns.length,column_stats:stats,correlations,notes:[
       'Exploratory descriptive analysis only; no causal inference, diagnosis, prediction or human judgment.',
       'Values are not independently verified; missing, invalid and mixed columns can affect statistics.',
+      'Every delimited record counts as a row, including entirely empty records. A trailing record terminator does not add an extra row.',
       'Numeric parsing accepts dot/Arabic decimal marks and local digits; unsafe plain integers stay categorical and plain JSON integer digits are preserved. Nonzero inputs that underflow to zero are excluded. Binary64 summaries are approximate. Non-finite results are null; labels may be shortened. Pearson uses pairwise complete cases and is not causation.']};
   }
   function analysisGroups(table,index,metric,{limit=GROUP_PREVIEW_LIMIT}={}){
@@ -202,7 +203,7 @@ function parse(text,extension){
  if(kind==='json')return parseJsonTable(text);
  if(!['csv','tsv'].includes(kind))throw Error('unsupported-table');
  const rows=parseDelimited(text,kind==='tsv'?'\t':',');
- return normalizedTable(rows[0]||[],rows.slice(1).filter(row=>row.some(x=>x!=='')));
+ return normalizedTable(rows[0]||[],rows.slice(1));
 }
 root.NexusTable=Object.freeze({parse,parseDelimited,normalizedTable,parseJsonTable,strictNumeric,numberStats,histogram,analyseTable,analysisGroups,groupReport,GROUP_PREVIEW_LIMIT,MAX_BYTES:ANALYSIS_MAX_BYTES,MAX_ROWS:ANALYSIS_MAX_ROWS,MAX_COLUMNS:ANALYSIS_MAX_COLUMNS});
 })(globalThis);
