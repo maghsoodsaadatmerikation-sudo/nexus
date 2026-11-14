@@ -43,4 +43,11 @@ committedStore.commit=async(...args)=>{await createCommit(...args);afterCreate.a
 await assert.rejects(committedVault.create(pass,{signal:afterCreate.signal}),/cancelled/);
 assert(committedStore.raw);assert.equal(committedVault.unlocked,false);checks++;
 committedStore.commit=createCommit;await committedVault.unlock(pass);assert.equal(committedVault.unlocked,true);checks++;
+// Cancellation belongs to one command, not a newer explicit Unlock queued behind it.
+const queuedStore=new Store(),queuedVault=new S.Vault(queuedStore),queuedAbort=new AbortController(),queuedCommit=queuedStore.commit.bind(queuedStore);
+let committed,finish;const committedGate=new Promise(r=>committed=r),finishGate=new Promise(r=>finish=r);
+queuedStore.commit=async(...args)=>{await queuedCommit(...args);queuedAbort.abort();committed();await finishGate};
+const cancelledCreation=queuedVault.create(pass,{signal:queuedAbort.signal});await committedGate;
+const newerUnlock=queuedVault.unlock(pass);finish();await assert.rejects(cancelledCreation,/cancelled/);await newerUnlock;
+assert.equal(queuedVault.unlocked,true);checks++;
 console.log(JSON.stringify({status:'PASS',checks,scope:'vault-cancellation-and-commit-boundaries',real_indexeddb_tested:false}));

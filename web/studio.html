@@ -720,7 +720,8 @@ class Vault{
   if(await this.store.read())fail('archive-exists');current();
   const salt=crypto.getRandomValues(new Uint8Array(16)),key=await keyFor(pass,salt);current();const raw=await encrypt(empty(),key,salt);current();
   await this.store.commit(null,raw,()=>{try{current();return true}catch{return false}});check();
-  if(signal?.aborted){this.lock();fail('cancelled')}
+  // Clear this command's keys without invalidating a newer queued Unlock.
+  if(signal?.aborted){Object.assign(this,{key:null,salt:null,raw:null,data:null});fail('cancelled')}
   Object.assign(this,{key,salt,raw});
  },{signal})}
  async unlock(pass,{signal}={}){return this.run(async(check,current)=>{
