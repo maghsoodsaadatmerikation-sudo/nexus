@@ -15,7 +15,7 @@ files = [
     "scripts/workspace-restore.sh", "scripts/readonly-verification.sh",
     "scripts/v1.2-durable-state-resilience.sh",
     "scripts/data-snapshot.py", "docs/full-data-recovery.md", "artifact-05/src/main.rs",
-    "artifact-05/src/lib.rs", "scripts/verify-data-recovery-http.py", "docs/gateway-health.md",
+    "artifact-05/src/lib.rs", "artifact-05/src/health.rs", "scripts/verify-data-recovery-http.py", "docs/gateway-health.md",
 ]
 with tempfile.TemporaryDirectory(prefix="nexus-contract-") as tmp:
     fixture = Path(tmp)
@@ -47,7 +47,8 @@ with tempfile.TemporaryDirectory(prefix="nexus-contract-") as tmp:
         ("scripts/readonly-verification.sh", 'python3 scripts/verify-storage-full.py nexus-ci-smoke "$GITHUB_RUN_ID"', 'true # omitted ENOSPC drill'),
         ("scripts/readonly-verification.sh", "mv /data/requests /data/requests.offline", "mv /production/requests /data/requests.offline"),
         ("scripts/readonly-verification.sh", '"$volume_request_id" restarted', '"$volume_request_id" unavailable'),
-        ("Dockerfile", "GET /livez HTTP/1.1", "GET / HTTP/1.1"),
+        ("artifact-05/src/health.rs", "GET /livez HTTP/1.1", "GET / HTTP/1.1"),
+        ("Dockerfile", 'CMD ["/usr/local/bin/nexus", "--health-check"]', 'CMD ["/usr/local/bin/nexus", "--missing-check"]'),
         ("scripts/verify-data-recovery-http.py", '("/readyz", 503 if args.quarantined else 200,',
          '("/readyz", 200 if args.quarantined else 200,'),
         ("artifact-05/src/lib.rs", '.route("/readyz", get(readiness::<D>))',
@@ -70,4 +71,4 @@ with tempfile.TemporaryDirectory(prefix="nexus-contract-") as tmp:
         else:
             assert result.returncode != 0, "unsafe cleanup passed"
             assert "BLOCKED" in result.stderr
-print("DURABLE WITNESS CLEANUP CONTRACT: PASS (valid + 20 rejected mutations)")
+print("DURABLE WITNESS CLEANUP CONTRACT: PASS (valid + 21 rejected mutations)")

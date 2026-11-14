@@ -1,3 +1,4 @@
+mod health;
 mod listener;
 
 use axum::{routing::get, Json};
@@ -183,6 +184,10 @@ impl CoreDelegate {
 
 #[tokio::main]
 async fn main() {
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("--health-check")) {
+        let success = std::env::args_os().len() == 2 && health::from_env().is_ok();
+        std::process::exit(if success { 0 } else { 1 });
+    }
     let token = std::env::var("NEXUS_API_TOKEN")
         .expect("NEXUS_API_TOKEN is required for authenticated workspace access");
     assert!(

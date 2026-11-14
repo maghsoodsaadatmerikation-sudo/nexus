@@ -50,3 +50,23 @@ The static resilience contract fails closed if the routes, Docker liveness path 
 
 `A_out ≤ A_in`, evidence ≠ authority, the AuthorizedRequest boundary, CT-001..020,
 Bootstrap versus Verify separation and both pinned Cargo.lock files still apply.
+
+
+## Container health command
+
+Docker executes `/usr/local/bin/nexus --health-check` directly. The probe reads
+`NEXUS_BIND_ADDR`, preserves its configured port, and maps wildcard IPv4/IPv6 binds
+to the matching loopback address. It requires an HTTP 200 response from `/livez`
+with exactly the bounded `{"status":"alive"}` JSON schema, a single consistent
+Content-Length and no transfer-encoding ambiguity. It rejects redirects, misleading
+error bodies, duplicate JSON fields, readiness payloads and oversized responses.
+Connect/write/read operations have bounded timeouts and a two-second overall
+budget. The supported probe profile is the gateway's non-chunked JSON response
+with connection close. Port zero is not a discoverable container health endpoint.
+
+The health command runs before token/storage initialization, sends no bearer or
+proxy credentials, does not follow redirects and creates no gateway data. It
+reports success/failure only through its exit status. Health remains liveness:
+recovery quarantine still returns `/livez` 200 and `/readyz` 503. The CI witness
+checks Docker's actual health engine on default/custom ports and a quarantined
+isolated container, plus a compiled-CLI witness against controlled HTTP failures.

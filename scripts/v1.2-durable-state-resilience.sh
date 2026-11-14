@@ -9,7 +9,7 @@ fail() {
   exit 1
 }
 
-for f in Dockerfile scripts/workspace-backup.sh scripts/workspace-restore.sh scripts/readonly-verification.sh docs/DEPLOYMENT.md scripts/data-snapshot.py docs/full-data-recovery.md artifact-05/src/main.rs artifact-05/src/lib.rs scripts/verify-data-recovery-http.py docs/gateway-health.md; do
+for f in Dockerfile scripts/workspace-backup.sh scripts/workspace-restore.sh scripts/readonly-verification.sh docs/DEPLOYMENT.md scripts/data-snapshot.py docs/full-data-recovery.md artifact-05/src/main.rs artifact-05/src/health.rs artifact-05/src/lib.rs scripts/verify-data-recovery-http.py docs/gateway-health.md; do
   [[ -f "$f" ]] || fail "missing $f"
 done
 
@@ -72,7 +72,9 @@ grep -F 'sudo python3 scripts/data-snapshot.py resume "$volume_restore" --offlin
 
 grep -F '.route("/readyz", get(readiness::<D>))' artifact-05/src/lib.rs >/dev/null \
   || fail 'gateway readiness route missing'
-grep -F 'GET /livez HTTP/1.1' Dockerfile >/dev/null \
+grep -F 'CMD ["/usr/local/bin/nexus", "--health-check"]' Dockerfile >/dev/null \
+  || fail 'container liveness command missing'
+grep -F 'GET /livez HTTP/1.1' artifact-05/src/health.rs >/dev/null \
   || fail 'container liveness probe missing'
 grep -F '("/readyz", 503 if args.quarantined else 200,' scripts/verify-data-recovery-http.py >/dev/null \
   || fail 'quarantine readiness HTTP witness missing'
