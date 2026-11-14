@@ -103,6 +103,16 @@ jobs:
           python3 scripts/verify-deployment-runbook.py
           python3 scripts/verify-deployment-runbook.py --self-test
 
+      # A missing/replaced durable volume must be rejected before gateway
+      # startup can manufacture a fresh empty history. Run synthetic full
+      # archive and explicit new-volume enrollment adversarial contracts.
+      - name: Verify enrolled volume startup and cold-restore contracts
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/data-snapshot.py scripts/test-data-snapshot.py scripts/enroll-new-volume.py scripts/test-enroll-new-volume.py scripts/test-volume-identity-gateway.py
+          python3 scripts/test-enroll-new-volume.py
+          python3 scripts/test-data-snapshot.py
+
       - name: Verify workflow authority boundary
         run: python3 scripts/verify-workflow-authority.py
 
