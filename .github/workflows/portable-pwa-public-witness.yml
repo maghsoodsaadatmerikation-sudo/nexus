@@ -1,0 +1,89 @@
+name: NEXUS Public HTTPS PWA Preview Witness
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/portable-pwa-public-witness.yml'
+      - 'scripts/observe-portable-pwa-preview.py'
+      - 'scripts/test-observe-portable-pwa-preview.py'
+      - 'scripts/test-portable-pwa-browser.mjs'
+      - 'scripts/prepare-portable-pwa-preview.py'
+      - 'scripts/build-portable-pwa-kit.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-https-preview-readonly:
+    name: public-https-preview-readonly
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact unprivileged PR candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Explicitly exclude live provider or user credentials
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+      - name: Test safe public observer with fake responses
+        run: |
+          python3 -m py_compile scripts/observe-portable-pwa-preview.py scripts/test-observe-portable-pwa-preview.py
+          python3 scripts/test-observe-portable-pwa-preview.py
+      - name: Compare all eight HTTPS assets against exact frozen source
+        run: |
+          set -euo pipefail
+          python3 scripts/observe-portable-pwa-preview.py > "$RUNNER_TEMP/preview-public-assets.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ['RUNNER_TEMP'])/'preview-public-assets.json').read_text())
+          assert r['status']=='PASS_PUBLIC_HTTPS_IDENTITY'
+          assert r['passed_assets']==r['checked_public_assets']==8
+          assert r['deployed_source_sha']=='ef86ca0ff1786be3f3354c24f5d72faf4a754c15'
+          assert r['credentials_used'] is False and r['production_data_touched'] is False
+          assert r['railway_restore_proven'] is False and r['release_authorized'] is False
+          print('NEXUS LIVE PREVIEW: EXACT PUBLIC HTTPS ASSETS VERIFIED')
+          PY
+      - name: Prepare disposable expected app bytes without deployment
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-portable-pwa-preview.py build "$RUNNER_TEMP/preview-expected" > "$RUNNER_TEMP/preview-expected-report.json"
+      - name: Real Chromium on public HTTPS, then disable browser network
+        env:
+          NEXUS_PUBLIC_PWA_PREVIEW: 'true'
+          NEXUS_PORTABLE_DIR: ${{ runner.temp }}/preview-expected/nexus
+        run: |
+          set -euo pipefail
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
+          node scripts/test-portable-pwa-browser.mjs > "$RUNNER_TEMP/preview-public-browser.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ['RUNNER_TEMP'])/'preview-public-browser.json').read_text())
+          assert r['schema']=='nexus.portable.installable-browser.v1'
+          assert r['status']=='PASS' and len(r['checks'])==8
+          assert r['actual_offline_navigation'] is True
+          assert r['real_android_hardware'] is False
+          assert r['private_data_submitted'] is False
+          assert r['production_mutation'] is False and r['authority']=='none'
+          print('NEXUS LIVE PREVIEW: PUBLIC HTTPS INSTALL AND OFFLINE RELOAD VERIFIED')
+          PY
+      - name: Upload only sanitized public checks, never workspace data
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-preview-https-witness
+          path: |
+            ${{ runner.temp }}/preview-public-assets.json
+            ${{ runner.temp }}/preview-public-browser.json
+          if-no-files-found: ignore
+          retention-days: 7
