@@ -73,7 +73,8 @@ async function openBrowser(layout) {
         const p = (await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0];
         return /^\d+$/.test(p) ? p : null;
       } catch {return null}
-    }, 12000, 'browser-debugger-port');
+    // Real ephemeral CI can have a slow cold Chromium start after the image build.
+    }, 30000, 'browser-debugger-port');
     const target = await deadline(async () => {
       try {
         const response = await fetch(`http://127.0.0.1:${port}/json/list`,
