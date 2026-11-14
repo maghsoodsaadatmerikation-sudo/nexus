@@ -28,6 +28,7 @@ on:
       - 'scripts/build-ui-languages.py'
       - 'web/locales/**'
       - 'scripts/test-offline-to-rust-http.py'
+      - 'scripts/test-container-health.py'
       - 'docs/PILOT-06-OFFLINE-RUST-BRIDGE.md'
       - 'scripts/workspace-browser-runner.mjs'
       - 'docs/OFFLINE-PILOT.md'
@@ -62,6 +63,7 @@ on:
       - 'scripts/build-ui-languages.py'
       - 'web/locales/**'
       - 'scripts/test-offline-to-rust-http.py'
+      - 'scripts/test-container-health.py'
       - 'docs/PILOT-06-OFFLINE-RUST-BRIDGE.md'
       - 'scripts/workspace-browser-runner.mjs'
       - 'docs/OFFLINE-PILOT.md'
@@ -282,6 +284,8 @@ jobs:
       - name: Build disposable Rust image with a dedicated time budget
         timeout-minutes: 12
         run: docker build --pull=false -t nexus-pilot-06:ci .
+      - name: Verify actual Docker health on default and custom ports and quarantine
+        run: python3 scripts/test-container-health.py nexus-pilot-06:ci > container-health-acceptance.json
       - name: Reconstruct fresh synthetic browser input for Rust acceptance
         timeout-minutes: 3
         env:
@@ -331,6 +335,8 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: nexus-rust-bridge-browser-witness
-          path: offline-rust-bridge-browser.json
+          path: |
+            offline-rust-bridge-browser.json
+            container-health-acceptance.json
           if-no-files-found: ignore
           retention-days: 30
