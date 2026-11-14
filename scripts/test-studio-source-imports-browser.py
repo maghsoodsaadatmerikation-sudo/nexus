@@ -24,6 +24,7 @@ window.addEventListener('load',async()=>{
   window.confirm=()=>true;window.fetch=()=>{throw Error('unexpected-network')};create('SYNTHETIC SOURCE PROJECT');
   await upload([file('first.txt','First orchard source'),file('second.md','Second moon source')]);
   assert(project().sources.length===2,'all-selected-source-files-are-imported');
+  assert($('source-file').multiple,'picker-allows-multiple-source-files');
   assert(project().sources.map(s=>s.name).join('|')==='first.txt|second.md','selected-file-order-is-preserved');
   assert(project().sources[1].text==='Second moon source','source-text-is-decoded-correctly');
   const before=snapshot();await upload([file('valid.txt','Must not be added'),file('invalid.txt',new Uint8Array([255,254]))]);

@@ -51,6 +51,7 @@ jobs:
           node scripts/test-studio-sky.mjs
           node scripts/test-studio-astrology.mjs
           node scripts/test-studio-core.mjs
+          node scripts/test-studio-source-imports.mjs
           node scripts/test-studio-storage.mjs
           node scripts/test-studio-vault-cancellation.mjs
           node scripts/test-studio-lab.mjs
