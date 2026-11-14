@@ -160,7 +160,7 @@ window.addEventListener('load', async () => {
       earlyCore.events.every(e=>e.provenance_id==='offline-bridge:user-supplied-unattested'),
       'core-export-invented-early-human-judgment');
     assert(earlyCore.workspace.claims[1].origin.ExternalEvidence.source===
-      'offline-bridge:user-reported-machine-analysis-unattested' &&
+      'offline-bridge:user-reported-machine-analysis-unattested;reported-source=synthetic%3Amodel%2Freport%3Bunverified' &&
       !earlyCore.events.some(e=>e.kind.MachineAnalysisRecorded),
       'core-export-forged-machine-adapter');
     checks.push('core-bridge-before-human-choice-is-nonauthoritative');
@@ -205,7 +205,7 @@ window.addEventListener('load', async () => {
        coreFixture.workspace.claims[0].origin.ExternalEvidence.source==='test:synthetic' &&
        coreFixture.workspace.claims[0].uncertainty==='High' &&
        coreFixture.workspace.claims[1].origin.ExternalEvidence.source===
-         'offline-bridge:user-reported-machine-analysis-unattested' &&
+         'offline-bridge:user-reported-machine-analysis-unattested;reported-source=synthetic%3Amodel%2Freport%3Bunverified' &&
        coreFixture.workspace.alternatives[0].consequences.length===2 &&
        coreFixture.workspace.judgment.decision===exported.workspace.judgment.decision &&
        coreFixture.events.length===5 &&
