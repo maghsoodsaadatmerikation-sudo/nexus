@@ -37,4 +37,13 @@ await assert.rejects(vault.save(data),/archive-damaged/);assert.equal(state.valu
 assert.deepEqual((await S.decrypt(await vault.export(data,pass),pass)).data,data);checks++;
 state.value=raw;await vault.save(data);assert.notEqual(JSON.parse(state.value).revision,revision);checks++;
 await vault.erase();assert.equal(state.value,undefined);assert.equal(vault.unlocked,false);checks++;
+// Cancellation must be checked again at the actual destructive transaction.
+const paused=fixture(),eraser=new S.Vault(paused.store);await eraser.create(pass);
+const retained=paused.state.value,alreadyAborted=new AbortController();alreadyAborted.abort();
+await assert.rejects(eraser.erase({signal:alreadyAborted.signal}),/cancelled/);assert.equal(paused.state.value,retained);checks++;
+let entered,release;const started=new Promise(r=>entered=r),gate=new Promise(r=>release=r),commit=paused.store.commit.bind(paused.store);
+paused.store.commit=async(...args)=>{if(args[1]===null){entered();await gate}return commit(...args)};
+const abort=new AbortController(),erasing=eraser.erase({signal:abort.signal});await started;abort.abort();release();
+await assert.rejects(erasing);assert.equal(paused.state.value,retained);assert.equal(eraser.unlocked,true);checks++;
+paused.store.commit=commit;await eraser.save(data);await eraser.erase();assert.equal(paused.state.value,undefined);checks++;
 console.log(JSON.stringify({status:'PASS',checks,scope:'synthetic-storage-faults',real_indexeddb_tested:false}));

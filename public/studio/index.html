@@ -739,7 +739,12 @@ class Vault{
  async unlock(pass){return this.run(async check=>{const raw=await this.store.read();if(!raw)fail('archive-missing');const opened=await decrypt(raw,pass);check();Object.assign(this,{key:opened.key,salt:opened.salt,raw:opened.raw});return copy(opened.data)})}
  async save(value){const data=state(value);return this.run(async check=>{if(!this.unlocked)fail('locked');const raw=await encrypt(data,this.key,this.salt);check();await this.store.commit(envelope(this.raw).revision,raw,()=>{try{check();return true}catch{return false}});check();this.raw=raw})}
  async export(value,pass){const data=state(value);return this.run(async check=>{const salt=crypto.getRandomValues(new Uint8Array(16)),key=await keyFor(pass,salt),raw=await encrypt(data,key,salt);check();return raw})}
- async erase(){return this.run(async check=>{if(!this.unlocked)fail('locked');await this.store.commit(envelope(this.raw).revision,null,()=>{try{check();return true}catch{return false}});check();this.lock()})}
+ async erase({signal}={}){return this.run(async check=>{
+  const current=()=>{check();if(signal?.aborted)fail('cancelled')};current();if(!this.unlocked)fail('locked');
+  await this.store.commit(envelope(this.raw).revision,null,()=>{try{current();return true}catch{return false}});
+  // A completed delete cannot be undone by a later cancellation; always clear its key.
+  check();this.lock();
+ })}
 }
 root.NexusStudio=Object.freeze({SCHEMA,MAX,state,empty,project,thread,path,append,context,search,retrieve,guide,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
 })(globalThis);
@@ -961,7 +966,14 @@ $('save').onclick=()=>{if(!noForms())return;const snapshot=S.state(data);operati
 $('lock').onclick=()=>{if((dirty||forms()||$('message').value)&&!confirm(t('discard')))return;window.NexusDevice?.unload();window.NexusTasksUI?.clear();window.NexusQualityUI?.clear();window.NexusAstrologyUI?.clear();window.NexusLabUI?.clear();undoSlot.clear();stop();modelInfo=null;vault.lock();data=S.empty();projectId=threadId=documentId=null;dirty=profileDirty=editorDirty=false;for(const id of ['passphrase','repeat-passphrase','gateway-token','message','project-title','document-title','instructions','memories','editor','source-query','search'])$(id).value='';$('model-status').textContent='';$('source-results').textContent='';$('request-context').textContent='';$('branch-notice').textContent='';renderVersions();render()};
 $('backup').onclick=()=>{if(!noForms())return;const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation(async rev=>{const raw=await vault.export(data,pass);if(rev===revision)download(raw,'nexus-studio.encrypted.json','application/json')})};
 $('restore').onclick=()=>$('restore-file').click();$('restore-file').onchange=event=>{const f=event.target.files[0];event.target.value='';if(!f||f.size>6*1024*1024||!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async rev=>{const opened=await S.decrypt(await f.text(),pass);if(rev!==revision)return;undoSlot.clear();data=opened.data;dirty=true;selectProject(data.projects[0]?.id||null);render()})};
-$('erase').onclick=()=>{if(confirm(t('discard')))operation(async()=>{window.NexusDevice?.unload();await vault.erase();undoSlot.clear();window.NexusQualityUI?.clear();modelInfo=null;for(const id of ['gateway-token','source-query','search','project-title','document-title'])$(id).value='';data=S.empty();selectProject(null);dirty=false;render()})};
+$('erase').onclick=()=>{if(confirm(t('discard')))operation(async rev=>{
+ const abort=new AbortController();controller=abort;
+ try{
+  window.NexusDevice?.unload();await vault.erase({signal:abort.signal});
+  if(rev!==revision){if(!vault.unlocked&&data.projects.length)dirty=true;return}
+  undoSlot.clear();window.NexusQualityUI?.clear();modelInfo=null;for(const id of ['gateway-token','source-query','search','project-title','document-title'])$(id).value='';data=S.empty();selectProject(null);dirty=false;render();
+ }finally{if(controller===abort)controller=null}
+})};
 function readAloud(text){try{speechSynthesis.cancel();const voices=speechSynthesis.getVoices().filter(v=>v.localService&&v.lang.startsWith(language));if(!voices.length)return status('failed');const u=new SpeechSynthesisUtterance(text.slice(0,6000));u.voice=voices[0];speechSynthesis.speak(u)}catch{status('failed')}}
 $('language-template').onclick=()=>download(JSON.stringify({schema:'nexus.studio.locale.v1',code:'en',dir:'ltr',messages:EN},null,2),'nexus-studio-english-labels.json','application/json');
 $('language-file').onchange=async event=>{const f=event.target.files[0];event.target.value='';if(!f||f.size>64000)return status('failed');try{const value=JSON.parse(await f.text()),code=Intl.getCanonicalLocales(value.code)[0];if(value.schema!=='nexus.studio.locale.v1'||!code||['en','fa'].includes(code)||!['ltr','rtl'].includes(value.dir)||!value.messages||Object.keys(value.messages).sort().join('|')!==Object.keys(EN).sort().join('|')||Object.values(value.messages).some(s=>typeof s!=='string'||!s.trim()||s.length>1500))throw Error('language-pack');customPack={code,dir:value.dir,messages:{...value.messages}};if(!$('language').querySelector('option[value="'+code+'"]'))$('language').append(option(code,code));language=code;$('language').value=code;stop();applyLanguage()}catch{status('failed')}};
