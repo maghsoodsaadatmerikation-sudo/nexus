@@ -744,8 +744,7 @@ async fn adversarial_fresh_state_has_no_durable_replay_guarantee() {
 async fn capacity_exhaustion_disables_readiness_not_liveness_or_status() {
     let delegate = RecordingDelegate::default();
     let app = router(
-        AppState::authenticated(delegate.clone(), "secret")
-            .with_safety(safety(4096, 100, 1)),
+        AppState::authenticated(delegate.clone(), "secret").with_safety(safety(4096, 100, 1)),
     );
 
     let request = Request::builder()
