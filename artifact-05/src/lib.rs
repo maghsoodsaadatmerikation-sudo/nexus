@@ -415,7 +415,9 @@ async fn liveness() -> Response {
     health_response(StatusCode::OK, "alive")
 }
 
-async fn readiness<D: ConstitutionalDelegate>(State(state): State<AppState<D>>) -> Response {
+async fn readiness<D: ConstitutionalDelegate + WorkspaceDelegate>(
+    State(state): State<AppState<D>>,
+) -> Response {
     if state.recovery_required {
         return health_response(StatusCode::SERVICE_UNAVAILABLE, "quarantined");
     }
@@ -429,6 +431,12 @@ async fn readiness<D: ConstitutionalDelegate>(State(state): State<AppState<D>>) 
         .is_some_and(|store| store.check_readiness().is_err())
     {
         return health_response(StatusCode::SERVICE_UNAVAILABLE, "storage_unavailable");
+    }
+    // A functioning request ledger does not establish workspace-store health:
+    // a separately mounted or substituted workspace path must be rejected
+    // before declaring the runtime ready for new workspace operations.
+    if state.delegate.check_storage_readiness().is_err() {
+        return health_response(StatusCode::SERVICE_UNAVAILABLE, "workspace_unavailable");
     }
     // Exhausting the configured tracked-request budget permanently blocks
     // new admissions until restart/reconfiguration. Do not advertise this
