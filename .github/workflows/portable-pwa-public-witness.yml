@@ -50,7 +50,7 @@ jobs:
           r=json.loads((Path(os.environ['RUNNER_TEMP'])/'preview-public-assets.json').read_text())
           assert r['status']=='PASS_PUBLIC_HTTPS_IDENTITY'
           assert r['passed_assets']==r['checked_public_assets']==9
-          assert r['deployed_source_sha']=='26aab8d7a27f7329199e0e0e8d3fe21f055e377e'
+          assert r['deployed_source_sha']=='4b4f32ab54fa6ce8bf4a7f0c1a428c6237307d42'
           assert r['credentials_used'] is False and r['production_data_touched'] is False
           assert r['railway_restore_proven'] is False and r['release_authorized'] is False
           print('NEXUS LIVE PREVIEW: EXACT PUBLIC HTTPS ASSETS VERIFIED')
