@@ -25,11 +25,11 @@ EXPECTED_BLOBS = {
     "docs/CLOUD-HEADER-CARDINALITY-2026-11-14.md": "73857d6fc248202280ba661fe2ab2249a195dcb1",
     "docs/STUDIO-JSON-BOUNDARY-2026-11-14.md": "1018752b319b14d99168e44633bfce1a477151db",
     "docs/GATEWAY-AUTH-HEADER-IDENTITY-2026-11-14.md": "337362089373faeb33061b041505e2d5e417c9ab",
-    "artifact-05/src/main.rs": "67d0283cc374b63d78d15f9cfe7138b72f2173e1",
+    "artifact-05/src/main.rs": "7764d62b471bb9dcdfcbc0c3fbd8b7497c4e18d1",
     "artifact-05/src/request_store.rs": "e988175dfeccaab1b2adfda0af096541647d7302",
     "artifact-05/src/workspace_api.rs": "e33f1bd77821ed05c0431d8dc4a117f07237ee66",
     "src/workspace_persistence.rs": "12b0c8198aec596825147160c6f78cc2c6af815e",
-    "docs/gateway-health.md": "01151f0409a1805c3dc228c8c5440cb7f5b80a82",
+    "docs/gateway-health.md": "6a1aa9020de9e3f32ca5e0be0abd532599bb1414",
     "scripts/verify-storage-failure-http.py": "7d51a52eadafdc4f9aee3eed549c14b85f562e6b",
     # PR #188 exact unmodified freeze-preflight source:
     "scripts/production-freeze-preflight.py": "67004efa104f9932bcf262e53c8e497c8fd81d4d",
@@ -43,11 +43,11 @@ EXPECTED_BLOBS = {
     # Candidate-owned, reviewable volume-identity additions; they are NOT
     # claimed to be unchanged upstream PR #202 source. Startup/backup behavior
     # must also pass mandatory Rust/Python and live HTTP synthetic checks.
-    "artifact-05/src/volume_identity.rs": "834ae8414f50e294b7f8b478b1582f550e936dac",
+    "artifact-05/src/volume_identity.rs": "94e548107972b479758a18f9ef7aeb1f4bef7a15",
     "scripts/data-snapshot.py": "437b4c5ee90ca013ae8aaee84184035b0b06ddd7",
     "scripts/enroll-new-volume.py": "9cd129563ff0339726137c744059bb05166b2b9a",
     "scripts/test-enroll-new-volume.py": "0e348cdc432ec0ff3cd3a05b12d2858c2ce034aa",
-    "scripts/test-volume-identity-gateway.py": "8b488adc4ac7868f24692ef65eb96eed7ce56310",
+    "scripts/test-volume-identity-gateway.py": "238b8b04ff6a1722a017f2604eb2b540c65ce511",
     "scripts/test-data-snapshot.py": "7e73645cdcbcd3436ac729c6c913f8d821f6dcf0",
 }
 
@@ -62,6 +62,8 @@ REQUIRED_RUST_TOKENS = {
         'health_response(StatusCode::SERVICE_UNAVAILABLE, "admission_unavailable")',
         '"volume_identity_unavailable"',
         'fn check_runtime_volume_identity(&self) -> bool',
+        'volume_identity_latched.swap(true, Ordering::AcqRel)',
+        'pinned_marker_identity',
     ),
     "artifact-05/tests/http_contract.rs": (
         "duplicate_authorization_headers_never_authorize_rust_gateway",
