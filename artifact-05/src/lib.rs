@@ -142,6 +142,14 @@ pub struct Submission {
 
 pub trait ConstitutionalDelegate: Send + Sync + 'static {
     fn submit(&self, envelope: RequestEnvelope) -> Result<Submission, DelegateError>;
+
+    /// Optional read-only guard for enrolled runtime volume identities.
+    /// Implementations without an enrolled volume preserve existing behavior.
+    /// The production gateway overrides this to reject API operations when
+    /// the original marker is removed or modified after startup.
+    fn check_runtime_volume_identity(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -380,10 +388,13 @@ async fn recovery_boundary<D: ConstitutionalDelegate>(
     request: Request,
     next: Next,
 ) -> Response {
-    // Authenticate workspace transport before Axum extracts or polls its body.
-    // Handler checks remain as defense in depth; this grants no core authority.
+    // Authenticate *all* private routes before revealing storage health,
+    // parsing bodies or consuming a request budget. The handlers check again.
     let path = request.uri().path();
-    if (path == "/v1/workspaces" || path.starts_with("/v1/workspaces/"))
+    let private_request = path == "/v1/requests" || path.starts_with("/v1/requests/");
+    let private_workspace =
+        path == "/v1/workspaces" || path.starts_with("/v1/workspaces/");
+    if (private_request || private_workspace)
         && !transport_authorized(&state, request.headers())
     {
         return transport_unauthorized();
@@ -401,6 +412,14 @@ async fn recovery_boundary<D: ConstitutionalDelegate>(
             StatusCode::SERVICE_UNAVAILABLE,
             "recovery_acknowledgment_required",
         );
+    }
+    // A marker removed/replaced during a running process must not leave a
+    // stale green runtime admitting new requests or Workspace operations.
+    // This read-only check is intentionally before Axum's body extractors.
+    if (private_request || private_workspace)
+        && !state.delegate.check_runtime_volume_identity()
+    {
+        return safety_error(StatusCode::SERVICE_UNAVAILABLE, "volume_identity_unavailable");
     }
     next.run(request).await
 }
@@ -438,7 +457,9 @@ async fn readiness<D: ConstitutionalDelegate + WorkspaceDelegate>(
     // A functioning request ledger does not establish workspace-store health:
     // a separately mounted or substituted workspace path must be rejected
     // before declaring the runtime ready for new workspace operations.
-    if state.delegate.check_storage_readiness().is_err() {
+    if !state.delegate.check_runtime_volume_identity()
+        || state.delegate.check_storage_readiness().is_err()
+    {
         return health_response(StatusCode::SERVICE_UNAVAILABLE, "workspace_unavailable");
     }
     // Exhausting the configured tracked-request budget permanently blocks
