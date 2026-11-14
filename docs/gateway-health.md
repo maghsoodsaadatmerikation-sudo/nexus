@@ -70,3 +70,26 @@ reports success/failure only through its exit status. Health remains liveness:
 recovery quarantine still returns `/livez` 200 and `/readyz` 503. The CI witness
 checks Docker's actual health engine on default/custom ports and a quarantined
 isolated container, plus a compiled-CLI witness against controlled HTTP failures.
+
+## Read-only public observer: fail-closed response validation
+
+The independent `scripts/observe-pilot-runtime.py` performs only five public
+HTTPS GETs, without bearer tokens, POST requests, redirects or production writes.
+For `/livez` and `/readyz`, an HTTP 200 **alone is insufficient**:
+each response must be bounded JSON with exactly the expected `status`
+(`alive` or `ready`), `Content-Type: application/json` and
+`Cache-Control: no-store`. Duplicate JSON properties, unexpected fields,
+malformed bodies, oversized payloads and cacheable responses are blockers.
+A valid `503 {"status":"quarantined"}` is recorded distinctly, but remains
+unready. Anonymous 401 responses must also carry `no-store` to avoid
+a false-green privacy/cache assessment. Runtime identity parsing rejects duplicate
+properties and still compares only **self-reported** source metadata to the
+expected hash; this is not independent binary attestation.
+
+The strict observer has negative tests for fake 200 responses, conflicting
+JSON, bad content type, oversized bodies, 503 quarantine and unsafe 401 caching.
+These tests run in required PR verification and the dedicated observer-contract
+workflow. They use synthetic responses. They do **not** establish public
+availability, a working authenticated transaction, backup recovery,
+operational release approval or Seal readiness. `public_checks: SATISFIED`
+must never be interpreted as `promotion_ready`.
