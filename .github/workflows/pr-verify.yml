@@ -23,6 +23,12 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      # This candidate composes several previously verified PRs. Require the
+      # unchanged upstream sources to retain their pinned Git blob identity;
+      # Rust source conflicts are separately exercised by Cargo/HTTP tests.
+      - name: Enforce composed candidate source identity
+        run: python3 scripts/verify-composed-security-source.py
+
       # This job is the only required branch-ruleset status check. Cloud
       # transport tests must be part of this same job, not only an optional
       # path-filtered workflow whose failure could be ignored at merge.
