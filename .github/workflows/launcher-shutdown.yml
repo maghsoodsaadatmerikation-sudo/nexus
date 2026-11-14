@@ -1,0 +1,29 @@
+name: NEXUS Launcher Shutdown
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/launcher-shutdown.yml'
+      - 'scripts/run-local-pilot.py'
+      - 'scripts/run-local-studio.py'
+      - 'scripts/test-launcher-shutdown.py'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/launcher-shutdown.yml'
+      - 'scripts/run-local-pilot.py'
+      - 'scripts/run-local-studio.py'
+      - 'scripts/test-launcher-shutdown.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  launcher-shutdown:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Stop real cooperative and resistant children without leaking credentials or locks
+        run: python3 scripts/test-launcher-shutdown.py
