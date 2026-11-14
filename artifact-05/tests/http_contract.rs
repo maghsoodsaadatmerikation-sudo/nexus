@@ -1690,11 +1690,11 @@ fn invalid_runtime_bearer_tokens_fail_at_configuration_not_during_requests() {
         "secret ",
         " secret",
         "a b",
-        "secret\\n",
-        "secret\\r",
-        "secret\\t",
-        "caf\\u{00e9}",
-        "\\u{007f}",
+        "secret\n",
+        "secret\r",
+        "secret\t",
+        "caf\u{00e9}",
+        "\u{007f}",
     ] {
         let result = std::panic::catch_unwind(|| {
             AppState::authenticated(RecordingDelegate::default(), token)
