@@ -20,14 +20,14 @@ def main():
   with tempfile.TemporaryDirectory(prefix='nexus-health-cli-') as tmp:
    data=Path(tmp)/'must-not-be-created'
    base_env={k:v for k,v in os.environ.items() if not k.startswith('NEXUS_')}
-   for mode in ['valid-wildcard','valid-explicit','not-found','wrong-status-body','redirect','wrong-length','duplicate-length','duplicate-status','oversized','slow']:
+   for mode in ['valid-wildcard','valid-explicit','not-found','wrong-status-body','array-status','redirect','wrong-length','duplicate-length','duplicate-status','oversized','slow']:
     requests=[]
     class Handler(BaseHTTPRequestHandler):
      def do_GET(self):
       requests.append((self.path,self.headers.get('authorization')))
       if mode=='slow':time.sleep(2);return
       status=404 if mode=='not-found' else 302 if mode=='redirect' else 200
-      body=(b'200 OK' if mode=='not-found' else b'{"status":"ready"}' if mode=='wrong-status-body' else b'{"status":"dead","status":"alive"}' if mode=='duplicate-status' else b'x'*9000 if mode=='oversized' else b'{"status":"alive"}')
+      body=(b'200 OK' if mode=='not-found' else b'["alive"]' if mode=='array-status' else b'{"status":"ready"}' if mode=='wrong-status-body' else b'{"status":"dead","status":"alive"}' if mode=='duplicate-status' else b'x'*9000 if mode=='oversized' else b'{"status":"alive"}')
       self.send_response(status)
       if mode=='redirect':self.send_header('Location',f'http://127.0.0.1:{target.server_port}/foreign')
       self.send_header('Content-Length',str(0 if mode=='wrong-length' else len(body)))

@@ -68,6 +68,10 @@ fn validate(response: &[u8]) -> io::Result<()> {
     if body.len() > 4096 || length != Some(body.len()) {
         return Err(invalid());
     }
+    let object_start = body.iter().copied().find(|b| !b.is_ascii_whitespace());
+    if object_start != Some(b'{') {
+        return Err(invalid());
+    }
     let result: Liveness = serde_json::from_slice(body).map_err(|_| invalid())?;
     if result.status != "alive" {
         return Err(invalid());
@@ -120,7 +124,11 @@ mod tests {
     use super::*;
 
     fn response(status: &str, body: &str) -> Vec<u8> {
-        format!("HTTP/1.1 {status}\r\nContent-Length: {}\r\n\r\n{body}", body.len()).into_bytes()
+        format!(
+            "HTTP/1.1 {status}\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        )
+        .into_bytes()
     }
 
     #[test]
@@ -146,6 +154,7 @@ mod tests {
             ("200 OK", r#"{"status":"dead","status":"alive"}"#),
             ("200 OK", r#"{"status":"alive","extra":true}"#),
             ("200 OK", "not-json"),
+            ("200 OK", r#"["alive"]"#),
             ("302 Redirect", r#"{"status":"alive"}"#),
         ] {
             assert!(validate(&response(status, body)).is_err());
