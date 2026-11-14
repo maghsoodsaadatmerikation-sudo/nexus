@@ -32,7 +32,7 @@ class StaticPreviewTests(unittest.TestCase):
 
     def test_source_bound_public_only_site(self):
         report = self.built()
-        self.assertEqual(report["files"], 8)
+        self.assertEqual(report["files"], 9)
         self.assertEqual(report["deployable_path"], "nexus/")
         self.assertFalse(report["private_data_included"])
         self.assertFalse(report["production_deployed"])
@@ -59,6 +59,39 @@ class StaticPreviewTests(unittest.TestCase):
         self.assertFalse(receipt["production_deployed"])
         self.assertIn("register('./service-worker.js'",
                       (self.target / "nexus/index.html").read_text())
+
+    def test_privacy_preserving_mobile_diagnostics_are_pinned_to_app(self):
+        self.built()
+        diag = (self.target / "nexus/device-check.html").read_text("utf-8")
+        app = (self.target / "nexus/index.html").read_bytes()
+        self.assertIn(preview.KIT.digest(app), diag)
+        self.assertNotIn("__NEXUS_SHELL_SHA256__", diag)
+        for fragment in (
+            "connect-src 'none'", "worker-src 'none'", "form-action 'none'",
+            "nexus.device-readiness.self-report.v1",
+            "owner_self_attestation", "private_information_collected:false",
+            "production_recovery_verified:false", "release_authorized:false",
+            "navigator.serviceWorker.getRegistration("
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, diag)
+        for forbidden in ("navigator.serviceWorker.register(", "fetch(",
+                          "XMLHttpRequest", "sendBeacon(", "userAgent",
+                          "navigator.geolocation", "localStorage.setItem(",
+                          "navigator.mediaDevices.getUserMedia("):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, diag)
+
+    def test_tampering_with_diagnostic_page_fails_verification(self):
+        self.built()
+        path = self.target / "nexus/device-check.html"
+        path.write_bytes(path.read_bytes() + b"unreviewed")
+        self.blocked(lambda: preview.verify(self.target, HEAD))
+
+    def test_missing_device_check_page_blocks_publication(self):
+        self.built()
+        (self.target / "nexus/device-check.html").unlink()
+        self.blocked(lambda: preview.verify(self.target, HEAD))
 
     def test_two_source_distinct_commits_refuse_as_same_preview(self):
         self.built()
