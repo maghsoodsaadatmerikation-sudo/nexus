@@ -82,7 +82,7 @@
     }
     throw Error('unsupported-analysis');
   }
-  const {strictNumeric,numberStats,analyseTable}=NexusTable;
+  const {strictNumeric,numberStats,histogram,analyseTable}=NexusTable;
   function metricFormat(value){
     if(value===null||value===undefined)return '—';
     return typeof value==='number'?new Intl.NumberFormat(interfaceLang,{maximumFractionDigits:4}).format(value):String(value);
@@ -109,7 +109,7 @@
     for(const column of report.column_stats){
       const base=column.name+': '+t('m388')+' '+column.missing+'; '+t('m389')+' '+column.distinct;
       const s=column.summary;
-      lines.push(s?base+'; n='+s.count+'; mean='+metricFormat(s.mean)+'; median='+
+      lines.push(s?base+'; n='+s.count+'; invalid='+column.invalid_numeric+'; mean='+metricFormat(s.mean)+'; median='+
         metricFormat(s.median)+'; SD='+metricFormat(s.sample_stddev)+'; min='+metricFormat(s.min)+'; max='+metricFormat(s.max):
         base+'; '+t('m390')+' '+column.top_values.map(x=>x.value+' ('+x.count+')').join(', '));
     }
@@ -124,9 +124,7 @@
     else if(metric>=0){
       const numbers=table.rows.map(r=>strictNumeric(r[metric])).filter(x=>x!==null);
       if(!numbers.length){analysisBars([]);return;}
-      const lo=Math.min(...numbers),hi=Math.max(...numbers),buckets=Array.from({length:8},(_,i)=>({label:String(i+1),count:0}));
-      for(const n of numbers)buckets[hi===lo?0:Math.min(7,Math.floor((n-lo)/(hi-lo)*8))].count++;
-      analysisBars(buckets);
+      analysisBars(histogram(numbers));
     }else analysisBars([]);
   }
   $('analysis-source').addEventListener('change',()=>{clearAnalysis();analysisStatus('m383');});
