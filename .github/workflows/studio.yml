@@ -48,6 +48,7 @@ jobs:
           node --check web/table-core.js
           node --check web/studio-quality-ui.js
           node scripts/test-studio-quality.mjs
+          node scripts/test-analysis-group-completeness.mjs
           node scripts/test-studio-sky.mjs
           node scripts/test-studio-astrology.mjs
           node scripts/test-studio-core.mjs
@@ -55,6 +56,8 @@ jobs:
           node scripts/test-studio-storage.mjs
           node scripts/test-studio-vault-cancellation.mjs
           node scripts/test-studio-lab.mjs
+      - name: Exercise complete group exports and early analysis cancellation
+        run: python3 scripts/test-studio-group-reports-browser.py
       - name: Exercise atomic source batches and isolated late file completions
         run: python3 scripts/test-studio-source-imports-browser.py
       - name: Exercise retained locale packs and asynchronous language imports

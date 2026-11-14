@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import '../web/table-core.js';
+const T=NexusTable;let checks=0;
+const table=T.parse('Group,Value\n'+Array.from({length:14},(_,i)=>'G'+String(i).padStart(2,'0')+','+i).join('\n'),'csv');
+assert.equal(T.analysisGroups(table,0,1).length,12);checks++;
+const all=T.groupReport(table,0,1);
+assert.equal(all.groups.length,14);assert.equal(all.group_count,14);assert.equal(all.groups_complete,true);checks++;
+assert.equal(all.group_by,'Group');assert.equal(all.metric,'Value');checks++;
+assert.equal(all.groups.reduce((sum,g)=>sum+g.count,0),table.rows.length);checks++;
+assert.equal(all.groups.find(g=>g.label==='G13').metric_mean,13);checks++;
+assert.equal(JSON.parse(JSON.stringify(all)).groups.length,14);checks++;
+const counts=T.groupReport(table,0,-1);assert.equal(counts.metric,null);assert(counts.groups.every(g=>g.metric_mean===null&&g.numeric_n===0));checks++;
+const none=T.groupReport(table,-1,-1);assert.equal(none.group_by,null);assert.equal(none.group_count,0);assert.deepEqual(none.groups,[]);checks++;
+const missing=T.groupReport(T.parse('g,v\n,1\n(missing),3\n','csv'),0,1);assert.equal(missing.group_count,2);assert.deepEqual(missing.groups.map(g=>g.missing).sort(),[false,true]);checks++;
+const partial=T.groupReport(T.parse('g,v\nA,2\nA,\nB,4\n','csv'),0,1);assert.equal(partial.groups[0].count,2);assert.equal(partial.groups[0].numeric_n,1);assert.equal(partial.groups[0].metric_mean,2);checks++;
+for(const [index,metric,limit] of [[2,1,12],[-2,1,12],[0,2,12],[.5,1,12],[0,NaN,12],[0,1,0],[0,1,5001],[0,1,1.5]]){assert.throws(()=>T.analysisGroups(table,index,metric,{limit}));checks++}
+assert.equal(T.analysisGroups(table,0,1,{limit:1}).length,1);checks++;
+const maximum=T.normalizedTable(['g','v'],Array.from({length:T.MAX_ROWS},(_,i)=>['G'+i,String(i)])),full=T.groupReport(maximum,0,1);
+assert.equal(full.group_count,5000);assert.equal(full.groups.reduce((n,g)=>n+g.count,0),5000);checks++;
+assert.throws(()=>T.groupReport({...maximum,rows:[...maximum.rows,['extra','1']]},0,1));checks++;
+assert.throws(()=>T.groupReport({columns:['g','v'],rows:[['short']]},0,1));checks++;
+console.log(JSON.stringify({status:'PASS',checks,scope:'complete-group-reports-and-bounded-previews'}));

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pilot 18: real, disposable browser tests of private bounded numerical analysis."""
+"""Public-compatible Pilot 18 witness; candidate group completeness has its own test."""
 import json
 from pathlib import Path
 import shutil

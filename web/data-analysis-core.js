@@ -87,21 +87,23 @@
     if(value===null||value===undefined)return '—';
     return typeof value==='number'?new Intl.NumberFormat(interfaceLang,{maximumFractionDigits:4}).format(value):String(value);
   }
-  function analysisBars(bars){
+  function analysisBars(bars,total=null){
     const host=$('analysis-bars');host.replaceChildren();
+    const shown=bars.slice(0,10);
+    if(total!==null&&shown.length)host.append(part('small',t('m391')+': '+shown.length+'/'+total));
     const max=Math.max(1,...bars.map(x=>x.count));
-    for(const item of bars.slice(0,10)){
+    for(const item of shown){
       const wrap=part('div','','entry');
       wrap.append(part('small',item.label+' — '+metricFormat(item.count)));
       const track=part('div','','analysis-track'),bar=part('div','','analysis-bar');
       bar.style.width=(100*item.count/max).toFixed(2)+'%';track.append(bar);wrap.append(track);host.append(wrap);
     }
   }
-  const {analysisGroups}=NexusTable;
+  const {groupReport,GROUP_PREVIEW_LIMIT}=NexusTable;
   function renderAnalysisResults(){
     if(!analysisData)return;
     const {table,report}=analysisData,group=Number($('analysis-group').value),metric=Number($('analysis-metric').value);
-    const groups=analysisGroups(table,group,metric);
+    const grouping=groupReport(table,group,metric),groups=grouping.groups.slice(0,GROUP_PREVIEW_LIMIT);
     const lines=[t('m386')+': '+report.rows+' × '+report.columns,
       t('m387')+': '+report.source.name+' / SHA-256 '+report.source.sha256,''];
     for(const column of report.column_stats){
@@ -111,14 +113,14 @@
         metricFormat(s.median)+'; SD='+metricFormat(s.sample_stddev)+'; min='+metricFormat(s.min)+'; max='+metricFormat(s.max):
         base+'; '+t('m390')+' '+column.top_values.map(x=>x.value+' ('+x.count+')').join(', '));
     }
-    if(groups.length){lines.push('',t('m391')+': '+table.columns[group]);
+    if(groups.length){lines.push('',t('m391')+': '+table.columns[group]+' ('+groups.length+'/'+grouping.group_count+')');
       for(const g of groups)lines.push(g.label+': n='+g.count+(metric>=0?'; mean='+metricFormat(g.metric_mean)+' (n='+g.numeric_n+')':''));}
     if(report.correlations.length){lines.push('',t('m392'));
       for(const pair of report.correlations.slice(0,12))
         lines.push(pair.left+' / '+pair.right+': r='+metricFormat(pair.pearson_r)+' (n='+pair.pairs+')');}
     lines.push('',t('m393'));
     $('analysis-summary').textContent=lines.join('\n');
-    if(groups.length)analysisBars(groups);
+    if(groups.length)analysisBars(groups,grouping.group_count);
     else if(metric>=0){
       const numbers=table.rows.map(r=>strictNumeric(r[metric])).filter(x=>x!==null);
       if(!numbers.length){analysisBars([]);return;}
@@ -162,9 +164,7 @@
     if(!analysisData||!analysisContext||analysisContext.epoch!==fileEpoch||
        analysisContext.workspace!==state.workspace)return clearAnalysis();
     if(!window.confirm(t('m394')))return;
-    const report={...analysisData.report,group_by:$('analysis-group').value==='-1'?null:
-      analysisData.table.columns[Number($('analysis-group').value)],
-      groups:analysisGroups(analysisData.table,Number($('analysis-group').value),Number($('analysis-metric').value))};
+    const report={...analysisData.report,...groupReport(analysisData.table,Number($('analysis-group').value),Number($('analysis-metric').value))};
     downloadFileBlob(new Blob([JSON.stringify(report,null,2)+'\n'],{type:'application/json;charset=utf-8'}),
       'nexus-analysis-'+analysisContext.sha.slice(0,12)+'.json');
     analysisStatus('m395');
