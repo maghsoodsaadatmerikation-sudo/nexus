@@ -58,7 +58,7 @@ one of these exact status strings:
 
 - `quarantined` — the startup recovery gate is latched
 - `storage_unavailable` — the durable request ledger is unavailable/replaced
-- `workspace_unavailable` — the pinned Workspace root is unavailable/replaced
+- `workspace_unavailable` — the pinned Workspace root is unavailable/replaced, or the configured volume marker is lost/mismatched
 - `admission_unavailable` — the permanent tracked-request budget is exhausted
 
 The Workspace API also distinguishes a storage I/O outage with HTTP **503**
@@ -123,8 +123,21 @@ restore still creates the recovery quarantine marker. The volume ID is **not
 authentication**, a disk hardware serial, a cryptographic signature, an
 independent custody receipt, or permission to dismiss quarantine. A root can
 still be tampered with by actors who can rewrite both the volume and marker.
-The runtime identity check is scoped to **startup and root pinning**, not
-continuous cryptographic integrity or a guarantee of future disk writes.
+When configured, the original marker and pinned root are rechecked on **every
+`/readyz` probe and authenticated private Workspace/request API operation**.
+Removing or changing the marker after startup changes `/readyz` to HTTP
+**503** `workspace_unavailable`, and private routes reject requests with
+HTTP **503** `volume_identity_unavailable` before parsing their bodies or
+reserving request IDs. `/livez` remains 200, avoiding recovery restart loops;
+invalid bearer credentials receive 401 before the storage state is disclosed.
+Restoring the exact original marker can recover readiness without a restart
+provided other storage and recovery gates pass.
+
+These are discrete checks, **not an atomic lock across a complete API
+transaction**: a hostile concurrent marker edit after the check can still race
+an in-flight operation. This is not continuous cryptographic integrity, a
+substitute for correctly isolated provider permissions, or proof that future
+disk writes and fsyncs will succeed.
 
 ## Security boundary
 
