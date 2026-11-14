@@ -18,9 +18,18 @@ pub enum WorkspaceDelegateError {
     AlreadyExists,
     Invalid,
     Unavailable,
+    StorageUnavailable,
 }
 
 pub trait WorkspaceDelegate: Send + Sync + 'static {
+    /// Optional check for runtimes with a persistent workspace store.
+    /// The in-memory/testing delegates have no such backing storage.
+    /// Production delegates must override this to prove their configured
+    /// storage identity is still accessible without mutation.
+    fn check_storage_readiness(&self) -> Result<(), WorkspaceDelegateError> {
+        Ok(())
+    }
+
     fn create_workspace(
         &self,
         workspace_id: String,
@@ -320,6 +329,9 @@ fn workspace_error_response(error: WorkspaceDelegateError) -> axum::response::Re
         WorkspaceDelegateError::Invalid => (StatusCode::UNPROCESSABLE_ENTITY, "workspace_invalid"),
         WorkspaceDelegateError::Unavailable => {
             (StatusCode::BAD_GATEWAY, "workspace_delegate_unavailable")
+        }
+        WorkspaceDelegateError::StorageUnavailable => {
+            (StatusCode::SERVICE_UNAVAILABLE, "workspace_storage_unavailable")
         }
     };
     (status, Json(ErrorResponse { error: message })).into_response()
