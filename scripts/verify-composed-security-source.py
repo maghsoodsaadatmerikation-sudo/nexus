@@ -47,7 +47,7 @@ EXPECTED_BLOBS = {
     "scripts/data-snapshot.py": "437b4c5ee90ca013ae8aaee84184035b0b06ddd7",
     "scripts/enroll-new-volume.py": "9cd129563ff0339726137c744059bb05166b2b9a",
     "scripts/test-enroll-new-volume.py": "0e348cdc432ec0ff3cd3a05b12d2858c2ce034aa",
-    "scripts/test-volume-identity-gateway.py": "6e50e2a3d10eba4c03df63774a096126e96ea8ec",
+    "scripts/test-volume-identity-gateway.py": "8b488adc4ac7868f24692ef65eb96eed7ce56310",
     "scripts/test-data-snapshot.py": "7e73645cdcbcd3436ac729c6c913f8d821f6dcf0",
 }
 
