@@ -93,6 +93,16 @@ jobs:
           python3 -m py_compile scripts/pilot-cross-runner-recovery.py
           python3 scripts/pilot-cross-runner-recovery.py self-test
 
+      # Operator guidance is part of the deployment safety contract: a
+      # missing readiness failure or false release-green claim fails the
+      # same branch-ruleset-required status as Rust/cloud verification.
+      - name: Enforce deployment runbook and health contract
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/verify-deployment-runbook.py
+          python3 scripts/verify-deployment-runbook.py
+          python3 scripts/verify-deployment-runbook.py --self-test
+
       - name: Verify workflow authority boundary
         run: python3 scripts/verify-workflow-authority.py
 
