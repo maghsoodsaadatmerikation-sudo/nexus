@@ -30,7 +30,9 @@ window.addEventListener('load',async()=>{
 
   const manual=pause('manual.json'),pendingManual=upload(pack('es','STALE MANUAL'),'manual.json');await wait(manual.ready);change('en');manual.resolve();await pendingManual;
   assert(document.documentElement.lang==='en','late-import-cannot-override-manual-language-choice');change('es');assert(title()==='Conversación','late-import-is-not-installed-in-background');
-  const older=pause('older.json'),pendingOlder=upload(pack('es','STALE OLDER'),'older.json');await wait(older.ready);await upload(pack('fr','Conversation FR'));older.resolve();await pendingOlder;
+  const older=pause('older.json'),pendingOlder=upload(pack('es','STALE OLDER'),'older.json');await wait(older.ready);
+  const newest=pause('newest.json'),pendingNewest=upload(pack('fr','Conversation FR'),'newest.json');await wait(newest.ready);older.resolve();await pendingOlder;
+  assert(document.documentElement.lang==='es'&&title()==='Conversación','older-file-cannot-apply-while-newer-file-is-reading');newest.resolve();await pendingNewest;
   assert(document.documentElement.lang==='fr'&&title()==='Conversation FR','newest-file-selection-wins');change('es');assert(title()==='Conversación','superseded-import-does-not-replace-old-pack');change('fr');
 
   const failed=pause('failed.json'),pendingFailure=upload('{broken','failed.json');await wait(failed.ready);$('lock').click();const lockedStatus=$('status').textContent;failed.reject(Error('PRIVATE_STALE_FILE_ERROR'));await pendingFailure;
