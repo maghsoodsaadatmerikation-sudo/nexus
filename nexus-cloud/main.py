@@ -106,6 +106,12 @@ async def health() -> dict[str, str]:
 async def delegate_to_constitutional_gateway(path: str, request: Request) -> Response:
     """Forward an opaque request without authorizing or interpreting it."""
     authorizations = request.headers.getlist("authorization")
+    if not authorizations:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Bearer authentication is required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     # Both an edge proxy and the constitutional gateway must interpret the
     # same single credential. Never select the first/last duplicate header.
     if len(authorizations) != 1:
