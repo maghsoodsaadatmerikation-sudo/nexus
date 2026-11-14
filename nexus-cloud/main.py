@@ -162,10 +162,13 @@ async def _forward_to_core(
     lengths = request.headers.getlist("content-length")
     content_types = request.headers.getlist("content-type")
     encodings = request.headers.getlist("content-encoding")
+    transfer_encodings = request.headers.getlist("transfer-encoding")
     # A request can be decoded or authorized differently across HTTP hops
     # when field cardinality is ambiguous. Fail before polling the body and
     # before sending any bytes to the private core.
-    if len(lengths) > 1 or len(content_types) > 1 or len(encodings) > 1:
+    if (len(lengths) > 1 or len(content_types) > 1 or
+        len(encodings) > 1 or len(transfer_encodings) > 1 or
+        (lengths and transfer_encodings)):
         raise HTTPException(
             status_code=400,
             detail="Ambiguous delegated request headers",
@@ -186,6 +189,12 @@ async def _forward_to_core(
                 body.extend(chunk)
     except TimeoutError as exc:
         raise HTTPException(status_code=408, detail="Request body timed out") from exc
+    if declared is not None and len(body) != int(declared):
+        raise HTTPException(
+            status_code=400,
+            detail="Content-Length does not match received body",
+            headers={"Cache-Control": "no-store"},
+        )
 
     headers = {"authorization": authorization, "accept-encoding": "identity"}
     if content_types and content_types[0]:
