@@ -279,7 +279,7 @@ def target(scratch, sha, input_dir):
     exec_checked(["sudo", sys.executable, "-c",
                   "from pathlib import Path; import sys; "
                   "assert Path(sys.argv[1]).read_bytes() == "
-                  "b'snapshot-restored; replay-risk-not-acknowledged\n'",
+                  "b'snapshot-restored; replay-risk-not-acknowledged\\n'",
                   marker], timeout=10)
     p = port()
     token = secrets.token_urlsafe(48)
