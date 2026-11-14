@@ -446,6 +446,62 @@ mod tests {
     }
 
     #[test]
+    fn concurrent_creates_for_identical_workspace_id_have_one_winner() {
+        use std::sync::{Arc, Barrier};
+        use std::thread;
+
+        let root = temp_root("atomic-create-race");
+        fs::create_dir_all(&root).unwrap();
+        let initial = WorkspaceEngine::new(
+            "same-id",
+            "Original",
+            ProvenanceId::new("human"),
+        )
+        .snapshot();
+        let mut workers = Vec::new();
+        let start = Arc::new(Barrier::new(8));
+        for _ in 0..8 {
+            let root = root.clone();
+            let snapshot = initial.clone();
+            let start = Arc::clone(&start);
+            workers.push(thread::spawn(move || {
+                let mut repo = FileWorkspaceRepository::new(root).pin_root().unwrap();
+                start.wait();
+                repo.create_new(snapshot)
+            }));
+        }
+        let mut created = 0;
+        let mut duplicate = 0;
+        for handle in workers {
+            match handle.join().unwrap() {
+                Ok(()) => created += 1,
+                Err(DurableWorkspaceError::AlreadyExists) => duplicate += 1,
+                other => panic!("unexpected atomic create result: {other:?}"),
+            }
+        }
+        assert_eq!(created, 1);
+        assert_eq!(duplicate, 7);
+        let mut repository = FileWorkspaceRepository::new(&root).pin_root().unwrap();
+        assert_eq!(repository.load("same-id").unwrap(), Some(initial.clone()));
+        assert_eq!(
+            repository.create_new(initial.clone()),
+            Err(DurableWorkspaceError::AlreadyExists)
+        );
+        // Existing validated workspace history extension remains supported,
+        // while create-if-absent never replaces it.
+        let mut engine = WorkspaceEngine::from_snapshot(initial).unwrap();
+        engine.add_claim(claim("new-claim"), ProvenanceId::new("human"));
+        let extended = engine.snapshot();
+        repository.save(extended.clone()).unwrap();
+        assert_eq!(
+            repository.create_new(extended.clone()),
+            Err(DurableWorkspaceError::AlreadyExists)
+        );
+        assert_eq!(repository.load("same-id").unwrap(), Some(extended));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn durable_round_trip_preserves_snapshot() {
         let root = temp_root("round-trip");
         let mut repo = FileWorkspaceRepository::new(&root);
