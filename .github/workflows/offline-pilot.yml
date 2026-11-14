@@ -15,6 +15,7 @@ on:
       - 'scripts/test-complete-data-analysis-browser.py'
       - 'scripts/test-numeric-data-analysis-browser.py'
       - 'scripts/test-empty-data-analysis-browser.py'
+      - 'scripts/test-json-keys-data-analysis-browser.py'
       - 'scripts/test-web-research-browser.py'
       - 'scripts/test-guided-chat-browser.py'
       - 'web/guided-chat-core.js'
@@ -45,6 +46,7 @@ on:
       - 'scripts/test-complete-data-analysis-browser.py'
       - 'scripts/test-numeric-data-analysis-browser.py'
       - 'scripts/test-empty-data-analysis-browser.py'
+      - 'scripts/test-json-keys-data-analysis-browser.py'
       - 'scripts/test-web-research-browser.py'
       - 'scripts/test-guided-chat-browser.py'
       - 'web/guided-chat-core.js'
@@ -136,6 +138,17 @@ jobs:
           assert r['status']=='PASS' and len(r['reports'])==2
           assert all(required.issubset(p['checks']) and p['network_requests']==0 for p in r['reports'])
           PY
+      - name: Reject ambiguous candidate JSON fields without retaining stale results
+        run: |
+          python3 scripts/test-json-keys-data-analysis-browser.py > json-keys-data-analysis-browser.json
+          python3 - <<'PYCODE'
+          import json
+          r=json.load(open('json-keys-data-analysis-browser.json'))
+          required={f'offline-{label}-{suffix}' for label in ['plain','escaped','proto','shadowed'] for suffix in ['starts-with-valid-analysis','duplicate-clears-stale-analysis','duplicate-error-is-actionable','duplicate-cannot-export-stale-result']}
+          required.update({'offline-same-decoded-key-across-rows-is-valid','offline-duplicate-looking-text-remains-inert','offline-persian-duplicate-error-is-actionable','offline-valid-input-recovers-after-rejection'})
+          assert r['status']=='PASS' and len(r['reports'])==2
+          assert all(required.issubset(p['checks']) and p['network_requests']==0 for p in r['reports'])
+          PYCODE
       - name: Verify all-missing candidate delimited records
         run: |
           python3 scripts/test-empty-data-analysis-browser.py > empty-data-analysis-browser.json
@@ -257,6 +270,7 @@ jobs:
             complete-data-analysis-browser.json
             numeric-data-analysis-browser.json
             empty-data-analysis-browser.json
+            json-keys-data-analysis-browser.json
             web-research-browser.json
             guided-chat-browser.json
           if-no-files-found: ignore

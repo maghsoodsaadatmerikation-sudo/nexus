@@ -60,6 +60,19 @@ const GROUP_PREVIEW_LIMIT=12;
         if(!columns.includes(key)){columns.push(key);if(columns.length>ANALYSIS_MAX_COLUMNS)throw Error('json-columns');}
       }
     }
+    // JSON.parse keeps only the last duplicate property. Inspect validated raw
+    // tokens too, comparing decoded keys within each object before using values.
+    // Whole string tokens keep braces, colons and key-like text inside values inert.
+    const keyScopes=[];
+    for(const [token] of text.matchAll(/"(?:\\[\s\S]|[^"\\])*"(?:[ \t\r\n]*:)?|[{}]/g)){
+      if(token==='{')keyScopes.push(new Set());
+      else if(token==='}')keyScopes.pop();
+      else if(token.endsWith(':')){
+        const key=JSON.parse(token.slice(0,-1)),scope=keyScopes[keyScopes.length-1];
+        if(scope.has(key))throw Error('json-duplicate-key');
+        scope.add(key);
+      }
+    }
     // Syntax is validated above before rewriting numeric value tokens. Quoted
     // strings (including object keys and escapes) are copied without alteration.
     const exact=text.replace(/"(?:\\[\s\S]|[^"\\])*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/g,token=>{
@@ -137,6 +150,7 @@ const GROUP_PREVIEW_LIMIT=12;
       'Exploratory descriptive analysis only; no causal inference, diagnosis, prediction or human judgment.',
       'Values are not independently verified; missing, invalid and mixed columns can affect statistics.',
       'Every delimited record counts as a row, including entirely empty records. A trailing record terminator does not add an extra row.',
+      'JSON objects with duplicate decoded field names are rejected rather than silently keeping the last value.',
       'Numeric parsing accepts dot/Arabic decimal marks and local digits; unsafe plain integers stay categorical and plain JSON integer digits are preserved. Nonzero inputs that underflow to zero are excluded. Binary64 summaries are approximate. Non-finite results are null; labels may be shortened. Pearson uses pairwise complete cases and is not causation.']};
   }
   function analysisGroups(table,index,metric,{limit=GROUP_PREVIEW_LIMIT}={}){

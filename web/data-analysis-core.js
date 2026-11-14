@@ -150,7 +150,7 @@
       metric.value=metric.options.length>1?metric.options[1].value:'-1';
       renderAnalysisResults();$('analysis-download').disabled=false;$('analysis-claim').disabled=false;
       analysisStatus('m376');
-    }catch{if(job===analysisJob){clearAnalysis();analysisStatus('m377');}}
+    }catch(error){if(job===analysisJob){clearAnalysis();analysisStatus(error.message==='json-duplicate-key'?'m492':'m377');}}
     finally{if(job===analysisJob)$('analysis-run').disabled=false;}
   });
   $('analysis-download').addEventListener('click',()=>{
