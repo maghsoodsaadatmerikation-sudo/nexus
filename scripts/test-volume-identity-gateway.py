@@ -139,6 +139,7 @@ def exercise(binary: Path):
         ]
         subprocess.run(command, check=True, stdout=subprocess.DEVNULL, timeout=7)
 
+        # Create one durable workspace before exercising fault/restart cycles.
         gateway, p = start(binary, root)
         try:
             status, body = request(p, "POST", "/v1/workspaces", {
@@ -148,26 +149,37 @@ def exercise(binary: Path):
             })
             require(status == 201 and body["workspace"]["id"] == "retained",
                     "synthetic workspace create refused")
+        finally:
+            stop(gateway)
 
-            # The marker may be altered *after* the process starts, even
-            # while both pinned directories retain their original inodes.
-            # Admission and readiness must fail closed without restarting.
-            marker = root / ".nexus-volume-identity"
-            original_marker = marker.read_bytes()
-            baseline_workspace = sorted(path.name for path in root.glob("*.json"))
-            baseline_ledger = sorted(path.name for path in (root / "requests").iterdir())
-            for damage in ("missing", "mismatched"):
+        marker = root / ".nexus-volume-identity"
+        original_marker = marker.read_bytes()
+        baseline_workspace = sorted(path.name for path in root.glob("*.json"))
+        baseline_ledger = sorted(path.name for path in (root / "requests").iterdir())
+
+        # Each failure mode begins in a newly trusted process. Once the
+        # process observes a fault, restoring even the exact original bytes
+        # MUST NOT allow private operations until a separate clean restart.
+        for damage in ("missing", "mismatched", "same-content-replacement"):
+            gateway, p = start(binary, root)
+            retired = root / ".retired-volume-marker"
+            try:
+                require(request(p, "GET", "/v1/workspaces/retained")[0] == 200,
+                        "original workspace unavailable before fault")
                 if damage == "missing":
-                    marker.unlink()
-                else:
+                    marker.rename(retired)
+                elif damage == "mismatched":
                     marker.write_bytes(
                         b"nexus.volume-identity.v1\n" + WRONG.encode() + b"\n"
                     )
-                status, body = request(p, "GET", "/readyz")
-                require((status, body) == (503, {"status": "workspace_unavailable"}),
-                        "tampered live marker advertised ready")
+                else:
+                    marker.rename(retired)
+                    marker.write_bytes(original_marker)
+                require(request(p, "GET", "/readyz") == (
+                    503, {"status": "workspace_unavailable"}
+                ), f"live {damage} marker advertised readiness")
                 require(request(p, "GET", "/livez") == (200, {"status": "alive"}),
-                        "volume marker outage caused liveness restart loop")
+                        "volume marker outage triggered liveness restart loop")
                 for method, route, payload in (
                     ("GET", "/v1/workspaces/retained", None),
                     ("POST", "/v1/workspaces", {
@@ -178,34 +190,45 @@ def exercise(binary: Path):
                     ("GET", "/v1/requests/synthetic-id", None),
                     ("POST", "/v1/requests", {}),
                 ):
-                    status, body = request(p, method, route, payload)
-                    require((status, body) == (
+                    require(request(p, method, route, payload) == (
                         503, {"error": "volume_identity_unavailable"}
                     ), f"{method} {route} admitted when marker {damage}")
-                    status, body = request(
+                    unauthenticated, _ = request(
                         p, method, route, payload, authorized=False
                     )
-                    require(status == 401,
+                    require(unauthenticated == 401,
                             "unauthenticated caller learned or bypassed volume state")
-                require(sorted(path.name for path in root.glob("*.json")) ==
-                        baseline_workspace, "workspace data changed after marker outage")
-                require(sorted(path.name for path in (root / "requests").iterdir()) ==
-                        baseline_ledger, "request ledger changed after marker outage")
 
-            marker.write_bytes(original_marker)
-            require(request(p, "GET", "/readyz") == (200, {"status": "ready"}),
-                    "original marker restoration did not recover readiness")
-            status, body = request(p, "GET", "/v1/workspaces/retained")
-            require(status == 200 and body["workspace"]["id"] == "retained",
-                    "original workspace unavailable after marker restoration")
-        finally:
-            stop(gateway)
+                # Restore the *same original inode* in two cases, not merely
+                # a same-value replacement, before trying the old process.
+                if damage in ("missing", "same-content-replacement"):
+                    if marker.exists():
+                        marker.unlink()
+                    retired.rename(marker)
+                else:
+                    marker.write_bytes(original_marker)
+                require(request(p, "GET", "/readyz") == (
+                    503, {"status": "workspace_unavailable"}
+                ), "fault latch cleared without a trusted restart")
+                require(request(p, "GET", "/v1/workspaces/retained") == (
+                    503, {"error": "volume_identity_unavailable"}
+                ), "private API resumed after marker restoration without restart")
+                require(sorted(path.name for path in root.glob("*.json")) ==
+                        baseline_workspace, "workspace changed during latched fault")
+                require(sorted(path.name for path in (root / "requests").iterdir()) ==
+                        baseline_ledger, "request ledger changed during latched fault")
+            finally:
+                stop(gateway)
+            # The next process starts with the exact known marker restored;
+            # successful startup must not silently dismiss recovery quarantine.
+            require(marker.read_bytes() == original_marker,
+                    "fault test did not restore marker for next process")
 
         gateway, p = start(binary, root)
         try:
             status, body = request(p, "GET", "/v1/workspaces/retained")
             require(status == 200 and body["workspace"]["id"] == "retained",
-                    "restart lost synthetic workspace")
+                    "trusted restart lost the original synthetic workspace")
         finally:
             stop(gateway)
 
