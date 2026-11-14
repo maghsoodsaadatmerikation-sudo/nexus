@@ -65,7 +65,12 @@ def require_shape(value):
         raise ValueError("unrecognized integration schema")
     if value["base_commit"] != EXPECTED_BASE:
         raise ValueError("wrong base commit")
-    if value["boundary"] != EXPECTED_BOUNDARY:
+    boundary = value["boundary"]
+    if (not isinstance(boundary, dict) or set(boundary) != set(EXPECTED_BOUNDARY)
+        or type(boundary["production_mutation"]) is not bool
+        or type(boundary["release_attestation"]) is not bool
+        or type(boundary["claim"]) is not str
+        or boundary != EXPECTED_BOUNDARY):
         raise ValueError("unexpected authority or production claim")
     inputs = value["inputs"]
     if not isinstance(inputs, list) or len(inputs) != len(EXPECTED):
@@ -131,6 +136,9 @@ def self_test():
         lambda o: o["inputs"][0].update(head_commit="0" * 40),
         lambda o: o["inputs"][1]["files"][0].update(path="../untrusted"),
         lambda o: o["boundary"].update(production_mutation=True),
+        lambda o: o["boundary"].update(production_mutation=0),
+        lambda o: o["boundary"].update(release_attestation=0),
+        lambda o: o["boundary"].update(release_attestation=1),
         lambda o: o.update(base_commit="0" * 40),
     )
     for mutate in changes:
