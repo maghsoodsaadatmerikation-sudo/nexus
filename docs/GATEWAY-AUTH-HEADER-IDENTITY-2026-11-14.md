@@ -18,6 +18,11 @@ duplicate-field checks introduced in the optional cloud-adapter branch
   This is a best-effort timing improvement; compiler, hardware, network,
   header-length and length-dependent effects prevent claiming a formal
   constant-time guarantee.
+- Rejects empty, whitespace-bearing, control-byte and non-ASCII
+  configured tokens at startup. Those tokens cannot be reliably represented
+  by clients in a single HTTP Bearer field and previously could start an
+  apparently healthy but unusable service. This is a deliberate fail-closed
+  startup configuration change; operators must use printable ASCII tokens.
 - Preserves explicit local unauthenticated mode when no token is configured.
   That mode must never be exposed on an untrusted network.
 - Keeps existing response codes, request shapes, safety budgets,
