@@ -1934,10 +1934,16 @@ root.NexusTable=Object.freeze({parse,parseDelimited,normalizedTable,parseJsonTab
     const w=original.workspace;
     const provenance='offline-bridge:user-supplied-unattested';
     const uncertainty={unknown:'Unknown',high:'High',medium:'Medium',low:'Low'};
+    // The offline user may *report* machine analysis, but this local page
+    // cannot attest a real adapter execution or run ID. Transport it as
+    // explicitly unverified external evidence, never forge a Rust
+    // MachineAnalysisRecorded event or silently grant machine provenance.
     const claims=w.claims.map(c=>({
       id:c.id,text:c.text,
       origin:c.origin==='external_evidence'?{ExternalEvidence:{source:c.source}}:
-             c.origin==='machine_analysis'?'MachineAnalysis':'Human',
+             c.origin==='machine_analysis'
+               ?{ExternalEvidence:{source:'offline-bridge:user-reported-machine-analysis-unattested'}}
+               :'Human',
       uncertainty:uncertainty[c.uncertainty]
     }));
     const alternatives=w.alternatives.map(a=>({
