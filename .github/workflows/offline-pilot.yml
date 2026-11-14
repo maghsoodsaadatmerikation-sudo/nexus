@@ -17,6 +17,7 @@ on:
       - 'scripts/test-empty-data-analysis-browser.py'
       - 'scripts/test-json-keys-data-analysis-browser.py'
       - 'scripts/test-xlsx-data-analysis-browser.py'
+      - 'scripts/test-workbook-data-analysis-browser.py'
       - 'scripts/test-xlsx-analysis.mjs'
       - 'scripts/test-web-research-browser.py'
       - 'scripts/test-guided-chat-browser.py'
@@ -50,6 +51,7 @@ on:
       - 'scripts/test-empty-data-analysis-browser.py'
       - 'scripts/test-json-keys-data-analysis-browser.py'
       - 'scripts/test-xlsx-data-analysis-browser.py'
+      - 'scripts/test-workbook-data-analysis-browser.py'
       - 'scripts/test-xlsx-analysis.mjs'
       - 'scripts/test-web-research-browser.py'
       - 'scripts/test-guided-chat-browser.py'
@@ -142,6 +144,18 @@ jobs:
           assert r['status']=='PASS' and len(r['reports'])==2
           assert all(required.issubset(p['checks']) and p['network_requests']==0 for p in r['reports'])
           PY
+      - name: Verify declared workbook selection and worksheet provenance
+        run: |
+          python3 scripts/test-workbook-data-analysis-browser.py > workbook-data-analysis-browser.json
+          python3 - <<'PYCODE'
+          import json
+          r=json.load(open('workbook-data-analysis-browser.json'))
+          required={f'workbook-{label}-{suffix}' for label in ['external','missing','unknown','duplicate'] for suffix in ['starts-with-valid-analysis','ambiguous-selection-clears-stale-result','selection-error-is-actionable','cannot-export-stale-result']}
+          required.update({f'workbook-{label}-relationship-values-preserved' for label in ['absolute','shared','strict','hidden']})
+          required.update({'workbook-order-and-relationship-select-correct-values','workbook-selection-and-coverage-visible','workbook-source-hash-remains-raw-byte-identity','workbook-absolute-target-provenance-preserved','workbook-hidden-state-disclosed-and-name-inert','workbook-persian-selection-error-is-actionable','workbook-selection-label-translates','workbook-valid-input-recovers-after-rejection'})
+          assert r['status']=='PASS' and len(r['reports'])==2
+          assert all(required.issubset(p['checks']) and p['network_requests']==0 for p in r['reports'])
+          PYCODE
       - name: Verify XLSX cell references agree with their containing rows
         run: |
           node scripts/test-xlsx-analysis.mjs
@@ -288,6 +302,7 @@ jobs:
             empty-data-analysis-browser.json
             json-keys-data-analysis-browser.json
             xlsx-data-analysis-browser.json
+            workbook-data-analysis-browser.json
             web-research-browser.json
             guided-chat-browser.json
           if-no-files-found: ignore
