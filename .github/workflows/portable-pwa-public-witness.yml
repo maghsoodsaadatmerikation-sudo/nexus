@@ -9,6 +9,8 @@ on:
       - 'scripts/test-portable-pwa-browser.mjs'
       - 'scripts/prepare-portable-pwa-preview.py'
       - 'scripts/build-portable-pwa-kit.py'
+      - 'web/mobile-readiness.html'
+      - 'scripts/test-mobile-readiness-browser.py'
   workflow_dispatch:
 
 permissions:
@@ -38,7 +40,7 @@ jobs:
         run: |
           python3 -m py_compile scripts/observe-portable-pwa-preview.py scripts/test-observe-portable-pwa-preview.py
           python3 scripts/test-observe-portable-pwa-preview.py
-      - name: Compare all eight HTTPS assets against exact frozen source
+      - name: Compare all nine HTTPS assets against exact frozen source
         run: |
           set -euo pipefail
           python3 scripts/observe-portable-pwa-preview.py > "$RUNNER_TEMP/preview-public-assets.json"
@@ -47,7 +49,7 @@ jobs:
           from pathlib import Path
           r=json.loads((Path(os.environ['RUNNER_TEMP'])/'preview-public-assets.json').read_text())
           assert r['status']=='PASS_PUBLIC_HTTPS_IDENTITY'
-          assert r['passed_assets']==r['checked_public_assets']==8
+          assert r['passed_assets']==r['checked_public_assets']==9
           assert r['deployed_source_sha']=='26aab8d7a27f7329199e0e0e8d3fe21f055e377e'
           assert r['credentials_used'] is False and r['production_data_touched'] is False
           assert r['railway_restore_proven'] is False and r['release_authorized'] is False
@@ -60,6 +62,7 @@ jobs:
       - name: Real Chromium on public HTTPS, then disable browser network
         env:
           NEXUS_PUBLIC_PWA_PREVIEW: 'true'
+          NEXUS_MOBILE_READINESS_PUBLIC: 'true'
           NEXUS_PORTABLE_DIR: ${{ runner.temp }}/preview-expected/nexus
         run: |
           set -euo pipefail
@@ -70,7 +73,7 @@ jobs:
           from pathlib import Path
           r=json.loads((Path(os.environ['RUNNER_TEMP'])/'preview-public-browser.json').read_text())
           assert r['schema']=='nexus.portable.installable-browser.v1'
-          assert r['status']=='PASS' and len(r['checks'])==8
+          assert r['status']=='PASS' and len(r['checks'])==9
           assert r['actual_offline_navigation'] is True
           assert r['real_android_hardware'] is False
           assert r['private_data_submitted'] is False
