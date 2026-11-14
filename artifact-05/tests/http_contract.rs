@@ -1678,3 +1678,36 @@ async fn a_single_exact_bearer_still_authorizes_without_prefix_equivalence() {
     assert_eq!(response.status(), StatusCode::ACCEPTED);
     assert_eq!(delegate.requests.lock().unwrap().len(), 1);
 }
+
+
+#[test]
+fn invalid_runtime_bearer_tokens_fail_at_configuration_not_during_requests() {
+    // Misconfigured credentials can otherwise make a healthy server
+    // permanently unreachable. HTTP Bearer header bytes must be representable.
+    for token in [
+        "",
+        " ",
+        "secret ",
+        " secret",
+        "a b",
+        "secret\\n",
+        "secret\\r",
+        "secret\\t",
+        "caf\\u{00e9}",
+        "\\u{007f}",
+    ] {
+        let result = std::panic::catch_unwind(|| {
+            AppState::authenticated(RecordingDelegate::default(), token)
+        });
+        assert!(result.is_err(), "invalid token accepted: {token:?}");
+    }
+    for token in ["secret", "ci-smoke-token", "opaque.token-0", "abc_+/="] {
+        assert!(
+            std::panic::catch_unwind(|| {
+                AppState::authenticated(RecordingDelegate::default(), token)
+            })
+            .is_ok(),
+            "valid token rejected: {token:?}"
+        );
+    }
+}
