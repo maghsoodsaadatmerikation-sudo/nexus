@@ -128,7 +128,12 @@ class Vault{
  async unlock(pass){return this.run(async check=>{const raw=await this.store.read();if(!raw)fail('archive-missing');const opened=await decrypt(raw,pass);check();Object.assign(this,{key:opened.key,salt:opened.salt,raw:opened.raw});return copy(opened.data)})}
  async save(value){const data=state(value);return this.run(async check=>{if(!this.unlocked)fail('locked');const raw=await encrypt(data,this.key,this.salt);check();await this.store.commit(envelope(this.raw).revision,raw,()=>{try{check();return true}catch{return false}});check();this.raw=raw})}
  async export(value,pass){const data=state(value);return this.run(async check=>{const salt=crypto.getRandomValues(new Uint8Array(16)),key=await keyFor(pass,salt),raw=await encrypt(data,key,salt);check();return raw})}
- async erase(){return this.run(async check=>{if(!this.unlocked)fail('locked');await this.store.commit(envelope(this.raw).revision,null,()=>{try{check();return true}catch{return false}});check();this.lock()})}
+ async erase({signal}={}){return this.run(async check=>{
+  const current=()=>{check();if(signal?.aborted)fail('cancelled')};current();if(!this.unlocked)fail('locked');
+  await this.store.commit(envelope(this.raw).revision,null,()=>{try{current();return true}catch{return false}});
+  // A completed delete cannot be undone by a later cancellation; always clear its key.
+  check();this.lock();
+ })}
 }
 root.NexusStudio=Object.freeze({SCHEMA,MAX,state,empty,project,thread,path,append,context,search,retrieve,guide,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
 })(globalThis);
