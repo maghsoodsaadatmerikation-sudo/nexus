@@ -26,6 +26,7 @@ PUBLIC = {
     "nexus/index.html", "nexus/service-worker.js", "nexus/manifest.json",
     "nexus/icons/nexus-192.png", "nexus/icons/nexus-512.png",
     "nexus/PWA-KIT.json", "nexus/START-HERE.txt",
+    "nexus/device-check.html",
 }
 ENTRY = ("""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -36,11 +37,29 @@ ENTRY = ("""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <h1>NEXUS Mobile Preview</h1>
 <p>Public static beta. No account, online model, or production gateway.</p>
 <p><a href="./nexus/">Open the installable NEXUS workshop</a></p>
+<p><a href="./nexus/device-check.html">Check compatibility on your device (no data sent)</a></p>
 <p lang="fa" dir="rtl">نسخه آزمایشی عمومی؛ بدون اتصال به اطلاعات تولید.
 <a href="./nexus/">ورود به نسخهٔ قابل‌نصب</a></p>
 <p>Prepare offline mode from inside the app; encrypted work exports remain yours.</p>
 </body></html>
 """).encode("utf-8")
+
+
+def device_check_page(shell):
+    template = (ROOT / "web/mobile-readiness.html").read_text("utf-8")
+    marker = "__NEXUS_SHELL_SHA256__"
+    KIT.require(template.count(marker) == 1, "diagnostic-hash-marker-drift")
+    KIT.require("connect-src 'none'" in template and
+                "worker-src 'none'" in template and
+                "form-action 'none'" in template and
+                "nexus.device-readiness.self-report.v1" in template and
+                "navigator.serviceWorker.register(" not in template and
+                "fetch(" not in template and
+                "XMLHttpRequest" not in template,
+                "diagnostic-privacy-contract-drift")
+    result = template.replace(marker, KIT.digest(shell)).encode("utf-8")
+    KIT.require(0 < len(result) < 60_000, "oversized-diagnostic")
+    return result
 
 
 def expected(commit):
@@ -52,7 +71,10 @@ def expected(commit):
         names = [item.filename for item in infos]
         KIT.require(len(names) == len(PUBLIC) and set(names) == PUBLIC,
                     "unexpected-preview-asset")
-        return {"index.html": ENTRY, **{name: archive.read(name) for name in names}}
+        site = {"index.html": ENTRY, **{name: archive.read(name) for name in names}}
+        site["nexus/device-check.html"] = device_check_page(site["nexus/index.html"])
+        KIT.require(set(site) == PUBLIC | {"index.html"}, "untracked-public-site-file")
+        return site
 
 
 def file_is_safe(root, path):
