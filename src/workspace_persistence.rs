@@ -506,7 +506,6 @@ mod tests {
         // A symlink alias to the original directory must not be accepted
         // as a recovery of the configured actual directory pathname.
         fs::remove_dir_all(&parent).unwrap();
-        std::os::unix::fs::symlink(moved.join("workspaces"), &root).unwrap_err();
         fs::create_dir_all(&parent).unwrap();
         std::os::unix::fs::symlink(moved.join("workspaces"), &root).unwrap();
         assert_eq!(repo.load("w"), Err(DurableWorkspaceError::Io));
