@@ -258,9 +258,17 @@ def test_ambiguous_provider_output_is_rejected_and_recovers(monkeypatch, raw):
 
 @pytest.mark.parametrize('raw', [
     b'{"consent":true,"messages":[],"x":NaN}',
-    b'\\xff',
+    bytes([255]),
     b'{"nested":{"x":1,"x":2}}',
 ])
 def test_strict_json_parser_rejects_nonportable_payloads(raw):
     with pytest.raises((ValueError, UnicodeError)):
         model.parse_unambiguous_json(raw)
+
+
+def test_non_utf8_json_with_valid_fields_is_rejected(monkeypatch):
+    import json
+    with configured(monkeypatch, lambda _:pytest.fail('non-UTF8 JSON forwarded')) as c:
+        raw = json.dumps(BODY).encode('utf-16')
+        assert c.post('/studio-api/respond', content=raw,
+                      headers={**AUTH,'content-type':'application/json'}).status_code == 422
