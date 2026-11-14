@@ -13,6 +13,8 @@ on:
       - 'public/manifest.json'
       - 'public/icons/**'
       - 'docs/PORTABLE-PWA-PREVIEW.md'
+      - 'web/mobile-readiness.html'
+      - 'scripts/test-mobile-readiness-browser.py'
   workflow_dispatch:
 
 permissions:
@@ -55,12 +57,12 @@ jobs:
           root=Path(os.environ['RUNNER_TEMP'])
           report=json.loads((root/'nexus-preview-verify.json').read_text())
           assert report['status']=='PUBLIC_STATIC_PREVIEW_VERIFIED'
-          assert report['files']==8 and report['candidate_sha']==os.environ['GITHUB_SHA']
+          assert report['files']==9 and report['candidate_sha']==os.environ['GITHUB_SHA']
           assert report['private_data_included'] is False
           assert report['production_deployed'] is False
           assert report['release_authorized'] is False
           assert report['authority']=='none'
-          print('PREVIEW BUILD: EXACTLY EIGHT PUBLIC FILES VERIFIED')
+          print('PREVIEW BUILD: EXACTLY NINE PUBLIC FILES VERIFIED')
           PY
       - name: Test opt-in install, true offline reload, and uninstall on scoped path
         env:
@@ -98,6 +100,23 @@ jobs:
           assert report['authority']=='none'
           print('PREVIEW INSTALL/OFFLINE/ISOLATION: PASS')
           PY
+      - name: Test privacy-only mobile diagnostics in real Chromium
+        run: |
+          set -euo pipefail
+          python3 scripts/test-mobile-readiness-browser.py > "$RUNNER_TEMP/device-readiness-browser.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          report=json.loads((Path(os.environ['RUNNER_TEMP'])/'device-readiness-browser.json').read_text())
+          assert report['schema']=='nexus.mobile-device-readiness-browser.v1'
+          assert report['status']=='PASS' and report['checks']==11
+          assert report['zero_network_requests'] is True
+          assert report['personal_identifiers_exported'] is False
+          assert report['private_workspace_read'] is False
+          assert report['real_android_hardware_tested'] is False
+          assert report['production_verified'] is False and report['authority']=='none'
+          print('NEXUS MOBILE READINESS: PRIVACY-SAFE REAL CHROMIUM TEST PASS')
+          PY
       - name: Publish only sanitized CI witnesses (not an external deployment)
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
@@ -105,5 +124,6 @@ jobs:
           path: |
             ${{ runner.temp }}/nexus-preview-verify.json
             ${{ runner.temp }}/preview-chrome.json
+            ${{ runner.temp }}/device-readiness-browser.json
           retention-days: 7
           if-no-files-found: error
