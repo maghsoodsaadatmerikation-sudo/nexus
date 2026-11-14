@@ -20,6 +20,7 @@ pub enum DurableWorkspaceError {
     JudgmentAuditMismatch,
     HistoryRollback,
     HistoryDivergence,
+    AlreadyExists,
     Io,
     Serialization,
     IdentityMismatch,
@@ -103,7 +104,26 @@ impl FileWorkspaceRepository {
         Ok(directory)
     }
 
+    /// Atomically create an ID exactly once, even when separate gateway
+    /// processes race. The existence check happens *inside* the same
+    /// cross-process directory lock as the durable rename, never before it.
+    pub fn create_new(
+        &mut self,
+        snapshot: WorkspaceSnapshot,
+    ) -> Result<(), DurableWorkspaceError> {
+        self.write_snapshot(snapshot, true)
+    }
+
+    /// Preserve audit-checked append/update semantics for existing workspaces.
     pub fn save(&mut self, snapshot: WorkspaceSnapshot) -> Result<(), DurableWorkspaceError> {
+        self.write_snapshot(snapshot, false)
+    }
+
+    fn write_snapshot(
+        &mut self,
+        snapshot: WorkspaceSnapshot,
+        must_be_absent: bool,
+    ) -> Result<(), DurableWorkspaceError> {
         validate_snapshot(&snapshot)?;
         let directory = self.open_directory(true)?.ok_or(DurableWorkspaceError::Io)?;
         let path = directory.path_for(&snapshot.workspace.id);
@@ -116,6 +136,9 @@ impl FileWorkspaceRepository {
             .map_err(|_| DurableWorkspaceError::Io)?;
         directory.verify()?;
         if let Some(existing) = directory.load(&snapshot.workspace.id)? {
+            if must_be_absent {
+                return Err(DurableWorkspaceError::AlreadyExists);
+            }
             validate_history_extension(&existing, &snapshot)?;
         }
 
