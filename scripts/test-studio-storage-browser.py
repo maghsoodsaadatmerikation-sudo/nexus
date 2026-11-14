@@ -25,7 +25,7 @@ window.addEventListener('load',async()=>{
   window.confirm=()=>true;window.fetch=()=>{throw Error('unexpected-network')};
   assert(await store.read()===null,'absent-key-is-an-empty-store');
   const project=S.project('SYNTHETIC PRIVATE STORAGE PROJECT');project.threads=[S.append(S.thread('Chat'),'user','SYNTHETIC PRIVATE QUESTION','human')];
-  const data={schema:S.SCHEMA,projects:[project]};await vault.create(pass);await vault.save(data);let raw=await direct(false);
+  const data=S.state({schema:S.SCHEMA,projects:[project]});await vault.create(pass);await vault.save(data);let raw=await direct(false);
   assert(!raw.includes('SYNTHETIC PRIVATE'),'only-ciphertext-persisted');
   for(const [i,damaged] of ['',false,0,null,'{broken','{}',JSON.stringify({schema:S.SCHEMA})].entries()){
    await direct(true,damaged);await fails(store.read(),'archive-damaged');
