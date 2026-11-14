@@ -1,6 +1,7 @@
 /* NEXUS Studio: bounded project-scoped conversation and artifact state. */
 (function(root){'use strict';
 const SCHEMA='nexus.studio.v1',MAX=4*1024*1024,enc=new TextEncoder(),dec=new TextDecoder('utf-8',{fatal:true});
+const MAX_SOURCES=12,MAX_SOURCE_BYTES=262144;
 const fail=code=>{throw Error(code)},copy=x=>JSON.parse(JSON.stringify(x)),uid=()=>root.crypto.randomUUID();
 function text(s,n,required=false){if(typeof s!=='string'||s.length>n||(required&&!s.trim()))fail('invalid-text');return s}
 function id(s){if(typeof s!=='string'||!/^[a-zA-Z0-9-]{1,80}$/.test(s))fail('invalid-id');return s}
@@ -9,7 +10,7 @@ function unique(xs){if(new Set(xs).size!==xs.length)fail('duplicate-id')}
 function state(v){
  if(!v||v.schema!==SCHEMA)fail('schema');
  const projects=array(v.projects,12).map(p=>{
-  const sources=array(p.sources,12).map(s=>({id:id(s.id),name:text(s.name,160,true),text:text(s.text,262144,true)}));unique(sources.map(s=>s.id));
+  const sources=array(p.sources,MAX_SOURCES).map(s=>({id:id(s.id),name:text(s.name,160,true),text:text(s.text,MAX_SOURCE_BYTES,true)}));unique(sources.map(s=>s.id));
   const threads=array(p.threads,60).map(t=>{
    const seen=new Map();const nodes=array(t.nodes,400).map(n=>{
     id(n.id);if(seen.has(n.id))fail('duplicate-id');
@@ -30,6 +31,23 @@ function state(v){
 function empty(){return {schema:SCHEMA,projects:[]}}
 function project(title){return {id:uid(),title:text(title,120,true),instructions:'',memories:[],threads:[],sources:[],documents:[]}}
 function thread(title){return {id:uid(),title:text(title,120,true),archived:false,head:null,nodes:[]}}
+async function readSources(files,{signal}={}){
+ const current=()=>{if(signal?.aborted)fail('cancelled')};current();
+ if(!Array.isArray(files)||!files.length||files.length>MAX_SOURCES)fail('source-files');
+ const selected=[...files];
+ // Check every file's metadata before starting any local reads.
+ for(const file of selected){
+  if(!file||typeof file.name!=='string'||!file.name.trim()||file.name.length>160||! /\.(txt|md|csv|tsv|json)$/i.test(file.name)||!Number.isSafeInteger(file.size)||file.size<0||file.size>MAX_SOURCE_BYTES||typeof file.arrayBuffer!=='function')fail('source-file');
+ }
+ const sources=[];
+ for(const file of selected){
+  current();const bytes=await file.arrayBuffer();current();
+  if(!(bytes instanceof ArrayBuffer)||bytes.byteLength!==file.size||bytes.byteLength>MAX_SOURCE_BYTES)fail('source-file');
+  const body=dec.decode(bytes);text(body,MAX_SOURCE_BYTES,true);
+  sources.push({id:uid(),name:file.name,text:body});
+ }
+ current();return sources;
+}
 function path(t,head=t.head){const map=new Map(t.nodes.map(n=>[n.id,n])),out=[],seen=new Set();while(head!==null){const n=map.get(head);if(!n||seen.has(head))fail('invalid-parent');seen.add(head);out.unshift(copy(n));head=n.parent}return out}
 function append(t,role,body,origin,parent=t.head){
  const n={id:uid(),parent,role,text:text(body,24000,true),origin};
@@ -161,5 +179,5 @@ class Vault{
   check();if(signal?.aborted)Object.assign(this,{key:null,salt:null,raw:null,data:null});else this.lock();
  },{signal})}
 }
-root.NexusStudio=Object.freeze({SCHEMA,MAX,state,empty,project,thread,path,append,context,search,retrieve,guide,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
+root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,state,empty,project,thread,readSources,path,append,context,search,retrieve,guide,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
 })(globalThis);
