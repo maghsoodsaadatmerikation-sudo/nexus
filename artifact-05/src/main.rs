@@ -7,8 +7,8 @@ use nexus_artifact_05_gateway::{
     WorkspaceDelegate, WorkspaceDelegateError,
 };
 use nexus_constitutional_core::{
-    Alternative, AnalysisBatch, Claim, FileWorkspaceRepository, HumanJudgment, PolicyEngine,
-    ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceSnapshot,
+    Alternative, AnalysisBatch, Claim, DurableWorkspaceError, FileWorkspaceRepository,
+    HumanJudgment, PolicyEngine, ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceSnapshot,
 };
 use serde::Serialize;
 use std::{net::SocketAddr, path::PathBuf, sync::Mutex, time::Duration};
@@ -30,13 +30,18 @@ async fn runtime_identity() -> Json<RuntimeIdentity> {
 
 struct CoreDelegate {
     workspaces: Mutex<FileWorkspaceRepository>,
+    // Independent read-only probe: readiness must not wait for a writer's mutex.
+    workspace_probe: FileWorkspaceRepository,
 }
 
 impl CoreDelegate {
-    fn new(root: PathBuf) -> Self {
-        Self {
-            workspaces: Mutex::new(FileWorkspaceRepository::new(root)),
-        }
+    fn new(root: PathBuf) -> Result<Self, DurableWorkspaceError> {
+        let repository = FileWorkspaceRepository::new(root).pin_root()?;
+        let workspace_probe = repository.clone();
+        Ok(Self {
+            workspaces: Mutex::new(repository),
+            workspace_probe,
+        })
     }
 }
 
@@ -52,7 +57,21 @@ impl ConstitutionalDelegate for CoreDelegate {
     }
 }
 
+fn map_durable_error(error: DurableWorkspaceError) -> WorkspaceDelegateError {
+    match error {
+        DurableWorkspaceError::Io => WorkspaceDelegateError::StorageUnavailable,
+        DurableWorkspaceError::AlreadyExists => WorkspaceDelegateError::AlreadyExists,
+        _ => WorkspaceDelegateError::Invalid,
+    }
+}
+
 impl WorkspaceDelegate for CoreDelegate {
+    fn check_storage_readiness(&self) -> Result<(), WorkspaceDelegateError> {
+        self.workspace_probe
+            .check_runtime_readiness()
+            .map_err(map_durable_error)
+    }
+
     fn create_workspace(
         &self,
         workspace_id: String,
@@ -63,17 +82,10 @@ impl WorkspaceDelegate for CoreDelegate {
             .workspaces
             .lock()
             .map_err(|_| WorkspaceDelegateError::Unavailable)?;
-        if repository
-            .load(&workspace_id)
-            .map_err(|_| WorkspaceDelegateError::Invalid)?
-            .is_some()
-        {
-            return Err(WorkspaceDelegateError::AlreadyExists);
-        }
         let snapshot = WorkspaceEngine::new(workspace_id, question, provenance_id).snapshot();
         repository
-            .save(snapshot.clone())
-            .map_err(|_| WorkspaceDelegateError::Invalid)?;
+            .create_new(snapshot.clone())
+            .map_err(map_durable_error)?;
         Ok(snapshot)
     }
 
@@ -87,16 +99,9 @@ impl WorkspaceDelegate for CoreDelegate {
             .workspaces
             .lock()
             .map_err(|_| WorkspaceDelegateError::Unavailable)?;
-        if repository
-            .load(&snapshot.workspace.id)
-            .map_err(|_| WorkspaceDelegateError::Invalid)?
-            .is_some()
-        {
-            return Err(WorkspaceDelegateError::AlreadyExists);
-        }
         repository
-            .save(snapshot.clone())
-            .map_err(|_| WorkspaceDelegateError::Invalid)?;
+            .create_new(snapshot.clone())
+            .map_err(map_durable_error)?;
         Ok(snapshot)
     }
 
@@ -108,7 +113,7 @@ impl WorkspaceDelegate for CoreDelegate {
             .lock()
             .map_err(|_| WorkspaceDelegateError::Unavailable)?
             .load(workspace_id)
-            .map_err(|_| WorkspaceDelegateError::Invalid)?
+            .map_err(map_durable_error)?
             .ok_or(WorkspaceDelegateError::NotFound)
     }
 
@@ -169,7 +174,7 @@ impl CoreDelegate {
             .map_err(|_| WorkspaceDelegateError::Unavailable)?;
         let snapshot = repository
             .load(workspace_id)
-            .map_err(|_| WorkspaceDelegateError::Invalid)?
+            .map_err(map_durable_error)?
             .ok_or(WorkspaceDelegateError::NotFound)?;
         let mut engine = WorkspaceEngine::from_snapshot(snapshot)
             .map_err(|_| WorkspaceDelegateError::Invalid)?;
@@ -177,7 +182,7 @@ impl CoreDelegate {
         let snapshot = engine.snapshot();
         repository
             .save(snapshot.clone())
-            .map_err(|_| WorkspaceDelegateError::Invalid)?;
+            .map_err(map_durable_error)?;
         Ok(snapshot)
     }
 }
@@ -215,8 +220,12 @@ async fn main() {
         Duration::from_secs(rate_window_seconds),
         max_tracked_requests,
     );
+    // Pin the workspace directory before serving. If the volume later
+    // vanishes or gets replaced, its next operation must fail closed rather
+    // than adopt the substitute directory as the workspace store.
+    let core_delegate = CoreDelegate::new(data_root.clone()).expect("pin workspace data root");
     let app = router(
-        AppState::authenticated(CoreDelegate::new(data_root.clone()), token)
+        AppState::authenticated(core_delegate, token)
             .with_safety(safety)
             .with_recovery_gate(&data_root)
             .expect("inspect recovery quarantine")
@@ -251,4 +260,189 @@ fn positive_env_u64(name: &str, default: u64) -> u64 {
         .checked_sub(1)
         .map(|value| value + 1)
         .expect("safety limit must be positive")
+}
+
+#[cfg(test)]
+mod operational_storage_tests {
+    use super::*;
+    use axum::{
+        body::{to_bytes, Body},
+        http::{Request, StatusCode},
+    };
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn distinct_gateway_instances_never_both_create_same_workspace() {
+        let root =
+            std::env::temp_dir().join(format!("nexus-atomic-gateway-{}", uuid::Uuid::new_v4()));
+        // Separate CoreDelegate instances simulate separate gateway processes:
+        // their in-process mutexes are unrelated but filesystem locks coordinate.
+        let first = router(AppState::authenticated(
+            CoreDelegate::new(root.clone()).unwrap(),
+            "test-secret",
+        ));
+        let second = router(AppState::authenticated(
+            CoreDelegate::new(root.clone()).unwrap(),
+            "test-secret",
+        ));
+        let create = r#"{"workspace_id":"one","question":"Q","provenance_id":"user"}"#;
+        let post = |app: axum::Router, route: &'static str, bytes: String| async move {
+            app.oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(route)
+                    .header("authorization", "Bearer test-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(bytes))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .status()
+        };
+        let (a, b) = tokio::join!(
+            post(first.clone(), "/v1/workspaces", create.to_owned()),
+            post(second.clone(), "/v1/workspaces", create.to_owned())
+        );
+        assert!(
+            (a == StatusCode::CREATED && b == StatusCode::CONFLICT)
+                || (a == StatusCode::CONFLICT && b == StatusCode::CREATED),
+            "create race should yield exactly one success: {a} and {b}"
+        );
+        let snapshot =
+            WorkspaceEngine::new("import-id", "Original", ProvenanceId::new("user")).snapshot();
+        let imported = serde_json::to_string(&snapshot).unwrap();
+        assert_eq!(
+            post(first, "/v1/workspaces/import", imported.clone()).await,
+            StatusCode::CREATED
+        );
+        assert_eq!(
+            post(second, "/v1/workspaces/import", imported).await,
+            StatusCode::CONFLICT
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn live_workspace_mount_substitution_flips_readiness_and_storage_errors() {
+        let root = std::env::temp_dir().join(format!(
+            "nexus-workspace-readiness-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let moved = root.with_extension("moved");
+        let delegate = CoreDelegate::new(root.clone()).unwrap();
+        delegate
+            .create_workspace(
+                "original".into(),
+                "Question".into(),
+                ProvenanceId::new("user"),
+            )
+            .unwrap();
+        let app = router(AppState::authenticated(delegate, "test-secret"));
+        let initial = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(initial.status(), StatusCode::OK);
+
+        // Simulate the live workspace directory being replaced by an empty,
+        // writable directory. Request ledger health does not cover this test.
+        std::fs::rename(&root, &moved).unwrap();
+        std::fs::create_dir(&root).unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        let bytes = to_bytes(response.into_body(), 128).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+            serde_json::json!({"status":"workspace_unavailable"})
+        );
+
+        for (method, path, body) in [
+            ("GET", "/v1/workspaces/original", ""),
+            (
+                "POST",
+                "/v1/workspaces",
+                r#"{"workspace_id":"substitute","question":"Q","provenance_id":"p"}"#,
+            ),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(path)
+                        .header("authorization", "Bearer test-secret")
+                        .header("content-type", "application/json")
+                        .body(Body::from(body))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::SERVICE_UNAVAILABLE,
+                "{method} {path}"
+            );
+            let bytes = to_bytes(response.into_body(), 128).await.unwrap();
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+                serde_json::json!({"error":"workspace_storage_unavailable"})
+            );
+        }
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+        let alive = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/livez")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(alive.status(), StatusCode::OK);
+
+        // Only the exact pinned directory inode restores readiness.
+        std::fs::remove_dir(&root).unwrap();
+        std::fs::rename(&moved, &root).unwrap();
+        let restored = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(restored.status(), StatusCode::OK);
+        let loaded = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/workspaces/original")
+                    .header("authorization", "Bearer test-secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(loaded.status(), StatusCode::OK);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

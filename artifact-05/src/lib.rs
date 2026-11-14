@@ -244,9 +244,12 @@ impl<D: ConstitutionalDelegate> AppState<D> {
 
     pub fn authenticated(delegate: D, token: impl Into<String>) -> Self {
         let token = token.into();
+        // An invisible whitespace/control/non-ASCII token cannot be used
+        // reliably as an HTTP Bearer field. Fail at configuration time,
+        // rather than booting a seemingly healthy but inaccessible gateway.
         assert!(
-            !token.trim().is_empty(),
-            "authentication token must not be empty"
+            !token.is_empty() && token.bytes().all(|byte| byte.is_ascii_graphic()),
+            "authentication token must be nonempty printable ASCII without whitespace"
         );
         Self {
             delegate: Arc::new(delegate),
@@ -415,12 +418,40 @@ async fn liveness() -> Response {
     health_response(StatusCode::OK, "alive")
 }
 
-async fn readiness<D: ConstitutionalDelegate>(State(state): State<AppState<D>>) -> Response {
+async fn readiness<D: ConstitutionalDelegate + WorkspaceDelegate>(
+    State(state): State<AppState<D>>,
+) -> Response {
     if state.recovery_required {
-        health_response(StatusCode::SERVICE_UNAVAILABLE, "quarantined")
-    } else {
-        health_response(StatusCode::OK, "ready")
+        return health_response(StatusCode::SERVICE_UNAVAILABLE, "quarantined");
     }
+    // The durable ledger may be removed/replaced after startup. The previous
+    // probe always reported ready in that case, even though admissions fail.
+    // This read-only check does not consume a request budget or acknowledge
+    // restored data, and must not be confused with a disk-write guarantee.
+    if state
+        .request_store
+        .as_ref()
+        .is_some_and(|store| store.check_readiness().is_err())
+    {
+        return health_response(StatusCode::SERVICE_UNAVAILABLE, "storage_unavailable");
+    }
+    // A functioning request ledger does not establish workspace-store health:
+    // a separately mounted or substituted workspace path must be rejected
+    // before declaring the runtime ready for new workspace operations.
+    if state.delegate.check_storage_readiness().is_err() {
+        return health_response(StatusCode::SERVICE_UNAVAILABLE, "workspace_unavailable");
+    }
+    // Exhausting the configured tracked-request budget permanently blocks
+    // new admissions until restart/reconfiguration. Do not advertise this
+    // instance as ready merely because its listener still answers requests.
+    let budget_exhausted = {
+        let safety = state.safety_state.lock().expect("safety lock poisoned");
+        safety.tracked_requests >= state.safety_config.max_tracked_requests
+    };
+    if budget_exhausted {
+        return health_response(StatusCode::SERVICE_UNAVAILABLE, "admission_unavailable");
+    }
+    health_response(StatusCode::OK, "ready")
 }
 
 async fn studio_model_status() -> impl IntoResponse {
@@ -614,15 +645,38 @@ async fn status<D: ConstitutionalDelegate>(
     }
 }
 
+/// Accept only one unambiguous credential. Some HTTP intermediaries select
+/// the first or last occurrence of a repeated Authorization field. The
+/// constitutional gateway must not authenticate one value while another hop
+/// interprets a different value.
 pub(crate) fn transport_authorized<D>(state: &AppState<D>, headers: &HeaderMap) -> bool {
     let Some(expected) = state.auth_token.as_deref() else {
+        // Explicit unauthenticated/local mode remains the caller's choice.
         return true;
     };
-    headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
+    let mut supplied = headers.get_all(header::AUTHORIZATION).iter();
+    let Some(value) = supplied.next() else {
+        return false;
+    };
+    if supplied.next().is_some() {
+        return false;
+    }
+    value
+        .to_str()
+        .ok()
         .and_then(|value| value.strip_prefix("Bearer "))
-        .is_some_and(|provided| provided.as_bytes() == expected.as_bytes())
+        .is_some_and(|provided| bearer_token_eq(provided.as_bytes(), expected.as_bytes()))
+}
+
+/// Scan every configured token byte without early-exit prefix comparison.
+/// There is no proof of machine-level constant-time behavior; this is a
+/// best-effort guard and not a substitute for short-lived bearer credentials.
+fn bearer_token_eq(provided: &[u8], expected: &[u8]) -> bool {
+    let mut mismatch = provided.len() ^ expected.len();
+    for (index, byte) in expected.iter().enumerate() {
+        mismatch |= usize::from(*byte ^ provided.get(index).copied().unwrap_or_default());
+    }
+    mismatch == 0
 }
 
 fn transport_unauthorized() -> axum::response::Response {

@@ -23,6 +23,33 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      # This candidate composes several previously verified PRs. Require the
+      # unchanged upstream sources to retain their pinned Git blob identity;
+      # Rust source conflicts are separately exercised by Cargo/HTTP tests.
+      - name: Enforce composed candidate source identity
+        run: python3 scripts/verify-composed-security-source.py
+
+      # This job is the only required branch-ruleset status check. Cloud
+      # transport tests must be part of this same job, not only an optional
+      # path-filtered workflow whose failure could be ignored at merge.
+      - name: Install pinned uv for mandatory cloud contract
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        with:
+          version: "0.12.4"
+          enable-cache: "false"
+          working-directory: nexus-cloud
+
+      - name: Install pinned Python for mandatory cloud contract
+        run: uv python install 3.13
+
+      - name: Enforce cloud transport and Studio model tests in required PR status
+        working-directory: nexus-cloud
+        run: |
+          set -euo pipefail
+          uv sync --frozen
+          uv run --frozen python -m compileall -q main.py studio_model.py tests
+          uv run --frozen pytest -q
+
       - name: Test fail-closed runtime diagnostics
         run: |
           bash -n scripts/observe-runtime-drift.sh
