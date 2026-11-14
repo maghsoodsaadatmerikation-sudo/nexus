@@ -50,11 +50,14 @@ jobs:
           node scripts/test-studio-astrology.mjs
           node scripts/test-studio-core.mjs
           node scripts/test-studio-storage.mjs
+          node scripts/test-studio-vault-cancellation.mjs
           node scripts/test-studio-lab.mjs
       - name: Exercise archive corruption and transaction recovery in real IndexedDB
         run: python3 scripts/test-studio-storage-browser.py
       - name: Exercise destructive cancellation and stale archive completions
         run: python3 scripts/test-studio-archive-races-browser.py
+      - name: Exercise vault cancellation, hidden key adoption and stale restore reads
+        run: python3 scripts/test-studio-vault-cancellation-browser.py
       - name: Exercise Studio in disposable narrow and wide Chromium
         run: python3 scripts/test-studio-browser.py
       - name: Exercise opt-in astrology and encrypted profile lifecycle

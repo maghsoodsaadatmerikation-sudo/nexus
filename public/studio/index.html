@@ -702,7 +702,12 @@ function envelope(raw){if(typeof raw!=='string'||enc.encode(raw).length>6*1024*1
 const aad=e=>enc.encode([SCHEMA,e.iterations,e.revision,e.salt].join('|'));
 async function keyFor(pass,salt){text(pass,512);if(Array.from(pass).length<12)fail('passphrase');const k=await crypto.subtle.importKey('raw',enc.encode(pass),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:310000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
 async function encrypt(v,key,salt){const e={schema:SCHEMA,iterations:310000,revision:uid(),salt:b64(salt),iv:b64(crypto.getRandomValues(new Uint8Array(12)))};e.ciphertext=b64(new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:un64(e.iv,12),additionalData:aad(e)},key,enc.encode(JSON.stringify(state(v))))));return JSON.stringify(e)}
-async function decrypt(raw,pass){const e=envelope(raw),salt=un64(e.salt,16),key=await keyFor(pass,salt);let bytes;try{bytes=await crypto.subtle.decrypt({name:'AES-GCM',iv:un64(e.iv,12),additionalData:aad(e)},key,un64(e.ciphertext,MAX+16))}catch{fail('wrong-passphrase-or-damaged-archive')}return {data:state(JSON.parse(dec.decode(bytes))),key,salt,raw}}
+async function decrypt(raw,pass,{signal}={}){
+ const current=()=>{if(signal?.aborted)fail('cancelled')};current();
+ const e=envelope(raw),salt=un64(e.salt,16),key=await keyFor(pass,salt);current();let bytes;
+ try{bytes=await crypto.subtle.decrypt({name:'AES-GCM',iv:un64(e.iv,12),additionalData:aad(e)},key,un64(e.ciphertext,MAX+16))}catch{fail('wrong-passphrase-or-damaged-archive')}
+ current();return {data:state(JSON.parse(dec.decode(bytes))),key,salt,raw};
+}
 class IndexedStore{
  async db(){return new Promise((resolve,reject)=>{const r=indexedDB.open('nexus-studio-v1',1);r.onupgradeneeded=()=>r.result.createObjectStore('vault');r.onsuccess=()=>resolve(r.result);r.onerror=r.onblocked=()=>reject(Error('storage'))})}
  async read(){
@@ -734,17 +739,38 @@ class Vault{
  constructor(store=new IndexedStore()){this.store=store;this.epoch=0;this.tail=Promise.resolve();this.lock()}
  lock(){this.epoch++;this.key=null;this.salt=null;this.raw=null;this.data=null}
  get unlocked(){return this.key!==null}
- run(fn){const e=this.epoch;const check=()=>{if(e!==this.epoch)fail('locked')};const result=this.tail.catch(()=>{}).then(async()=>{check();try{return await fn(check)}catch(x){if(x.message==='conflict'&&e===this.epoch)this.lock();throw x}});this.tail=result.catch(()=>{});return result}
- async create(pass){return this.run(async check=>{if(await this.store.read())fail('archive-exists');const salt=crypto.getRandomValues(new Uint8Array(16)),key=await keyFor(pass,salt),raw=await encrypt(empty(),key,salt);check();await this.store.commit(null,raw,()=>{try{check();return true}catch{return false}});check();Object.assign(this,{key,salt,raw})})}
- async unlock(pass){return this.run(async check=>{const raw=await this.store.read();if(!raw)fail('archive-missing');const opened=await decrypt(raw,pass);check();Object.assign(this,{key:opened.key,salt:opened.salt,raw:opened.raw});return copy(opened.data)})}
- async save(value){const data=state(value);return this.run(async check=>{if(!this.unlocked)fail('locked');const raw=await encrypt(data,this.key,this.salt);check();await this.store.commit(envelope(this.raw).revision,raw,()=>{try{check();return true}catch{return false}});check();this.raw=raw})}
- async export(value,pass){const data=state(value);return this.run(async check=>{const salt=crypto.getRandomValues(new Uint8Array(16)),key=await keyFor(pass,salt),raw=await encrypt(data,key,salt);check();return raw})}
- async erase({signal}={}){return this.run(async check=>{
-  const current=()=>{check();if(signal?.aborted)fail('cancelled')};current();if(!this.unlocked)fail('locked');
+ run(fn,{signal}={}){
+  const e=this.epoch,check=()=>{if(e!==this.epoch)fail('locked')},current=()=>{check();if(signal?.aborted)fail('cancelled')};
+  const result=this.tail.catch(()=>{}).then(async()=>{current();try{return await fn(check,current)}catch(x){if(x.message==='conflict'&&e===this.epoch)this.lock();throw x}});
+  this.tail=result.catch(()=>{});return result;
+ }
+ async create(pass,{signal}={}){return this.run(async(check,current)=>{
+  if(await this.store.read())fail('archive-exists');current();
+  const salt=crypto.getRandomValues(new Uint8Array(16)),key=await keyFor(pass,salt);current();const raw=await encrypt(empty(),key,salt);current();
+  await this.store.commit(null,raw,()=>{try{current();return true}catch{return false}});check();
+  // Clear this command's keys without invalidating a newer queued Unlock.
+  if(signal?.aborted){Object.assign(this,{key:null,salt:null,raw:null,data:null});fail('cancelled')}
+  Object.assign(this,{key,salt,raw});
+ },{signal})}
+ async unlock(pass,{signal}={}){return this.run(async(check,current)=>{
+  const raw=await this.store.read();current();if(!raw)fail('archive-missing');const opened=await decrypt(raw,pass,{signal});current();
+  Object.assign(this,{key:opened.key,salt:opened.salt,raw:opened.raw});return copy(opened.data);
+ },{signal})}
+ async save(value,{signal}={}){const data=state(value);return this.run(async(check,current)=>{
+  if(!this.unlocked)fail('locked');const raw=await encrypt(data,this.key,this.salt);current();
+  await this.store.commit(envelope(this.raw).revision,raw,()=>{try{current();return true}catch{return false}});
+  // Once committed, keep the real revision even if cancellation arrived late.
+  check();this.raw=raw;
+ },{signal})}
+ async export(value,pass,{signal}={}){const data=state(value);return this.run(async(check,current)=>{
+  const salt=crypto.getRandomValues(new Uint8Array(16)),key=await keyFor(pass,salt);current();const raw=await encrypt(data,key,salt);current();return raw;
+ },{signal})}
+ async erase({signal}={}){return this.run(async(check,current)=>{
+  if(!this.unlocked)fail('locked');
   await this.store.commit(envelope(this.raw).revision,null,()=>{try{current();return true}catch{return false}});
   // A completed delete cannot be undone by a later cancellation; always clear its key.
-  check();this.lock();
- })}
+  check();if(signal?.aborted)Object.assign(this,{key:null,salt:null,raw:null,data:null});else this.lock();
+ },{signal})}
 }
 root.NexusStudio=Object.freeze({SCHEMA,MAX,state,empty,project,thread,path,append,context,search,retrieve,guide,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
 })(globalThis);
@@ -925,7 +951,11 @@ function mayReplace(){return (!forms()&&!$('message').value)||confirm(t('discard
 function selectProject(id){window.NexusTasksUI?.clear();window.NexusQualityUI?.clear();window.NexusAstrologyUI?.clear();window.NexusLabUI?.clear();stop();projectId=id;threadId=p()?.threads.find(x=>!x.archived)?.id||null;documentId=p()?.documents[0]?.id||null;branchBase=undefined;profileDirty=editorDirty=false;$('message').value='';$('use-memory').checked=false;$('use-sources').checked=false;$('source-results').textContent='';$('branch-notice').textContent='';fillProfile();fillDoc()}
 function applyLanguage(){document.documentElement.lang=language;document.documentElement.dir=customPack?.code===language?customPack.dir:language==='fa'?'rtl':'ltr';document.querySelectorAll('[data-t]').forEach(n=>n.textContent=t(n.dataset.t));document.querySelectorAll('[data-placeholder]').forEach(n=>n.placeholder=t(n.dataset.placeholder));render();if(branchBase!==undefined)$('branch-notice').textContent=t('branching')}
 function download(text,name,type='text/plain'){const u=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
-async function operation(fn,success='apply'){if(busy)return;busy=true;controls();const rev=revision;try{await fn(rev);if(rev===revision)status(success)}catch(error){if(rev===revision)status(error?.message==='archive-damaged'?'archiveDamaged':'failed')}finally{if(rev===revision)busy=false;controls()}}
+async function operation(fn,success='apply'){
+ if(busy)return;const rev=revision,abort=new AbortController();controller=abort;busy=true;controls();
+ try{await fn(rev,abort);if(rev===revision)status(success)}catch(error){if(rev===revision)status(error?.message==='archive-damaged'?'archiveDamaged':'failed')}
+ finally{if(controller===abort)controller=null;if(rev===revision)busy=false;controls()}
+}
 function noForms(){if(forms()||$('message').value){status('needApply');return false}return true}
 function candidate(regenerate=false){const c=chat();if(!c||!p()||c.archived)throw Error('select-chat');if(regenerate){const path=S.path(c),last=path.at(-1);if(last?.role!=='assistant')throw Error('no-answer');return {...S.copy(c),head:last.parent}}return S.append(c,'user',$('message').value.trim(),'human',branchBase===undefined?c.head:branchBase)}
 function installThread(next){const ok=mutate(v=>{const q=projectIn(v);q.threads[q.threads.findIndex(x=>x.id===next.id)]=next});if(!ok)return false;$('message').value='';branchBase=undefined;$('branch-notice').textContent='';render()}
@@ -947,7 +977,7 @@ $('guide').onclick=()=>{if($('use-astrology').checked&&window.NexusAstrologyUI?.
 $('prepare').onclick=()=>prepare();$('regenerate').onclick=()=>prepare(true);$('consent').onchange=controls;$('stop').onclick=()=>{stop();render()};
 for(const id of ['message','gateway','gateway-token','use-memory','use-sources','use-astrology','astro-historical','sky-tone'])$(id).addEventListener('input',stop);
 $('send-model').onclick=async()=>{if(!pending||!$('consent').checked||busy)return;const request=pending,rev=revision;const abort=new AbortController();controller=abort;const timer=setTimeout(()=>abort.abort(),request.destination==='device'?120000:50000);busy=true;controls();try{let out;if(request.destination==='device'){out=await window.NexusDevice.generate(request.body,abort.signal)}else{const response=await fetch(gateway()+'/studio-api/respond',{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',redirect:'error',headers:{'content-type':'application/json','authorization':'Bearer '+$('gateway-token').value},body:JSON.stringify(request.body),signal:abort.signal});out=await boundedJson(response)}if(rev!==revision||request.projectId!==projectId||request.threadId!==threadId)return;if(out.origin!=='model'||out.authority!=='none'||typeof out.text!=='string'||out.model!==modelInfo?.model)throw Error('model-response');busy=false;installThread(S.append(request.thread,'assistant',(request.destination==='device'?'[On-device draft · SmolLM2-135M · English / limited]\n\n':'')+out.text,'model'));if(out.truncated)$('status').textContent=language==='fa'?'پاسخ به سقف طول رسیده است.':'The response reached its length limit.'}catch{if(rev===revision)status('failed')}finally{clearTimeout(timer);if(rev===revision){busy=false;pending=null;$('request-review').hidden=true;$('consent').checked=false;controller=null;controls()}}};
-$('check-model').onclick=()=>operation(async rev=>{if(selectedModelEngine()==='device'){const info=window.NexusDevice?.info();modelInfo=info?{...info,configured:true,gateway:'device',provider_host:'this device'}:null;$('model-status').textContent=info?info.model+' · on-device · max 64 output tokens':t('noModel');return}const abort=new AbortController();controller=abort;const timer=setTimeout(()=>abort.abort(),10000);try{const out=await boundedJson(await fetch(gateway()+'/studio-api/status',{credentials:'omit',cache:'no-store',redirect:'error',signal:abort.signal}),8000);if(rev===revision){if(out.configured&&(typeof out.model!=='string'||typeof out.provider_host!=='string'||! /^[a-f0-9]{64}$/.test(out.configuration_id)))throw Error('configuration');modelInfo={...out,gateway:gateway()};$('model-status').textContent=out.configured?t('configured')+': '+out.model+' · '+out.provider_host:t('noModel')} }finally{clearTimeout(timer);if(controller===abort)controller=null}});
+$('check-model').onclick=()=>operation(async(rev,abort)=>{if(selectedModelEngine()==='device'){const info=window.NexusDevice?.info();modelInfo=info?{...info,configured:true,gateway:'device',provider_host:'this device'}:null;$('model-status').textContent=info?info.model+' · on-device · max 64 output tokens':t('noModel');return}const timer=setTimeout(()=>abort.abort(),10000);try{const out=await boundedJson(await fetch(gateway()+'/studio-api/status',{credentials:'omit',cache:'no-store',redirect:'error',signal:abort.signal}),8000);if(rev===revision){if(out.configured&&(typeof out.model!=='string'||typeof out.provider_host!=='string'||! /^[a-f0-9]{64}$/.test(out.configuration_id)))throw Error('configuration');modelInfo={...out,gateway:gateway()};$('model-status').textContent=out.configured?t('configured')+': '+out.model+' · '+out.provider_host:t('noModel')} }finally{clearTimeout(timer)}});
 $('apply-profile').onclick=()=>{if(!p())return;const instructions=$('instructions').value,memories=$('memories').value.split('\n').map(x=>x.trim()).filter(Boolean);if(mutate(v=>Object.assign(projectIn(v),{instructions,memories})))profileDirty=false};
 for(const id of ['instructions','memories'])$(id).addEventListener('input',()=>{profileDirty=true;stop()});$('editor').addEventListener('input',()=>{editorDirty=true;stop()});
 $('source-file').onchange=async event=>{const file=event.target.files[0];event.target.value='';if(!file||!p()||busy)return;const rev=revision,pid=projectId;try{if(file.size>262144||! /\.(txt|md|csv|tsv|json)$/i.test(file.name))throw Error('file');const text=new TextDecoder('utf-8',{fatal:true}).decode(await file.arrayBuffer());if(rev!==revision||pid!==projectId)return;mutate(v=>projectIn(v).sources.push({id:S.uid(),name:file.name,text}))}catch{if(rev===revision&&pid===projectId)status('failed')}};
@@ -960,19 +990,16 @@ $('versions').onchange=()=>{const a=doc()?.versions.find(x=>x.id===$('versions')
 $('load-version').onclick=()=>{if(forms()&&!confirm(t('discard')))return;const v=doc()?.versions.find(x=>x.id===$('versions').value);if(v){$('editor').value=v.text;editorDirty=true;stop()}};
 $('export-document').onclick=()=>{if(doc()&&confirm(t('plain')))download($('editor').value,'nexus-document.md','text/markdown')};
 $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+chat().title+'\n\n'+S.path(chat()).map(n=>'## '+t(n.origin==='human'?'human':n.origin==='model'?'model':'local')+'\n\n'+n.text).join('\n\n'),'nexus-conversation.md','text/markdown')};
-$('create-vault').onclick=()=>{const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation(()=>vault.create(pass))};
-$('unlock').onclick=()=>{if((dirty||forms()||$('message').value)&&!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async rev=>{const next=await vault.unlock(pass);if(rev!==revision)return;undoSlot.clear();data=next;dirty=false;selectProject(data.projects[0]?.id||null);render()})};
-$('save').onclick=()=>{if(!noForms())return;const snapshot=S.state(data);operation(async rev=>{await vault.save(snapshot);if(rev===revision)dirty=false},'saved')};
+$('create-vault').onclick=()=>{const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation((rev,abort)=>vault.create(pass,{signal:abort.signal}))};
+$('unlock').onclick=()=>{if((dirty||forms()||$('message').value)&&!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const next=await vault.unlock(pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=next;dirty=false;selectProject(data.projects[0]?.id||null);render()})};
+$('save').onclick=()=>{if(!noForms())return;const snapshot=S.state(data);operation(async(rev,abort)=>{await vault.save(snapshot,{signal:abort.signal});if(rev===revision)dirty=false},'saved')};
 $('lock').onclick=()=>{if((dirty||forms()||$('message').value)&&!confirm(t('discard')))return;window.NexusDevice?.unload();window.NexusTasksUI?.clear();window.NexusQualityUI?.clear();window.NexusAstrologyUI?.clear();window.NexusLabUI?.clear();undoSlot.clear();stop();modelInfo=null;vault.lock();data=S.empty();projectId=threadId=documentId=null;dirty=profileDirty=editorDirty=false;for(const id of ['passphrase','repeat-passphrase','gateway-token','message','project-title','document-title','instructions','memories','editor','source-query','search'])$(id).value='';$('model-status').textContent='';$('source-results').textContent='';$('request-context').textContent='';$('branch-notice').textContent='';renderVersions();render()};
-$('backup').onclick=()=>{if(!noForms())return;const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation(async rev=>{const raw=await vault.export(data,pass);if(rev===revision)download(raw,'nexus-studio.encrypted.json','application/json')})};
-$('restore').onclick=()=>$('restore-file').click();$('restore-file').onchange=event=>{const f=event.target.files[0];event.target.value='';if(!f||f.size>6*1024*1024||!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async rev=>{const opened=await S.decrypt(await f.text(),pass);if(rev!==revision)return;undoSlot.clear();data=opened.data;dirty=true;selectProject(data.projects[0]?.id||null);render()})};
-$('erase').onclick=()=>{if(confirm(t('discard')))operation(async rev=>{
- const abort=new AbortController();controller=abort;
- try{
+$('backup').onclick=()=>{if(!noForms())return;const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await vault.export(data,pass,{signal:abort.signal});if(rev===revision)download(raw,'nexus-studio.encrypted.json','application/json')})};
+$('restore').onclick=()=>$('restore-file').click();$('restore-file').onchange=event=>{const f=event.target.files[0];event.target.value='';if(!f||f.size>6*1024*1024||!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await f.text();if(rev!==revision||abort.signal.aborted)return;const opened=await S.decrypt(raw,pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=opened.data;dirty=true;selectProject(data.projects[0]?.id||null);render()})};
+$('erase').onclick=()=>{if(confirm(t('discard')))operation(async(rev,abort)=>{
   window.NexusDevice?.unload();await vault.erase({signal:abort.signal});
   if(rev!==revision){if(!vault.unlocked&&data.projects.length)dirty=true;return}
   undoSlot.clear();window.NexusQualityUI?.clear();modelInfo=null;for(const id of ['gateway-token','source-query','search','project-title','document-title'])$(id).value='';data=S.empty();selectProject(null);dirty=false;render();
- }finally{if(controller===abort)controller=null}
 })};
 function readAloud(text){try{speechSynthesis.cancel();const voices=speechSynthesis.getVoices().filter(v=>v.localService&&v.lang.startsWith(language));if(!voices.length)return status('failed');const u=new SpeechSynthesisUtterance(text.slice(0,6000));u.voice=voices[0];speechSynthesis.speak(u)}catch{status('failed')}}
 $('language-template').onclick=()=>download(JSON.stringify({schema:'nexus.studio.locale.v1',code:'en',dir:'ltr',messages:EN},null,2),'nexus-studio-english-labels.json','application/json');
