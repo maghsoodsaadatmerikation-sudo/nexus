@@ -27,6 +27,7 @@ jobs:
         run: |
           bash -n scripts/observe-runtime-drift.sh
           python3 scripts/test-runtime-drift.py
+          python3 scripts/test-observe-pilot-runtime.py
 
       - name: Test fail-closed public Stage D authentication diagnostics
         run: |
@@ -54,6 +55,11 @@ jobs:
 
       - name: Verify transport authentication behavior
         run: bash scripts/v2.5-transport-authentication-verification.sh
+
+      - name: Verify production freeze preflight remains fail-closed
+        run: |
+          python3 -m py_compile scripts/production-freeze-preflight.py scripts/test-production-freeze-preflight.py
+          python3 scripts/test-production-freeze-preflight.py
 
       - name: Verify workflow authority boundary
         run: python3 scripts/verify-workflow-authority.py
