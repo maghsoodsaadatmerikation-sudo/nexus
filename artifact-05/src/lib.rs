@@ -392,11 +392,8 @@ async fn recovery_boundary<D: ConstitutionalDelegate>(
     // parsing bodies or consuming a request budget. The handlers check again.
     let path = request.uri().path();
     let private_request = path == "/v1/requests" || path.starts_with("/v1/requests/");
-    let private_workspace =
-        path == "/v1/workspaces" || path.starts_with("/v1/workspaces/");
-    if (private_request || private_workspace)
-        && !transport_authorized(&state, request.headers())
-    {
+    let private_workspace = path == "/v1/workspaces" || path.starts_with("/v1/workspaces/");
+    if (private_request || private_workspace) && !transport_authorized(&state, request.headers()) {
         return transport_unauthorized();
     }
     if state.recovery_required
@@ -416,10 +413,11 @@ async fn recovery_boundary<D: ConstitutionalDelegate>(
     // A marker removed/replaced during a running process must not leave a
     // stale green runtime admitting new requests or Workspace operations.
     // This read-only check is intentionally before Axum's body extractors.
-    if (private_request || private_workspace)
-        && !state.delegate.check_runtime_volume_identity()
-    {
-        return safety_error(StatusCode::SERVICE_UNAVAILABLE, "volume_identity_unavailable");
+    if (private_request || private_workspace) && !state.delegate.check_runtime_volume_identity() {
+        return safety_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "volume_identity_unavailable",
+        );
     }
     next.run(request).await
 }
