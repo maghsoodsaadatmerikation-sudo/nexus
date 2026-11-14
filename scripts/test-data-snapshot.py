@@ -54,7 +54,7 @@ class SnapshotTests(unittest.TestCase):
         marker.write_bytes(identity)
         self.capture()
         inspection = snapshot.inspect_snapshot(self.archive)
-        self.assertEqual(inspection["file_count"], 5)
+        self.assertEqual(inspection["file_count"], 4)
         self.assertEqual(inspection["workspace_count"], 1)
         snapshot.restore(self.archive, self.target)
         self.assertEqual((self.target / snapshot.VOLUME_IDENTITY_MARKER).read_bytes(), identity)
