@@ -921,11 +921,11 @@ async fn runtime_readiness_tracks_pinned_storage_loss_replacement_and_recovery()
     let response = app
         .clone()
         .oneshot(
-                Request::builder()
-                    .uri("/readyz")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            Request::builder()
+                .uri("/readyz")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
