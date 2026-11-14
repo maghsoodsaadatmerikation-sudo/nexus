@@ -1589,3 +1589,124 @@ async fn workspace_transport_rejects_before_polling_or_delegation() {
         StatusCode::UNAUTHORIZED
     );
 }
+
+#[tokio::test]
+async fn duplicate_authorization_headers_never_authorize_rust_gateway() {
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::authenticated(delegate.clone(), "secret"));
+
+    // Even duplicate copies of the correct credential are ambiguous. Test
+    // both read and write surfaces; a rejected write must not be delegated.
+    for (method, path, body) in [
+        ("POST", "/v1/requests", "{invalid-json"),
+        ("GET", "/v1/requests/missing", ""),
+        ("POST", "/v1/workspaces", "{invalid-json"),
+        ("GET", "/v1/workspaces/missing", ""),
+    ] {
+        for values in [
+            ["Bearer secret", "Bearer secret"],
+            ["Bearer wrong", "Bearer secret"],
+            ["Bearer secret", "Bearer wrong"],
+        ] {
+            let request = Request::builder()
+                .method(method)
+                .uri(path)
+                .header("authorization", values[0])
+                .header("authorization", values[1])
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap();
+            assert_eq!(
+                request.headers().get_all("authorization").iter().count(),
+                2,
+                "test fixture must actually contain repeated fields"
+            );
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::UNAUTHORIZED,
+                "{method} {path} {values:?}"
+            );
+            assert_eq!(response.headers()["cache-control"], "no-store");
+            assert!(delegate.requests.lock().unwrap().is_empty());
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_single_exact_bearer_still_authorizes_without_prefix_equivalence() {
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::authenticated(delegate.clone(), "secret"));
+    for invalid in [
+        "Bearer secre",
+        "Bearer secrets",
+        "Bearer secret ",
+        "Bearer Secret",
+        "bearer secret",
+        "Basic secret",
+        "Bearer ",
+    ] {
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/requests")
+            .header("authorization", invalid)
+            .header("content-type", "application/json")
+            .body(Body::from("{invalid-json"))
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "{invalid}");
+        assert!(delegate.requests.lock().unwrap().is_empty());
+    }
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/v1/requests")
+        .header("authorization", "Bearer secret")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::json!({
+                "request_id": "auth-header-identity",
+                "authority": "user",
+                "action": "present",
+                "value": "accepted",
+                "payload": "opaque"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    assert_eq!(delegate.requests.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn invalid_runtime_bearer_tokens_fail_at_configuration_not_during_requests() {
+    // Misconfigured credentials can otherwise make a healthy server
+    // permanently unreachable. HTTP Bearer header bytes must be representable.
+    for token in [
+        "",
+        " ",
+        "secret ",
+        " secret",
+        "a b",
+        "secret\n",
+        "secret\r",
+        "secret\t",
+        "caf\u{00e9}",
+        "\u{007f}",
+    ] {
+        let result = std::panic::catch_unwind(|| {
+            AppState::authenticated(RecordingDelegate::default(), token)
+        });
+        assert!(result.is_err(), "invalid token accepted: {token:?}");
+    }
+    for token in ["secret", "ci-smoke-token", "opaque.token-0", "abc_+/="] {
+        assert!(
+            std::panic::catch_unwind(|| {
+                AppState::authenticated(RecordingDelegate::default(), token)
+            })
+            .is_ok(),
+            "valid token rejected: {token:?}"
+        );
+    }
+}
