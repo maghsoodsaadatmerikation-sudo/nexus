@@ -44,3 +44,17 @@ changes in small batches, preserving an explicit source-to-commit manifest,
 then require a fresh main-base verification. Do not substitute a successful
 synthetic CI test for a real on-provider restore, or merge long stacked PRs
 without checking their exact dependency revisions.
+
+## Additional negative controls found during self-review
+- JSON boolean fields must have actual boolean types. A numeric `0` or `1`
+  may compare equal to `false` or `true` in Python, but must not stand in
+  for an explicit authority/production declaration.
+- Source identity checks alone are insufficient: unknown additional changes
+  must also be rejected. The integration verifier now checks the full
+  `git diff` against the fixed main base and fails on any added, deleted,
+  or changed path outside the seven source files and four integration audit
+  files. CI fetches full history to make this comparison possible.
+
+These tests are narrow engineering invariants, not a substitute for a
+malicious-maintainer threat model, signed provenance, or an administrator-
+verified deployment gate.
