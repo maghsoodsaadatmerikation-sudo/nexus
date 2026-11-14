@@ -8,6 +8,7 @@ Status: DEVELOPMENT / UNSEALED
 | GET /readyz | 200, `{"status":"ready"}` | Startup recovery quarantine is absent and the pinned request ledger is presently reachable (if configured) |
 | GET /readyz | 503, `{"status":"quarantined"}` | Recovery quarantine still blocks all mutations |
 | GET /readyz | 503, `{"status":"storage_unavailable"}` | Configured request ledger is missing, inaccessible or replaced after startup |
+| GET /readyz | 503, `{"status":"admission_unavailable"}` | Permanent tracked-request admission capacity is already exhausted |
 
 HEAD preserves the corresponding status and headers with no response body.
 Both routes are public, bounded, and return `Cache-Control: no-store`. They expose
@@ -43,8 +44,9 @@ prove a deployed provider's routing configuration.
 
 Readiness covers the startup recovery gate and the currently accessible,
 pinned request-ledger directory. A 200 response is not a promise that
-the next request will pass auth, policy, rate/capacity limits, filesystem
-operations or execution. The check does **not** write to storage, detect
+the next request will pass auth, policy, temporary rate limits, filesystem
+operations or execution. Permanent tracked-request capacity is explicitly
+checked, but the result can still race with new admissions. The check does **not** write to storage, detect
 ENOSPC/disk exhaustion, inspect the workspace repository or independently
 validate full-volume recoverability. It does not measure throughput, establish
 production availability, validate a recovery point, confer authority, or
