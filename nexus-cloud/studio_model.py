@@ -47,6 +47,31 @@ class Completion(BaseModel):
             raise ValueError("explicit boolean consent required")
         return value
 
+def parse_unambiguous_json(raw: bytes) -> object:
+    """One interpretation of each JSON field, including nested/escaped keys.
+
+    The model endpoint makes an explicit-consent decision from this body.
+    JSON decoders that silently keep the final duplicate key can disagree with
+    a reviewer, a logger, or another parser. Require UTF-8 and unique decoded
+    keys before Pydantic validation or provider-output interpretation.
+    """
+    def unique_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Duplicate JSON key")
+            result[key] = value
+        return result
+
+    def reject_non_json_constant(_):
+        raise ValueError("Non-standard JSON constant")
+
+    return json.loads(
+        raw.decode("utf-8"),
+        object_pairs_hook=unique_pairs,
+        parse_constant=reject_non_json_constant,
+    )
+
 
 def config():
     endpoint = os.getenv("NEXUS_MODEL_URL", "").strip()
@@ -95,11 +120,19 @@ def register(app):
         c = config()
         if c is None:
             raise HTTPException(503, "No model provider is configured")
-        authorization = request.headers.get("authorization", "")
-        if not hmac.compare_digest(authorization.encode(), ("Bearer " + c[2]).encode()):
+        authorizations = request.headers.getlist("authorization")
+        if len(authorizations) != 1 or not hmac.compare_digest(
+            authorizations[0].encode(), ("Bearer " + c[2]).encode()
+        ):
             raise HTTPException(401, "Studio authentication required", headers={"WWW-Authenticate": "Bearer"})
-        if not request.headers.get("content-type", "").lower().startswith("application/json"):
+        content_types = request.headers.getlist("content-type")
+        if len(content_types) != 1:
             raise HTTPException(415, "JSON required")
+        media_type, *parameters = [part.strip().lower() for part in content_types[0].split(";")]
+        if media_type != "application/json" or any(
+            part not in {"charset=utf-8", 'charset="utf-8"'} for part in parameters
+        ):
+            raise HTTPException(415, "UTF-8 JSON required")
         try:
             request.app.state.model_limiter.acquire_nowait()
         except anyio.WouldBlock:
@@ -112,9 +145,9 @@ def register(app):
                         raise HTTPException(413, "Model context too large")
                     body.extend(chunk)
             try:
-                data = Completion.model_validate_json(body)
-            except ValidationError:
-                raise HTTPException(422, "Invalid consent or message context") from None
+                data = Completion.model_validate(parse_unambiguous_json(bytes(body)))
+            except (UnicodeError, ValueError, RecursionError, ValidationError):
+                raise HTTPException(422, "Invalid or ambiguous JSON consent or message context") from None
             if data.configuration_id != configuration_id(c):
                 raise HTTPException(409, "Model configuration changed; review again")
             if data.messages[-1].role != "user":
@@ -147,7 +180,7 @@ def register(app):
                             raise HTTPException(502, "Model response exceeded limit")
                         raw.extend(chunk)
             try:
-                output = json.loads(raw)
+                output = parse_unambiguous_json(bytes(raw))
                 choice = output["choices"][0]
                 message = choice["message"]
                 content = message["content"]
