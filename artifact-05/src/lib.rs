@@ -417,10 +417,20 @@ async fn liveness() -> Response {
 
 async fn readiness<D: ConstitutionalDelegate>(State(state): State<AppState<D>>) -> Response {
     if state.recovery_required {
-        health_response(StatusCode::SERVICE_UNAVAILABLE, "quarantined")
-    } else {
-        health_response(StatusCode::OK, "ready")
+        return health_response(StatusCode::SERVICE_UNAVAILABLE, "quarantined");
     }
+    // The durable ledger may be removed/replaced after startup. The previous
+    // probe always reported ready in that case, even though admissions fail.
+    // This read-only check does not consume a request budget or acknowledge
+    // restored data, and must not be confused with a disk-write guarantee.
+    if state
+        .request_store
+        .as_ref()
+        .is_some_and(|store| store.check_readiness().is_err())
+    {
+        return health_response(StatusCode::SERVICE_UNAVAILABLE, "storage_unavailable");
+    }
+    health_response(StatusCode::OK, "ready")
 }
 
 async fn studio_model_status() -> impl IntoResponse {
