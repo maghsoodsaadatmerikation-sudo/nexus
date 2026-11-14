@@ -55,3 +55,19 @@ fresh status checks. Existing feature PR #130 also changes
   Cargo format, Rust and gateway tests and real HTTP missing-ledger fault.
 - Other workflow tests on the head must not fail.
 - Full offsite restore and provider-side deployment proof remain separate.
+
+## Second operational false-ready detected during self-review
+
+The gateway also reported 200 `ready` after its configured
+`max_tracked_requests` budget was exhausted, even though every new
+request ID then returns 503 `request_budget_exhausted`. The revised
+`/readyz` now returns public 503 `admission_unavailable` once this
+persistent capacity is reached. This check does not mutate counters and
+does not count temporary rolling-window rate throttling as unavailability.
+Already recorded request statuses remain readable; `/livez` remains
+200. A Rust HTTP regression verifies all of these distinctions.
+
+This still cannot promise acceptance under concurrent requests because
+capacity can be exhausted immediately after the probe. A capacity change
+requires an operator-approved restart/reconfiguration, not a fake
+automatic counter reset.
