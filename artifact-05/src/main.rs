@@ -12,7 +12,15 @@ use nexus_constitutional_core::{
     HumanJudgment, PolicyEngine, ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceSnapshot,
 };
 use serde::Serialize;
-use std::{net::SocketAddr, path::PathBuf, sync::Mutex, time::Duration};
+use std::{
+    net::SocketAddr,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
+    time::Duration,
+};
 
 #[derive(Debug, Serialize)]
 struct RuntimeIdentity {
@@ -36,6 +44,11 @@ struct CoreDelegate {
     // Optional non-secret operator-enrolled volume ID. Rechecked before
     // serving each private API request and every readiness probe.
     expected_volume_id: Option<String>,
+    pinned_marker_identity: Option<volume_identity::MarkerIdentity>,
+    // Once an enrolled volume is lost or its marker changes, the gateway
+    // remains quarantined until a clean restart and independent inspection.
+    // In-memory and shared across all router clones in this process.
+    volume_identity_latched: AtomicBool,
 }
 
 impl CoreDelegate {
@@ -47,23 +60,42 @@ impl CoreDelegate {
         root: PathBuf,
         expected_volume_id: Option<String>,
     ) -> Result<Self, DurableWorkspaceError> {
-        if let Some(expected) = &expected_volume_id {
-            volume_identity::verify(&root, expected).map_err(|_| DurableWorkspaceError::Io)?;
-        }
+        let pinned_marker_identity = expected_volume_id
+            .as_ref()
+            .map(|expected| {
+                volume_identity::inspect(&root, expected).map_err(|_| DurableWorkspaceError::Io)
+            })
+            .transpose()?;
         let repository = FileWorkspaceRepository::new(root).pin_root()?;
         let workspace_probe = repository.clone();
         Ok(Self {
             workspaces: Mutex::new(repository),
             workspace_probe,
             expected_volume_id,
+            pinned_marker_identity,
+            volume_identity_latched: AtomicBool::new(false),
         })
     }
 
     fn volume_identity_ready(&self) -> bool {
-        self.expected_volume_id.as_ref().is_none_or(|expected| {
-            self.workspace_probe.check_runtime_readiness().is_ok()
-                && volume_identity::verify(self.workspace_probe.root(), expected).is_ok()
-        })
+        let Some(expected) = self.expected_volume_id.as_ref() else {
+            return true; // Legacy mode: retain existing pinned-root checks.
+        };
+        if self.volume_identity_latched.load(Ordering::Acquire) {
+            return false;
+        }
+        let matches_original = self.workspace_probe.check_runtime_readiness().is_ok()
+            && volume_identity::inspect(self.workspace_probe.root(), expected)
+                .is_ok_and(|current| Some(current) == self.pinned_marker_identity);
+        if !matches_original {
+            if !self.volume_identity_latched.swap(true, Ordering::AcqRel) {
+                eprintln!("NEXUS_OP event=volume_identity_guard status=latched");
+            }
+            return false;
+        }
+        // Another concurrent request may have detected an outage while this
+        // probe was running. Never allow this probe to clear that latch.
+        !self.volume_identity_latched.load(Ordering::Acquire)
     }
 }
 
