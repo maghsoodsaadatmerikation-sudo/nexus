@@ -199,12 +199,20 @@ def test_ambiguous_json_never_reaches_model_provider(monkeypatch, mutation):
     original = json.dumps(BODY, separators=(',', ':'))
     mutated = mutation(original)
     assert mutated != original
-    with configured(monkeypatch, lambda _:pytest.fail('ambiguous JSON forwarded')) as c:
+    calls = []
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={
+            'choices':[{'message':{'content':'Recovered draft'},'finish_reason':'stop'}]})
+    with configured(monkeypatch, handler) as c:
         response = c.post('/studio-api/respond', content=mutated.encode(),
                           headers={**AUTH, 'content-type':'application/json'})
         assert response.status_code == 422, response.text
         assert 'Injected' not in response.text
-        assert c.post('/studio-api/respond', json=BODY, headers=AUTH).status_code == 200
+        assert calls == [], 'ambiguous JSON was forwarded'
+        valid = c.post('/studio-api/respond', json=BODY, headers=AUTH)
+        assert valid.status_code == 200 and valid.json()['text'] == 'Recovered draft'
+        assert len(calls) == 1
 
 
 @pytest.mark.parametrize('type_header', [
