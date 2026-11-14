@@ -7,8 +7,8 @@ use nexus_artifact_05_gateway::{
     WorkspaceDelegate, WorkspaceDelegateError,
 };
 use nexus_constitutional_core::{
-    Alternative, AnalysisBatch, Claim, FileWorkspaceRepository, HumanJudgment, PolicyEngine,
-    ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceSnapshot,
+    Alternative, AnalysisBatch, Claim, DurableWorkspaceError, FileWorkspaceRepository,
+    HumanJudgment, PolicyEngine, ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceSnapshot,
 };
 use serde::Serialize;
 use std::{net::SocketAddr, path::PathBuf, sync::Mutex, time::Duration};
@@ -33,10 +33,11 @@ struct CoreDelegate {
 }
 
 impl CoreDelegate {
-    fn new(root: PathBuf) -> Self {
-        Self {
-            workspaces: Mutex::new(FileWorkspaceRepository::new(root)),
-        }
+    fn new(root: PathBuf) -> Result<Self, DurableWorkspaceError> {
+        let repository = FileWorkspaceRepository::new(root).pin_root()?;
+        Ok(Self {
+            workspaces: Mutex::new(repository),
+        })
     }
 }
 
@@ -215,8 +216,12 @@ async fn main() {
         Duration::from_secs(rate_window_seconds),
         max_tracked_requests,
     );
+    // Pin the workspace directory before serving. If the volume later
+    // vanishes or gets replaced, its next operation must fail closed rather
+    // than adopt the substitute directory as the workspace store.
+    let core_delegate = CoreDelegate::new(data_root.clone()).expect("pin workspace data root");
     let app = router(
-        AppState::authenticated(CoreDelegate::new(data_root.clone()), token)
+        AppState::authenticated(core_delegate, token)
             .with_safety(safety)
             .with_recovery_gate(&data_root)
             .expect("inspect recovery quarantine")
