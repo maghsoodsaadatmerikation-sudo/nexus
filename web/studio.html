@@ -741,7 +741,7 @@ class Vault{
   if(!this.unlocked)fail('locked');
   await this.store.commit(envelope(this.raw).revision,null,()=>{try{current();return true}catch{return false}});
   // A completed delete cannot be undone by a later cancellation; always clear its key.
-  check();this.lock();
+  check();if(signal?.aborted)Object.assign(this,{key:null,salt:null,raw:null,data:null});else this.lock();
  },{signal})}
 }
 root.NexusStudio=Object.freeze({SCHEMA,MAX,state,empty,project,thread,path,append,context,search,retrieve,guide,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});

@@ -50,4 +50,11 @@ queuedStore.commit=async(...args)=>{await queuedCommit(...args);queuedAbort.abor
 const cancelledCreation=queuedVault.create(pass,{signal:queuedAbort.signal});await committedGate;
 const newerUnlock=queuedVault.unlock(pass);finish();await assert.rejects(cancelledCreation,/cancelled/);await newerUnlock;
 assert.equal(queuedVault.unlocked,true);checks++;
+const deletedStore=new Store(),deletedVault=new S.Vault(deletedStore),deletedAbort=new AbortController();await deletedVault.create(pass);
+const deleteCommit=deletedStore.commit.bind(deletedStore);let deleted,finishDelete;
+const deletedGate=new Promise(r=>deleted=r),finishDeleteGate=new Promise(r=>finishDelete=r);
+deletedStore.commit=async(...args)=>{await deleteCommit(...args);if(args[1]===null){deletedAbort.abort();deleted();await finishDeleteGate}};
+const cancelledDelete=deletedVault.erase({signal:deletedAbort.signal});await deletedGate;
+const newerCreate=deletedVault.create(pass);finishDelete();await cancelledDelete;await newerCreate;
+assert.equal(deletedVault.unlocked,true);assert(deletedStore.raw);checks++;
 console.log(JSON.stringify({status:'PASS',checks,scope:'vault-cancellation-and-commit-boundaries',real_indexeddb_tested:false}));
