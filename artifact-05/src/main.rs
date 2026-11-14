@@ -274,3 +274,105 @@ fn positive_env_u64(name: &str, default: u64) -> u64 {
         .map(|value| value + 1)
         .expect("safety limit must be positive")
 }
+
+
+#[cfg(test)]
+mod operational_storage_tests {
+    use super::*;
+    use axum::{
+        body::{to_bytes, Body},
+        http::{Request, StatusCode},
+    };
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn live_workspace_mount_substitution_flips_readiness_and_storage_errors() {
+        let root = std::env::temp_dir().join(format!(
+            "nexus-workspace-readiness-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let moved = root.with_extension("moved");
+        let delegate = CoreDelegate::new(root.clone()).unwrap();
+        delegate
+            .create_workspace("original".into(), "Question".into(), ProvenanceId::new("user"))
+            .unwrap();
+        let app = router(AppState::authenticated(delegate, "test-secret"));
+        let initial = app
+            .clone()
+            .oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(initial.status(), StatusCode::OK);
+
+        // Simulate the live workspace directory being replaced by an empty,
+        // writable directory. Request ledger health does not cover this test.
+        std::fs::rename(&root, &moved).unwrap();
+        std::fs::create_dir(&root).unwrap();
+        let response = app
+            .clone()
+            .oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        let bytes = to_bytes(response.into_body(), 128).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+            serde_json::json!({"status":"workspace_unavailable"})
+        );
+
+        for (method, path, body) in [
+            ("GET", "/v1/workspaces/original", ""),
+            ("POST", "/v1/workspaces", r#"{"workspace_id":"substitute","question":"Q","provenance_id":"p"}"#),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(path)
+                        .header("authorization", "Bearer test-secret")
+                        .header("content-type", "application/json")
+                        .body(Body::from(body))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE, "{method} {path}");
+            let bytes = to_bytes(response.into_body(), 128).await.unwrap();
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+                serde_json::json!({"error":"workspace_storage_unavailable"})
+            );
+        }
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+        let alive = app
+            .clone()
+            .oneshot(Request::builder().uri("/livez").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(alive.status(), StatusCode::OK);
+
+        // Only the exact pinned directory inode restores readiness.
+        std::fs::remove_dir(&root).unwrap();
+        std::fs::rename(&moved, &root).unwrap();
+        let restored = app
+            .clone()
+            .oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(restored.status(), StatusCode::OK);
+        let loaded = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/workspaces/original")
+                    .header("authorization", "Bearer test-secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(loaded.status(), StatusCode::OK);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
