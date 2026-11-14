@@ -25,11 +25,11 @@ EXPECTED_BLOBS = {
     "docs/CLOUD-HEADER-CARDINALITY-2026-11-14.md": "73857d6fc248202280ba661fe2ab2249a195dcb1",
     "docs/STUDIO-JSON-BOUNDARY-2026-11-14.md": "1018752b319b14d99168e44633bfce1a477151db",
     "docs/GATEWAY-AUTH-HEADER-IDENTITY-2026-11-14.md": "337362089373faeb33061b041505e2d5e417c9ab",
-    "artifact-05/src/main.rs": "195c87e51e91147a57c64415aa3f743e4d6d8e6c",
+    "artifact-05/src/main.rs": "67d0283cc374b63d78d15f9cfe7138b72f2173e1",
     "artifact-05/src/request_store.rs": "e988175dfeccaab1b2adfda0af096541647d7302",
     "artifact-05/src/workspace_api.rs": "e33f1bd77821ed05c0431d8dc4a117f07237ee66",
     "src/workspace_persistence.rs": "12b0c8198aec596825147160c6f78cc2c6af815e",
-    "docs/gateway-health.md": "866652bf8b175961566403345837e6682603261a",
+    "docs/gateway-health.md": "01151f0409a1805c3dc228c8c5440cb7f5b80a82",
     "scripts/verify-storage-failure-http.py": "7d51a52eadafdc4f9aee3eed549c14b85f562e6b",
     # PR #188 exact unmodified freeze-preflight source:
     "scripts/production-freeze-preflight.py": "67004efa104f9932bcf262e53c8e497c8fd81d4d",
@@ -47,7 +47,7 @@ EXPECTED_BLOBS = {
     "scripts/data-snapshot.py": "437b4c5ee90ca013ae8aaee84184035b0b06ddd7",
     "scripts/enroll-new-volume.py": "9cd129563ff0339726137c744059bb05166b2b9a",
     "scripts/test-enroll-new-volume.py": "0e348cdc432ec0ff3cd3a05b12d2858c2ce034aa",
-    "scripts/test-volume-identity-gateway.py": "915b7351596968d55392f561e3f1e05f6665253b",
+    "scripts/test-volume-identity-gateway.py": "6e50e2a3d10eba4c03df63774a096126e96ea8ec",
     "scripts/test-data-snapshot.py": "7e73645cdcbcd3436ac729c6c913f8d821f6dcf0",
 }
 
@@ -60,6 +60,8 @@ REQUIRED_RUST_TOKENS = {
         'health_response(StatusCode::SERVICE_UNAVAILABLE, "workspace_unavailable")',
         'health_response(StatusCode::SERVICE_UNAVAILABLE, "storage_unavailable")',
         'health_response(StatusCode::SERVICE_UNAVAILABLE, "admission_unavailable")',
+        'safety_error(StatusCode::SERVICE_UNAVAILABLE, "volume_identity_unavailable")',
+        'fn check_runtime_volume_identity(&self) -> bool',
     ),
     "artifact-05/tests/http_contract.rs": (
         "duplicate_authorization_headers_never_authorize_rust_gateway",
