@@ -125,13 +125,25 @@ independent custody receipt, or permission to dismiss quarantine. A root can
 still be tampered with by actors who can rewrite both the volume and marker.
 When configured, the original marker and pinned root are rechecked on **every
 `/readyz` probe and authenticated private Workspace/request API operation**.
+A failed live identity check becomes a process-wide, monotonic in-memory latch
+shared by concurrent requests; subsequent successful file checks cannot
+automatically unfreeze it.
 Removing or changing the marker after startup changes `/readyz` to HTTP
 **503** `workspace_unavailable`, and private routes reject requests with
 HTTP **503** `volume_identity_unavailable` before parsing their bodies or
 reserving request IDs. `/livez` remains 200, avoiding recovery restart loops;
 invalid bearer credentials receive 401 before the storage state is disclosed.
-Restoring the exact original marker can recover readiness without a restart
-provided other storage and recovery gates pass.
+**A detected marker outage permanently latches this gateway process as not
+ready.** Replacing the marker with the exact original bytes or inode does
+**not** clear the latch: `/readyz` remains HTTP 503 and private routes
+remain HTTP 503 until the operator has investigated the volume, verified
+the independent recovery evidence, and deliberately restarted the process
+against a trusted original or restored volume. The gateway never
+automatically acknowledges a marker recovery. The original marker file
+identity (device/inode on Unix) is pinned for that process; a replacement
+file with **the same contents** also triggers this hold. A new process pins
+the identity of its verified volume marker at startup, but a restart is
+not authorization to bypass the separate restore quarantine or release gates.
 
 These are discrete checks, **not an atomic lock across a complete API
 transaction**: a hostile concurrent marker edit after the check can still race
