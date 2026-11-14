@@ -107,6 +107,21 @@ impl RequestStore {
         Ok(())
     }
 
+    /// Read-only runtime readiness. Check that the configured ledger path
+    /// still names the pinned directory and its directory entries are
+    /// traversable. This deliberately does not write a probe marker, clear
+    /// recovery quarantine or promise that the next fsync will succeed.
+    pub(crate) fn check_readiness(&self) -> io::Result<()> {
+        self.verify_root()?;
+        let mut entries = fs::read_dir(self.pinned_dir_path())?;
+        // read_dir opens the directory; consuming one entry also surfaces
+        // delayed enumeration errors without scanning the whole request log.
+        if let Some(entry) = entries.next() {
+            entry?;
+        }
+        self.verify_root()
+    }
+
     fn verify_marker_identity(&self, file: &File, path: &Path, size: u64) -> io::Result<()> {
         let linked = fs::symlink_metadata(path)?;
         let actual = file.metadata()?;

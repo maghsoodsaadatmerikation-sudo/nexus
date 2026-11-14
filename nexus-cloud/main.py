@@ -105,7 +105,22 @@ async def health() -> dict[str, str]:
 )
 async def delegate_to_constitutional_gateway(path: str, request: Request) -> Response:
     """Forward an opaque request without authorizing or interpreting it."""
-    authorization = request.headers.get("authorization", "")
+    authorizations = request.headers.getlist("authorization")
+    if not authorizations:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Bearer authentication is required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # Both an edge proxy and the constitutional gateway must interpret the
+    # same single credential. Never select the first/last duplicate header.
+    if len(authorizations) != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Ambiguous Authorization headers",
+            headers={"Cache-Control": "no-store"},
+        )
+    authorization = authorizations[0]
     if not authorization.startswith("Bearer ") or not authorization[7:].strip():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -144,7 +159,22 @@ async def delegate_to_constitutional_gateway(path: str, request: Request) -> Res
 async def _forward_to_core(
     path: str, request: Request, core_url: str, authorization: str
 ) -> Response:
-    declared = request.headers.get("content-length")
+    lengths = request.headers.getlist("content-length")
+    content_types = request.headers.getlist("content-type")
+    encodings = request.headers.getlist("content-encoding")
+    transfer_encodings = request.headers.getlist("transfer-encoding")
+    # A request can be decoded or authorized differently across HTTP hops
+    # when field cardinality is ambiguous. Fail before polling the body and
+    # before sending any bytes to the private core.
+    if (len(lengths) > 1 or len(content_types) > 1 or
+        len(encodings) > 1 or len(transfer_encodings) > 1 or
+        (lengths and transfer_encodings)):
+        raise HTTPException(
+            status_code=400,
+            detail="Ambiguous delegated request headers",
+            headers={"Cache-Control": "no-store"},
+        )
+    declared = lengths[0] if lengths else None
     if declared is not None:
         if not declared.isascii() or not declared.isdecimal():
             raise HTTPException(status_code=400, detail="Invalid Content-Length")
@@ -159,12 +189,18 @@ async def _forward_to_core(
                 body.extend(chunk)
     except TimeoutError as exc:
         raise HTTPException(status_code=408, detail="Request body timed out") from exc
+    if declared is not None and len(body) != int(declared):
+        raise HTTPException(
+            status_code=400,
+            detail="Content-Length does not match received body",
+            headers={"Cache-Control": "no-store"},
+        )
 
     headers = {"authorization": authorization, "accept-encoding": "identity"}
-    if content_type := request.headers.get("content-type"):
-        headers["content-type"] = content_type
-    if encoding := request.headers.get("content-encoding"):
-        headers["content-encoding"] = encoding
+    if content_types and content_types[0]:
+        headers["content-type"] = content_types[0]
+    if encodings and encodings[0]:
+        headers["content-encoding"] = encodings[0]
     response_headers = {"cache-control": "no-store"}
     content = bytearray()
     try:

@@ -23,6 +23,33 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      # This candidate composes several previously verified PRs. Require the
+      # unchanged upstream sources to retain their pinned Git blob identity;
+      # Rust source conflicts are separately exercised by Cargo/HTTP tests.
+      - name: Enforce composed candidate source identity
+        run: python3 scripts/verify-composed-security-source.py
+
+      # This job is the only required branch-ruleset status check. Cloud
+      # transport tests must be part of this same job, not only an optional
+      # path-filtered workflow whose failure could be ignored at merge.
+      - name: Install pinned uv for mandatory cloud contract
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        with:
+          version: "0.12.4"
+          enable-cache: "false"
+          working-directory: nexus-cloud
+
+      - name: Install pinned Python for mandatory cloud contract
+        run: uv python install 3.13
+
+      - name: Enforce cloud transport and Studio model tests in required PR status
+        working-directory: nexus-cloud
+        run: |
+          set -euo pipefail
+          uv sync --frozen
+          uv run --frozen python -m compileall -q main.py studio_model.py tests
+          uv run --frozen pytest -q
+
       - name: Test fail-closed runtime diagnostics
         run: |
           bash -n scripts/observe-runtime-drift.sh
@@ -49,6 +76,42 @@ jobs:
 
       - name: Verify transport authentication behavior
         run: bash scripts/v2.5-transport-authentication-verification.sh
+
+      # Mandatory PR gate: test the operator freeze decision without provider
+      # credentials or pretending that synthetic evidence grants release authority.
+      - name: Test fail-closed Render and GitHub freeze preflight
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/production-freeze-preflight.py scripts/test-production-freeze-preflight.py
+          python3 scripts/test-production-freeze-preflight.py
+
+      # The full two-runner drill is exercised in its separate isolated
+      # workflow. Require its reject-invalid-input self-test here as well.
+      - name: Test isolated cross-runner recovery evidence contract
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/pilot-cross-runner-recovery.py
+          python3 scripts/pilot-cross-runner-recovery.py self-test
+
+      # Operator guidance is part of the deployment safety contract: a
+      # missing readiness failure or false release-green claim fails the
+      # same branch-ruleset-required status as Rust/cloud verification.
+      - name: Enforce deployment runbook and health contract
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/verify-deployment-runbook.py
+          python3 scripts/verify-deployment-runbook.py
+          python3 scripts/verify-deployment-runbook.py --self-test
+
+      # A missing/replaced durable volume must be rejected before gateway
+      # startup can manufacture a fresh empty history. Run synthetic full
+      # archive and explicit new-volume enrollment adversarial contracts.
+      - name: Verify enrolled volume startup and cold-restore contracts
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/data-snapshot.py scripts/test-data-snapshot.py scripts/enroll-new-volume.py scripts/test-enroll-new-volume.py scripts/test-volume-identity-gateway.py
+          python3 scripts/test-enroll-new-volume.py
+          python3 scripts/test-data-snapshot.py
 
       - name: Verify workflow authority boundary
         run: python3 scripts/verify-workflow-authority.py

@@ -47,8 +47,14 @@ inspect it offline. A retry rejects the existing target. No failure path resumes
 traffic or creates core authorization.
 
 The versioned JSON envelope records paths, byte sizes, SHA-256 digests and base64
-contents. It accepts only current hex-named workspace JSON and request marker
-files. Symlinks, unknown files (including unfinished `.json.tmp` writes), path
+contents. It accepts hex-named workspace JSON, request markers, an optional
+strictly formatted `.nexus-volume-identity` marker, and the recovery quarantine
+marker. An enrolled volume's identity marker is copied byte-for-byte and restored
+with Workspace history and the request ledger; recovery does **not** invent an
+identity for a legacy volume, and still creates quarantine on every restore.
+An operator-selected `NEXUS_EXPECTED_VOLUME_ID` therefore continues to match
+a recovered identity-bearing archive. Identity is not proof of archive
+authenticity or independent custody. Symlinks, unknown files (including unfinished `.json.tmp` writes), path
 traversal, duplicates, corrupt markers, inconsistent sizes/digests and archives
 over 64 MiB or 20,000 files fail closed. The gateway retains core workspace audit
 validation on load; the snapshot tool's structural checks do not replace it.
