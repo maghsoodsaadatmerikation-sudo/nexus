@@ -16,8 +16,13 @@ can cause different interpretations of a request's framing or content.
   Duplicate credentials (including identical copies) produce HTTP 400;
   a single malformed/missing bearer remains HTTP 401.
 - Permit zero or one of each `Content-Length`, `Content-Type` and
-  `Content-Encoding` headers. Duplicates fail with HTTP 400, before
-  polling the body or contacting the private core.
+  `Content-Encoding` and `Transfer-Encoding` headers. Duplicates fail
+  with HTTP 400, before polling the body or contacting the private core.
+  Requests carrying both `Content-Length` and `Transfer-Encoding`
+  are also rejected, regardless of field order.
+- Require the declared `Content-Length` (when present) to exactly equal
+  the bytes received from ASGI, not only stay under the 1 MiB limit.
+  A mismatch returns HTTP 400 and is never forwarded.
 - Preserve existing 1 MiB bounded body, response limit, deadline, capacity,
   HTTPS-only origin, no redirect, raw-body fidelity and pass-through status.
 - Add isolated regression tests using actual FastAPI TestClient and a
