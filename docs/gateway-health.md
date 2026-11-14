@@ -18,10 +18,15 @@ If the marker disappears or changes while the gateway remains running,
 `/readyz` returns 503 `workspace_unavailable` and authenticated private
 routes return 503 `{"error":"volume_identity_unavailable"}`. Invalid bearer
 credentials still produce 401 first; no marker failure details are disclosed
-to unauthenticated clients. `/livez` continues to return 200. Restoring
-the exact marker can restore readiness if the remaining gates pass. In
-legacy mode without an expected ID, this marker check is intentionally
-disabled; the runtime remains subject to the existing pinned-root safeguards.
+to unauthenticated clients. `/livez` continues to return 200. **A detected
+marker fault is latched for this process:** even restoring the same original
+marker does not clear the HTTP 503 responses. Authorized operators must
+investigate, establish the independent recovery state, and deliberately
+restart on a verified original or restored volume; the existing recovery
+quarantine remains separately enforced. On Unix the process also pins the
+marker device/inode identity: a new marker containing the correct bytes is
+not automatically trusted. In legacy mode without an expected ID, this
+check is intentionally disabled; existing pinned-root safeguards still apply.
 
 This check is **not** a transaction-spanning lock or a cryptographic proof
 of physical-disk identity. A concurrent marker modification between the
