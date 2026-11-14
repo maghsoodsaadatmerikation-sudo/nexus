@@ -1,0 +1,85 @@
+name: NEXUS Synthetic Cross-Runner Disaster Recovery
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pilot-cross-runner-recovery.yml'
+      - 'scripts/pilot-cross-runner-recovery.py'
+      - 'scripts/data-snapshot.py'
+      - 'Dockerfile'
+      - 'artifact-05/**'
+      - 'src/**'
+      - 'docs/PILOT-CROSS-RUNNER-RECOVERY.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-source:
+    name: synthetic-cross-runner-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    env:
+      NEXUS_CROSS_RUNNER_TEST: 'true'
+    outputs:
+      artifact_id: ${{ steps.transfer.outputs.artifact-id }}
+    steps:
+      - name: Checkout exact unprivileged commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Synthetic scripts self-check
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/pilot-cross-runner-recovery.py
+          python3 scripts/pilot-cross-runner-recovery.py self-test
+      - name: Build disposable Rust gateway (locked source)
+        run: |
+          set -euo pipefail
+          docker build --pull=false -t nexus-cross-runner:ci .
+      - name: Create synthetic workspace and archive AFTER clean stop
+        run: |
+          set -euo pipefail
+          python3 scripts/pilot-cross-runner-recovery.py produce
+      - name: Upload only this job's synthetic archive (never real data)
+        id: transfer
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-synthetic-cross-runner-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/nexus-synthetic-transfer/synthetic-volume-snapshot.json
+            ${{ runner.temp }}/nexus-synthetic-transfer/synthetic-recovery-receipt.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  synthetic-recipient:
+    name: synthetic-cross-runner-restore
+    needs: synthetic-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    env:
+      NEXUS_CROSS_RUNNER_TEST: 'true'
+    steps:
+      - name: Checkout same exact unprivileged candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Download exactly the producer job's artifact ID
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: ${{ needs.synthetic-source.outputs.artifact_id }}
+          path: ${{ runner.temp }}/nexus-synthetic-received
+          merge-multiple: true
+      - name: Independently rebuild Rust gateway from candidate source
+        run: |
+          set -euo pipefail
+          docker build --pull=false -t nexus-cross-runner:ci .
+      - name: Verify corruption refusal, quarantine, ledger, reads, resumed writes
+        run: |
+          set -euo pipefail
+          python3 scripts/pilot-cross-runner-recovery.py recover \
+            --artifact-dir "${{ runner.temp }}/nexus-synthetic-received"

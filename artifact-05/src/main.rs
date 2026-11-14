@@ -1,5 +1,6 @@
 mod health;
 mod listener;
+mod volume_identity;
 
 use axum::{routing::get, Json};
 use nexus_artifact_05_gateway::{
@@ -7,11 +8,19 @@ use nexus_artifact_05_gateway::{
     WorkspaceDelegate, WorkspaceDelegateError,
 };
 use nexus_constitutional_core::{
-    Alternative, AnalysisBatch, Claim, FileWorkspaceRepository, HumanJudgment, PolicyEngine,
-    ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceSnapshot,
+    Alternative, AnalysisBatch, Claim, DurableWorkspaceError, FileWorkspaceRepository,
+    HumanJudgment, PolicyEngine, ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceSnapshot,
 };
 use serde::Serialize;
-use std::{net::SocketAddr, path::PathBuf, sync::Mutex, time::Duration};
+use std::{
+    net::SocketAddr,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
+    time::Duration,
+};
 
 #[derive(Debug, Serialize)]
 struct RuntimeIdentity {
@@ -30,17 +39,71 @@ async fn runtime_identity() -> Json<RuntimeIdentity> {
 
 struct CoreDelegate {
     workspaces: Mutex<FileWorkspaceRepository>,
+    // Independent read-only probe: readiness must not wait for a writer's mutex.
+    workspace_probe: FileWorkspaceRepository,
+    // Optional non-secret operator-enrolled volume ID. Rechecked before
+    // serving each private API request and every readiness probe.
+    expected_volume_id: Option<String>,
+    pinned_marker_identity: Option<volume_identity::MarkerIdentity>,
+    // Once an enrolled volume is lost or its marker changes, the gateway
+    // remains quarantined until a clean restart and independent inspection.
+    // In-memory and shared across all router clones in this process.
+    volume_identity_latched: AtomicBool,
 }
 
 impl CoreDelegate {
-    fn new(root: PathBuf) -> Self {
-        Self {
-            workspaces: Mutex::new(FileWorkspaceRepository::new(root)),
+    fn new(root: PathBuf) -> Result<Self, DurableWorkspaceError> {
+        Self::new_with_volume_id(root, None)
+    }
+
+    fn new_with_volume_id(
+        root: PathBuf,
+        expected_volume_id: Option<String>,
+    ) -> Result<Self, DurableWorkspaceError> {
+        let pinned_marker_identity = expected_volume_id
+            .as_ref()
+            .map(|expected| {
+                volume_identity::inspect(&root, expected).map_err(|_| DurableWorkspaceError::Io)
+            })
+            .transpose()?;
+        let repository = FileWorkspaceRepository::new(root).pin_root()?;
+        let workspace_probe = repository.clone();
+        Ok(Self {
+            workspaces: Mutex::new(repository),
+            workspace_probe,
+            expected_volume_id,
+            pinned_marker_identity,
+            volume_identity_latched: AtomicBool::new(false),
+        })
+    }
+
+    fn volume_identity_ready(&self) -> bool {
+        let Some(expected) = self.expected_volume_id.as_ref() else {
+            return true; // Legacy mode: retain existing pinned-root checks.
+        };
+        if self.volume_identity_latched.load(Ordering::Acquire) {
+            return false;
         }
+        let matches_original = self.workspace_probe.check_runtime_readiness().is_ok()
+            && volume_identity::inspect(self.workspace_probe.root(), expected)
+                .is_ok_and(|current| Some(current) == self.pinned_marker_identity);
+        if !matches_original {
+            if !self.volume_identity_latched.swap(true, Ordering::AcqRel) {
+                eprintln!("NEXUS_OP event=volume_identity_guard status=latched");
+            }
+            return false;
+        }
+        // Another concurrent request may have detected an outage while this
+        // probe was running. Never allow this probe to clear that latch.
+        !self.volume_identity_latched.load(Ordering::Acquire)
     }
 }
 
 impl ConstitutionalDelegate for CoreDelegate {
+    fn check_runtime_volume_identity(&self) -> bool {
+        self.volume_identity_ready()
+    }
+
     fn submit(&self, envelope: RequestEnvelope) -> Result<Submission, DelegateError> {
         let request = PolicyEngine::new()
             .authorize(envelope)
@@ -52,7 +115,24 @@ impl ConstitutionalDelegate for CoreDelegate {
     }
 }
 
+fn map_durable_error(error: DurableWorkspaceError) -> WorkspaceDelegateError {
+    match error {
+        DurableWorkspaceError::Io => WorkspaceDelegateError::StorageUnavailable,
+        DurableWorkspaceError::AlreadyExists => WorkspaceDelegateError::AlreadyExists,
+        _ => WorkspaceDelegateError::Invalid,
+    }
+}
+
 impl WorkspaceDelegate for CoreDelegate {
+    fn check_storage_readiness(&self) -> Result<(), WorkspaceDelegateError> {
+        if !self.volume_identity_ready() {
+            return Err(WorkspaceDelegateError::StorageUnavailable);
+        }
+        self.workspace_probe
+            .check_runtime_readiness()
+            .map_err(map_durable_error)
+    }
+
     fn create_workspace(
         &self,
         workspace_id: String,
@@ -63,17 +143,10 @@ impl WorkspaceDelegate for CoreDelegate {
             .workspaces
             .lock()
             .map_err(|_| WorkspaceDelegateError::Unavailable)?;
-        if repository
-            .load(&workspace_id)
-            .map_err(|_| WorkspaceDelegateError::Invalid)?
-            .is_some()
-        {
-            return Err(WorkspaceDelegateError::AlreadyExists);
-        }
         let snapshot = WorkspaceEngine::new(workspace_id, question, provenance_id).snapshot();
         repository
-            .save(snapshot.clone())
-            .map_err(|_| WorkspaceDelegateError::Invalid)?;
+            .create_new(snapshot.clone())
+            .map_err(map_durable_error)?;
         Ok(snapshot)
     }
 
@@ -87,16 +160,9 @@ impl WorkspaceDelegate for CoreDelegate {
             .workspaces
             .lock()
             .map_err(|_| WorkspaceDelegateError::Unavailable)?;
-        if repository
-            .load(&snapshot.workspace.id)
-            .map_err(|_| WorkspaceDelegateError::Invalid)?
-            .is_some()
-        {
-            return Err(WorkspaceDelegateError::AlreadyExists);
-        }
         repository
-            .save(snapshot.clone())
-            .map_err(|_| WorkspaceDelegateError::Invalid)?;
+            .create_new(snapshot.clone())
+            .map_err(map_durable_error)?;
         Ok(snapshot)
     }
 
@@ -108,7 +174,7 @@ impl WorkspaceDelegate for CoreDelegate {
             .lock()
             .map_err(|_| WorkspaceDelegateError::Unavailable)?
             .load(workspace_id)
-            .map_err(|_| WorkspaceDelegateError::Invalid)?
+            .map_err(map_durable_error)?
             .ok_or(WorkspaceDelegateError::NotFound)
     }
 
@@ -169,7 +235,7 @@ impl CoreDelegate {
             .map_err(|_| WorkspaceDelegateError::Unavailable)?;
         let snapshot = repository
             .load(workspace_id)
-            .map_err(|_| WorkspaceDelegateError::Invalid)?
+            .map_err(map_durable_error)?
             .ok_or(WorkspaceDelegateError::NotFound)?;
         let mut engine = WorkspaceEngine::from_snapshot(snapshot)
             .map_err(|_| WorkspaceDelegateError::Invalid)?;
@@ -177,7 +243,7 @@ impl CoreDelegate {
         let snapshot = engine.snapshot();
         repository
             .save(snapshot.clone())
-            .map_err(|_| WorkspaceDelegateError::Invalid)?;
+            .map_err(map_durable_error)?;
         Ok(snapshot)
     }
 }
@@ -197,6 +263,16 @@ async fn main() {
     let data_root = std::env::var_os("NEXUS_DATA_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("nexus-data"));
+    // Explicit opt-in. The operator must have enrolled the existing persistent
+    // volume OFFLINE first. Never enroll or create a missing volume on startup.
+    let expected_volume_id = std::env::var_os("NEXUS_EXPECTED_VOLUME_ID")
+        .map(|value| value.into_string().expect("volume ID must be UTF-8"));
+    if let Some(expected) = &expected_volume_id {
+        volume_identity::verify(&data_root, expected).expect("enrolled data volume identity");
+        eprintln!("NEXUS_OP event=volume_identity_guard status=verified");
+    } else {
+        eprintln!("NEXUS_OP event=volume_identity_guard status=disabled");
+    }
     let bind_addr =
         std::env::var("NEXUS_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".to_owned());
     let addr: SocketAddr = bind_addr.parse().expect("valid NEXUS_BIND_ADDR");
@@ -215,8 +291,14 @@ async fn main() {
         Duration::from_secs(rate_window_seconds),
         max_tracked_requests,
     );
+    // Pin the workspace directory before serving. If the volume later
+    // vanishes or gets replaced, its next operation must fail closed rather
+    // than adopt the substitute directory as the workspace store.
+    let core_delegate =
+        CoreDelegate::new_with_volume_id(data_root.clone(), expected_volume_id.clone())
+            .expect("pin enrolled workspace data root");
     let app = router(
-        AppState::authenticated(CoreDelegate::new(data_root.clone()), token)
+        AppState::authenticated(core_delegate, token)
             .with_safety(safety)
             .with_recovery_gate(&data_root)
             .expect("inspect recovery quarantine")
@@ -224,6 +306,11 @@ async fn main() {
             .expect("open durable request store"),
     )
     .route("/v1/runtime-identity", get(runtime_identity));
+    // Validate again after opening workspace/ledger handles to reject a root
+    // changed during startup. Directory pinning covers later root swaps.
+    if let Some(expected) = &expected_volume_id {
+        volume_identity::verify(&data_root, expected).expect("data volume changed at startup");
+    }
     let listener = listener::open(addr).await.expect("open gateway listener");
     if let Err(error) = axum::serve(listener, app).await {
         eprintln!("NEXUS_OP event=server_exit error={error}");
@@ -251,4 +338,189 @@ fn positive_env_u64(name: &str, default: u64) -> u64 {
         .checked_sub(1)
         .map(|value| value + 1)
         .expect("safety limit must be positive")
+}
+
+#[cfg(test)]
+mod operational_storage_tests {
+    use super::*;
+    use axum::{
+        body::{to_bytes, Body},
+        http::{Request, StatusCode},
+    };
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn distinct_gateway_instances_never_both_create_same_workspace() {
+        let root =
+            std::env::temp_dir().join(format!("nexus-atomic-gateway-{}", uuid::Uuid::new_v4()));
+        // Separate CoreDelegate instances simulate separate gateway processes:
+        // their in-process mutexes are unrelated but filesystem locks coordinate.
+        let first = router(AppState::authenticated(
+            CoreDelegate::new(root.clone()).unwrap(),
+            "test-secret",
+        ));
+        let second = router(AppState::authenticated(
+            CoreDelegate::new(root.clone()).unwrap(),
+            "test-secret",
+        ));
+        let create = r#"{"workspace_id":"one","question":"Q","provenance_id":"user"}"#;
+        let post = |app: axum::Router, route: &'static str, bytes: String| async move {
+            app.oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(route)
+                    .header("authorization", "Bearer test-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(bytes))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .status()
+        };
+        let (a, b) = tokio::join!(
+            post(first.clone(), "/v1/workspaces", create.to_owned()),
+            post(second.clone(), "/v1/workspaces", create.to_owned())
+        );
+        assert!(
+            (a == StatusCode::CREATED && b == StatusCode::CONFLICT)
+                || (a == StatusCode::CONFLICT && b == StatusCode::CREATED),
+            "create race should yield exactly one success: {a} and {b}"
+        );
+        let snapshot =
+            WorkspaceEngine::new("import-id", "Original", ProvenanceId::new("user")).snapshot();
+        let imported = serde_json::to_string(&snapshot).unwrap();
+        assert_eq!(
+            post(first, "/v1/workspaces/import", imported.clone()).await,
+            StatusCode::CREATED
+        );
+        assert_eq!(
+            post(second, "/v1/workspaces/import", imported).await,
+            StatusCode::CONFLICT
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn live_workspace_mount_substitution_flips_readiness_and_storage_errors() {
+        let root = std::env::temp_dir().join(format!(
+            "nexus-workspace-readiness-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let moved = root.with_extension("moved");
+        let delegate = CoreDelegate::new(root.clone()).unwrap();
+        delegate
+            .create_workspace(
+                "original".into(),
+                "Question".into(),
+                ProvenanceId::new("user"),
+            )
+            .unwrap();
+        let app = router(AppState::authenticated(delegate, "test-secret"));
+        let initial = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(initial.status(), StatusCode::OK);
+
+        // Simulate the live workspace directory being replaced by an empty,
+        // writable directory. Request ledger health does not cover this test.
+        std::fs::rename(&root, &moved).unwrap();
+        std::fs::create_dir(&root).unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        let bytes = to_bytes(response.into_body(), 128).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+            serde_json::json!({"status":"workspace_unavailable"})
+        );
+
+        for (method, path, body) in [
+            ("GET", "/v1/workspaces/original", ""),
+            (
+                "POST",
+                "/v1/workspaces",
+                r#"{"workspace_id":"substitute","question":"Q","provenance_id":"p"}"#,
+            ),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(path)
+                        .header("authorization", "Bearer test-secret")
+                        .header("content-type", "application/json")
+                        .body(Body::from(body))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::SERVICE_UNAVAILABLE,
+                "{method} {path}"
+            );
+            let bytes = to_bytes(response.into_body(), 128).await.unwrap();
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+                serde_json::json!({"error":"workspace_storage_unavailable"})
+            );
+        }
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+        let alive = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/livez")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(alive.status(), StatusCode::OK);
+
+        // Only the exact pinned directory inode restores readiness.
+        std::fs::remove_dir(&root).unwrap();
+        std::fs::rename(&moved, &root).unwrap();
+        let restored = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(restored.status(), StatusCode::OK);
+        let loaded = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/workspaces/original")
+                    .header("authorization", "Bearer test-secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(loaded.status(), StatusCode::OK);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
