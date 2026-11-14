@@ -1590,7 +1590,6 @@ async fn workspace_transport_rejects_before_polling_or_delegation() {
     );
 }
 
-
 #[tokio::test]
 async fn duplicate_authorization_headers_never_authorize_rust_gateway() {
     let delegate = RecordingDelegate::default();
@@ -1671,14 +1670,14 @@ async fn a_single_exact_bearer_still_authorizes_without_prefix_equivalence() {
                 "action": "present",
                 "value": "accepted",
                 "payload": "opaque"
-            }).to_string()
+            })
+            .to_string(),
         ))
         .unwrap();
     let response = app.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::ACCEPTED);
     assert_eq!(delegate.requests.lock().unwrap().len(), 1);
 }
-
 
 #[test]
 fn invalid_runtime_bearer_tokens_fail_at_configuration_not_during_requests() {
