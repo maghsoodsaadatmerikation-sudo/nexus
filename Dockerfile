@@ -5,13 +5,18 @@ COPY Cargo.toml Cargo.lock ./
 COPY Dockerfile ./Dockerfile
 COPY src ./src
 COPY artifact-05 ./artifact-05
+# Keep dependency retrieval separate from frequently changed browser assets.
+# Fetch uses locked versions and bounded native retries; compilation is offline.
+RUN CARGO_HTTP_MULTIPLEXING=false CARGO_HTTP_TIMEOUT=30 CARGO_NET_RETRY=3 \
+    cargo fetch --manifest-path artifact-05/Cargo.toml --locked
+
 COPY web ./web
 COPY scripts/source-tree-digest.sh ./scripts/source-tree-digest.sh
 
 RUN SOURCE_TREE_SHA256="$(bash scripts/source-tree-digest.sh)" \
     && test -n "$SOURCE_TREE_SHA256" \
     && echo "NEXUS build source tree: $SOURCE_TREE_SHA256" \
-    && NEXUS_SOURCE_TREE_SHA256="$SOURCE_TREE_SHA256" cargo build --manifest-path artifact-05/Cargo.toml --release --locked \
+    && NEXUS_SOURCE_TREE_SHA256="$SOURCE_TREE_SHA256" cargo build --manifest-path artifact-05/Cargo.toml --release --frozen \
     && test -x artifact-05/target/release/nexus-artifact-05-gateway
 
 FROM rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e

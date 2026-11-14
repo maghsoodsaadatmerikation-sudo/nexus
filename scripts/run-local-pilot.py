@@ -158,8 +158,15 @@ def main():
                 print(json.dumps({'url': base, 'gateway_pid': process.pid,
                     'state': 'ready' if readiness == 200 else 'recovery-quarantined',
                     'token_file': str(token_path), 'authority': 'none'}), flush=True)
-                code = process.wait()
-                return 0 if stopped else code if code > 0 else 1
+                # Poll so a stop request reaches bounded cleanup even if the
+                # child ignores SIGTERM; an unbounded wait would never unwind.
+                while not stopped:
+                    try:
+                        code = process.wait(timeout=.2)
+                        return 0 if stopped else code if code > 0 else 1
+                    except subprocess.TimeoutExpired:
+                        continue
+                return 0
             except OSError:
                 time.sleep(.05)
         if stopped:
