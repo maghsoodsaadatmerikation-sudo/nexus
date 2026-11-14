@@ -16,9 +16,13 @@ disposable Chromium** at narrow and wide viewports, on manual dispatch, relevant
 script changes and a once-weekly read-only schedule (Monday 06:23 UTC).
 The workflow:
 
-1. Requires checked-out standalone HTML to match exact previously published
-   source `736e7b25819064722675505c86efa09e7e79e2df`.
-   **Source candidate != deployed code** must fail, never be silently promoted.
+1. Pins the observed public HTML **and the corresponding Chromium witness scripts**
+   to a single immutable published-source reference in
+   `scripts/prepare-public-pilot-witness.sh`. A separate local regression
+   compares their extracted bytes against that reference. The current PR
+   candidate is tested independently; it must never be silently presented
+   as the running public deployment. A candidate/public version difference is
+   explicitly disclosed, not misclassified as a live-site failure.
 2. Independently GETs the exact public URL without redirects or credentials,
    checks HTTP 200 and `text/html`, then requires byte-for-byte SHA-256 match
    with the pinned deployed HTML and CSP/schema markers. Node repeats the
@@ -27,9 +31,9 @@ The workflow:
    remotely debugs them only over `127.0.0.1`, visits the actual HTTPS URL,
    observes real browser `Document` responses, fetches a genuine Chromium
    network response body, and checks its SHA-256 against source.
-4. Injects the **same synthetic JavaScript witness already used by the
-   isolated 46-check acceptance suite** via DevTools, not by editing the
-   deployed site. Its synthetic exercise includes one-click fictional onboarding,
+4. Injects the **published revision's matching synthetic JavaScript
+   witness** via DevTools, not by editing the deployed site. The candidate
+   revision's newer tests run in separate PR/offline checks. Its synthetic exercise includes one-click fictional onboarding,
    refusal to overwrite, external-source validation, optional AES-GCM
    encrypted file/checkpoint, wrong-password and tamper rejection, actual
    page reload with password re-entry and explicit user judgment semantics.
@@ -44,6 +48,10 @@ The workflow:
 The six local negative fixtures reject non-200/redirect/MIME/body drift
 and unexpected network hosts and POST requests. The app's CSP must continue
 to deny external connections. No production API call is issued by this test.
+
+## Version-coherent acceptance and limitation
+
+The public browser check establishes behavior of the **currently observed pinned source** only, not that the pending candidate is deployed. If the public HTML changes without a reviewed pinned-source update, exact-byte identity fails closed. If the candidate evolves independently, its new test expectations must not be applied to the older published site; doing so creates misleading failures and can hide the real distinction between deployed and proposed behavior. The independent source-coherence regression enforces the pinned source/witness pairing. A green public check never authorizes promotion or proves the candidate's runtime behavior.
 
 ## Evidentiary boundary and fail-closed gates
 
