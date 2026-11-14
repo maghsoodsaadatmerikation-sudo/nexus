@@ -330,9 +330,10 @@ fn workspace_error_response(error: WorkspaceDelegateError) -> axum::response::Re
         WorkspaceDelegateError::Unavailable => {
             (StatusCode::BAD_GATEWAY, "workspace_delegate_unavailable")
         }
-        WorkspaceDelegateError::StorageUnavailable => {
-            (StatusCode::SERVICE_UNAVAILABLE, "workspace_storage_unavailable")
-        }
+        WorkspaceDelegateError::StorageUnavailable => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "workspace_storage_unavailable",
+        ),
     };
     (status, Json(ErrorResponse { error: message })).into_response()
 }
