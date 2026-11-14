@@ -6,6 +6,7 @@ on:
       - 'web/vendor/**'
       - 'web/table-core.js'
       - 'scripts/*studio*'
+      - 'scripts/test-analysis-*.mjs'
       - 'nexus-cloud/**'
       - 'artifact-05/src/lib.rs'
       - '.github/workflows/studio.yml'
@@ -16,6 +17,7 @@ on:
       - 'web/vendor/**'
       - 'web/table-core.js'
       - 'scripts/*studio*'
+      - 'scripts/test-analysis-*.mjs'
       - '.github/workflows/studio.yml'
   workflow_dispatch:
 permissions:
@@ -51,6 +53,7 @@ jobs:
           node scripts/test-analysis-group-completeness.mjs
           node scripts/test-analysis-numeric-boundaries.mjs
           node scripts/test-analysis-empty-records.mjs
+          node scripts/test-analysis-json-keys.mjs
           node scripts/test-studio-sky.mjs
           node scripts/test-studio-astrology.mjs
           node scripts/test-studio-core.mjs
@@ -58,6 +61,8 @@ jobs:
           node scripts/test-studio-storage.mjs
           node scripts/test-studio-vault-cancellation.mjs
           node scripts/test-studio-lab.mjs
+      - name: Reject ambiguous JSON fields and clear stale analysis in real downloads
+        run: python3 scripts/test-studio-json-keys-browser.py
       - name: Exercise all-missing CSV and TSV records in real downloads
         run: python3 scripts/test-studio-empty-records-browser.py
       - name: Exercise exact JSON identifier and numeric range boundaries
