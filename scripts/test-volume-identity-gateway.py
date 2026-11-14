@@ -65,13 +65,13 @@ def failed_startup(binary: Path, root: Path, volume_id=ID) -> None:
             proc.wait(timeout=4)
 
 
-def request(number: int, method: str, route: str, payload=None):
+def request(number: int, method: str, route: str, payload=None, *, authorized=True):
     headers = {"Accept": "application/json"}
     data = None
     if payload is not None:
         data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         headers["Content-Type"] = "application/json"
-    if route.startswith("/v1/"):
+    if route.startswith("/v1/") and authorized:
         headers["Authorization"] = "Bearer " + TOKEN
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     req = urllib.request.Request(
@@ -148,6 +148,56 @@ def exercise(binary: Path):
             })
             require(status == 201 and body["workspace"]["id"] == "retained",
                     "synthetic workspace create refused")
+
+            # The marker may be altered *after* the process starts, even
+            # while both pinned directories retain their original inodes.
+            # Admission and readiness must fail closed without restarting.
+            marker = root / ".nexus-volume-identity"
+            original_marker = marker.read_bytes()
+            baseline_workspace = sorted(path.name for path in root.glob("*.json"))
+            baseline_ledger = sorted(path.name for path in (root / "requests").iterdir())
+            for damage in ("missing", "mismatched"):
+                if damage == "missing":
+                    marker.unlink()
+                else:
+                    marker.write_bytes(
+                        b"nexus.volume-identity.v1\\n" + WRONG.encode() + b"\\n"
+                    )
+                status, body = request(p, "GET", "/readyz")
+                require((status, body) == (503, {"status": "workspace_unavailable"}),
+                        "tampered live marker advertised ready")
+                require(request(p, "GET", "/livez") == (200, {"status": "alive"}),
+                        "volume marker outage caused liveness restart loop")
+                for method, route, payload in (
+                    ("GET", "/v1/workspaces/retained", None),
+                    ("POST", "/v1/workspaces", {
+                        "workspace_id": "unauthorized-on-volume",
+                        "question": "Reject",
+                        "provenance_id": "fixture:volume",
+                    }),
+                    ("GET", "/v1/requests/synthetic-id", None),
+                    ("POST", "/v1/requests", {}),
+                ):
+                    status, body = request(p, method, route, payload)
+                    require((status, body) == (
+                        503, {"error": "volume_identity_unavailable"}
+                    ), f"{method} {route} admitted when marker {damage}")
+                    status, body = request(
+                        p, method, route, payload, authorized=False
+                    )
+                    require(status == 401,
+                            "unauthenticated caller learned or bypassed volume state")
+                require(sorted(path.name for path in root.glob("*.json")) ==
+                        baseline_workspace, "workspace data changed after marker outage")
+                require(sorted(path.name for path in (root / "requests").iterdir()) ==
+                        baseline_ledger, "request ledger changed after marker outage")
+
+            marker.write_bytes(original_marker)
+            require(request(p, "GET", "/readyz") == (200, {"status": "ready"}),
+                    "original marker restoration did not recover readiness")
+            status, body = request(p, "GET", "/v1/workspaces/retained")
+            require(status == 200 and body["workspace"]["id"] == "retained",
+                    "original workspace unavailable after marker restoration")
         finally:
             stop(gateway)
 
