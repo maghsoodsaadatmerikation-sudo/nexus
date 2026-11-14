@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Fail-closed read-only provenance gate for the composited NEXUS candidate.
 
-Exact Git blob identities establish that unchanged code was copied from tested
-source PR heads. They are NOT signatures, runtime assurance or release authority.
+Git blob identities establish exact inherited upstream source and explicitly
+record new candidate-owned source identities. They are NOT signatures, runtime
+assurance or release authority.
 The intentionally merged Rust files are validated by Cargo/HTTP regression.
 """
 from __future__ import annotations
@@ -24,7 +25,7 @@ EXPECTED_BLOBS = {
     "docs/CLOUD-HEADER-CARDINALITY-2026-11-14.md": "73857d6fc248202280ba661fe2ab2249a195dcb1",
     "docs/STUDIO-JSON-BOUNDARY-2026-11-14.md": "1018752b319b14d99168e44633bfce1a477151db",
     "docs/GATEWAY-AUTH-HEADER-IDENTITY-2026-11-14.md": "337362089373faeb33061b041505e2d5e417c9ab",
-    "artifact-05/src/main.rs": "b899c8d30a088c6f9be2078a5dcc4b8b29fe7a41",
+    "artifact-05/src/main.rs": "195c87e51e91147a57c64415aa3f743e4d6d8e6c",
     "artifact-05/src/request_store.rs": "e988175dfeccaab1b2adfda0af096541647d7302",
     "artifact-05/src/workspace_api.rs": "e33f1bd77821ed05c0431d8dc4a117f07237ee66",
     "src/workspace_persistence.rs": "12b0c8198aec596825147160c6f78cc2c6af815e",
@@ -39,6 +40,15 @@ EXPECTED_BLOBS = {
     "scripts/pilot-cross-runner-recovery.py": "b4113ca9d7301dd48510a8433c681e2376d739a9",
     "docs/PILOT-CROSS-RUNNER-RECOVERY.md": "bd76958b5beeb363ed11f29b775bf794a28c19c4",
     ".github/workflows/pilot-cross-runner-recovery.yml": "07688b9ef3cfbef7ae79611f37c17bb1a4833b45",
+    # Candidate-owned, reviewable volume-identity additions; they are NOT
+    # claimed to be unchanged upstream PR #202 source. Startup/backup behavior
+    # must also pass mandatory Rust/Python and live HTTP synthetic checks.
+    "artifact-05/src/volume_identity.rs": "9bff70be16e859f2560e5e2a0957b4bb0ee2ec6e",
+    "scripts/data-snapshot.py": "437b4c5ee90ca013ae8aaee84184035b0b06ddd7",
+    "scripts/enroll-new-volume.py": "9cd129563ff0339726137c744059bb05166b2b9a",
+    "scripts/test-enroll-new-volume.py": "0e348cdc432ec0ff3cd3a05b12d2858c2ce034aa",
+    "scripts/test-volume-identity-gateway.py": "915b7351596968d55392f561e3f1e05f6665253b",
+    "scripts/test-data-snapshot.py": "7e73645cdcbcd3436ac729c6c913f8d821f6dcf0",
 }
 
 # Source files modified *only* to compose upstream Rust fixes. Mandatory Rust
