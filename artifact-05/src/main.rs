@@ -30,13 +30,17 @@ async fn runtime_identity() -> Json<RuntimeIdentity> {
 
 struct CoreDelegate {
     workspaces: Mutex<FileWorkspaceRepository>,
+    // Independent read-only probe: readiness must not wait for a writer's mutex.
+    workspace_probe: FileWorkspaceRepository,
 }
 
 impl CoreDelegate {
     fn new(root: PathBuf) -> Result<Self, DurableWorkspaceError> {
         let repository = FileWorkspaceRepository::new(root).pin_root()?;
+        let workspace_probe = repository.clone();
         Ok(Self {
             workspaces: Mutex::new(repository),
+            workspace_probe,
         })
     }
 }
@@ -53,7 +57,20 @@ impl ConstitutionalDelegate for CoreDelegate {
     }
 }
 
+fn map_durable_error(error: DurableWorkspaceError) -> WorkspaceDelegateError {
+    match error {
+        DurableWorkspaceError::Io => WorkspaceDelegateError::StorageUnavailable,
+        _ => WorkspaceDelegateError::Invalid,
+    }
+}
+
 impl WorkspaceDelegate for CoreDelegate {
+    fn check_storage_readiness(&self) -> Result<(), WorkspaceDelegateError> {
+        self.workspace_probe
+            .check_runtime_readiness()
+            .map_err(map_durable_error)
+    }
+
     fn create_workspace(
         &self,
         workspace_id: String,
@@ -66,7 +83,7 @@ impl WorkspaceDelegate for CoreDelegate {
             .map_err(|_| WorkspaceDelegateError::Unavailable)?;
         if repository
             .load(&workspace_id)
-            .map_err(|_| WorkspaceDelegateError::Invalid)?
+            .map_err(map_durable_error)?
             .is_some()
         {
             return Err(WorkspaceDelegateError::AlreadyExists);
@@ -74,7 +91,7 @@ impl WorkspaceDelegate for CoreDelegate {
         let snapshot = WorkspaceEngine::new(workspace_id, question, provenance_id).snapshot();
         repository
             .save(snapshot.clone())
-            .map_err(|_| WorkspaceDelegateError::Invalid)?;
+            .map_err(map_durable_error)?;
         Ok(snapshot)
     }
 
@@ -90,14 +107,14 @@ impl WorkspaceDelegate for CoreDelegate {
             .map_err(|_| WorkspaceDelegateError::Unavailable)?;
         if repository
             .load(&snapshot.workspace.id)
-            .map_err(|_| WorkspaceDelegateError::Invalid)?
+            .map_err(map_durable_error)?
             .is_some()
         {
             return Err(WorkspaceDelegateError::AlreadyExists);
         }
         repository
             .save(snapshot.clone())
-            .map_err(|_| WorkspaceDelegateError::Invalid)?;
+            .map_err(map_durable_error)?;
         Ok(snapshot)
     }
 
@@ -109,7 +126,7 @@ impl WorkspaceDelegate for CoreDelegate {
             .lock()
             .map_err(|_| WorkspaceDelegateError::Unavailable)?
             .load(workspace_id)
-            .map_err(|_| WorkspaceDelegateError::Invalid)?
+            .map_err(map_durable_error)?
             .ok_or(WorkspaceDelegateError::NotFound)
     }
 
@@ -170,7 +187,7 @@ impl CoreDelegate {
             .map_err(|_| WorkspaceDelegateError::Unavailable)?;
         let snapshot = repository
             .load(workspace_id)
-            .map_err(|_| WorkspaceDelegateError::Invalid)?
+            .map_err(map_durable_error)?
             .ok_or(WorkspaceDelegateError::NotFound)?;
         let mut engine = WorkspaceEngine::from_snapshot(snapshot)
             .map_err(|_| WorkspaceDelegateError::Invalid)?;
@@ -178,7 +195,7 @@ impl CoreDelegate {
         let snapshot = engine.snapshot();
         repository
             .save(snapshot.clone())
-            .map_err(|_| WorkspaceDelegateError::Invalid)?;
+            .map_err(map_durable_error)?;
         Ok(snapshot)
     }
 }
