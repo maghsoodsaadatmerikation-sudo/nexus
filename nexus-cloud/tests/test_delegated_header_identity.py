@@ -120,3 +120,55 @@ def test_two_authorization_headers_are_rejected_before_model_or_core(monkeypatch
             ("authorization", "Bearer other"),
         ])
         assert response.status_code == 400
+
+
+@pytest.mark.parametrize("declared", ["1", "3"])
+def test_mismatched_declared_length_fails_before_core(monkeypatch, declared):
+    monkeypatch.setenv("NEXUS_CORE_URL", "https://core.example")
+    headers = [(b"authorization", b"Bearer opaque"),
+               (b"content-length", declared.encode())]
+    calls = []
+    async def receive():
+        calls.append(1)
+        return {"type": "http.request", "body": b"{}", "more_body": False}
+    request = Request(
+        {"type": "http", "method": "POST", "path": "/v1/requests",
+         "headers": headers, "app": main.app}, receive
+    )
+
+    async def check():
+        main.app.state.gateway_limiter = anyio.CapacityLimiter(16)
+        with pytest.raises(HTTPException) as error:
+            await main.delegate_to_constitutional_gateway("requests", request)
+        assert error.value.status_code == 400
+        assert error.value.headers["Cache-Control"] == "no-store"
+
+    anyio.run(check)
+    assert calls == [1]
+
+
+@pytest.mark.parametrize("framing", [
+    [(b"content-length", b"2"), (b"transfer-encoding", b"chunked")],
+    [(b"transfer-encoding", b"chunked"), (b"transfer-encoding", b"identity")],
+])
+def test_conflicting_transfer_framing_rejected_without_body_poll(monkeypatch, framing):
+    monkeypatch.setenv("NEXUS_CORE_URL", "https://core.example")
+    calls = []
+    async def receive():
+        calls.append(1)
+        raise AssertionError("ambiguous framing reached body stream")
+
+    request = Request({
+        "type": "http", "method": "POST", "path": "/v1/requests",
+        "headers": [(b"authorization", b"Bearer opaque"), *framing],
+        "app": main.app,
+    }, receive)
+
+    async def check():
+        main.app.state.gateway_limiter = anyio.CapacityLimiter(16)
+        with pytest.raises(HTTPException) as error:
+            await main.delegate_to_constitutional_gateway("requests", request)
+        assert error.value.status_code == 400
+
+    anyio.run(check)
+    assert not calls
