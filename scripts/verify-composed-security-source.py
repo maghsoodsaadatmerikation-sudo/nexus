@@ -62,8 +62,11 @@ REQUIRED_RUST_TOKENS = {
         'health_response(StatusCode::SERVICE_UNAVAILABLE, "admission_unavailable")',
         '"volume_identity_unavailable"',
         'fn check_runtime_volume_identity(&self) -> bool',
+    ),
+    "artifact-05/src/main.rs": (
         'volume_identity_latched.swap(true, Ordering::AcqRel)',
-        'pinned_marker_identity',
+        'pinned_marker_identity: Option<volume_identity::MarkerIdentity>',
+        'fn volume_identity_ready(&self) -> bool',
     ),
     "artifact-05/tests/http_contract.rs": (
         "duplicate_authorization_headers_never_authorize_rust_gateway",
