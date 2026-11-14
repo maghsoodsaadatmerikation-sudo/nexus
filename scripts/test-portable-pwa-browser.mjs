@@ -11,7 +11,9 @@ import path from 'node:path';
 if(process.env.GITHUB_ACTIONS!=='true'||
    !/^[0-9]+$/.test(process.env.GITHUB_RUN_ID||''))
   throw Error('scoped-test-requires-ephemeral-GitHub-runner');
-const ORIGIN='http://127.0.0.1:8765/nexus/';
+const PUBLIC_MODE=process.env.NEXUS_PUBLIC_PWA_PREVIEW==='true';
+const ORIGIN=PUBLIC_MODE?'https://nexus-merikation-pwa-preview.onrender.com/nexus/':
+  'http://127.0.0.1:8765/nexus/';
 const PACKAGE_DIR=process.env.NEXUS_PORTABLE_DIR;
 if(!PACKAGE_DIR || !PACKAGE_DIR.startsWith(process.env.RUNNER_TEMP+'/'))
   throw Error('untrusted-packaged-directory');
