@@ -24,6 +24,8 @@ MAX_BYTES = 64 * 1024 * 1024
 MAX_FILES = 20_000
 RECOVERY_MARKER = ".nexus-recovery-required"
 RECOVERY_BYTES = b"snapshot-restored; replay-risk-not-acknowledged\n"
+VOLUME_IDENTITY_MARKER = ".nexus-volume-identity"
+VOLUME_IDENTITY_BYTES = re.compile(rb"nexus\.volume-identity\.v1\n[0-9a-f]{32}\n\Z")
 
 
 class SnapshotError(ValueError):
@@ -47,6 +49,9 @@ def validate_file(name, data):
     require(isinstance(name, str), "invalid path")
     if name == RECOVERY_MARKER:
         require(data == RECOVERY_BYTES, "invalid recovery quarantine marker")
+    elif name == VOLUME_IDENTITY_MARKER:
+        require(VOLUME_IDENTITY_BYTES.fullmatch(data) is not None,
+                "invalid volume identity marker")
     elif re.fullmatch(r"requests/[0-9a-f]{2,200}", name):
         encoded = name.split("/")[1]
         require(len(encoded) % 2 == 0, "invalid request ID encoding")
