@@ -483,6 +483,48 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn gateway_pinned_root_rejects_substitution_then_accepts_exact_restoration() {
+        let parent = temp_root("runtime-root-identity");
+        let root = parent.join("workspaces");
+        let moved = parent.with_extension("moved");
+        let mut repo = FileWorkspaceRepository::new(&root).pin_root().unwrap();
+        let first = WorkspaceEngine::new("w", "Original", ProvenanceId::new("p")).snapshot();
+        repo.save(first.clone()).unwrap();
+        assert_eq!(repo.load("w").unwrap(), Some(first.clone()));
+
+        // A vanished mount/ancestor is replaced by another writable folder.
+        fs::rename(&parent, &moved).unwrap();
+        fs::create_dir_all(&root).unwrap();
+        let witness = root.join("sentinel");
+        fs::write(&witness, b"not the original store").unwrap();
+        let second = WorkspaceEngine::new("new", "Other", ProvenanceId::new("p")).snapshot();
+        assert_eq!(repo.load("w"), Err(DurableWorkspaceError::Io));
+        assert_eq!(repo.save(second.clone()), Err(DurableWorkspaceError::Io));
+        assert_eq!(fs::read(&witness).unwrap(), b"not the original store");
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+
+        // A symlink alias to the original directory must not be accepted
+        // as a recovery of the configured actual directory pathname.
+        fs::remove_dir_all(&parent).unwrap();
+        std::os::unix::fs::symlink(moved.join("workspaces"), &root).unwrap_err();
+        fs::create_dir_all(&parent).unwrap();
+        std::os::unix::fs::symlink(moved.join("workspaces"), &root).unwrap();
+        assert_eq!(repo.load("w"), Err(DurableWorkspaceError::Io));
+        assert_eq!(repo.save(second.clone()), Err(DurableWorkspaceError::Io));
+        fs::remove_file(&root).unwrap();
+        fs::remove_dir(&parent).unwrap();
+
+        // Returning the original inode to the configured path preserves its
+        // history and allows legitimate extensions and new workspaces.
+        fs::rename(&moved, &parent).unwrap();
+        assert_eq!(repo.load("w").unwrap(), Some(first));
+        repo.save(second.clone()).unwrap();
+        assert_eq!(repo.load("new").unwrap(), Some(second));
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn pinned_directory_cannot_redirect_operations_after_an_ancestor_is_replaced() {
         let parent = temp_root("pinned-ancestor");
         let root = parent.join("workspaces");
