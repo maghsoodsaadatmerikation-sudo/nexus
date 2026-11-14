@@ -101,6 +101,20 @@ def payloads(source=None, worker=None, manifest=None, icons=None):
     require(b"connect-src 'none'" in source and b"nexus.offline-pilot" in source,
             "unexpected-html-contract")
     base = source.decode("utf-8")
+    # Portability must include the origin permission check, not merely paths.
+    # Accept a secure HTTPS origin (on any host) or local loopback HTTP only.
+    # Never permit file:// or non-loopback HTTP to register a worker.
+    base = replace_once(
+        base,
+        "const allowedInstallOrigin=window.isSecureContext&&\n"
+        "    (location.hostname==='nexus-offline-pilot.onrender.com'||\n"
+        "     location.hostname==='127.0.0.1'||location.hostname==='localhost')&&\n"
+        "    (location.protocol==='https:'||\n"
+        "     (location.protocol==='http:'&&location.hostname!=='nexus-offline-pilot.onrender.com'));",
+        "const allowedInstallOrigin=window.isSecureContext&&\n"
+        "    (location.protocol==='https:'||\n"
+        "     (location.protocol==='http:'&&\n"
+        "      (location.hostname==='127.0.0.1'||location.hostname==='localhost')));")
     base = replace_once(base, 'href="/manifest.json"', 'href="./manifest.json"')
     base = replace_once(
         base, "navigator.serviceWorker.register('/service-worker.js',{\n        scope:'/',",
