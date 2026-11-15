@@ -8,7 +8,8 @@ use nexus_artifact_05_gateway::{
 };
 use nexus_constitutional_core::analysis::{AnalysisAdapter, LocalQuestionProbe};
 use nexus_constitutional_core::{
-    Alternative, Claim, HumanJudgment, InMemoryWorkspaceRepository, ProvenanceId, RequestEnvelope,
+    Alternative, AnalysisBatch, AnalysisObservation, AnalysisObservationKind, Claim, ClaimOrigin,
+    HumanJudgment, InMemoryWorkspaceRepository, ProvenanceId, RequestEnvelope, Uncertainty,
     WorkspaceEngine, WorkspaceRepository, WorkspaceSnapshot,
 };
 use std::{
@@ -48,6 +49,22 @@ impl WorkspaceDelegate for RecordingDelegate {
         }
         let snapshot = WorkspaceEngine::new(workspace_id, question, provenance_id).snapshot();
         repository
+            .save(snapshot.clone())
+            .map_err(|_| WorkspaceDelegateError::Invalid)?;
+        Ok(snapshot)
+    }
+
+    fn import_workspace(
+        &self,
+        snapshot: WorkspaceSnapshot,
+    ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+        // Deliberately permissive test delegate: the HTTP boundary, not this
+        // in-memory fixture, must block claimed machine history pre-delegation.
+        let mut store = self.workspaces.lock().unwrap();
+        if store.load(&snapshot.workspace.id).is_some() {
+            return Err(WorkspaceDelegateError::AlreadyExists);
+        }
+        store
             .save(snapshot.clone())
             .map_err(|_| WorkspaceDelegateError::Invalid)?;
         Ok(snapshot)
