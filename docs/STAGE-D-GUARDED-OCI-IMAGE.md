@@ -27,7 +27,7 @@ The dedicated CI test runs actual \`docker run\` with Linux host-loopback networ
   
 The historical baseline binary predates the current PR's new restrictive 0700/0600 request creation fix. If it creates a permissively readable request marker, the guard **correctly refuses** the next startup, and CI narrows permissions *only on the disposable synthetic dataset* before retrying. Existing production volumes are never automatically chmodded or migrated.
 
-The CI reports \`local_image_id\` from \`docker image inspect\`. **This is not a registry-owned image digest, provider attestation, reproducible build record, SBOM, two-host recovery proof or deployment authorization.** The final runtime stage installs Python using an ordinary Debian apt repository and its packages are not pinned by snapshot digest; this is a reproducibility gap. Never promote this image to production without a reviewed, pinned OS/runtime dependency process.
+The CI reports \`local_image_id\` from \`docker image inspect\`. **This is not a registry-owned image digest, provider attestation, reproducible build record, SBOM, two-host recovery proof or deployment authorization.** In Stage 240, the runtime Python base was pinned to the exact official `python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c` image index, and mutable apt/pip installation was removed. A separate partial CycloneDX inventory and SHA-pinned build-input manifest are now generated in CI. This narrows build-input drift but **does not prove bit-identical rebuilds, independent provenance, a signed registry image digest or production readiness**. See `STAGE-D-OCI-BUILD-EVIDENCE.md`.
 
 ## Important bypass/limits
 

@@ -23,7 +23,7 @@ import uuid
 SOURCE = "f4d027bb5f7e715b298f7cf7184fa621a2fb071d"
 LEGACY = "588dc7672146031425b16b34956876d644244ace"
 ENTRY = [
-    "/usr/bin/python3", "-I", "-B",
+    "/usr/local/bin/python3", "-I", "-B",
     "/opt/nexus/stage-d-guarded-image-entrypoint.py",
 ]
 IMAGE_BINARY = "/opt/nexus/nexus"

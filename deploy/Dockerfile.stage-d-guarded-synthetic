@@ -14,21 +14,17 @@ RUN CARGO_HTTP_MULTIPLEXING=false CARGO_HTTP_TIMEOUT=30 CARGO_NET_RETRY=3 \
       --bin nexus-artifact-05-gateway \
     && test -s artifact-05/target/release/nexus-artifact-05-gateway
 
-FROM rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
+FROM python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
 LABEL org.opencontainers.image.title="NEXUS Stage D guarded synthetic image" \
       org.opencontainers.image.revision="f4d027bb5f7e715b298f7cf7184fa621a2fb071d" \
       nexus.release_authority="none" \
       nexus.runtime_scope="synthetic-only"
 
-# Python is needed by the guard; the external Debian apt repository is NOT
-# a cryptographically pinned reproducible input. Never claim reproducible
-# build provenance or production readiness from this ephemeral candidate.
-RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3-minimal \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --uid 10001 --no-create-home --home-dir /opt/nexus --shell /usr/sbin/nologin nexus \
-    && mkdir -p /opt/nexus /data /run/nexus \
-    && chown nexus:nexus /opt/nexus /data \
+# Python interpreter and its Debian runtime are fixed to an upstream
+# immutable OCI index digest. No apt or pip at build time. A registry digest
+# identifies these bytes, but does not independently attest their trust.
+RUN mkdir -p /opt/nexus /data /run/nexus \
+    && chown -R 10001:10001 /opt/nexus /data \
     && chmod 0700 /data
 
 COPY --from=compile --chown=10001:10001 /nexus/artifact-05/target/release/nexus-artifact-05-gateway /opt/nexus/nexus
@@ -43,7 +39,7 @@ COPY scripts/stage-d-guarded-image-entrypoint.py \
      scripts/data-snapshot.py /opt/nexus/
 
 RUN chmod 0700 /opt/nexus/nexus \
-    && python3 -B -m py_compile /opt/nexus/*.py \
+    && /usr/local/bin/python3 -B -m py_compile /opt/nexus/*.py \
     && chmod 0555 /opt/nexus/*.py \
     && test -x /opt/nexus/nexus
 
@@ -52,4 +48,4 @@ WORKDIR /opt/nexus
 ENV PYTHONDONTWRITEBYTECODE=1
 # No CMD or VOLUME directive: missing independently mounted synthetic
 # data and policy always produce hard denial, not an implicit writable layer.
-ENTRYPOINT ["/usr/bin/python3", "-I", "-B", "/opt/nexus/stage-d-guarded-image-entrypoint.py"]
+ENTRYPOINT ["/usr/local/bin/python3", "-I", "-B", "/opt/nexus/stage-d-guarded-image-entrypoint.py"]

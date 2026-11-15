@@ -57,7 +57,7 @@ def main():
         "NEXUS_API_TOKEN": values["NEXUS_API_TOKEN"],
     }
     argv = [
-        "/usr/bin/python3", "-I", "-B",
+        "/usr/local/bin/python3", "-I", "-B",
         "/opt/nexus/workspace-stage-d-startup-guard.py",
         "run-synthetic",
         "--data-dir", "/data",
@@ -67,7 +67,7 @@ def main():
         "--policy", "/run/nexus/approval.json",
         "--policy-sha256", values["NEXUS_POLICY_SHA256"],
     ]
-    os.execve("/usr/bin/python3", argv, environment)
+    os.execve("/usr/local/bin/python3", argv, environment)
     raise AssertionError("unreachable")
 
 
