@@ -42,6 +42,7 @@ jobs:
           python3 -B scripts/generate-workspace-cross-version-fixtures.py "$tmp/fixtures"
           export CARGO_TARGET_DIR="$tmp/target"
           checks=0
+          legacy_provenance_accepted=0
           for role in recovery source target; do
             case "$role" in
               recovery) revision="588dc7672146031425b16b34956876d644244ace" ;;
@@ -62,12 +63,25 @@ jobs:
               checks=$((checks+1))
             done
             for case in "$tmp"/fixtures/invalid-*.json; do
-              if "$reader" --snapshot "$case" w >/dev/null 2>&1; then
-                echo "NEXUS historical reader unexpectedly accepted an unsafe fixture: $role $(basename "$case")" >&2
-                exit 1
+              # The older recovery core demonstrably predates the
+              # MissingProvenance check. A passing test MUST expose this
+              # known historical vulnerability, not relabel it as safe.
+              if [ "$role" = recovery ] && [ "$(basename "$case")" = invalid-empty-provenance.json ]; then
+                if ! "$reader" --snapshot "$case" w >/dev/null 2>&1; then
+                  echo "NEXUS expected historical empty-provenance acceptance changed" >&2
+                  exit 1
+                fi
+                echo "NEXUS KNOWN LEGACY RISK: recovery Rust core accepts missing provenance"
+                legacy_provenance_accepted=$((legacy_provenance_accepted+1))
+              else
+                if "$reader" --snapshot "$case" w >/dev/null 2>&1; then
+                  echo "NEXUS historical reader unexpectedly accepted an unsafe fixture: $role $(basename "$case")" >&2
+                  exit 1
+                fi
               fi
               checks=$((checks+1))
             done
             echo "NEXUS historical Rust reader $role: synthetic accepted/refused contract PASS"
           done
-          printf '{"status":"PASS","checks":%s,"scope":"three-actual-historical-rust-core-semantic-readers-synthetic-only","live_data_touched":false,"production_release_authorized":false}\n' "$checks"
+          test "$legacy_provenance_accepted" = 1
+          printf '{"status":"PASS_WITH_KNOWN_LEGACY_WEAKNESS","checks":%s,"legacy_missing_provenance_accepted":%s,"scope":"three-actual-historical-rust-core-semantic-readers-synthetic-only","live_data_touched":false,"production_release_authorized":false}\n' "$checks" "$legacy_provenance_accepted"
