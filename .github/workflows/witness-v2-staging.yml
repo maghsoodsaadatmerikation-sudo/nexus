@@ -1,0 +1,37 @@
+name: NEXUS V2 Durable Candidate Staging
+on:
+  pull_request:
+    paths:
+      - 'scripts/workspace-witness-v2-stager.py'
+      - 'scripts/test-workspace-witness-v2-stager.py'
+      - 'docs/WITNESS-V2-DURABLE-STAGING.md'
+      - 'scripts/readonly-verification.sh'
+      - '.github/workflows/witness-v2-staging.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/workspace-witness-v2-stager.py'
+      - 'scripts/test-workspace-witness-v2-stager.py'
+      - '.github/workflows/witness-v2-staging.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  v2-durable-staging:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact source commit read-only
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify durable append with real synthetic Ed25519, crash and concurrency
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          command -v openssl
+          python3 -B -m py_compile scripts/workspace-witness-v2-stager.py scripts/test-workspace-witness-v2-stager.py
+          python3 -B scripts/test-workspace-witness-v2-stager.py
