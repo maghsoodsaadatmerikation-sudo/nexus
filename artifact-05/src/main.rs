@@ -82,6 +82,11 @@ impl WorkspaceDelegate for CoreDelegate {
         &self,
         snapshot: WorkspaceSnapshot,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+        // Defense in depth: transport-level checks can be bypassed by a
+        // direct delegate caller, but untrusted machine history cannot.
+        if snapshot.claims_unattested_machine_execution() {
+            return Err(WorkspaceDelegateError::Invalid);
+        }
         WorkspaceEngine::from_snapshot(snapshot.clone())
             .map_err(|_| WorkspaceDelegateError::Invalid)?;
         let mut repository = self
