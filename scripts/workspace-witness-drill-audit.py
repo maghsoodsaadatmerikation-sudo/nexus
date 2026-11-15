@@ -116,7 +116,14 @@ def check_stage_d(args):
 def audit(args):
     pair = two.verify_pair(args)
     if pair["status"] != "two-distinct-signer-observations-verified":
-        fail("two independent signed observer reports were not validated")
+        fail("two separate signed observer reports were not validated")
+    # Path spelling is not enough: a bind mount or another route to the
+    # exact same inode is not a distinct *staging copy*.
+    origin_meta = os.stat(args.origin_store, follow_symlinks=False)
+    restored_meta = os.stat(args.restored_store, follow_symlinks=False)
+    if (origin_meta.st_dev, origin_meta.st_ino) == (
+            restored_meta.st_dev, restored_meta.st_ino):
+        fail("origin and restored candidate must reside in distinct directories")
     origin = pinned_stage(args.origin_store, pair["bridge_sha256"], "origin")
     restored = pinned_stage(args.restored_store, pair["bridge_sha256"], "restored")
     approved = trust.open_no_symlinks(args.approved_bridge, stager.MAX)
