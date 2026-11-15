@@ -41,6 +41,18 @@ jobs:
           RUNNER_OS: ${{ runner.os }}
         run: bash scripts/readonly-verification.sh
 
+      - name: Test real loopback OpenSSH witness delivery and restart recovery
+        run: |
+          set -euo pipefail
+          if ! test -x /usr/sbin/sshd; then
+            sudo apt-get update -qq
+            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-server
+          fi
+          command -v ssh
+          command -v ssh-keygen
+          test -x /usr/sbin/sshd
+          python3 scripts/test-workspace-witness-ssh-real.py
+
       - name: Verify durable-state resilience contract
         run: |
           bash -n scripts/v1.2-durable-state-resilience.sh
