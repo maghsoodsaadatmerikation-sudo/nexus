@@ -1,0 +1,36 @@
+name: NEXUS Stage D Provider Preflight Denial
+on:
+  pull_request:
+    paths:
+      - 'scripts/workspace-stage-d-railway-preflight.py'
+      - 'scripts/test-workspace-stage-d-railway-preflight.py'
+      - 'scripts/readonly-verification.sh'
+      - 'docs/STAGE-D-RAILWAY-READONLY-PREFLIGHT.md'
+      - '.github/workflows/stage-d-railway-preflight.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/workspace-stage-d-railway-preflight.py'
+      - 'scripts/test-workspace-stage-d-railway-preflight.py'
+      - '.github/workflows/stage-d-railway-preflight.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-railway-provider-denial:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Read-only checkout at the exact commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Test pinned provider inventory and fail-closed readiness
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -B -m py_compile scripts/workspace-stage-d-railway-preflight.py scripts/test-workspace-stage-d-railway-preflight.py
+          python3 -B scripts/test-workspace-stage-d-railway-preflight.py
