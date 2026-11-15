@@ -33,6 +33,11 @@ jobs:
           bash -n scripts/observe-stage-d-auth.sh
           python3 scripts/test-stage-d-auth.py
 
+      - name: Verify root-owned independent witness code bundle and installer
+        run: |
+          set -euo pipefail
+          python3 scripts/test-workspace-witness-package.py
+
       - name: Verify without publication or attestation authority
         env:
           RUST_IMAGE: ${{ env.RUST_IMAGE }}

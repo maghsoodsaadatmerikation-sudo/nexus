@@ -78,7 +78,7 @@ def write_forced_command(root, config, drop_marker):
         "raw = sys.stdin.buffer.read(8193)\n"
         "if len(raw) > 8192:\n"
         "    sys.exit(87)\n"
-        f"process = subprocess.run([sys.executable, {str(HARDENED)!r},"
+        f"process = subprocess.run([sys.executable, '-I', {str(HARDENED)!r},"
         f" 'serve', '--config', {str(config)!r}],"
         " input=raw, capture_output=True, timeout=30, env=os.environ)\n"
         f"marker = Path({str(drop_marker)!r})\n"
