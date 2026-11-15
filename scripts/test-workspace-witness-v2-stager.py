@@ -647,7 +647,7 @@ def main():
         assert audited["real_destructive_offhost_restore_proven"] is False
         checked += 1
         blocked = call(DRILL_AUDIT, "release-gate", *audit_arguments, good=False)
-        assert '"release_gate": "BLOCKED"' in blocked.stdout
+        assert json.loads(blocked.stdout)["release_gate"] == "BLOCKED"
         assert "NEXUS TWO-HOST RELEASE GATE: BLOCKED" in blocked.stderr
         checked += 1
         # A fake/incomplete Stage D pack cannot become a release approval.
