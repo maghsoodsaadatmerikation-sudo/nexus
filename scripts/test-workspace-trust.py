@@ -20,8 +20,11 @@ spec.loader.exec_module(fixtures)
 
 
 def call(script, *args, success=True):
+    params = list(args)
+    if script == TRUST and params and params[0] in ("inspect", "record", "anchor"):
+        params += ["--rust-validator", os.environ["NEXUS_WORKSPACE_VALIDATOR_BIN"]]
     r = subprocess.run(
-        [sys.executable, str(script), *map(str, args)],
+        [sys.executable, str(script), *map(str, params)],
         capture_output=True, text=True, timeout=45, check=False,
     )
     if (r.returncode == 0) != success:
@@ -68,7 +71,21 @@ def add_claim_and_event(doc, suffix):
     })
 
 
+def add_alternative_and_event(doc, suffix):
+    sequence = len(doc["events"])
+    doc["workspace"]["alternatives"].append({
+        "id": "alternative-" + suffix,
+        "label": "Option " + suffix,
+        "consequences": ["Uncertain effect"],
+    })
+    doc["events"].append({
+        "sequence": sequence, "provenance_id": "human:owner",
+        "kind": {"AlternativeAdded": {"alternative_id": "alternative-" + suffix}},
+    })
+
+
 def main():
+    assert Path(os.environ["NEXUS_WORKSPACE_VALIDATOR_BIN"]).is_file()
     with tempfile.TemporaryDirectory(prefix="nexus-trust-regression-") as td:
         root = Path(td)
         state = root / "private-registry"
@@ -108,7 +125,19 @@ def main():
         sealed = (state / "trust-state.json").read_bytes()
         call(TRUST, "record", *base, *verify, success=False)
         assert (state / "trust-state.json").read_bytes() == sealed
-        assert json.loads(sealed)["workspaces"]["machine-history"]["event_count"] == 2
+        initial = json.loads(sealed)
+        assert initial["workspaces"]["machine-history"]["event_count"] == 2
+        assert initial["workspaces"]["machine-history"]["claims_count"] == 1
+        # Legacy operator state is readable, but extending its history
+        # without the exact old signed bytes is prohibited.
+        old = json.loads(sealed)
+        for key in ("identity_sha256", "claims_count", "claims_sha256",
+                    "alternatives_count", "alternatives_sha256"):
+            old["workspaces"]["machine-history"].pop(key)
+        (state / "trust-state.json").write_text(json.dumps(old))
+        call(TRUST, "anchor", *base, *verify)
+        call(TRUST, "anchor", *base, *verify, success=False)
+        assert (state / "trust-state.json").read_bytes() != sealed
 
         # No trust of a different key merely because it signs correctly.
         rogue_att = sign(root, snapshot, "rogue-issuer", rogue_private, "rogue")
@@ -121,8 +150,10 @@ def main():
              "--attestation", fake_att, "--workspace-id", "machine-history",
              success=False)
 
-        second = mutate_snapshot(root, snapshot, "second", lambda doc:
-                                 add_claim_and_event(doc, "second"))
+        def second_step(doc):
+            add_claim_and_event(doc, "second")
+            add_alternative_and_event(doc, "second")
+        second = mutate_snapshot(root, snapshot, "second", second_step)
         second_att = sign(root, second, "issuer-1", one_private, "second")
         # Revision increase alone is insufficient: the old event prefix must
         # match the one recorded under the previous signing key.
@@ -132,8 +163,27 @@ def main():
         fork_att = sign(root, fork, "issuer-1", one_private, "fork")
         call(TRUST, "record", *base, "--snapshot", fork, "--attestation", fork_att,
              "--workspace-id", "machine-history", success=False)
+        # The Rust validator must reject a cryptographically valid but
+        # structurally false machine-origin claim.
+        invalid_origin = mutate_snapshot(root, second, "bad-semantic", lambda doc:
+            doc["workspace"]["claims"][0].__setitem__("origin", "Human"))
+        invalid_signature = sign(root, invalid_origin, "issuer-1", one_private, "bad-semantic")
+        call(TRUST, "record", *base, "--snapshot", invalid_origin,
+             "--attestation", invalid_signature, "--workspace-id", "machine-history",
+             success=False)
+
+        # A forged, re-signed revision with unchanged event labels cannot
+        # overwrite content already committed by a previous operator witness.
+        altered = mutate_snapshot(root, second, "claim-edit", lambda doc:
+            doc["workspace"]["claims"][0].__setitem__("text", "Rewritten old claim"))
+        altered_att = sign(root, altered, "issuer-1", one_private, "claim-edit")
+        call(TRUST, "record", *base, "--snapshot", altered,
+             "--attestation", altered_att, "--workspace-id", "machine-history",
+             success=False)
         call(TRUST, "record", *base, "--snapshot", second, "--attestation", second_att,
              "--workspace-id", "machine-history")
+        assert json.loads((state / "trust-state.json").read_text())[
+            "workspaces"]["machine-history"]["alternatives_count"] == 1
         call(TRUST, "record", *base, *verify, success=False)
 
         # Atomic revocation and rotation: an old signature must no longer
@@ -155,10 +205,24 @@ def main():
         third = mutate_snapshot(root, second, "third", lambda doc:
                                 add_claim_and_event(doc, "third"))
         third_att = sign(root, third, "issuer-2", two_private, "third")
+        for label, mutation in [
+            ("alternative-rewrite", lambda d:
+             d["workspace"]["alternatives"][0].__setitem__("label", "Edited option")),
+            ("immutable-rewrite", lambda d:
+             d["workspace"].__setitem__("question", "Rewritten original question")),
+            ("human-claim-rewrite", lambda d:
+             d["workspace"]["claims"][1].__setitem__("text", "Rewritten human claim")),
+        ]:
+            tampered = mutate_snapshot(root, third, label, mutation)
+            tampered_att = sign(root, tampered, "issuer-2", two_private, label)
+            call(TRUST, "record", *base, "--snapshot", tampered,
+                 "--attestation", tampered_att, "--workspace-id", "machine-history",
+                 success=False)
         # Two independent processes competing on the same revision may not
         # both commit: the directory descriptor is exclusively flock-locked.
         tasks = [["record", *base, "--snapshot", third, "--attestation", third_att,
-                  "--workspace-id", "machine-history"] for _ in range(2)]
+                  "--workspace-id", "machine-history", "--rust-validator",
+                  os.environ["NEXUS_WORKSPACE_VALIDATOR_BIN"]] for _ in range(2)]
         with ThreadPoolExecutor(max_workers=2) as executor:
             results = list(executor.map(
                 lambda params: subprocess.run([sys.executable, str(TRUST), *map(str, params)],
@@ -167,7 +231,7 @@ def main():
             ))
         assert sorted(x.returncode for x in results) == [0, 1], results
         assert json.loads((state / "trust-state.json").read_text())["workspaces"][
-            "machine-history"]["event_count"] == 4
+            "machine-history"]["event_count"] == 5
         call(TRUST, "record", *base, "--snapshot", second, "--attestation", second_att,
              "--workspace-id", "machine-history", success=False)
 
