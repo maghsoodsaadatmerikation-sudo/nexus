@@ -137,7 +137,9 @@ def main():
         (state / "trust-state.json").write_text(json.dumps(old))
         call(TRUST, "anchor", *base, *verify)
         call(TRUST, "anchor", *base, *verify, success=False)
-        assert (state / "trust-state.json").read_bytes() != sealed
+        assert (state / "trust-state.json").read_bytes() == sealed, (
+            "anchoring the exact signed legacy checkpoint must restore its identical commitment"
+        )
 
         # No trust of a different key merely because it signs correctly.
         rogue_att = sign(root, snapshot, "rogue-issuer", rogue_private, "rogue")
