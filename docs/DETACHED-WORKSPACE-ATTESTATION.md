@@ -77,7 +77,14 @@ may be replayed on an otherwise empty installation without a separate
 trusted revision ledger. Key custody and source evidence require independent
 operator verification.
 
-Before signed imports can be enabled, NEXUS requires:
+An optional **operator-side public-key registry and monotonic offline witness
+ledger** is now available. See [OPERATOR-WORKSPACE-TRUST.md](OPERATOR-WORKSPACE-TRUST.md).
+It verifies using enrolled public keys, supports revocation and key rotation,
+and prevents replay or event-prefix rewrites **within its private local state**.
+It does not give the HTTP gateway authority to import signed machine history
+or protect against an operator-level rollback of the whole trust directory.
+
+Before signed imports can be enabled, NEXUS still requires:
 
 1. An operator-owned trusted public-key registry, scoped signer roles,
    revocation, key rotation, and compromise recovery.
