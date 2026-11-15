@@ -193,7 +193,7 @@ def advance(args):
                 # same single-entry candidate with the pinned predecessor.
                 old_data = dict(new_data)
                 if not isinstance(old_data.get("entries"), list) or len(
-                        old_data["entries"]) <= 1):
+                        old_data["entries"]) <= 1:
                     fail("retry cannot reconstruct the pinned predecessor")
                 old_data["entries"] = old_data["entries"][:-1]
                 prefix_bytes = trust.encode_json(old_data)
