@@ -113,7 +113,9 @@ def main():
                      "namespaces", "secrets"):
         rc, out, err = kubectl(
             "auth", "can-i", "update", resource, "--as=" + REVIEWER)
-        require(rc == 0 and out.strip() == "no",
+        # kubectl auth can-i uses exit=1 for an expected "no" result.
+        # A permission DENIAL is the security success condition here.
+        require(rc in (0, 1) and out.strip() == "no",
                 "untrusted Pod submitter could edit release control: " + resource)
 
     count = 5
