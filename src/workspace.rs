@@ -134,10 +134,21 @@ impl WorkspaceEngine {
         &self.events
     }
 
-    pub fn add_claim(&mut self, claim: Claim, provenance_id: ProvenanceId) {
+    pub fn add_claim(
+        &mut self,
+        claim: Claim,
+        provenance_id: ProvenanceId,
+    ) -> Result<(), WorkspaceStoreError> {
+        // A generic claim event cannot establish machine provenance. Reject
+        // before mutating either the workspace or its append-only audit log.
+        // Only record_analysis_batch may create machine-origin claims.
+        if claim.origin == ClaimOrigin::MachineAnalysis {
+            return Err(WorkspaceStoreError::ClaimAuditMismatch);
+        }
         let claim_id = claim.id.clone();
         self.workspace.add_claim(claim);
         self.append_event(provenance_id, WorkspaceEventKind::ClaimAdded { claim_id });
+        Ok(())
     }
 
     pub fn add_alternative(&mut self, alternative: Alternative, provenance_id: ProvenanceId) {
