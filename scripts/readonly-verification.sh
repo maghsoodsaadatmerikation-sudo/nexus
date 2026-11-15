@@ -31,6 +31,10 @@ esac
 # Static and fail-closed release checks.
 # This does NOT change release gates, classify an actual run from CI, or
 # grant publication. Unit fixtures only guard against false green reports.
+# Offline Ed25519 verification uses disposable keys only: no registry,
+# production signing key, or trusted machine-history import is created.
+command -v openssl >/dev/null || { echo 'OpenSSL missing' >&2; exit 1; }
+python3 scripts/test-workspace-attestation.py
 python3 scripts/test-release-intent-triage.py
 python3 scripts/test-stage-d-encrypted-escrow.py
 python3 scripts/verify_test_matrix.py
