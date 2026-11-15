@@ -21,6 +21,7 @@ HERE = Path(__file__).resolve().parent
 TRUST = HERE / "workspace-trust.py"
 WITNESS = HERE / "workspace-offsite-witness.py"
 CUSTODIAN = HERE / "workspace-witness-custodian.py"
+RECOVERY = HERE / "workspace-witness-recovery.py"
 CLIENT = HERE / "workspace-witness-ssh-client.py"
 RECEIVER = HERE / "workspace-witness-ssh-receiver.py"
 
@@ -330,13 +331,33 @@ def main():
                  "--output", latest_output)
             assert json.loads(latest_output.read_text()) == latest_local
 
-            # Actual daemon termination: no false "received" claim while
-            # offline, and exact signed latest survives a fresh sshd process.
+            # Actual daemon termination and TOTAL receiver directory loss:
+            # no false receipt while offline, restore with a separately
+            # verified latest acknowledgment, then serve from a fresh sshd.
             stop_sshd(process, stream, root)
             process = None
             stream = None
             tool(CLIENT, "latest", *common, "--minimum-sequence", "2",
                  "--output", receipts / "offline-claim.json", success=False)
+            recovery_pins = [
+                "--expected-receiver-id", "independent-ssh-loopback",
+                "--trusted-source-key-id", "external-witness",
+                "--trusted-source-public-key", source_pub,
+                "--trusted-ack-key-id", "independent-ack",
+                "--trusted-ack-public-key", ack_pub,
+                "--minimum-sequence", "2",
+                "--trusted-checkpoint", latest_output,
+            ]
+            disaster_backup = root / "disaster-backup.json"
+            tool(RECOVERY, "export", "--store", custodian,
+                 "--backup", disaster_backup, *recovery_pins)
+            shutil.rmtree(custodian)
+            assert not custodian.exists()
+            tool(RECOVERY, "restore", "--new-store", custodian,
+                 "--backup", disaster_backup, *recovery_pins)
+            assert json.loads(
+                tool(CUSTODIAN, "latest", "--store", custodian).stdout
+            ) == latest_local
             process, stream = start_sshd(config, root / "sshd-restarted.log")
             resumed = receipts / "after-restart.json"
             tool(CLIENT, "latest", *common, "--minimum-sequence", "2",
@@ -344,7 +365,7 @@ def main():
             assert json.loads(resumed.read_text()) == latest_local
             print(
                 "REAL LOOPBACK OPENSSH NEXUS WITNESS: PASS "
-                "(real sshd, pinned hostkey, forced command, reply-loss recovery, restart)"
+                "(pinned real sshd, forced command, durable reply retry, full receiver directory loss and restore)"
             )
         finally:
             if process is not None and stream is not None:

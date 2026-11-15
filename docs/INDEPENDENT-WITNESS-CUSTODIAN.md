@@ -86,6 +86,20 @@ The optional `--state-dir` compares the **current validated local NEXUS trust-st
 
 If a custodian's signing key is compromised, its operator must perform a reviewed out-of-band key rotation/recovery protocol; this v1 ledger deliberately refuses to silently change pinned keys. Restoring a deleted ledger is also an operator incident, not a reason to initialize a replacement and call it continuous history.
 
+## Full receiver-state loss and signed-chain restoration
+
+A strict, independently pinned backup and restore protocol is available in
+[CUSTODIAN-DISASTER-RECOVERY.md](CUSTODIAN-DISASTER-RECOVERY.md).
+It recovers **only** the validated public receipt/acknowledgment chain to a
+new private directory, and requires the last independently retained signed
+acknowledgment and a pinned minimum sequence. Any lost receiver signing
+private key must be recovered **separately** under a key-custody policy.
+
+The real OpenSSH loopback CI drill now deletes the receiver directory
+after stopping the server, restores that chain and tests the latest
+authenticated package after restarting SSH. It does not establish a
+production off-host recovery provider or immutable storage.
+
 ## Privacy, operational limits and next security step
 
 - **Never send private signing keys, raw workspaces, user conversations or authentication headers to the custodian.** Receipt state hashes still disclose aggregate metadata and may allow correlation; handle them as controlled operational records.
