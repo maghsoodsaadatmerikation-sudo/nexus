@@ -386,17 +386,19 @@ mod tests {
     #[test]
     fn audit_events_are_append_only_and_sequenced() {
         let mut engine = WorkspaceEngine::new("w-1", "Question", ProvenanceId::new("human:p1"));
-        engine.add_claim(
-            Claim {
-                id: "c-1".into(),
-                text: "Evidence".into(),
-                origin: ClaimOrigin::ExternalEvidence {
-                    source: "source-1".into(),
+        engine
+            .add_claim(
+                Claim {
+                    id: "c-1".into(),
+                    text: "Evidence".into(),
+                    origin: ClaimOrigin::ExternalEvidence {
+                        source: "source-1".into(),
+                    },
+                    uncertainty: Uncertainty::Medium,
                 },
-                uncertainty: Uncertainty::Medium,
-            },
-            ProvenanceId::new("source:1"),
-        );
+                ProvenanceId::new("source:1"),
+            )
+            .unwrap();
         engine.record_human_judgment(
             HumanJudgment {
                 decision: "A".into(),
