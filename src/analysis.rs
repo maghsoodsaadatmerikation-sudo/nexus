@@ -52,6 +52,46 @@ impl AnalysisBatch {
     }
 }
 
+/// A bounded, deterministic question probe executed inside the server.
+/// It does not fetch evidence, call a model, or make a factual assertion.
+/// The trusted gateway, rather than the HTTP caller, supplies the run ID.
+#[derive(Debug, Clone)]
+pub struct LocalQuestionProbe {
+    run_id: String,
+}
+
+impl LocalQuestionProbe {
+    pub fn new(run_id: impl Into<String>) -> Self {
+        Self {
+            run_id: run_id.into(),
+        }
+    }
+}
+
+impl AnalysisAdapter for LocalQuestionProbe {
+    fn analyze(&self, workspace: &DecisionWorkspace) -> Result<AnalysisBatch, AnalysisError> {
+        if self.run_id.trim().is_empty() {
+            return Err(AnalysisError {
+                message: "missing-local-run-id".into(),
+            });
+        }
+        let question: String = workspace.question.chars().take(240).collect();
+        Ok(AnalysisBatch {
+            adapter_id: "nexus-local-question-probe-v1".into(),
+            run_id: self.run_id.clone(),
+            observations: vec![AnalysisObservation {
+                id: format!("local-question-probe-{}", self.run_id),
+                kind: AnalysisObservationKind::UncertaintyNote,
+                text: format!(
+                    "Local rule-based question (not evidence): What observation could disconfirm: {question}"
+                ),
+                uncertainty: Uncertainty::High,
+                source_ids: Vec::new(),
+            }],
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -83,6 +123,29 @@ mod tests {
         assert_eq!(claims[0].origin, ClaimOrigin::MachineAnalysis);
         assert!(!workspace.has_human_judgment());
         assert_eq!(batch.provenance_id().0, "machine:static-challenge:run-1");
+    }
+
+    #[test]
+    fn local_probe_is_bounded_questioning_not_external_evidence() {
+        let question = "س".repeat(700);
+        let workspace = DecisionWorkspace::new("local", question);
+        let batch = LocalQuestionProbe::new("local-run-1")
+            .analyze(&workspace)
+            .unwrap();
+        assert_eq!(batch.adapter_id, "nexus-local-question-probe-v1");
+        assert_eq!(batch.run_id, "local-run-1");
+        assert_eq!(batch.observations.len(), 1);
+        let probe = &batch.observations[0];
+        assert_eq!(probe.id, "local-question-probe-local-run-1");
+        assert_eq!(probe.kind, AnalysisObservationKind::UncertaintyNote);
+        assert_eq!(probe.uncertainty, Uncertainty::High);
+        assert!(probe.source_ids.is_empty());
+        assert!(probe.text.contains("not evidence"));
+        assert!(probe.text.chars().count() <= 340);
+        assert!(LocalQuestionProbe::new(" ")
+            .analyze(&workspace)
+            .is_err());
+        assert!(!workspace.has_human_judgment());
     }
 
     #[test]

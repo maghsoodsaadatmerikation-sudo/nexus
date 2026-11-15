@@ -340,7 +340,7 @@ where
         )
         .route(
             "/v1/workspaces/{id}/analysis",
-            post(workspace_api::record_analysis_batch::<D>),
+            post(workspace_api::run_local_analysis::<D>),
         )
         .route(
             "/v1/workspaces/{id}/judgment",

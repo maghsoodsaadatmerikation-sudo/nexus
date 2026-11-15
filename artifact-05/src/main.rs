@@ -6,9 +6,10 @@ use nexus_artifact_05_gateway::{
     router, AppState, ConstitutionalDelegate, DelegateError, SafetyConfig, Submission,
     WorkspaceDelegate, WorkspaceDelegateError,
 };
+use nexus_constitutional_core::analysis::{AnalysisAdapter, LocalQuestionProbe};
 use nexus_constitutional_core::{
-    Alternative, AnalysisBatch, Claim, FileWorkspaceRepository, HumanJudgment, PolicyEngine,
-    ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceSnapshot,
+    Alternative, Claim, FileWorkspaceRepository, HumanJudgment, PolicyEngine, ProvenanceId,
+    RequestEnvelope, WorkspaceEngine, WorkspaceSnapshot,
 };
 use serde::Serialize;
 use std::{net::SocketAddr, path::PathBuf, sync::Mutex, time::Duration};
@@ -137,12 +138,17 @@ impl WorkspaceDelegate for CoreDelegate {
         })
     }
 
-    fn record_analysis_batch(
+    fn run_local_analysis(
         &self,
         workspace_id: &str,
-        batch: AnalysisBatch,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         self.mutate_workspace(workspace_id, |engine| {
+            // Both the algorithm implementation and the execution identifier
+            // are server-owned. No HTTP value is accepted as machine provenance.
+            let adapter = LocalQuestionProbe::new(uuid::Uuid::new_v4().to_string());
+            let batch = adapter
+                .analyze(engine.workspace())
+                .map_err(|_| WorkspaceDelegateError::Invalid)?;
             engine.record_analysis_batch(batch);
             Ok(())
         })

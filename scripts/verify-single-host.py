@@ -111,13 +111,21 @@ def main():
                     'label': 'Inspect before deciding', 'consequences': ['Uncertainty remains'],
                     'provenance_id': 'test:single-host'})
                 assert code == 200
+                # Only the algorithm selector crosses the HTTP boundary;
+                # the gateway constructs the machine event and run UUID.
                 code, snapshot = call('POST', path + '/analysis', {
-                    'adapter_id': 'test:challenge', 'run_id': workspace,
-                    'observations': [{'id': 'ci-observation', 'kind': 'Counterargument',
-                        'text': 'Synthetic machine counterargument', 'uncertainty': 'High',
-                        'source_ids': ['test:fixture']}]})
+                    'kind': 'question_probe'})
                 assert code == 200 and snapshot['workspace']['judgment'] is None
                 assert len(snapshot['workspace']['claims']) == 2
+                recorded = snapshot['events'][-1]
+                machine = recorded['kind']['MachineAnalysisRecorded']
+                assert machine['adapter_id'] == 'nexus-local-question-probe-v1'
+                assert machine['run_id'] != workspace
+                assert machine['source_ids'] == []
+                assert recorded['provenance_id'] == (
+                    'machine:nexus-local-question-probe-v1:' + machine['run_id'])
+                assert snapshot['workspace']['claims'][-1]['origin'] == 'MachineAnalysis'
+                assert 'not evidence' in snapshot['workspace']['claims'][-1]['text']
                 assert len(snapshot['workspace']['alternatives']) == 1
                 assert call('GET', path) == (200, snapshot)
                 request_id = workspace + '-request'
