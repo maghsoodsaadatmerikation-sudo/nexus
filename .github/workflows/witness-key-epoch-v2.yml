@@ -1,0 +1,37 @@
+name: NEXUS Witness v2 Key Epoch Proof
+on:
+  pull_request:
+    paths:
+      - 'scripts/workspace-witness-key-epoch-v2.py'
+      - 'scripts/test-workspace-witness-key-epoch-v2.py'
+      - 'scripts/readonly-verification.sh'
+      - 'docs/WITNESS-KEY-EPOCH-V2-OFFLINE.md'
+      - '.github/workflows/witness-key-epoch-v2.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/workspace-witness-key-epoch-v2.py'
+      - 'scripts/test-workspace-witness-key-epoch-v2.py'
+      - '.github/workflows/witness-key-epoch-v2.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  v2-key-epoch-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Read-only exact-commit checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify v2 key epoch transition and adversarial Ed25519 history
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          command -v openssl
+          python3 -B -m py_compile scripts/workspace-witness-key-epoch-v2.py scripts/test-workspace-witness-key-epoch-v2.py
+          python3 -B scripts/test-workspace-witness-key-epoch-v2.py
