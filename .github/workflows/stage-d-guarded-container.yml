@@ -27,12 +27,14 @@ permissions:
 jobs:
   build-and-test-synthetic-guarded-image:
     runs-on: ubuntu-24.04
+    env:
+      APPROVED_CHECKOUT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     timeout-minutes: 23
     steps:
       - name: Check out exact PR commit and full history without credentials
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Build exact historical baseline inside a new guarded OCI image
@@ -41,7 +43,7 @@ jobs:
           DOCKER_BUILDKIT: '1'
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$APPROVED_CHECKOUT_SHA"
           python3 -B -m py_compile scripts/stage-d-guarded-image-entrypoint.py scripts/test-stage-d-guarded-container.py
           python3 -B -m py_compile scripts/stage-d-oci-image-evidence.py scripts/test-stage-d-oci-image-evidence.py
           python3 -B scripts/test-stage-d-oci-image-evidence.py
@@ -73,11 +75,11 @@ jobs:
             --synthetic-only \
             --image nexus-stage-d-guarded-synthetic:ci \
             --runner-temp "$scratch"
-          evidence_root="${RUNNER_TEMP}/nexus-synthetic-oci-evidence-${GITHUB_SHA}"
+          evidence_root="${RUNNER_TEMP}/nexus-synthetic-oci-evidence-${APPROVED_CHECKOUT_SHA}"
           mkdir -m 0700 "$evidence_root"
           python3 -B scripts/stage-d-oci-image-evidence.py capture \
             --image nexus-stage-d-guarded-synthetic:ci \
-            --commit "$GITHUB_SHA" \
+            --commit "$APPROVED_CHECKOUT_SHA" \
             --review-root "$PWD" \
             --build-root "$scratch/historical-src" \
             --dockerfile "$PWD/deploy/Dockerfile.stage-d-guarded-synthetic" \
@@ -88,12 +90,12 @@ jobs:
           expected="$(sha256sum "$evidence_root/manifest.json" | cut -d' ' -f1)"
           python3 -B scripts/stage-d-oci-image-evidence.py verify \
             --image nexus-stage-d-guarded-synthetic:ci \
-            --commit "$GITHUB_SHA" \
+            --commit "$APPROVED_CHECKOUT_SHA" \
             --expected-sha256 "$expected" \
             --evidence "$evidence_root/manifest.json" \
             --sbom "$evidence_root/sbom.cdx.json"
           if python3 -B scripts/stage-d-oci-image-evidence.py release-gate \
-            --commit "$GITHUB_SHA" \
+            --commit "$APPROVED_CHECKOUT_SHA" \
             --expected-sha256 "$expected" \
             --evidence "$evidence_root/manifest.json" \
             --sbom "$evidence_root/sbom.cdx.json"; then
@@ -105,7 +107,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: nexus-synthetic-oci-evidence-${{ github.sha }}
-          path: ${{ runner.temp }}/nexus-synthetic-oci-evidence-${{ github.sha }}/
+          name: nexus-synthetic-oci-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/nexus-synthetic-oci-evidence-${{ github.event.pull_request.head.sha || github.sha }}/
           if-no-files-found: error
           retention-days: 7
