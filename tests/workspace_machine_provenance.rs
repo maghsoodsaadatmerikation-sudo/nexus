@@ -66,16 +66,44 @@ fn generic_claim_event_cannot_impersonate_machine_analysis() {
         "Question",
         ProvenanceId::new("human:creator"),
     );
-    workspace.add_claim(
+    workspace
+        .add_claim(
+            Claim {
+                id: "forged-machine-claim".into(),
+                text: "Looks like machine analysis, but is not".into(),
+                origin: ClaimOrigin::Human,
+                uncertainty: Uncertainty::Unknown,
+            },
+            ProvenanceId::new("machine:research:run-17"),
+        )
+        .unwrap();
+    // Simulate a tampered serialized snapshot, which bypasses the checked
+    // mutation API; import and repository validation must still reject it.
+    let mut forged = workspace.snapshot();
+    forged.workspace.claims[0].origin = ClaimOrigin::MachineAnalysis;
+    assert_rejected_on_every_import(forged);
+}
+
+#[test]
+fn generic_machine_claim_is_rejected_atomically_before_audit_append() {
+    let mut workspace = WorkspaceEngine::new(
+        "provenance-workspace",
+        "Question",
+        ProvenanceId::new("human:creator"),
+    );
+    let before = workspace.snapshot();
+    let result = workspace.add_claim(
         Claim {
             id: "forged-machine-claim".into(),
-            text: "Looks like machine analysis, but is not".into(),
+            text: "Machine provenance cannot be self-declared here".into(),
             origin: ClaimOrigin::MachineAnalysis,
             uncertainty: Uncertainty::Unknown,
         },
         ProvenanceId::new("machine:research:run-17"),
     );
-    assert_rejected_on_every_import(workspace.snapshot());
+    assert_eq!(result, Err(WorkspaceStoreError::ClaimAuditMismatch));
+    assert_eq!(workspace.snapshot(), before);
+    assert_eq!(workspace.events().len(), 1);
 }
 
 #[test]
