@@ -1,0 +1,73 @@
+name: NEXUS Stage D Native Kubernetes Admission — Throwaway Cluster
+on:
+  pull_request:
+    paths:
+      - 'deploy/kind-stage-d-sandbox-admission.yaml'
+      - 'scripts/test-stage-d-kind-admission.py'
+      - 'docs/STAGE-D-KIND-ADMISSION.md'
+      - '.github/workflows/stage-d-kind-admission.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/kind-stage-d-sandbox-admission.yaml'
+      - 'scripts/test-stage-d-kind-admission.py'
+      - '.github/workflows/stage-d-kind-admission.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  kubernetes-server-enforces-synthetic-pod-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - name: Check out exact reviewed branch without credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install SHA-256-pinned kind and kubectl, then start disposable Kubernetes
+        env:
+          REVIEWED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          NEXUS_KIND_ONLY: 'yes'
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$REVIEWED_HEAD"
+          scratch="$(mktemp -d "${RUNNER_TEMP:-/tmp}/nexus-stage-d-ci-XXXXXXXX")"
+          echo "NEXUS_TEMP_ROOT=$scratch" >> "$GITHUB_ENV"
+          echo "KUBECONFIG=$scratch/nexus-stage-d-kubeconfig" >> "$GITHUB_ENV"
+          curl -fsSL --retry 3 -o "$scratch/kind" \
+            https://github.com/kubernetes-sigs/kind/releases/download/v0.30.0/kind-linux-amd64
+          printf '%s  %s\n' 517ab7fc89ddeed5fa65abf71530d90648d9638ef0c4cde22c2c11f8097b8889 "$scratch/kind" | sha256sum -c -
+          curl -fsSL --retry 3 -o "$scratch/kubectl" \
+            https://dl.k8s.io/release/v1.34.0/bin/linux/amd64/kubectl
+          printf '%s  %s\n' cfda68cba5848bc3b6c6135ae2f20ba2c78de20059f68789c090166d6abc3e2c "$scratch/kubectl" | sha256sum -c -
+          chmod 0700 "$scratch/kind" "$scratch/kubectl"
+          sudo install -m 0755 "$scratch/kind" /usr/local/bin/kind
+          sudo install -m 0755 "$scratch/kubectl" /usr/local/bin/kubectl
+          kind version
+          kubectl version --client
+          kind create cluster \
+            --name nexus-stage-d-ci \
+            --image kindest/node:v1.34.0@sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a \
+            --kubeconfig "$scratch/nexus-stage-d-kubeconfig" \
+            --wait 90s
+          kubectl apply -f deploy/kind-stage-d-sandbox-admission.yaml
+          kubectl get validatingadmissionpolicy nexus-stage-d-sandbox.nexus.example -o json
+          kubectl get validatingadmissionpolicybinding nexus-stage-d-sandbox-binding -o json
+      - name: Test actual API-server deny rules and restricted proposal role
+        env:
+          NEXUS_KIND_ONLY: 'yes'
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/test-stage-d-kind-admission.py
+          python3 -B scripts/test-stage-d-kind-admission.py
+          test "$(kubectl get pods -n nexus-stage-d-sandbox --no-headers | wc -l)" = 0
+          echo "KIND: API-SERVER DENIAL EXERCISED; no workload created and no image pulled"
+      - name: Destroy the synthetic Kubernetes cluster even on failure
+        if: always()
+        run: |
+          kind delete cluster --name nexus-stage-d-ci || true
+          if [ -n "${NEXUS_TEMP_ROOT:-}" ]; then
+            rm -rf "$NEXUS_TEMP_ROOT"
+          fi
+          echo "No NEXUS production host, volume, registry or provider changed"
