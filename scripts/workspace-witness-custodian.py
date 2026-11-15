@@ -142,8 +142,7 @@ def validated_receipt(receipt, pubpath, source_id):
         fail("external receipt must be a JSON object")
     if set(receipt) != witness.SIGNED_FIELDS:
         fail("unrecognized external receipt fields")
-    # Verify the exact existing v1 signer contract with the independently pinned key.
-    witness.read_receipt  # The same explicit schema is checked below.
+    # Verify the existing v1 source contract with the independently pinned key.
     if (receipt["schema"] != witness.SCHEMA
             or receipt["algorithm"] != witness.ALGORITHM
             or receipt["role"] != witness.ROLE
@@ -361,6 +360,9 @@ def independent_verify_package(package, args):
         previous = ack.get("previous_ack_sha256")
         if not isinstance(previous, str) or not witness.HEX32.fullmatch(previous):
             fail("invalid previous acknowledgment digest")
+        if (ack["sequence"] == 1 and previous != "0" * 64
+                or ack["sequence"] > 1 and previous == "0" * 64):
+            fail("inconsistent custodian genesis or prior acknowledgment pointer")
         validated_ack(
             ack, receipt, args.expected_receiver_id, args.trusted_source_key_id,
             args.trusted_ack_key_id, ack["sequence"], previous, ack_pub,
