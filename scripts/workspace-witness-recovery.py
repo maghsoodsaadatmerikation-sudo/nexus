@@ -99,6 +99,8 @@ def parse_backup(path):
             or not trust.SHA256_HEX.fullmatch(obj["latest_ack_sha256"])):
         fail("unsupported or malformed custodian backup envelope")
     store = custodian.inspect_store(obj["store"])
+    if not store["entries"]:
+        fail("backup cannot restore an unacknowledged, empty ledger")
     raw = trust.encode_json(store)
     if len(raw) > custodian.MAX_STORE_BYTES or digest_bytes(raw) != obj["store_sha256"]:
         fail("custodian backup SHA-256 or size mismatch")
