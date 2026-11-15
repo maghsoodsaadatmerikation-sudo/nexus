@@ -180,8 +180,8 @@ def main():
     args = parser.parse_args()
     # recovery.verify_backup uses an independently pinned candidate SHA.
     # Only bind to the same CLI value after v2.verify independently checked it.
-    args.expected_bridge_sha256 = ledger.pin(args.expected_bridge_sha256, "bridge")
     try:
+        args.expected_bridge_sha256 = ledger.pin(args.expected_bridge_sha256, "bridge")
         result = audit(args)
         print(json.dumps(result, sort_keys=True, separators=(",", ":")))
         if args.mode == "release-gate":
