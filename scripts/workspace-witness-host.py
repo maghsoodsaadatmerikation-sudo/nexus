@@ -66,7 +66,7 @@ def check_root_path(path: Path):
 
 
 def private_key(path: Path, store: Path):
-    if not path.is_absolute() or path.resolve() == path.root:
+    if not path.is_absolute() or path == Path("/"):
         deny("signer private key requires absolute path")
     if path.resolve().is_relative_to(store.resolve()):
         deny("signing key must be outside the receiver ledger directory")
@@ -91,10 +91,20 @@ def checked_config(path: Path):
         deny("receiver state paths must be absolute")
     fd = trust.protected_directory(store)
     try:
-        custodian.read_store(fd)
+        data = custodian.read_store(fd)
     finally:
         os.close(fd)
     private_key(secret, store)
+    # Preflight must prove signer custody is actually usable and corresponds
+    # to the public key pinned by the existing, fully audited receiver ledger.
+    # A missing or wrong key fails before SSH accepts any new receipt.
+    try:
+        private_der = custodian.witness.private_signer(secret)
+    except custodian.witness.WitnessError as exc:
+        raise LaunchError("recipient signer key unreadable or invalid") from exc
+    _, pinned_ack_der = custodian.derived_keys(data)
+    if private_der != pinned_ack_der:
+        deny("signer private key does not match existing receiver trust identity")
     return store, secret
 
 
