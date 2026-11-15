@@ -214,13 +214,13 @@ def main():
         }))
         execute("sudo", "-n", "install", "-d", "-m", "0755",
                 "-o", "root", "-g", "root", config_dir)
-        config = config_dir / "receiver.json"
+        root_config = config_dir / "receiver.json"
         execute("sudo", "-n", "install", "-o", "root", "-g", "root",
-                "-m", "0644", local_config, config)
-        tool(HARDENED, "check", "--config", config)
+                "-m", "0644", local_config, root_config)
+        tool(HARDENED, "check", "--config", root_config)
         tool(HARDENED, "check", "--config", local_config, success=False)
         marker = root / "drop-one-reply"
-        forced = write_forced_command(root, config, marker)
+        forced = write_forced_command(root, root_config, marker)
         authorized = root / "authorized_keys"
         authorized.write_text(
             f'restrict,command="{forced}" {ssh_pub.read_text().strip()}\n'
@@ -394,7 +394,7 @@ def main():
         finally:
             if process is not None and stream is not None:
                 stop_sshd(process, stream, root)
-            execute("sudo", "-n", "rm", "-f", config)
+            execute("sudo", "-n", "rm", "-f", root_config)
             execute("sudo", "-n", "rmdir", config_dir)
 
 
