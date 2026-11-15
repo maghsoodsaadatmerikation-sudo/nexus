@@ -292,6 +292,25 @@ def main():
             assert first_ack["ack"]["sequence"] == 1
             latest = signed_package(client, "/work/ack-one.json")
 
+            # Separate client and server namespaces: compare the authenticated
+            # live SSH latest against a pre-pinned exact package commitment.
+            approved_sha = inside(client, "sha256sum",
+                                  "/work/ack-one.json").split()[0]
+            gate_base = send_args("latest", "/work/unused.json", 1)[1:-2]
+            python(client, "workspace-witness-live-gate.py", *gate_base,
+                   "--trusted-package", "/work/ack-one.json",
+                   "--trusted-package-sha256", approved_sha,
+                   "--report", "/work/protocol-gate.json")
+            gate_result = signed_package(client, "/work/protocol-gate.json")
+            assert gate_result["result"] == "cryptographic_protocol_match"
+            assert gate_result["external_administrative_independence"] == "not_verified"
+            assert gate_result["machine_history_import_authorized"] is False
+            python(client, "workspace-witness-live-gate.py", *gate_base,
+                   "--trusted-package", "/work/ack-one.json",
+                   "--trusted-package-sha256", "0" * 64,
+                   "--report", "/work/invalid-protocol.json", ok=False)
+            inside(client, "sh", "-c", "test ! -e /work/invalid-protocol.json")
+
             # Independent SSH key pinning: an authenticated receiver with
             # a different presented host key must not be accepted.
             install_pinned_host_public(server, client, staging, valid=False)
@@ -358,6 +377,12 @@ def main():
             python(client, "workspace-witness-ssh-client.py",
                    *send_args("latest", "/work/after-loss.json", 1))
             assert signed_package(client, "/work/after-loss.json") == latest
+            python(client, "workspace-witness-live-gate.py", *gate_base,
+                   "--trusted-package", "/work/ack-one.json",
+                   "--trusted-package-sha256", approved_sha,
+                   "--report", "/work/after-loss-protocol-gate.json")
+            assert signed_package(client, "/work/after-loss-protocol-gate.json")[
+                "ack_sequence"] == 1
 
             # A container with old receiver state and another SSH host
             # identity is not trusted merely because it has the right signed

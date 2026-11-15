@@ -137,7 +137,17 @@ independently and retain the latest acknowledgment and minimum sequence in
 a separate trusted domain. No remote access or publication right is
 created by this code-bundle installation.
 
-## 5. Backup, recovery and rollback handling
+## 5. Read-only live protocol evidence
+
+After a separate custodian actually receives a signed checkpoint, use
+[LIVE-WITNESS-PROTOCOL-GATE.md](LIVE-WITNESS-PROTOCOL-GATE.md) to verify
+that the receiver's current SSH `latest` exactly matches an **externally
+retained and independently SHA-256-pinned signed package** and the current
+NEXUS operator trust state. A successful protocol match is **not proof**
+that two different organizations control the host and public keys, nor
+that a WORM store, production service or public witness exists.
+
+## 6. Backup, recovery and rollback handling
 
 The independently signed receiver history can be exported/restored using
 [CUSTODIAN-DISASTER-RECOVERY.md](CUSTODIAN-DISASTER-RECOVERY.md).

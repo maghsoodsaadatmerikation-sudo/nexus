@@ -7,6 +7,7 @@ Unlike the fake-ssh contract fixture this executes a real sshd and SSH handshake
 """
 
 import getpass
+import hashlib
 import json
 import os
 import secrets
@@ -24,6 +25,7 @@ WITNESS = HERE / "workspace-offsite-witness.py"
 CUSTODIAN = HERE / "workspace-witness-custodian.py"
 RECOVERY = HERE / "workspace-witness-recovery.py"
 CLIENT = HERE / "workspace-witness-ssh-client.py"
+LIVE_GATE = HERE / "workspace-witness-live-gate.py"
 RECEIVER = HERE / "workspace-witness-ssh-receiver.py"
 HARDENED = HERE / "workspace-witness-host.py"
 
@@ -354,6 +356,70 @@ def main():
             tool(CLIENT, "latest", *common, "--minimum-sequence", "2",
                  "--output", latest_output)
             assert json.loads(latest_output.read_text()) == latest_local
+
+            # A live online gate must compare the current locked operator
+            # state, the live SSH latest and an out-of-band pinned **exact**
+            # signed checkpoint; it never issues a deployment authorization.
+            independent_sha = hashlib.sha256(latest_output.read_bytes()).hexdigest()
+            evidence = receipts / "live-protocol-evidence.json"
+            live_common = [
+                *common, "--minimum-sequence", "2",
+                "--trusted-package", latest_output,
+                "--trusted-package-sha256", independent_sha,
+            ]
+            tool(LIVE_GATE, *live_common, "--report", evidence)
+            evidence_doc = json.loads(evidence.read_text())
+            assert evidence_doc["result"] == "cryptographic_protocol_match"
+            assert evidence_doc["ack_sequence"] == 2
+            assert evidence_doc["external_administrative_independence"] == "not_verified"
+            assert evidence_doc["production_deployment"] == "not_verified"
+            assert evidence_doc["machine_history_import_authorized"] is False
+            assert evidence.stat().st_mode & 0o077 == 0
+            tool(LIVE_GATE, *live_common, "--report", evidence, success=False)
+
+            tool(LIVE_GATE, *common, "--minimum-sequence", "2",
+                 "--trusted-package", latest_output,
+                 "--trusted-package-sha256", "0" * 64,
+                 "--report", receipts / "bad-pinned-sha.json", success=False)
+            tool(LIVE_GATE, *common, "--minimum-sequence", "3",
+                 "--trusted-package", latest_output,
+                 "--trusted-package-sha256", independent_sha,
+                 "--report", receipts / "stale-floor.json", success=False)
+
+            wrong_id = [
+                "different-receiver" if x == "independent-ssh-loopback" else x
+                for x in common
+            ]
+            tool(LIVE_GATE, *wrong_id, "--minimum-sequence", "2",
+                 "--trusted-package", latest_output,
+                 "--trusted-package-sha256", independent_sha,
+                 "--report", receipts / "wrong-receiver.json", success=False)
+            fake_pin = [wrong_hosts if x == known_hosts else x for x in common]
+            tool(LIVE_GATE, *fake_pin, "--minimum-sequence", "2",
+                 "--trusted-package", latest_output,
+                 "--trusted-package-sha256", independent_sha,
+                 "--report", receipts / "wrong-host-pin.json", success=False)
+
+            # Even a valid independently signed checkpoint cannot override
+            # a locally rolled-back/different registered source state.
+            other = root / "different-trust-state"
+            tool(TRUST, "init", "--state-dir", other)
+            changed_source = [other if x == source else x for x in common]
+            tool(LIVE_GATE, *changed_source, "--minimum-sequence", "2",
+                 "--trusted-package", latest_output,
+                 "--trusted-package-sha256", independent_sha,
+                 "--report", receipts / "wrong-local-state.json", success=False)
+            local_copy = source / "mutable-latest.json"
+            local_copy.write_bytes(latest_output.read_bytes())
+            tool(LIVE_GATE, *common, "--minimum-sequence", "2",
+                 "--trusted-package", local_copy,
+                 "--trusted-package-sha256", independent_sha,
+                 "--report", receipts / "fake-external.json", success=False)
+            assert all(not (receipts / n).exists() for n in (
+                "bad-pinned-sha.json", "stale-floor.json", "wrong-receiver.json",
+                "wrong-host-pin.json", "wrong-local-state.json",
+                "fake-external.json",
+            ))
 
             # Actual daemon termination and TOTAL receiver directory loss:
             # no false receipt while offline, restore with a separately
