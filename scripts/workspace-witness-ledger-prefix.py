@@ -24,7 +24,7 @@ custodian = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(custodian)
 trust = custodian.trust
 SCHEMA = "nexus.offsite.ledger-prefix-proof.v1"
-SHA256 = re.compile(r"[0-9a-f]{64}\\Z")
+SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
 
 class PrefixError(Exception):
