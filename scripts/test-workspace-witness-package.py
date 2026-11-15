@@ -111,8 +111,8 @@ def main():
                 run("sudo", "-n", "install", "-o", "root", "-g", "root",
                     "-m", "0644", unsafe_config, config)
                 deployed_host = target / HOST_NAME
-                run(sys.executable, deployed_host, "check", "--config", config)
-                run(sys.executable, deployed_host, "check", "--config",
+                run(sys.executable, "-I", deployed_host, "check", "--config", config)
+                run(sys.executable, "-I", deployed_host, "check", "--config",
                     unsafe_config, success=False)
 
                 # An unrelated key or world-writable root config cannot
@@ -127,13 +127,13 @@ def main():
                 wrong_installed = config_root / "wrong.json"
                 run("sudo", "-n", "install", "-o", "root", "-g", "root",
                     "-m", "0644", wrong_config, wrong_installed)
-                run(sys.executable, deployed_host, "check",
+                run(sys.executable, "-I", deployed_host, "check",
                     "--config", wrong_installed, success=False)
                 run("sudo", "-n", "chmod", "0666", config)
-                run(sys.executable, deployed_host, "check",
+                run(sys.executable, "-I", deployed_host, "check",
                     "--config", config, success=False)
                 run("sudo", "-n", "chmod", "0644", config)
-                run(sys.executable, deployed_host, "check", "--config", config)
+                run(sys.executable, "-I", deployed_host, "check", "--config", config)
 
                 # Integrity check must catch code replacement and extraneous
                 # new files in the exact installed directory.
