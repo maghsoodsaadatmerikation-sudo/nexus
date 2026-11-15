@@ -189,9 +189,19 @@ def main():
         modified("unknown-event-kind", lambda d: edit_workspace(
             d, lambda w: w["events"][0].update(kind="MachineTrustGranted")),
             rejected=True)
-        modified("unknown-schema", lambda d: edit_workspace(
-            d, lambda w: w.update(schema_version=2)),
-            rejected=True)
+        # The *real* snapshot encoder refuses a v2 workspace before
+        # generating an archive. Verify that boundary explicitly; separately
+        # forge a checksum-consistent untrusted archive below.
+        unsupported = deepcopy(base_data())
+        edit_workspace(unsupported, lambda w: w.update(schema_version=2))
+        write_source(root / "unsupported-schema-source", unsupported)
+        try:
+            snapshot.backup(root / "unsupported-schema-source",
+                            root / "unsupported-schema-archive.json")
+        except snapshot.SnapshotError:
+            count += 1
+        else:
+            raise AssertionError("NEXUS backup unexpectedly accepted schema v2")
         modified("unknown-top-level", lambda d: edit_workspace(
             d, lambda w: w.update(new_authority="yes")),
             rejected=True)
@@ -237,6 +247,16 @@ def main():
             count += 1
             return artifact
 
+        def alter_inner_workspace_schema(doc):
+            rec = next(x for x in doc["files"] if x["path"] == "77.json")
+            contents = json.loads(base64.b64decode(rec["data"]))
+            contents["schema_version"] = 2
+            raw = canonical(contents)
+            rec["data"] = base64.b64encode(raw).decode("ascii")
+            rec["size"] = len(raw)
+            rec["sha256"] = hashlib.sha256(raw).hexdigest()
+
+        forged("unsupported-inner-workspace-schema", alter_inner_workspace_schema)
         forged("duplicate-record", lambda d: d["files"].append(
             deepcopy(d["files"][0])))
         forged("wrong-file-size", lambda d: d["files"][0].update(size=999))
