@@ -24,7 +24,6 @@ pub use adapters::{
 };
 pub use analysis::{
     AnalysisAdapter, AnalysisBatch, AnalysisError, AnalysisObservation, AnalysisObservationKind,
-    LocalQuestionProbe,
 };
 pub use audit::{AuditEvent, AuditEventKind, AuditLog};
 pub use authority::{leq, Authority};
