@@ -183,13 +183,19 @@ def prepare(args):
     custodian.witness.write_exclusive(
         args.output, {"schema": SCHEMA, "proposal": proposal, "approvals": {}}
     )
-    print("KEY TRANSITION PROPOSAL CREATED: 0/3 consent signatures; no key changed")
+    print("KEY TRANSITION PROPOSAL CREATED: 0/3 consent signatures; proposal_sha256="
+          + fingerprint(trust.encode_json(proposal))
+          + "; no key changed")
 
 
 def sign(args):
     document = parse_document(args.input)
     if args.role in document["approvals"]:
         fail("a signer role cannot be approved twice")
+    approved_hash = args.trusted_proposal_sha256
+    if (not SHA.fullmatch(approved_hash) or
+            fingerprint(trust.encode_json(document["proposal"])) != approved_hash):
+        fail("proposed transition does not match independently approved exact proposal digest")
     private_der = custodian.witness.private_signer(args.private_key)
     commitment = document["proposal"][args.role + "_public_sha256"]
     if fingerprint(private_der) != commitment:
@@ -280,6 +286,7 @@ def main():
     signer.add_argument("--output", type=Path, required=True)
     signer.add_argument("--role", choices=ROLES, required=True)
     signer.add_argument("--private-key", type=Path, required=True)
+    signer.add_argument("--trusted-proposal-sha256", required=True)
 
     args = parser.parse_args()
     try:
