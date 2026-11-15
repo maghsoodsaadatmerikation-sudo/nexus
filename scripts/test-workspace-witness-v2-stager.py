@@ -731,6 +731,50 @@ def main():
             if case == "hardlink":
                 ledger_file.unlink()
             checked += 1
+        # Actual process exits before/after registry atomic rename. No
+        # bypass of the externally trusted prior registry head is allowed.
+        for crash_phase in ("before", "after"):
+            crashed_registry = root / ("challenge-aborted-" + crash_phase)
+            setup = json.loads(call(
+                CHALLENGE_LEDGER, "init", "--registry", crashed_registry).stdout)
+            args = [
+                "issue", "--registry", crashed_registry,
+                "--expected-registry-sha256", setup["registry_sha256"],
+            ]
+            script = (
+                "import os,sys,importlib.util;"
+                "p=sys.argv[1];"
+                "s=importlib.util.spec_from_file_location('fault_nonce',p);"
+                "m=importlib.util.module_from_spec(s);s.loader.exec_module(m);"
+                "real=os.replace;"
+                "bad=lambda *a,**k:"
+                + ("os._exit(82)" if crash_phase == "before"
+                   else "(real(*a,**k),os._exit(83))")
+                + ";os.replace=bad;"
+                "sys.argv=[p]+sys.argv[2:];sys.exit(m.main())"
+            )
+            interrupted = subprocess.run(
+                [sys.executable, "-c", script, str(CHALLENGE_LEDGER),
+                 *[str(item) for item in args]],
+                capture_output=True, text=True, timeout=70)
+            assert interrupted.returncode == (82 if crash_phase == "before" else 83), (
+                interrupted.returncode, interrupted.stderr)
+            events = json.loads(
+                (crashed_registry / "challenges.json").read_text())["events"]
+            assert len(events) == (0 if crash_phase == "before" else 1)
+            current = hash_file(crashed_registry / "challenges.json")
+            if crash_phase == "before":
+                assert current == setup["registry_sha256"]
+                call(CHALLENGE_LEDGER, *args)
+            else:
+                assert current != setup["registry_sha256"]
+                call(CHALLENGE_LEDGER, *args, good=False)
+                audited = json.loads(call(
+                    CHALLENGE_LEDGER, "inspect", "--registry", crashed_registry,
+                    "--expected-registry-sha256", current).stdout)
+                assert len(audited["pending_challenges"]) == 1
+            checked += 1
+
         assert (registry / "challenges.json").read_bytes() == trust.encode_json(
             trust.strict_json((registry / "challenges.json").read_bytes()))
         checked += 1
