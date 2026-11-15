@@ -58,6 +58,19 @@ See [the operational and security contract](STUDIO-CHAT-ATTACHMENTS.md).
 This is *not* multimodal model vision, PDF/OCR parsing, unrestricted file
 uploads, source verification or a substitute for real ChatGPT model quality.
 
+## Direct chat handoff from the existing local tools
+
+Studio now exposes **Use in next chat** actions on explicitly fetched public
+research cards, finished local JavaScript Worker results and completed local
+data-analysis summaries. The actions stage clearly marked, bounded
+**untrusted one-turn excerpts** in the existing chat attachment tray,
+with no automatic model requests or persistent source registration.
+Source content is still included only after human review and explicit
+model-send approval. See [the operating contract](STUDIO-CHAT-TOOL-HANDOFF.md).
+
+This is user-directed data flow; **not autonomous model tool calling,
+open-ended research, tool-execution authority, or a trained model**.
+
 ## Remaining gaps and their actual prerequisites
 
 | ChatGPT capability | NEXUS boundary after this change | Required next dependency |
