@@ -227,6 +227,43 @@ def main():
         assert (store / "candidate.json").read_bytes() == bridges[2].read_bytes()
         checked += 1
 
+        # Two DISTINCT fully valid Ed25519 continuations of the same prior
+        # head must not both succeed. This is a real cross-process fork test.
+        fork_store = root / "distinct-fork-staging"
+        call(STAGER, *init_args(fork_store))
+        call(STAGER, *append_args(fork_store, 1))
+        _, data5_public = keypair(root, "data5")
+        competing = signed_entry(data5_public, "data5", 4,
+                                 v2.custodian.digest(entry2["ack"]))
+        rival_bridge = save(out, "competing-bridge", {
+            **root_doc, "entries": [entry1, entry2, competing]})
+        rival_package = save(out, "competing-package", {
+            "schema": v2.PACKAGE_SCHEMA, **competing})
+        first_args = [str(x) for x in append_args(fork_store, 2)]
+        second_args = first_args.copy()
+        for flag, value in (
+            ("--candidate", rival_bridge),
+            ("--candidate-sha256", hash_file(rival_bridge)),
+            ("--trusted-next-package", rival_package),
+            ("--trusted-next-package-sha256", hash_file(rival_package)),
+        ):
+            second_args[second_args.index(flag) + 1] = str(value)
+
+        def direct_run(argv):
+            return subprocess.run(
+                [sys.executable, str(STAGER), *argv],
+                capture_output=True, text=True, timeout=70)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = [f.result() for f in (
+                executor.submit(direct_run, first_args),
+                executor.submit(direct_run, second_args))]
+        assert sum(result.returncode == 0 for result in results) == 1, [
+            (result.returncode, result.stderr) for result in results
+        ]
+        assert (fork_store / "candidate.json").read_bytes() in (
+            bridges[2].read_bytes(), rival_bridge.read_bytes())
+        checked += 1
+
         # A historical rollback or divergent candidate cannot be quietly
         # accepted as a new history, even if it is internally well signed.
         stale_args = append_args(store, 1)
