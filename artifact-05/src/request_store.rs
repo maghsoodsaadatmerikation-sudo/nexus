@@ -242,18 +242,21 @@ mod tests {
         let fresh = parent.join("new-requests");
         let (store, _) = RequestStore::open(&fresh).unwrap();
         assert_eq!(
-            fs::metadata(&fresh).unwrap().permissions().mode() & 0o077, 0,
+            fs::metadata(&fresh).unwrap().permissions().mode() & 0o077,
+            0,
             "new reservation directory must not expose request IDs"
         );
         store.reserve("synthetic").unwrap();
         let marker = store.path("synthetic");
         assert_eq!(
-            fs::metadata(&marker).unwrap().permissions().mode() & 0o077, 0,
+            fs::metadata(&marker).unwrap().permissions().mode() & 0o077,
+            0,
             "new request reservation must be owner-private"
         );
         store.pending("synthetic").unwrap();
         assert_eq!(
-            fs::metadata(&marker).unwrap().permissions().mode() & 0o077, 0,
+            fs::metadata(&marker).unwrap().permissions().mode() & 0o077,
+            0,
             "pending transition must preserve private marker permissions"
         );
         fs::remove_dir_all(parent).unwrap();
