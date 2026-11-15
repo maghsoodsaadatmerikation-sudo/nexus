@@ -42,11 +42,22 @@ window.addEventListener('load',async()=>{
   assert($('chat-attachment-tray').textContent.includes(EN.chatNoFiles),'research-transient-cleared-after-send');
   assert(!JSON.stringify(snapshot()).includes('Unverified live source note'),'research-result-bytes-not-persisted');
 
+  // Clean, saved project: the tool excerpt alone must protect navigation.
+  $('passphrase').value='transient-handoff-test-passphrase-2026';
+  $('repeat-passphrase').value='transient-handoff-test-passphrase-2026';
+  $('create-vault').click();await wait(()=>!$('save').disabled);
+  $('save').click();await wait(()=>$('retention').textContent===EN.saved);
+  const cleanUnload=new Event('beforeunload',{cancelable:true});window.dispatchEvent(cleanUnload);
+  assert(!cleanUnload.defaultPrevented,'saved-empty-composer-does-not-warn');
+
   // A local sandbox result can be explicitly used without pretending
   // the LLM ran the code itself.
-  fill('message','Explain the calculation');
   $('code-sample').click();$('code-consent').checked=true;$('code-run').click();await wait(()=>$('code-result').textContent.includes('Local calculation'));
   $('code-chat').click();assert($('chat-attachment-tray').textContent.includes('Local code result'),'code-result-staged');
+  assert($('message').value==='', 'tool-result-staged-without-typed-draft');
+  const pendingUnload=new Event('beforeunload',{cancelable:true});window.dispatchEvent(pendingUnload);
+  assert(pendingUnload.defaultPrevented,'temporary-tool-excerpt-warns-on-navigation');
+  fill('message','Explain the calculation');
   assert(providerCalls===1,'code-execution-not-auto-sent');
   $('prepare').click();reviewed=JSON.parse($('request-context').textContent);
   assert(reviewed.messages[0].content.includes('Local calculation'),'review-includes-real-code-result');

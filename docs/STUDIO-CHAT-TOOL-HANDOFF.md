@@ -54,3 +54,11 @@ CSV analysis. It checks no automatic provider submission, non-persistent
 source selection, visible reviewed content, untrusted provenance and
 hand-off cancellation. The static installable Studio bundle and service
 worker use the exact deterministic updated HTML digest.
+
+## Protect unsent excerpts during navigation
+
+Studio now requests a browser leave-page warning if an unsubmitted one-turn
+tool result or explicitly selected saved-writing excerpt is still staged,
+even when the project is saved and no question has been typed. The browser
+may decline to show such warnings. They do not persist the excerpt or send
+it automatically; users must still review and explicitly send it.

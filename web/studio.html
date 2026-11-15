@@ -1165,7 +1165,7 @@ $('language-file').onchange=async event=>{
  }catch{if(current())status('failed')}
 };
 $('language').onchange=()=>{stop();language=$('language').value;applyLanguage()};
-window.addEventListener('beforeunload',e=>{if(dirty||forms()||$('message').value){e.preventDefault();e.returnValue=''}});
+window.addEventListener('beforeunload',e=>{if(dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked){e.preventDefault();e.returnValue=''}});
 window.NexusStudioUI={snapshot:()=>S.copy(data),stageChatContext,resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}};applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
