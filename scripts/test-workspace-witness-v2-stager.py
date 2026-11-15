@@ -300,6 +300,8 @@ def main():
             else:
                 os.chmod(target, 0o644)
             call(STAGER, *append_args(broken, 1), good=False)
+            if case == "hardlink":
+                target.unlink()  # release input inode before the next independent fixture
             checked += 1
 
         # Invalid operator inputs do not create a half-authoritative store.
