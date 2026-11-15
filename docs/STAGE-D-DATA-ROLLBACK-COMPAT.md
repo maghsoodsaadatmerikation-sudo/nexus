@@ -53,7 +53,7 @@ Run the same command with \`rollback-gate\` rather than \`inspect\` only as a **
 
 ## What must be tested next, independently
 
-The screen is a **structural, offline differential** using the production snapshot encoder. It does **not execute either historical Rust binary** and does not revalidate the full Rust constitutional audit semantics. Such semantic verification must be done by the actual version-pinned Rust readers in separate, disposable isolated containers on synthetic and externally approved (non-sensitive) snapshots, before any executable old/new compatibility claim. Git ancestry and JSON parsing cannot substitute for this.
+The archive-screen CLI is a **structural, offline differential** using the production snapshot encoder. By itself it **does not execute a historical Rust binary** and does not revalidate the full Rust constitutional audit semantics. A separate dedicated CI workflow now performs **historical Rust core reader testing**, described below. Even those tests do not establish the historical deployed *gateway* read/write semantics or production data safety. Git ancestry and JSON parsing cannot substitute for a real version-pinned runtime import/restart/restore drill.
 
 A legitimate future operator-controlled, safely quarantined real drill must also prove:
 1. Explicit versioned manifest of request marker conventions, state/quarantine semantics and supported workspace/event variants for **both exact builds**.
@@ -62,6 +62,14 @@ A legitimate future operator-controlled, safely quarantined real drill must also
 4. Independent encrypted off-host backup, external monotonic checkpoint custody, two-host provider evidence and complete release review.
 
 **Never downgrade a live writer by changing only the Git commit**. In particular, request markers of uncertain execution must not be reclassified as accepted or retried, and the absence of a marker after restoration is not proof of original execution state.
+
+## Cross-version Rust core execution on disposable fixtures
+
+The separate \`.github/workflows/stage-d-historical-rust-reader.yml\` workflow checks out the exact PR commit with Git history and creates **three disposable Git worktrees** at the precise historical revisions \`588dc7672146031425b16b34956876d644244ace\` (recovery), \`9abbc067aad3ebbb0956432cf6682d2ea70e2824\` (original Stage D) and \`f4d027bb5f7e715b298f7cf7184fa621a2fb071d\` (later repository main reference). It compiles each revision's actual \`nexus-constitutional-core\` Rust library with the repository's pinned Rust 1.85.0 toolchain. The only addition to those disposable worktrees is a **read-only, test-only shim** from \`scripts/nexus-historical-rust-reader-shim.rs\`.
+
+That shim deserializes a synthetic \`WorkspaceSnapshot\` with the exact selected revision's \`serde_json\` and \`WorkspaceEngine::from_snapshot\` implementation, verifies workspace identity, and semantically round-trips the snapshot to reject silently dropped unknown fields. The synthetic fixtures cover valid creation/claim events and invalid versions, omitted creation, mismatched audit sequence, unknown events, missing provenance, altered identity and unknown serialized fields.
+
+A CI PASS **only establishes the historical Rust core accepted/rejected those specific synthetic workspace fixtures**. It does not run the original deployed Axum gateway, request marker subsystem, filesystem persistence, real schema migrations, live operator credentials, real user data or a destructive two-host recovery. No historical file or deployed service is modified: all worktrees are ephemeral and deleted after each test. A future provider-backed rehearsal must independently validate the entire older service's private data layout, including request markers and read/write/restart failure behavior.
 
 ## CI / test coverage
 
