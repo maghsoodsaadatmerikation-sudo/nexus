@@ -1,0 +1,38 @@
+name: NEXUS Stage D Data Downgrade Risk Screen
+on:
+  pull_request:
+    paths:
+      - 'scripts/workspace-stage-d-data-rollback-screen.py'
+      - 'scripts/test-workspace-stage-d-data-rollback-screen.py'
+      - 'scripts/data-snapshot.py'
+      - 'scripts/workspace-stage-d-upgrade-rehearsal.py'
+      - 'scripts/readonly-verification.sh'
+      - 'docs/STAGE-D-DATA-ROLLBACK-COMPAT.md'
+      - '.github/workflows/stage-d-data-rollback-screen.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/workspace-stage-d-data-rollback-screen.py'
+      - 'scripts/test-workspace-stage-d-data-rollback-screen.py'
+      - '.github/workflows/stage-d-data-rollback-screen.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  v1-archive-and-downgrade-safety:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Checkout exact branch state without GitHub credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify synthetic original encoder, audit prefix and no automatic rollback
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -B -m py_compile scripts/workspace-stage-d-data-rollback-screen.py scripts/test-workspace-stage-d-data-rollback-screen.py
+          python3 -B scripts/test-workspace-stage-d-data-rollback-screen.py
