@@ -100,7 +100,7 @@ def make_sshd_config(root, port, host_key, authorized_keys):
         f"AuthorizedKeysFile {authorized_keys}\n"
         "PasswordAuthentication no\n"
         "KbdInteractiveAuthentication no\n"
-        "UsePAM no\n"
+        "UsePAM yes\n"
         "PubkeyAuthentication yes\n"
         "AuthenticationMethods publickey\n"
         "PermitRootLogin no\n"
@@ -112,7 +112,7 @@ def make_sshd_config(root, port, host_key, authorized_keys):
         "PermitUserEnvironment no\n"
         "PermitUserRC no\n"
         "StrictModes yes\n"
-        "LogLevel ERROR\n"
+        "LogLevel VERBOSE\n"
     )
     return config
 
@@ -242,8 +242,32 @@ def main():
 
             first = seal("first")
             first_output = receipts / "first-ack.json"
-            tool(CLIENT, "send", *common, "--minimum-sequence", "1",
-                 "--receipt", first, "--output", first_output)
+            try:
+                tool(CLIENT, "send", *common, "--minimum-sequence", "1",
+                     "--receipt", first, "--output", first_output)
+            except AssertionError:
+                # Only synthetic keys and a disposable daemon live here.
+                # This debug path never runs on a production host and never
+                # prints SSH private keys or user workspace content.
+                diagnostic = subprocess.run([
+                    "ssh", "-vv", "-F", "/dev/null", "-T",
+                    "-o", "StrictHostKeyChecking=yes",
+                    "-o", f"UserKnownHostsFile={known_hosts}",
+                    "-o", "GlobalKnownHostsFile=/dev/null",
+                    "-o", "BatchMode=yes",
+                    "-o", "IdentitiesOnly=yes",
+                    "-o", "IdentityAgent=none",
+                    "-i", str(ssh_secret), "-p", str(port),
+                    "-l", getpass.getuser(), "127.0.0.1",
+                    "nexus-witness-v1 latest",
+                ], capture_output=True, timeout=12)
+                print("Ephemeral OpenSSH diagnostic: " +
+                      diagnostic.stderr.decode(errors="replace")[-6000:],
+                      file=sys.stderr)
+                print("Ephemeral sshd diagnostic: " +
+                      (root / "sshd.log").read_text(errors="replace")[-4500:],
+                      file=sys.stderr)
+                raise
             package1 = json.loads(first_output.read_text())
             assert package1["ack"]["sequence"] == 1
 
