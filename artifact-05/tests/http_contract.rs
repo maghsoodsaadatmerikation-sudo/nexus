@@ -8,8 +8,8 @@ use nexus_artifact_05_gateway::{
 };
 use nexus_constitutional_core::analysis::{AnalysisAdapter, LocalQuestionProbe};
 use nexus_constitutional_core::{
-    Alternative, Claim, HumanJudgment, InMemoryWorkspaceRepository, ProvenanceId,
-    RequestEnvelope, WorkspaceEngine, WorkspaceRepository, WorkspaceSnapshot,
+    Alternative, Claim, HumanJudgment, InMemoryWorkspaceRepository, ProvenanceId, RequestEnvelope,
+    WorkspaceEngine, WorkspaceRepository, WorkspaceSnapshot,
 };
 use std::{
     sync::{Arc, Mutex},
@@ -557,7 +557,10 @@ async fn analysis_cannot_accept_client_minted_adapter_or_run_provenance() {
     let run_two = second["events"][2]["kind"]["MachineAnalysisRecorded"]["run_id"]
         .as_str()
         .unwrap();
-    assert_ne!(run_one, run_two, "server must mint a fresh run ID per execution");
+    assert_ne!(
+        run_one, run_two,
+        "server must mint a fresh run ID per execution"
+    );
     assert!(uuid::Uuid::parse_str(run_one).is_ok());
     assert!(uuid::Uuid::parse_str(run_two).is_ok());
     assert_eq!(second["workspace"]["claims"].as_array().unwrap().len(), 2);
