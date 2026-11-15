@@ -1,0 +1,41 @@
+name: NEXUS Stage D Signed OCI Review and Admission Denial
+on:
+  pull_request:
+    paths:
+      - 'scripts/stage-d-signed-oci-admission.py'
+      - 'scripts/test-stage-d-signed-oci-admission.py'
+      - 'scripts/stage-d-oci-image-evidence.py'
+      - 'scripts/test-stage-d-oci-image-evidence.py'
+      - 'scripts/readonly-verification.sh'
+      - 'docs/STAGE-D-SIGNED-OCI-ADMISSION.md'
+      - '.github/workflows/stage-d-signed-oci-admission.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/stage-d-signed-oci-admission.py'
+      - 'scripts/test-stage-d-signed-oci-admission.py'
+      - '.github/workflows/stage-d-signed-oci-admission.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ephemeral-ed25519-signatures-and-hard-admission-denial:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out exact review revision with no persisted Git token
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify disposable Ed25519 signer and malicious policy denials
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          REVIEWED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
+          openssl version
+          python3 -B -m py_compile scripts/stage-d-signed-oci-admission.py scripts/test-stage-d-signed-oci-admission.py
+          python3 -B scripts/test-stage-d-signed-oci-admission.py
+          echo "SYNTHETIC SIGNATURE DEMO ONLY — no real signer credentials or provider deploy"
