@@ -13,6 +13,7 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 STAGER = HERE / "workspace-witness-v2-stager.py"
+RECOVERY = HERE / "workspace-witness-v2-recovery.py"
 TRUST = HERE / "workspace-trust.py"
 WITNESS = HERE / "workspace-offsite-witness.py"
 CUSTODIAN = HERE / "workspace-witness-custodian.py"
@@ -348,6 +349,164 @@ def main():
         call(STAGER, *malicious, good=False)
         assert not nonexistent.exists()
         checked += 1
+        # OFFLINE COLD-BACKUP / FRESH-RESTORE fixture. Independent custody
+        # is simulated by separate temp paths, not claimed to be real.
+        recovery_common = [
+            *common,
+            "--expected-bridge-sha256", hash_file(bridges[2]),
+            "--trusted-latest-package", packages[2],
+            "--trusted-latest-package-sha256", hash_file(packages[2]),
+            "--minimum-sequence", "4",
+        ]
+        backup_file = out / "cold-backup.json"
+        export_params = [
+            "export", "--store", store,
+            *recovery_common, "--backup", backup_file,
+        ]
+        exported = json.loads(call(RECOVERY, *export_params).stdout)
+        assert exported["status"] == "exported-verifiable-cold-backup"
+        assert exported["backup_sha256"] == hash_file(backup_file)
+        assert exported["bridge_sha256"] == hash_file(bridges[2])
+        checked += 1
+        call(RECOVERY, *export_params, good=False)
+        checked += 1
+
+        verify_params = [
+            "verify", *recovery_common, "--backup", backup_file,
+            "--backup-sha256", hash_file(backup_file),
+        ]
+        checked_report = json.loads(call(RECOVERY, *verify_params).stdout)
+        assert checked_report["status"] == "cold-backup-cryptographically-verified"
+        checked += 1
+        fresh = root / "fresh-v2-restore"
+        restored = json.loads(call(
+            RECOVERY, "restore", *recovery_common,
+            "--backup", backup_file, "--backup-sha256", hash_file(backup_file),
+            "--new-store", fresh).stdout)
+        assert restored["status"] == "fresh-offline-stage-restored-and-reverified"
+        assert (fresh / "candidate.json").read_bytes() == (store / "candidate.json").read_bytes()
+        assert (fresh / "candidate.json").read_bytes() == bridges[2].read_bytes()
+        assert fresh.stat().st_mode & 0o077 == 0
+        checked += 1
+        call(RECOVERY, "restore", *recovery_common,
+             "--backup", backup_file, "--backup-sha256", hash_file(backup_file),
+             "--new-store", fresh, good=False)
+        checked += 1
+
+        def changed_flags(items, updates):
+            changed = list(items)
+            for key, value in updates.items():
+                flag = "--" + key.replace("_", "-")
+                assert flag in changed
+                changed[changed.index(flag) + 1] = str(value)
+            return changed
+
+        for case in (
+            {"backup_sha256": "e" * 64},
+            {"expected_bridge_sha256": "f" * 64},
+            {"minimum_sequence": "5"},
+            {"trusted_latest_package": packages[1],
+             "trusted_latest_package_sha256": hash_file(packages[1])},
+            {"incoming_ack_public_key": rogue_public},
+        ):
+            call(RECOVERY, *changed_flags(verify_params, case), good=False)
+            checked += 1
+
+        bad_envelope = json.loads(backup_file.read_text())
+        bad_envelope["latest_ack_sha256"] = "a" * 64
+        poisoned = save(out, "recovery-forged-envelope", bad_envelope)
+        call(RECOVERY, *changed_flags(verify_params, {
+            "backup": poisoned, "backup_sha256": hash_file(poisoned),
+        }), good=False)
+        checked += 1
+
+        bad_candidate = json.loads(backup_file.read_text())
+        bad_candidate["candidate"]["entries"][-1]["ack"]["signature_base64"] = "AAAA"
+        tainted = save(out, "recovery-forged-signature", bad_candidate)
+        call(RECOVERY, *changed_flags(verify_params, {
+            "backup": tainted, "backup_sha256": hash_file(tainted),
+        }), good=False)
+        checked += 1
+
+        ambiguous = out / "ambiguous-cold-backup.json"
+        ambiguous.write_bytes(backup_file.read_bytes().replace(
+            b'"schema":', b'"schema":"evil","schema":', 1))
+        call(RECOVERY, *changed_flags(verify_params, {
+            "backup": ambiguous, "backup_sha256": hash_file(ambiguous),
+        }), good=False)
+        checked += 1
+
+        noncanonical = out / "noncanonical-cold-backup.json"
+        noncanonical.write_bytes(backup_file.read_bytes() + b" \n")
+        call(RECOVERY, *changed_flags(verify_params, {
+            "backup": noncanonical, "backup_sha256": hash_file(noncanonical),
+        }), good=False)
+        checked += 1
+
+        shortcut = out / "linked-cold-backup.json"
+        shortcut.symlink_to(backup_file)
+        call(RECOVERY, *changed_flags(verify_params, {
+            "backup": shortcut, "backup_sha256": hash_file(backup_file),
+        }), good=False)
+        checked += 1
+        shortcut.unlink()
+        hardlink = out / "hardlinked-cold-backup.json"
+        os.link(backup_file, hardlink)
+        call(RECOVERY, *changed_flags(verify_params, {
+            "backup": hardlink, "backup_sha256": hash_file(backup_file),
+        }), good=False)
+        checked += 1
+        hardlink.unlink()
+
+        # Genuine older signed backup is independently valid but cannot be
+        # restored after a later monotonic floor is approved off-site.
+        stale_stage = root / "stale-v2-stage"
+        call(STAGER, *init_args(stale_stage))
+        call(STAGER, *append_args(stale_stage, 1))
+        stale_snapshot = out / "stale-cold-backup.json"
+        old_head_flags = changed_flags(recovery_common, {
+            "expected_bridge_sha256": hash_file(bridges[1]),
+            "trusted_latest_package": packages[1],
+            "trusted_latest_package_sha256": hash_file(packages[1]),
+            "minimum_sequence": 3,
+        })
+        call(RECOVERY, "export", "--store", stale_stage,
+             *old_head_flags, "--backup", stale_snapshot)
+        call(RECOVERY, "verify", *changed_flags(old_head_flags, {
+            "minimum_sequence": 4,
+        }), "--backup", stale_snapshot,
+             "--backup-sha256", hash_file(stale_snapshot), good=False)
+        checked += 1
+
+        # Crash during restore cannot partially overwrite a *pre-existing*
+        # store; it leaves a visibly incomplete fresh destination requiring
+        # explicit operator handling, not automatic privileged repair.
+        crash_dir = root / "interrupted-offline-restore"
+        snippet = (
+            "import os,sys,importlib.util;"
+            "p=sys.argv[1];"
+            "s=importlib.util.spec_from_file_location('recovery_fault',p);"
+            "m=importlib.util.module_from_spec(s);s.loader.exec_module(m);"
+            "os.replace=lambda *a,**k:os._exit(75);"
+            "sys.argv=[p]+sys.argv[2:];sys.exit(m.main())"
+        )
+        crash_flags = [
+            "restore", *recovery_common,
+            "--backup", backup_file, "--backup-sha256", hash_file(backup_file),
+            "--new-store", crash_dir,
+        ]
+        abnormal = subprocess.run(
+            [sys.executable, "-c", snippet, str(RECOVERY),
+             *[str(s) for s in crash_flags]],
+            capture_output=True, text=True, timeout=70)
+        assert abnormal.returncode == 75, (abnormal.returncode, abnormal.stderr)
+        assert crash_dir.exists() and not (crash_dir / "candidate.json").exists()
+        call(RECOVERY, *crash_flags, good=False)
+        checked += 1
+        assert (store / "candidate.json").read_bytes() == bridges[2].read_bytes()
+        assert (fresh / "candidate.json").read_bytes() == bridges[2].read_bytes()
+        checked += 1
+
         assert old_ledger.read_bytes() == old_ledger_initial
         assert (receiver / "custodian.json").read_bytes() == old_ledger_initial
         assert all(bridge.read_bytes() == trust.encode_json(
@@ -355,7 +514,7 @@ def main():
 
     print(json.dumps({
         "status": "PASS", "checks": checked,
-        "scope": "synthetic-atomic-v2-staging-concurrency-and-process-crashes",
+        "scope": "synthetic-atomic-v2-staging-crashes-and-pinned-cold-recovery",
         "live_receiver_modified": False,
         "production_key_rotation_activated": False,
     }))
