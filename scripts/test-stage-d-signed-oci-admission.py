@@ -240,7 +240,8 @@ def main():
             altered[field] = value
             changed(intent_args(altered), mode="inspect-intent")
 
-        altered = deepcopy(plan, bypass_signature=True)
+        altered = deepcopy(plan)
+        altered["bypass_signature"] = True
         changed(intent_args(altered), mode="inspect-intent")
 
         intent_args()
