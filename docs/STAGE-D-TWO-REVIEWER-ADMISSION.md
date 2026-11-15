@@ -51,6 +51,12 @@ The \`admission-gate\` command always exits **nonzero** even when both signature
 - A local Docker image ID is not a published image digest and is not an independent build attestation. Stage 242 never treats it as one.
 - A nonexecuting launch policy is not enforceable until the actual orchestrator admission surface is configured and independently checked. No deployment, no provider permission changes, no live volume access, no real signing keys, no registry push, no offsite destructive restore and no main merge are performed here.
 
+## Two signatures over the *actual* synthetic Docker build
+
+The separate \`NEXUS Stage D Guarded OCI Image — Synthetic Only\` workflow now also invokes \`scripts/stage-d-ci-dual-review-demo.py\` **after the actual guarded Docker build, real HTTP tests and Stage-240 manifest/SBOM capture**. It reuses the Stage-241 disposable CI review signature, generates a second independently *different* temporary Ed25519 key in a directory **outside the artifact upload**, signs the same exact manifest/SBOM and invokes the Stage-242 two-reviewer verifier on the two signed reviews.
+
+It writes a synthetic-only nonexecuting candidate launch specification and Stage-241 intent, plus a local receipt proving the two keys verified, to the CI artifact. Only the public keys, signed reviews, strict synthetic candidate/intent, and local hashes are uploaded; no private key is uploaded. The CI job self-generates all both keys and hash references. Thus **cryptographic distinctness is tested but human/host independence is NOT tested or claimed**. The runtime remains local/synthetic, the launch specification is not a captured/provider-enforced deployment and no image is pushed.
+
 The dedicated CI workflow \`NEXUS Stage D Two Distinct Synthetic Reviewer Admission Denial\` generates two ephemeral keys and tests both true 2-of-2 cryptographic verification and hostile substitutions. Its green result means the **synthetic integration worked**, not that any release was approved or two real custodians existed. The tests are also part of \`scripts/readonly-verification.sh\`.
 
 ## Operational dependency before deployment
