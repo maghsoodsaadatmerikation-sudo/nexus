@@ -72,8 +72,12 @@ def independent_proof(args, candidate_bytes, candidate_sha):
 def exact_pinned_backup(args):
     approved_sha(args.backup_sha256, "backup")
     approved_sha(args.expected_bridge_sha256, "bridge")
-    backup = v2.pinned(args.backup, args.backup_sha256,
-                       "cold backup", MAX_BACKUP_BYTES)
+    raw_backup = trust.open_no_symlinks(args.backup, MAX_BACKUP_BYTES)
+    if stager.digest(raw_backup) != args.backup_sha256:
+        fail("cold backup differs from independently approved exact bytes")
+    backup = trust.strict_json(raw_backup)
+    if trust.encode_json(backup) != raw_backup:
+        fail("cold backup requires unique canonical JSON bytes")
     if (not isinstance(backup, dict) or set(backup) != FIELDS
             or backup["schema"] != SCHEMA
             or type(backup["latest_sequence"]) is not int
