@@ -38,6 +38,7 @@ python3 scripts/test-workspace-attestation.py
 python3 scripts/test-workspace-offsite-witness.py
 python3 scripts/test-workspace-witness-custodian.py
 python3 scripts/test-workspace-witness-key-transition.py
+python3 scripts/test-workspace-witness-ledger-prefix.py
 python3 scripts/test-workspace-witness-recovery.py
 python3 scripts/test-workspace-witness-ssh.py
 python3 scripts/test-release-intent-triage.py
