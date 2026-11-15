@@ -143,10 +143,12 @@ def archive(path, pinned_sha):
 
 
 def metadata_plan(args):
-    p = trust.strict_json(trust.open_no_symlinks(args.plan, 16384))
+    # Hold the approved bytes fixed across hashing and parsing; a second
+    # pathname open would admit a swap between those two operations.
+    raw = trust.open_no_symlinks(args.plan, 16384)
+    p = trust.strict_json(raw)
     # Caller pins *exact* approved immutable bytes; do not trust a plan's
     # self-declared digest or internally recompute a trusted floor.
-    raw = trust.open_no_symlinks(args.plan, 16384)
     if (not isinstance(args.plan_sha256, str)
             or not trust.SHA256_HEX.fullmatch(args.plan_sha256)
             or hashlib.sha256(raw).hexdigest() != args.plan_sha256):
