@@ -6,10 +6,10 @@ use nexus_artifact_05_gateway::{
     router, AppState, ConstitutionalDelegate, DelegateError, RequestStatus, SafetyConfig,
     Submission, WorkspaceDelegate, WorkspaceDelegateError,
 };
+use nexus_constitutional_core::analysis::{AnalysisAdapter, LocalQuestionProbe};
 use nexus_constitutional_core::{
-    Alternative, AnalysisAdapter, Claim, HumanJudgment, InMemoryWorkspaceRepository,
-    LocalQuestionProbe, ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceRepository,
-    WorkspaceSnapshot,
+    Alternative, Claim, HumanJudgment, InMemoryWorkspaceRepository, ProvenanceId,
+    RequestEnvelope, WorkspaceEngine, WorkspaceRepository, WorkspaceSnapshot,
 };
 use std::{
     sync::{Arc, Mutex},
