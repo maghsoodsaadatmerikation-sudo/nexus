@@ -6,8 +6,7 @@ use axum::{
     Json,
 };
 use nexus_constitutional_core::{
-    Alternative, AnalysisBatch, Claim, ClaimOrigin, HumanJudgment, ProvenanceId, Uncertainty,
-    WorkspaceSnapshot,
+    Alternative, Claim, ClaimOrigin, HumanJudgment, ProvenanceId, Uncertainty, WorkspaceSnapshot,
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -54,10 +53,11 @@ pub trait WorkspaceDelegate: Send + Sync + 'static {
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError>;
 
-    fn record_analysis_batch(
+    /// Run only a gateway-owned adapter. HTTP clients cannot submit
+    /// adapter IDs, run IDs, observations, or forged machine provenance.
+    fn run_local_analysis(
         &self,
         _workspace_id: &str,
-        _batch: AnalysisBatch,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         Err(WorkspaceDelegateError::Unavailable)
     }
@@ -266,11 +266,25 @@ where
     }
 }
 
-pub(crate) async fn record_analysis_batch<D>(
+/// Strict local execution request: only the supported algorithm selector is
+/// caller-controlled. A legacy submitted AnalysisBatch must fail JSON parsing.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunLocalAnalysisRequest {
+    pub kind: LocalAnalysisKind,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LocalAnalysisKind {
+    QuestionProbe,
+}
+
+pub(crate) async fn run_local_analysis<D>(
     State(state): State<AppState<D>>,
     headers: HeaderMap,
     Path(id): Path<String>,
-    Json(batch): Json<AnalysisBatch>,
+    Json(input): Json<RunLocalAnalysisRequest>,
 ) -> impl IntoResponse
 where
     D: ConstitutionalDelegate + WorkspaceDelegate,
@@ -278,9 +292,11 @@ where
     if !workspace_authorized(&state, &headers) {
         return unauthorized();
     }
-    match state.delegate.record_analysis_batch(&id, batch) {
-        Ok(snapshot) => (StatusCode::OK, Json(snapshot)).into_response(),
-        Err(error) => workspace_error_response(error),
+    match input.kind {
+        LocalAnalysisKind::QuestionProbe => match state.delegate.run_local_analysis(&id) {
+            Ok(snapshot) => (StatusCode::OK, Json(snapshot)).into_response(),
+            Err(error) => workspace_error_response(error),
+        },
     }
 }
 
