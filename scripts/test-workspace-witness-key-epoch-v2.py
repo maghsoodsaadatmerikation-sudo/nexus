@@ -172,14 +172,6 @@ def main():
             "--incoming-ack-public-key", new_pub,
             "--minimum-sequence", "3",
         ]
-        def override(**replace):
-            return [
-                replace.get(arg.lstrip("-").replace("-", "_"), value)
-                if str(arg).startswith("--") else value
-                for arg, value in zip(base_args[::2], base_args[1::2])
-                for value in ("",)
-            ]
-
         def verify(changes=None, good=True):
             params = base_args.copy()
             for key, value in (changes or {}).items():
