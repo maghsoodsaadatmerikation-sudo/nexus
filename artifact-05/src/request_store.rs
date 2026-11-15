@@ -6,7 +6,7 @@ use std::{
     io::{self, Read, Write},
     os::{
         fd::AsRawFd,
-        unix::fs::{MetadataExt, OpenOptionsExt},
+        unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt},
     },
     path::{Path, PathBuf},
 };
@@ -26,7 +26,12 @@ impl RequestStore {
         } else {
             std::env::current_dir()?.join(root)
         };
-        fs::create_dir_all(&root)?;
+        // New durable marker directories must not expose request IDs.
+        // Existing directories are not silently chmodded: a separate
+        // operator review/migration must reconcile their existing mode.
+        let mut maker = fs::DirBuilder::new();
+        maker.recursive(true).mode(0o700);
+        maker.create(&root)?;
         // A path alias to a different ledger must not become a durable root.
         if !fs::symlink_metadata(&root)?.file_type().is_dir() {
             return Err(invalid());
@@ -128,6 +133,7 @@ impl RequestStore {
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
+            .mode(0o600)
             .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
             .open(&path)?;
         // Allocate and sync a non-accepted prefix before crossing the delegate
@@ -227,6 +233,30 @@ mod tests {
             std::env::temp_dir().join(format!("nexus-ledger-{}-{}", label, uuid::Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
         root
+    }
+
+    #[test]
+    fn new_reservation_files_and_marker_directories_are_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let parent = isolated_ledger("private-permissions");
+        let fresh = parent.join("new-requests");
+        let (store, _) = RequestStore::open(&fresh).unwrap();
+        assert_eq!(
+            fs::metadata(&fresh).unwrap().permissions().mode() & 0o077, 0,
+            "new reservation directory must not expose request IDs"
+        );
+        store.reserve("synthetic").unwrap();
+        let marker = store.path("synthetic");
+        assert_eq!(
+            fs::metadata(&marker).unwrap().permissions().mode() & 0o077, 0,
+            "new request reservation must be owner-private"
+        );
+        store.pending("synthetic").unwrap();
+        assert_eq!(
+            fs::metadata(&marker).unwrap().permissions().mode() & 0o077, 0,
+            "pending transition must preserve private marker permissions"
+        );
+        fs::remove_dir_all(parent).unwrap();
     }
 
     #[test]
