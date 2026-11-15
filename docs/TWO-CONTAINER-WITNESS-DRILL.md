@@ -63,6 +63,20 @@ All containers, disposable volumes, Docker network and built image are
 deleted by the test finalizer. These are synthetic, disposable signing keys
 and data with no user information.
 
+## Live exact-checkpoint comparison
+
+The two-container CI acceptance now also runs the read-only
+[Live Witness Protocol Gate](LIVE-WITNESS-PROTOCOL-GATE.md) across the actual
+Docker SSH network. The sender pins the SHA-256 of its already signed package,
+queries the receiver's live latest, validates both Ed25519 signatures, exact
+receipt equality, local trust-state commitment and sequence. It repeats the
+check after deletion and restoration of the recipient data volume.
+
+The test's package digest is produced by its own disposable sender container;
+this is **not independently approved** and must never be described as
+production/off-host evidence. The output explicitly leaves administrative
+independence, WORM custody and deployment status unverified.
+
 ## Open operational requirements
 
 A truly independent custodian still needs a separate infrastructure and
