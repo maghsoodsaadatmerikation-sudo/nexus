@@ -6,10 +6,10 @@ use nexus_artifact_05_gateway::{
     router, AppState, ConstitutionalDelegate, DelegateError, SafetyConfig, Submission,
     WorkspaceDelegate, WorkspaceDelegateError,
 };
+use nexus_constitutional_core::analysis::{AnalysisAdapter, LocalQuestionProbe};
 use nexus_constitutional_core::{
-    Alternative, AnalysisAdapter, Claim, FileWorkspaceRepository, HumanJudgment,
-    LocalQuestionProbe, PolicyEngine, ProvenanceId, RequestEnvelope, WorkspaceEngine,
-    WorkspaceSnapshot,
+    Alternative, Claim, FileWorkspaceRepository, HumanJudgment, PolicyEngine, ProvenanceId,
+    RequestEnvelope, WorkspaceEngine, WorkspaceSnapshot,
 };
 use serde::Serialize;
 use std::{net::SocketAddr, path::PathBuf, sync::Mutex, time::Duration};
