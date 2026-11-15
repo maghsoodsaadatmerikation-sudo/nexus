@@ -15,6 +15,7 @@ HERE = Path(__file__).resolve().parent
 STAGER = HERE / "workspace-witness-v2-stager.py"
 RECOVERY = HERE / "workspace-witness-v2-recovery.py"
 TWO_OBSERVERS = HERE / "workspace-witness-two-custody-evidence.py"
+CHALLENGE_LEDGER = HERE / "workspace-witness-challenge-ledger.py"
 TRUST = HERE / "workspace-trust.py"
 WITNESS = HERE / "workspace-offsite-witness.py"
 CUSTODIAN = HERE / "workspace-witness-custodian.py"
@@ -514,7 +515,28 @@ def main():
         origin_private, origin_public = keypair(root, "origin-observer")
         restore_private, restore_public = keypair(root, "restore-observer")
         outsider_private, outsider_public = keypair(root, "outsider-observer")
-        nonce = "a7" * 32
+        # Issue a cryptographically random 32-byte challenge into a distinct
+        # private append-only ledger before either observer signs it.
+        registry = root / "separate-review-challenge-registry"
+        initialized = json.loads(call(
+            CHALLENGE_LEDGER, "init", "--registry", registry).stdout)
+        assert initialized["events"] == 0
+        head = initialized["registry_sha256"]
+        assert head == hash_file(registry / "challenges.json")
+        checked += 1
+        issued = json.loads(call(
+            CHALLENGE_LEDGER, "issue", "--registry", registry,
+            "--expected-registry-sha256", head).stdout)
+        nonce = issued["challenge_hex"]
+        assert len(nonce) == 64 and nonce != "0" * 64
+        assert issued["registry_sha256"] == hash_file(registry / "challenges.json")
+        checked += 1
+        current_registry_sha = issued["registry_sha256"]
+        pending = json.loads(call(
+            CHALLENGE_LEDGER, "inspect", "--registry", registry,
+            "--expected-registry-sha256", current_registry_sha).stdout)
+        assert pending["pending_challenges"] == [nonce]
+        checked += 1
         shared_observation = [
             *common,
             "--trusted-latest-package", packages[2],
@@ -565,6 +587,196 @@ def main():
         assert paired["physical_host_independence_proven"] is False
         assert paired["real_offsite_restore_performed"] is False
         assert paired["production_release_authorized"] is False
+        checked += 1
+
+        # Release-facing verification must consume the independently minted
+        # challenge exactly once, while holding a cross-process directory lock.
+        consume_params = [
+            "consume", "--registry", registry,
+            "--expected-registry-sha256", current_registry_sha,
+            *pair[1:],
+        ]
+        consumed_result = json.loads(call(
+            CHALLENGE_LEDGER, *consume_params).stdout)
+        assert consumed_result["status"] == "one-time-observer-evidence-consumed"
+        assert consumed_result["event_count"] == 2
+        assert consumed_result["latest_sequence"] == 4
+        assert consumed_result["physical_host_independence_proven"] is False
+        assert consumed_result["production_release_authorized"] is False
+        checked += 1
+        used_registry_sha = hash_file(registry / "challenges.json")
+        assert used_registry_sha == consumed_result["registry_sha256"]
+        # A persisted replay must fail with both the stale predecessor
+        # checkpoint AND with the newest externally retained registry head.
+        call(CHALLENGE_LEDGER, *consume_params, good=False)
+        checked += 1
+        call(CHALLENGE_LEDGER, *changed_flags(consume_params, {
+            "expected_registry_sha256": used_registry_sha,
+        }), good=False)
+        checked += 1
+        post = json.loads(call(
+            CHALLENGE_LEDGER, "inspect", "--registry", registry,
+            "--expected-registry-sha256", used_registry_sha).stdout)
+        assert post["pending_challenges"] == []
+        assert post["consumed_count"] == 1
+        checked += 1
+
+        # New challenge after consumption must be fresh and must not let
+        # signatures over the previous challenge count as new evidence.
+        new_issue = json.loads(call(
+            CHALLENGE_LEDGER, "issue", "--registry", registry,
+            "--expected-registry-sha256", used_registry_sha).stdout)
+        assert new_issue["challenge_hex"] != nonce
+        assert new_issue["event_count"] == 3
+        checked += 1
+        updated_registry_sha = new_issue["registry_sha256"]
+        call(CHALLENGE_LEDGER, *changed_flags(consume_params, {
+            "expected_registry_sha256": updated_registry_sha,
+        }), good=False)
+        checked += 1
+        for changes in (
+            {"expected_registry_sha256": "b" * 64},
+            {"challenge_hex": "f" * 64},
+            {"challenge_hex": new_issue["challenge_hex"]},
+            {"origin_report_sha256": "d" * 64},
+            {"recovery_public_key": origin_public},
+            {"minimum_sequence": "5"},
+        ):
+            call(CHALLENGE_LEDGER, *changed_flags(consume_params, {
+                "expected_registry_sha256": updated_registry_sha,
+                **changes,
+            }), good=False)
+            checked += 1
+
+        # Two concurrent consumers of exactly the same signed evidence:
+        # one succeeds and one is refused, with no double consumption.
+        race_registry = root / "concurrent-challenge-registry"
+        race_init = json.loads(call(
+            CHALLENGE_LEDGER, "init", "--registry", race_registry).stdout)
+        # For the concurrency fixture, issue a *different* challenge and
+        # produce genuinely signed observations over that challenge.
+        issued_race = json.loads(call(
+            CHALLENGE_LEDGER, "issue", "--registry", race_registry,
+            "--expected-registry-sha256", race_init["registry_sha256"]).stdout)
+        race_challenge = issued_race["challenge_hex"]
+        race_shared = changed_flags(shared_observation, {
+            "challenge_hex": race_challenge,
+        })
+        race_origin = out / "race-origin-observation.json"
+        race_recovery = out / "race-recovery-observation.json"
+        call(TWO_OBSERVERS, "observe", *race_shared,
+             "--role", "origin", "--store", store,
+             "--observer-private-key", origin_private,
+             "--observer-public-key", origin_public,
+             "--observer-id", "independent-origin-observer",
+             "--output", race_origin)
+        call(TWO_OBSERVERS, "observe", *race_shared,
+             "--role", "recovery", "--store", fresh,
+             "--observer-private-key", restore_private,
+             "--observer-public-key", restore_public,
+             "--observer-id", "independent-recovery-observer",
+             "--output", race_recovery)
+        race_pair = [
+            *changed_flags(pair, {
+                "challenge_hex": race_challenge,
+                "origin_report": race_origin,
+                "origin_report_sha256": hash_file(race_origin),
+                "recovery_report": race_recovery,
+                "recovery_report_sha256": hash_file(race_recovery),
+            })[1:],
+        ]
+        concurrent_consume = [
+            "consume", "--registry", race_registry,
+            "--expected-registry-sha256", issued_race["registry_sha256"],
+            *race_pair,
+        ]
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(
+                lambda: subprocess.run(
+                    [sys.executable, str(CHALLENGE_LEDGER),
+                     *[str(x) for x in concurrent_consume]],
+                    capture_output=True, text=True, timeout=80))
+                for _ in range(2)]
+            results = [f.result() for f in futures]
+        assert sorted(x.returncode for x in results) == [0, 1], [
+            (x.returncode, x.stderr) for x in results]
+        assert json.loads((race_registry / "challenges.json").read_text())["events"][-1]["kind"] == "consume"
+        checked += 1
+
+        # Missing/invalid ledger, changed previous hash, unsafe inode and
+        # corruption may never be silently reset or reused for issuance.
+        for case in ("wrong-head", "symlink", "hardlink", "corrupt", "permission", "missing"):
+            test_registry = root / ("unsafe-challenge-" + case)
+            first = json.loads(call(
+                CHALLENGE_LEDGER, "init", "--registry", test_registry).stdout)
+            ledger_file = test_registry / "challenges.json"
+            if case == "wrong-head":
+                chosen = "f" * 64
+            else:
+                chosen = first["registry_sha256"]
+                if case == "symlink":
+                    ledger_file.unlink()
+                    ledger_file.symlink_to(registry / "challenges.json")
+                elif case == "hardlink":
+                    ledger_file.unlink()
+                    os.link(registry / "challenges.json", ledger_file)
+                elif case == "corrupt":
+                    ledger_file.write_bytes(b"{not json")
+                elif case == "permission":
+                    os.chmod(ledger_file, 0o644)
+                elif case == "missing":
+                    ledger_file.unlink()
+            call(CHALLENGE_LEDGER, "issue", "--registry", test_registry,
+                 "--expected-registry-sha256", chosen, good=False)
+            if case == "hardlink":
+                ledger_file.unlink()
+            checked += 1
+        # Actual process exits before/after registry atomic rename. No
+        # bypass of the externally trusted prior registry head is allowed.
+        for crash_phase in ("before", "after"):
+            crashed_registry = root / ("challenge-aborted-" + crash_phase)
+            setup = json.loads(call(
+                CHALLENGE_LEDGER, "init", "--registry", crashed_registry).stdout)
+            args = [
+                "issue", "--registry", crashed_registry,
+                "--expected-registry-sha256", setup["registry_sha256"],
+            ]
+            script = (
+                "import os,sys,importlib.util;"
+                "p=sys.argv[1];"
+                "s=importlib.util.spec_from_file_location('fault_nonce',p);"
+                "m=importlib.util.module_from_spec(s);s.loader.exec_module(m);"
+                "real=os.replace;"
+                "bad=lambda *a,**k:"
+                + ("os._exit(82)" if crash_phase == "before"
+                   else "(real(*a,**k),os._exit(83))")
+                + ";os.replace=bad;"
+                "sys.argv=[p]+sys.argv[2:];sys.exit(m.main())"
+            )
+            interrupted = subprocess.run(
+                [sys.executable, "-c", script, str(CHALLENGE_LEDGER),
+                 *[str(item) for item in args]],
+                capture_output=True, text=True, timeout=70)
+            assert interrupted.returncode == (82 if crash_phase == "before" else 83), (
+                interrupted.returncode, interrupted.stderr)
+            events = json.loads(
+                (crashed_registry / "challenges.json").read_text())["events"]
+            assert len(events) == (0 if crash_phase == "before" else 1)
+            current = hash_file(crashed_registry / "challenges.json")
+            if crash_phase == "before":
+                assert current == setup["registry_sha256"]
+                call(CHALLENGE_LEDGER, *args)
+            else:
+                assert current != setup["registry_sha256"]
+                call(CHALLENGE_LEDGER, *args, good=False)
+                audited = json.loads(call(
+                    CHALLENGE_LEDGER, "inspect", "--registry", crashed_registry,
+                    "--expected-registry-sha256", current).stdout)
+                assert len(audited["pending_challenges"]) == 1
+            checked += 1
+
+        assert (registry / "challenges.json").read_bytes() == trust.encode_json(
+            trust.strict_json((registry / "challenges.json").read_bytes()))
         checked += 1
 
         for changes in (
@@ -657,7 +869,7 @@ def main():
 
     print(json.dumps({
         "status": "PASS", "checks": checked,
-        "scope": "synthetic-v2-staging-cold-restore-and-two-distinct-observer-signatures",
+        "scope": "synthetic-v2-recovery-two-observers-and-one-time-durable-challenges",
         "live_receiver_modified": False,
         "production_key_rotation_activated": False,
     }))
