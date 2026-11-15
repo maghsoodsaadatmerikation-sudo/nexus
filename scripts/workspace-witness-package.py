@@ -254,10 +254,12 @@ def verify(args):
     found = {entry.name for entry in args.destination.iterdir()}
     if found != set(SOURCES) | {"install.json"}:
         fail("unexpected installed executable, symlink or file")
-    if args.bundle is not None:
-        extracted = decode_bundle(args.bundle, args.trusted_sha256)
-        if record_for(extracted, args.trusted_sha256) != manifest:
-            fail("installed manifest differs from approved bundle")
+    # A self-contained manifest is not an independent trust anchor. The
+    # operator must supply the originally approved bundle bytes on every
+    # verification; otherwise attacker-edited files+manifest could agree.
+    extracted = decode_bundle(args.bundle, args.trusted_sha256)
+    if record_for(extracted, args.trusted_sha256) != manifest:
+        fail("installed manifest differs from independently approved bundle")
     print("NEXUS WITNESS CODE VERIFIED: root-owned, exact hashes, approved bundle reference")
 
 
@@ -274,7 +276,7 @@ def main():
     checker = subs.add_parser("verify")
     checker.add_argument("--destination", type=Path, required=True)
     checker.add_argument("--trusted-sha256", required=True)
-    checker.add_argument("--bundle", type=Path)
+    checker.add_argument("--bundle", type=Path, required=True)
     args = parser.parse_args()
     try:
         {"build": build, "install": install, "verify": verify}[args.action](args)
