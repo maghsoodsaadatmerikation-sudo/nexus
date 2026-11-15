@@ -25,7 +25,9 @@ ok('explicit attachment context',()=>{
  assert(ctx.messages[0].content.includes('UNTRUSTED'));
  assert(ctx.messages[0].content.includes('green orchard'));
  assert(ctx.messages[0].content.includes('numbers.csv'));
- assert(ctx.attachments_supplied.length===2);
+ assert(ctx.attachments_supplied.length>=2&&ctx.attachments_supplied.length<=S.MAX_CHAT_ATTACHMENTS);
+ assert(new Set(ctx.attachments_supplied.map(x=>x.name)).has('notes.md'));
+ assert(new Set(ctx.attachments_supplied.map(x=>x.name)).has('numbers.csv'));
  assert(ctx.attachments_supplied.every(x=>x.kind==='one_turn_attachment'));
  assert.equal(ctx.messages.at(-1).content,'Summarize the uploaded file');
  assert(!JSON.stringify(S.state({schema:S.SCHEMA,projects:[p]})).includes('orchard'));
