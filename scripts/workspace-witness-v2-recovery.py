@@ -245,12 +245,20 @@ def main():
     commands = p.add_subparsers(dest="command", required=True)
     for name in ("export", "verify", "restore"):
         op = commands.add_parser(name)
-        stager.add_common(op)
-        # Replace names inherited from the stager's staging operations with
-        # explicitly named checkpoint inputs for the recovery interface.
-        # The shared parser requires --candidate and --trusted-next-package;
-        # recovery accepts them only through --candidate/--trusted-next-package
-        # aliases used as independent witness checkpoint paths.
+        for flag in (
+            "old-ledger", "trusted-old-package", "consent",
+            "source-public-key", "outgoing-ack-public-key",
+            "incoming-ack-public-key",
+        ):
+            op.add_argument("--" + flag, type=Path, required=True)
+        for flag in (
+            "old-ledger-sha256", "trusted-old-package-sha256",
+            "consent-sha256", "receiver-id", "source-key-id",
+            "outgoing-ack-key-id", "incoming-ack-key-id",
+        ):
+            op.add_argument("--" + flag, required=True)
+        if name == "export":
+            op.add_argument("--store", type=Path, required=True)
         op.add_argument("--expected-bridge-sha256", required=True)
         op.add_argument("--trusted-latest-package", type=Path, required=True)
         op.add_argument("--trusted-latest-package-sha256", required=True)
