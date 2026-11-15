@@ -1,0 +1,61 @@
+name: NEXUS Historical Gateway Crash Restart Isolation
+on:
+  pull_request:
+    paths:
+      - 'scripts/test-stage-d-historical-gateway-restart.py'
+      - '.github/workflows/stage-d-historical-gateway-restart.yml'
+      - 'docs/STAGE-D-HISTORICAL-GATEWAY-RESTART.md'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/test-stage-d-historical-gateway-restart.py'
+      - '.github/workflows/stage-d-historical-gateway-restart.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-three-historical-http-gateways:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - name: Checkout exact PR commit and immutable history
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Compile historical gateway binaries and exercise isolated loopback crash recovery
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          CARGO_TERM_COLOR: never
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -B -m py_compile scripts/test-stage-d-historical-gateway-restart.py
+          command -v cargo >/dev/null
+          command -v rustup >/dev/null
+          rustup toolchain install 1.85.0 --profile minimal
+          scratch="$(mktemp -d "${RUNNER_TEMP:-/tmp}/nexus-actual-historical-gateways-XXXXXXXX")"
+          trap 'for role in recovery source target; do git worktree remove --force "$scratch/$role" >/dev/null 2>&1 || :; done; rm -rf "$scratch"' EXIT
+          export CARGO_TARGET_DIR="$scratch/compiled-artifacts"
+          for role in recovery source target; do
+            case "$role" in
+              recovery) revision="588dc7672146031425b16b34956876d644244ace" ;;
+              source) revision="9abbc067aad3ebbb0956432cf6682d2ea70e2824" ;;
+              target) revision="f4d027bb5f7e715b298f7cf7184fa621a2fb071d" ;;
+            esac
+            git cat-file -e "${revision}^{commit}"
+            git worktree add --detach "$scratch/$role" "$revision"
+            test "$(git -C "$scratch/$role" rev-parse HEAD)" = "$revision"
+            RUSTUP_TOOLCHAIN=1.85.0 cargo build --locked --quiet \
+              --manifest-path "$scratch/$role/artifact-05/Cargo.toml" \
+              --bin nexus-artifact-05-gateway
+            install -m 0700 "$CARGO_TARGET_DIR/debug/nexus-artifact-05-gateway" \
+              "$scratch/nexus-$role"
+          done
+          python3 -B scripts/test-stage-d-historical-gateway-restart.py \
+            --synthetic-only \
+            --runner-temp "$scratch" \
+            --recovery-binary "$scratch/nexus-recovery" \
+            --source-binary "$scratch/nexus-source" \
+            --target-binary "$scratch/nexus-target"
