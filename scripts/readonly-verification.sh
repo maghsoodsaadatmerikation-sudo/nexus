@@ -37,6 +37,7 @@ command -v openssl >/dev/null || { echo 'OpenSSL missing' >&2; exit 1; }
 python3 scripts/test-workspace-attestation.py
 python3 scripts/test-workspace-offsite-witness.py
 python3 scripts/test-workspace-witness-custodian.py
+python3 scripts/test-workspace-witness-ssh.py
 python3 scripts/test-release-intent-triage.py
 python3 scripts/test-stage-d-encrypted-escrow.py
 python3 scripts/verify_test_matrix.py
