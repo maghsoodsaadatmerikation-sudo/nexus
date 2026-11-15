@@ -108,8 +108,10 @@ def write_exclusive(path, content, mode=0o644):
         with os.fdopen(fd, "wb") as output:
             output.write(content)
             output.flush()
+            # Set permissions on the same open descriptor to eliminate a
+            # possible path replacement between creation and chmod.
+            os.fchmod(output.fileno(), mode)
             os.fsync(output.fileno())
-        os.chmod(path, mode, follow_symlinks=False)
     except BaseException:
         path.unlink(missing_ok=True)
         raise
