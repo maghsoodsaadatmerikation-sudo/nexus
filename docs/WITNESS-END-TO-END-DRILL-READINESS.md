@@ -63,7 +63,11 @@ Optional \`--stage-d-evidence /private/path --deployed-commit FULL_40_CHAR_SHA\`
 
 ## Current Render observation (2026-11-15)
 
-Read-only service inventory showed **one** NEXUS Docker web service on Render (\`nexus\`, free tier, one instance, Ohio) with \`autoDeploy=yes\` on \`main\`. Three further NEXUS entries are static sites (Studio, offline pilot and portable PWA preview), not independent v2 custodians. This is an operational observation, **not** a credential, private server inspection, proof of persistent disks, or a guarantee that no separate host exists outside the connected account. Do not assume a static site can serve as a durable private witness receiver.
+Read-only service inventory showed **one** NEXUS Docker web service on Render (\`nexus\`, free tier, one instance, Ohio) with \`autoDeploy=yes\` on \`main\`. Three further NEXUS entries are static sites (Studio, offline pilot and portable PWA preview), not independent v2 custodians.
+
+A separate **Railway** project named \`NEXUS Stage D\` has preexisting \`nexus-stage-d\` (region \`sfo\`, mounted \`/data\` volume) and \`nexus-stage-d-restore\` (region \`us-west2\`, distinct mounted \`/data\` volume), as well as operator/runner services. The last reported deployments for both the main Stage D service and the recovery service were \`SLEEPING\` on inspection; the runner's last deployment was \`FAILED\`, and there was an unapplied staged change patch. The existence of different services, regions and volumes is a **deployment topology observation**, not proof of independent administration, durable live service availability, up-to-date committed data, successful restoration, or a verified v2 witness recipient. There is no permission in this stage to deploy or apply pending Railway configuration.
+
+This is read-only metadata, **not** a credential, private server inspection, a guarantee of distinct failure domains, or a successful operational test. Do not assume a static site or an unverified sleeping Stage D restore service can act as an independent authoritative witness receiver.
 
 ## Remaining release blockers
 
