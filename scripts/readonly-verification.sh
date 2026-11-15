@@ -45,6 +45,7 @@ python3 scripts/test-workspace-stage-d-deploy-coherence.py
 python3 scripts/test-workspace-stage-d-upgrade-rehearsal.py
 python3 scripts/test-workspace-stage-d-data-rollback-screen.py
 python3 scripts/test-stage-d-oci-image-evidence.py
+python3 scripts/test-stage-d-signed-oci-admission.py
 python3 scripts/test-workspace-witness-ledger-prefix.py
 python3 scripts/test-workspace-witness-recovery.py
 python3 scripts/test-workspace-witness-ssh.py
