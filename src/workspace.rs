@@ -134,10 +134,21 @@ impl WorkspaceEngine {
         &self.events
     }
 
-    pub fn add_claim(&mut self, claim: Claim, provenance_id: ProvenanceId) {
+    pub fn add_claim(
+        &mut self,
+        claim: Claim,
+        provenance_id: ProvenanceId,
+    ) -> Result<(), WorkspaceStoreError> {
+        // A generic claim event cannot establish machine provenance. Reject
+        // before mutating either the workspace or its append-only audit log.
+        // Only record_analysis_batch may create machine-origin claims.
+        if claim.origin == ClaimOrigin::MachineAnalysis {
+            return Err(WorkspaceStoreError::ClaimAuditMismatch);
+        }
         let claim_id = claim.id.clone();
         self.workspace.add_claim(claim);
         self.append_event(provenance_id, WorkspaceEventKind::ClaimAdded { claim_id });
+        Ok(())
     }
 
     pub fn add_alternative(&mut self, alternative: Alternative, provenance_id: ProvenanceId) {
@@ -375,17 +386,19 @@ mod tests {
     #[test]
     fn audit_events_are_append_only_and_sequenced() {
         let mut engine = WorkspaceEngine::new("w-1", "Question", ProvenanceId::new("human:p1"));
-        engine.add_claim(
-            Claim {
-                id: "c-1".into(),
-                text: "Evidence".into(),
-                origin: ClaimOrigin::ExternalEvidence {
-                    source: "source-1".into(),
+        engine
+            .add_claim(
+                Claim {
+                    id: "c-1".into(),
+                    text: "Evidence".into(),
+                    origin: ClaimOrigin::ExternalEvidence {
+                        source: "source-1".into(),
+                    },
+                    uncertainty: Uncertainty::Medium,
                 },
-                uncertainty: Uncertainty::Medium,
-            },
-            ProvenanceId::new("source:1"),
-        );
+                ProvenanceId::new("source:1"),
+            )
+            .unwrap();
         engine.record_human_judgment(
             HumanJudgment {
                 decision: "A".into(),

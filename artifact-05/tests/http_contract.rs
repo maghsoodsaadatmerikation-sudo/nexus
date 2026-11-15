@@ -70,7 +70,9 @@ impl WorkspaceDelegate for RecordingDelegate {
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         self.mutate(workspace_id, |engine| {
-            engine.add_claim(claim, provenance_id)
+            engine
+                .add_claim(claim, provenance_id)
+                .map_err(|_| WorkspaceDelegateError::Invalid)
         })
     }
 
@@ -81,7 +83,8 @@ impl WorkspaceDelegate for RecordingDelegate {
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         self.mutate(workspace_id, |engine| {
-            engine.add_alternative(alternative, provenance_id)
+            engine.add_alternative(alternative, provenance_id);
+            Ok(())
         })
     }
 
@@ -90,7 +93,10 @@ impl WorkspaceDelegate for RecordingDelegate {
         workspace_id: &str,
         batch: AnalysisBatch,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
-        self.mutate(workspace_id, |engine| engine.record_analysis_batch(batch))
+        self.mutate(workspace_id, |engine| {
+            engine.record_analysis_batch(batch);
+            Ok(())
+        })
     }
 
     fn record_human_judgment(
@@ -100,7 +106,8 @@ impl WorkspaceDelegate for RecordingDelegate {
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         self.mutate(workspace_id, |engine| {
-            engine.record_human_judgment(judgment, provenance_id)
+            engine.record_human_judgment(judgment, provenance_id);
+            Ok(())
         })
     }
 }
@@ -112,7 +119,7 @@ impl RecordingDelegate {
         mutate: F,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError>
     where
-        F: FnOnce(&mut WorkspaceEngine),
+        F: FnOnce(&mut WorkspaceEngine) -> Result<(), WorkspaceDelegateError>,
     {
         let mut repository = self.workspaces.lock().unwrap();
         let snapshot = repository
@@ -120,7 +127,7 @@ impl RecordingDelegate {
             .ok_or(WorkspaceDelegateError::NotFound)?;
         let mut engine = WorkspaceEngine::from_snapshot(snapshot)
             .map_err(|_| WorkspaceDelegateError::Invalid)?;
-        mutate(&mut engine);
+        mutate(&mut engine)?;
         let snapshot = engine.snapshot();
         repository
             .save(snapshot.clone())
@@ -436,6 +443,67 @@ async fn workspace_lifecycle_is_delegated_and_auditable() {
     let snapshot: serde_json::Value = serde_json::from_slice(&get_body).unwrap();
     assert_eq!(snapshot["workspace"]["judgment"]["decision"], "Option A");
     assert_eq!(snapshot["events"].as_array().unwrap().len(), 4);
+}
+
+#[tokio::test]
+async fn generic_machine_claim_is_rejected_before_lookup_without_mutation() {
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::new(delegate.clone()));
+    let forged = serde_json::json!({
+        "claim_id": "machine-forgery",
+        "text": "User-supplied claim cannot assert machine execution",
+        "origin": {"kind": "machine_analysis"},
+        "uncertainty": "unknown",
+        "provenance_id": "machine:claimed:run"
+    });
+
+    // Returning 422 rather than 404 for an unknown workspace demonstrates
+    // that the transport rejects the invalid origin before delegation.
+    let absent = Request::builder()
+        .method("POST")
+        .uri("/v1/workspaces/unknown/claims")
+        .header("content-type", "application/json")
+        .body(Body::from(forged.to_string()))
+        .unwrap();
+    let response = app.clone().oneshot(absent).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let error: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(error["error"], "machine_origin_cannot_be_claim_added");
+
+    let create = Request::builder()
+        .method("POST")
+        .uri("/v1/workspaces")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::json!({
+                "workspace_id": "atomic",
+                "question": "Keep machine provenance auditable?",
+                "provenance_id": "human:owner"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(create).await.unwrap().status(),
+        StatusCode::CREATED
+    );
+
+    let forged_again = Request::builder()
+        .method("POST")
+        .uri("/v1/workspaces/atomic/claims")
+        .header("content-type", "application/json")
+        .body(Body::from(forged.to_string()))
+        .unwrap();
+    assert_eq!(
+        app.oneshot(forged_again).await.unwrap().status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    let unchanged = delegate.get_workspace("atomic").unwrap();
+    assert!(unchanged.workspace.claims.is_empty());
+    assert_eq!(unchanged.events.len(), 1);
 }
 
 #[tokio::test]

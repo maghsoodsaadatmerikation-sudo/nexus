@@ -9,15 +9,17 @@ use std::{
 
 fn engine() -> WorkspaceEngine {
     let mut engine = WorkspaceEngine::new("w", "Question", ProvenanceId::new("human:p"));
-    engine.add_claim(
-        Claim {
-            id: "c1".into(),
-            text: "original".into(),
-            origin: ClaimOrigin::Human,
-            uncertainty: Uncertainty::Unknown,
-        },
-        ProvenanceId::new("source:1"),
-    );
+    engine
+        .add_claim(
+            Claim {
+                id: "c1".into(),
+                text: "original".into(),
+                origin: ClaimOrigin::Human,
+                uncertainty: Uncertainty::Unknown,
+            },
+            ProvenanceId::new("source:1"),
+        )
+        .unwrap();
     engine.add_alternative(
         Alternative {
             id: "a1".into(),
@@ -66,7 +68,7 @@ fn duplicate_creation_event_rejected_consistently() {
 #[test]
 fn duplicate_claim_identifiers_rejected_consistently() {
     let mut e = engine();
-    e.add_claim(e.workspace().claims[0].clone(), ProvenanceId::new("p"));
+    e.add_claim(e.workspace().claims[0].clone(), ProvenanceId::new("p")).unwrap();
     reject_on_all_import_paths(e.snapshot());
 }
 #[test]
@@ -101,15 +103,17 @@ fn storage_rejects_content_edits_even_with_an_extended_event_log() {
     let initial = engine().snapshot();
     for variant in 0..5 {
         let mut e = WorkspaceEngine::from_snapshot(initial.clone()).unwrap();
-        e.add_claim(
-            Claim {
-                id: "c2".into(),
-                text: "new".into(),
-                origin: ClaimOrigin::Human,
-                uncertainty: Uncertainty::Unknown,
-            },
-            ProvenanceId::new("p"),
-        );
+        e
+            .add_claim(
+                Claim {
+                    id: "c2".into(),
+                    text: "new".into(),
+                    origin: ClaimOrigin::Human,
+                    uncertainty: Uncertainty::Unknown,
+                },
+                ProvenanceId::new("p"),
+            )
+            .unwrap();
         let mut changed = e.snapshot();
         match variant {
             0 => changed.workspace.claims[0].text = "rewritten".into(),
@@ -193,15 +197,17 @@ fn independent_writers_cannot_both_replace_a_shared_revision() {
             let dir = dir.clone();
             let barrier = barrier.clone();
             let mut e = WorkspaceEngine::from_snapshot(initial.clone()).unwrap();
-            e.add_claim(
-                Claim {
-                    id: format!("writer-{i}"),
-                    text: "candidate".into(),
-                    origin: ClaimOrigin::Human,
-                    uncertainty: Uncertainty::Unknown,
-                },
-                ProvenanceId::new("p"),
-            );
+            e
+                .add_claim(
+                    Claim {
+                        id: format!("writer-{i}"),
+                        text: "candidate".into(),
+                        origin: ClaimOrigin::Human,
+                        uncertainty: Uncertainty::Unknown,
+                    },
+                    ProvenanceId::new("p"),
+                )
+                .unwrap();
             thread::spawn(move || {
                 barrier.wait();
                 FileWorkspaceRepository::new(dir).save(e.snapshot())
