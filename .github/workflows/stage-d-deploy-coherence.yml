@@ -1,0 +1,38 @@
+name: NEXUS Stage D Deployment Commit Coherence
+on:
+  pull_request:
+    paths:
+      - 'scripts/workspace-stage-d-deploy-coherence.py'
+      - 'scripts/test-workspace-stage-d-deploy-coherence.py'
+      - 'scripts/workspace-stage-d-railway-preflight.py'
+      - 'scripts/test-workspace-stage-d-railway-preflight.py'
+      - 'scripts/readonly-verification.sh'
+      - 'docs/STAGE-D-DEPLOYED-COMMIT-COHERENCE.md'
+      - '.github/workflows/stage-d-deploy-coherence.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/workspace-stage-d-deploy-coherence.py'
+      - 'scripts/test-workspace-stage-d-deploy-coherence.py'
+      - '.github/workflows/stage-d-deploy-coherence.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-deployment-source-coherence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact source without durable tokens
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify provider deployment-history constraints and fail-closed gate
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -B -m py_compile scripts/workspace-stage-d-deploy-coherence.py scripts/test-workspace-stage-d-deploy-coherence.py
+          python3 -B scripts/test-workspace-stage-d-deploy-coherence.py
