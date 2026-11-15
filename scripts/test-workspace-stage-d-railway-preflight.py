@@ -181,6 +181,25 @@ def main():
         mutated("crashed-replica",
                 lambda i, h: h["services"][0]["replicaStatus"].update(crashed=1))
 
+        # Reproduce the *shape*, not the data authority, of the real
+        # read-only provider observation: two sleeping services, no running
+        # replicas, and an unapplied source health-check configuration.
+        def current_stage_d_shape(inventory, health):
+            inventory["services"][0]["state"] = "live-with-staged-changes"
+            inventory["staged"] = {
+                "status": "STAGED", "changeCount": 2,
+            }
+            health["pendingWork"] = [{"kind": "EnvironmentPatch",
+                                      "status": "staged"}]
+            for service, observed in zip(
+                    inventory["services"], health["services"]):
+                service["latestDeployment"]["status"] = "SLEEPING"
+                observed["activeDeployments"][0]["status"] = "SLEEPING"
+                observed["state"] = "sleeping"
+                observed["replicaStatus"] = None
+                observed["hasIssues"] = False
+        mutated("observed-stage-d-blocked-shape", current_stage_d_shape)
+
         # Metadata integrity: wrong identity, volume, repo, missing service,
         # or inconsistent provider snapshot must not look like 'blocked but
         # well-attested topology'; it is structurally denied.
