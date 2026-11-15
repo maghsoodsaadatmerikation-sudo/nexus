@@ -196,9 +196,20 @@ def main():
             finally:
                 stop(process)
 
-            # The Rust writer creates its request dir; ensure it can be
-            # audited with strict operator ownership before a guarded restart.
+            # Historical gateways create request markers with umask-based
+            # mode (usually 0644) and sometimes a 0755 request directory.
+            # The new guard refuses such modes: demonstrate the failure,
+            # then narrow permissions ONLY on this disposable test data.
+            reservation = workroot / "requests" / b"synthetic-accepted".hex()
+            unsafe_permissions = (
+                (reservation.stat().st_mode & 0o077)
+                or ((workroot / "requests").stat().st_mode & 0o077)
+            )
+            if unsafe_permissions:
+                call("inspect", opts, False)
+                counts += 1
             os.chmod(workroot / "requests", 0o700)
+            os.chmod(reservation, 0o600)
             approved = call("inspect", opts, True)
             assert approved["reservations_checked"] == 1
             counts += 1
