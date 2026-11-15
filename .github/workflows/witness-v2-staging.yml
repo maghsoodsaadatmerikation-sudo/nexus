@@ -4,9 +4,11 @@ on:
     paths:
       - 'scripts/workspace-witness-v2-stager.py'
       - 'scripts/workspace-witness-v2-recovery.py'
+      - 'scripts/workspace-witness-two-custody-evidence.py'
       - 'scripts/test-workspace-witness-v2-stager.py'
       - 'docs/WITNESS-V2-DURABLE-STAGING.md'
       - 'docs/WITNESS-V2-OFFLINE-RECOVERY.md'
+      - 'docs/WITNESS-TWO-CUSTODY-EVIDENCE.md'
       - 'scripts/readonly-verification.sh'
       - '.github/workflows/witness-v2-staging.yml'
   push:
@@ -14,6 +16,7 @@ on:
     paths:
       - 'scripts/workspace-witness-v2-stager.py'
       - 'scripts/workspace-witness-v2-recovery.py'
+      - 'scripts/workspace-witness-two-custody-evidence.py'
       - 'scripts/test-workspace-witness-v2-stager.py'
       - '.github/workflows/witness-v2-staging.yml'
   workflow_dispatch:
@@ -36,5 +39,5 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           command -v openssl
-          python3 -B -m py_compile scripts/workspace-witness-v2-stager.py scripts/workspace-witness-v2-recovery.py scripts/test-workspace-witness-v2-stager.py
+          python3 -B -m py_compile scripts/workspace-witness-v2-stager.py scripts/workspace-witness-v2-recovery.py scripts/workspace-witness-two-custody-evidence.py scripts/test-workspace-witness-v2-stager.py
           python3 -B scripts/test-workspace-witness-v2-stager.py
