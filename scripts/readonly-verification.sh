@@ -42,6 +42,7 @@ python3 scripts/test-workspace-witness-key-epoch-v2.py
 python3 scripts/test-workspace-witness-v2-stager.py
 python3 scripts/test-workspace-stage-d-railway-preflight.py
 python3 scripts/test-workspace-stage-d-deploy-coherence.py
+python3 scripts/test-workspace-stage-d-upgrade-rehearsal.py
 python3 scripts/test-workspace-witness-ledger-prefix.py
 python3 scripts/test-workspace-witness-recovery.py
 python3 scripts/test-workspace-witness-ssh.py
