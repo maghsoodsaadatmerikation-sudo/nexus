@@ -51,7 +51,7 @@ def sha(raw):
 
 def challenge(value):
     if not isinstance(value, str) or not CHALLENGE.fullmatch(value):
-        fail("a separately approved 32-byte hexadecimal one-use challenge is required")
+        fail("an operator-approved externally tracked 32-byte hexadecimal challenge is required")
     if value == "0" * 64:
         fail("all-zero challenge is not an acceptable operator challenge")
     return value
@@ -59,6 +59,9 @@ def challenge(value):
 
 def observer_keys(args):
     observer_id = v2.custodian.key_id(args.observer_id)
+    if observer_id in (args.source_key_id, args.outgoing_ack_key_id,
+                       args.incoming_ack_key_id):
+        fail("observer identity must not reuse a ledger signing role ID")
     pub_der = trust.derive_ed25519_public_der(args.observer_public_key)
     source_der, outgoing_der = v2.custodian.secure_inputs(
         args.source_public_key, args.outgoing_ack_public_key,
