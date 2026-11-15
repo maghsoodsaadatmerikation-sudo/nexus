@@ -119,7 +119,9 @@ impl WorkspaceDelegate for CoreDelegate {
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         self.mutate_workspace(workspace_id, |engine| {
-            engine.add_claim(claim, provenance_id).map_err(|_| WorkspaceDelegateError::Invalid)
+            engine
+                .add_claim(claim, provenance_id)
+                .map_err(|_| WorkspaceDelegateError::Invalid)
         })
     }
 
