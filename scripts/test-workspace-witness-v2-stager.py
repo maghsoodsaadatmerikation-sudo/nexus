@@ -16,6 +16,7 @@ STAGER = HERE / "workspace-witness-v2-stager.py"
 RECOVERY = HERE / "workspace-witness-v2-recovery.py"
 TWO_OBSERVERS = HERE / "workspace-witness-two-custody-evidence.py"
 CHALLENGE_LEDGER = HERE / "workspace-witness-challenge-ledger.py"
+DRILL_AUDIT = HERE / "workspace-witness-drill-audit.py"
 TRUST = HERE / "workspace-trust.py"
 WITNESS = HERE / "workspace-offsite-witness.py"
 CUSTODIAN = HERE / "workspace-witness-custodian.py"
@@ -621,6 +622,82 @@ def main():
         assert post["consumed_count"] == 1
         checked += 1
 
+        # Entire staged source -> independently retained cold backup ->
+        # restored staged copy -> separately signed observations -> one-time
+        # challenge-consumption chain MUST agree. This is a same-runner
+        # synthetic drill, so the independent-host release gate stays blocked.
+        audit_arguments = [
+            *pair[1:],
+            "--registry", registry,
+            "--registry-sha256", used_registry_sha,
+            "--origin-store", store,
+            "--restored-store", fresh,
+            "--backup", backup_file,
+            "--backup-sha256", hash_file(backup_file),
+        ]
+        audited = json.loads(call(
+            DRILL_AUDIT, "verify", *audit_arguments).stdout)
+        assert audited["status"] == "offline-cryptographic-drill-consistent"
+        assert audited["origin_and_restored_stage_identical"] is True
+        assert audited["cold_backup_verified"] is True
+        assert audited["challenge_consumed_once_in_pinned_ledger"] is True
+        assert audited["release_gate"] == "BLOCKED"
+        assert audited["release_authorized"] is False
+        assert audited["physical_host_independence_proven"] is False
+        assert audited["real_destructive_offhost_restore_proven"] is False
+        checked += 1
+        blocked = call(DRILL_AUDIT, "release-gate", *audit_arguments, good=False)
+        assert '"release_gate": "BLOCKED"' in blocked.stdout
+        assert "NEXUS TWO-HOST RELEASE GATE: BLOCKED" in blocked.stderr
+        checked += 1
+        # A fake/incomplete Stage D pack cannot become a release approval.
+        fake_stage_d = root / "simulated-incomplete-stage-d"
+        fake_stage_d.mkdir(mode=0o700)
+        audit_with_stage_d = [
+            *audit_arguments, "--stage-d-evidence", fake_stage_d,
+            "--deployed-commit", "f" * 40,
+        ]
+        corroboration = json.loads(call(
+            DRILL_AUDIT, "verify", *audit_with_stage_d).stdout)
+        assert corroboration["stage_d_status"] == "BLOCKED_INCOMPLETE_OR_INVALID"
+        assert corroboration["release_authorized"] is False
+        checked += 1
+        call(DRILL_AUDIT, "release-gate", *audit_with_stage_d, good=False)
+        checked += 1
+
+        for changes in (
+            {"registry_sha256": "f" * 64},
+            {"challenge_hex": "c" * 64},
+            {"origin_report_sha256": "f" * 64},
+            {"recovery_report_sha256": "f" * 64},
+            {"trusted_latest_package_sha256": "f" * 64},
+            {"backup_sha256": "f" * 64},
+            {"expected_bridge_sha256": hash_file(bridges[1])},
+            {"minimum_sequence": "5"},
+            {"origin_public_key": outsider_public},
+            {"recovery_public_key": origin_public},
+            {"recovery_observer_id": "independent-origin-observer"},
+        ):
+            call(DRILL_AUDIT, "verify", *changed_flags(audit_arguments, changes),
+                 good=False)
+            checked += 1
+        call(DRILL_AUDIT, "verify",
+             *changed_flags(audit_arguments, {"restored_store": stale_stage}),
+             good=False)
+        checked += 1
+        call(DRILL_AUDIT, "verify",
+             *changed_flags(audit_arguments, {"origin_store": stale_stage}),
+             good=False)
+        checked += 1
+        call(DRILL_AUDIT, "verify",
+             *changed_flags(audit_arguments, {"backup": stale_snapshot,
+                                               "backup_sha256": hash_file(stale_snapshot)}),
+             good=False)
+        checked += 1
+        call(DRILL_AUDIT, "verify", *audit_arguments,
+             "--deployed-commit", "f" * 40, good=False)
+        checked += 1
+
         # New challenge after consumption must be fresh and must not let
         # signatures over the previous challenge count as new evidence.
         new_issue = json.loads(call(
@@ -869,7 +946,7 @@ def main():
 
     print(json.dumps({
         "status": "PASS", "checks": checked,
-        "scope": "synthetic-v2-recovery-two-observers-and-one-time-durable-challenges",
+        "scope": "synthetic-v2-end-to-end-drill-and-fail-closed-release-gate",
         "live_receiver_modified": False,
         "production_key_rotation_activated": False,
     }))
