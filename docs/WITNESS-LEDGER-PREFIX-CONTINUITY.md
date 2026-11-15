@@ -2,7 +2,7 @@
 
 NEXUS already validates each Ed25519 receipt and signed recipient acknowledgment and supports an independently pinned latest checkpoint. A separately transported **candidate ledger** can nonetheless be a different, internally valid history. Checking only its final sequence is not a historical continuity proof.
 
-The offline command `scripts/workspace-witness-ledger-prefix.py` compares the **entire signed prefix** of a retained baseline ledger with a newer candidate ledger, verifies **every receipt and acknowledgment in both ledgers**, and checks the candidate's exact latest independently preserved signed package. It uses no service credentials, private keys, network calls or storage writes.
+The offline command `scripts/workspace-witness-ledger-prefix.py` compares the **entire signed prefix** of a retained baseline ledger with a newer candidate ledger, verifies **every receipt and acknowledgment in both ledgers**, and checks the candidate's exact latest independently preserved signed package. It requires no service credentials, private keys or network calls, and does not modify either input ledger. Cryptographic inspection may use temporary scratch files.
 
 ## Trust inputs
 
