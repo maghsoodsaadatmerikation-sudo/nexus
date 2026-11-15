@@ -35,7 +35,6 @@ esac
 # registry. No production key, runtime trust or machine-history import is granted.
 command -v openssl >/dev/null || { echo 'OpenSSL missing' >&2; exit 1; }
 python3 scripts/test-workspace-attestation.py
-python3 scripts/test-workspace-trust.py
 python3 scripts/test-release-intent-triage.py
 python3 scripts/test-stage-d-encrypted-escrow.py
 python3 scripts/verify_test_matrix.py
@@ -75,6 +74,12 @@ GITHUB_SHA="$GITHUB_SHA" \
 GITHUB_RUN_ID="$GITHUB_RUN_ID" \
 RUNNER_OS="$RUNNER_OS" \
   bash scripts/verify-docker.sh
+
+# Cargo's locked root build above produces the same current-core Rust semantic
+# validator used by the offline signed witness. The Python trust tests require
+# it explicitly and fail closed if missing: no Python-only attestation bypass.
+NEXUS_WORKSPACE_VALIDATOR_BIN="$ROOT/target/debug/nexus-workspace-snapshot-verify" \
+  python3 scripts/test-workspace-trust.py
 
 GITHUB_SHA="$GITHUB_SHA" \
 GITHUB_RUN_ID="$GITHUB_RUN_ID" \
