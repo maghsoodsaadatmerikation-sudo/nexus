@@ -1,0 +1,41 @@
+name: NEXUS Stage D Two Distinct Synthetic Reviewer Admission Denial
+on:
+  pull_request:
+    paths:
+      - 'scripts/stage-d-two-reviewer-admission.py'
+      - 'scripts/test-stage-d-two-reviewer-admission.py'
+      - 'scripts/stage-d-signed-oci-admission.py'
+      - 'scripts/test-stage-d-signed-oci-admission.py'
+      - 'scripts/readonly-verification.sh'
+      - 'docs/STAGE-D-TWO-REVIEWER-ADMISSION.md'
+      - '.github/workflows/stage-d-two-reviewer-admission.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/stage-d-two-reviewer-admission.py'
+      - 'scripts/test-stage-d-two-reviewer-admission.py'
+      - '.github/workflows/stage-d-two-reviewer-admission.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  two-disposable-keys-and-denied-production:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Checkout exact PR head without persisted credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Exercise distinct reviewer signatures, launch policy and fail-closed gate
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          NEXUS_REVIEWED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$NEXUS_REVIEWED_SHA"
+          openssl version
+          python3 -B -m py_compile scripts/stage-d-two-reviewer-admission.py scripts/test-stage-d-two-reviewer-admission.py
+          python3 -B scripts/test-stage-d-two-reviewer-admission.py
+          echo "Two CI-only distinct Ed25519 keys do not prove separate operators or permit real deployment"
