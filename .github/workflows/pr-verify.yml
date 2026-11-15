@@ -58,6 +58,12 @@ jobs:
           test -x /usr/sbin/sshd
           python3 scripts/test-workspace-witness-ssh-real.py
 
+      - name: Verify independent witness across two isolated Docker containers
+        run: |
+          set -euo pipefail
+          docker version
+          python3 scripts/test-workspace-witness-two-containers.py
+
       - name: Verify durable-state resilience contract
         run: |
           bash -n scripts/v1.2-durable-state-resilience.sh
