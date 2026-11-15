@@ -70,7 +70,9 @@ impl WorkspaceDelegate for RecordingDelegate {
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         self.mutate(workspace_id, |engine| {
-            engine.add_claim(claim, provenance_id).map_err(|_| WorkspaceDelegateError::Invalid)
+            engine
+                .add_claim(claim, provenance_id)
+                .map_err(|_| WorkspaceDelegateError::Invalid)
         })
     }
 
@@ -484,7 +486,10 @@ async fn generic_machine_claim_is_rejected_before_lookup_without_mutation() {
             .to_string(),
         ))
         .unwrap();
-    assert_eq!(app.clone().oneshot(create).await.unwrap().status(), StatusCode::CREATED);
+    assert_eq!(
+        app.clone().oneshot(create).await.unwrap().status(),
+        StatusCode::CREATED
+    );
 
     let forged_again = Request::builder()
         .method("POST")
