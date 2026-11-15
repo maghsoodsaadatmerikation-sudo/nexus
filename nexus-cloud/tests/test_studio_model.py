@@ -185,3 +185,98 @@ def test_malformed_provider_output_is_contained_and_capacity_recovers(monkeypatc
         assert r.status_code==502
         assert r.json()['detail']=='Invalid text-only model response'
         assert c.post('/studio-api/respond',json=BODY,headers=AUTH).json()['text']=='Recovered draft'
+
+
+@pytest.mark.parametrize('mutation', [
+    lambda raw: raw.replace('"consent":true', '"consent":false,"consent":true', 1),
+    lambda raw: raw.replace('"consent":true', '"consent":false,"cons\\u0065nt":true', 1),
+    lambda raw: raw.replace('"role":"user"', '"role":"system","role":"user"', 1),
+    lambda raw: raw.replace('"content":"Reviewed exact prompt"', '"content":"Injected","content":"Reviewed exact prompt"', 1),
+    lambda raw: raw.replace('"configuration_id":', '"ignored":0,"ignored":1,"configuration_id":', 1),
+])
+def test_ambiguous_json_never_reaches_model_provider(monkeypatch, mutation):
+    import json
+    original = json.dumps(BODY, separators=(',', ':'))
+    mutated = mutation(original)
+    assert mutated != original
+    calls = []
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={
+            'choices':[{'message':{'content':'Recovered draft'},'finish_reason':'stop'}]})
+    with configured(monkeypatch, handler) as c:
+        response = c.post('/studio-api/respond', content=mutated.encode(),
+                          headers={**AUTH, 'content-type':'application/json'})
+        assert response.status_code == 422, response.text
+        assert 'Injected' not in response.text
+        assert calls == [], 'ambiguous JSON was forwarded'
+        valid = c.post('/studio-api/respond', json=BODY, headers=AUTH)
+        assert valid.status_code == 200 and valid.json()['text'] == 'Recovered draft'
+        assert len(calls) == 1
+
+
+@pytest.mark.parametrize('type_header', [
+    'application/json-fake',
+    'application/json; charset=utf-16',
+    'application/json; charset=utf-8; charset=latin1',
+])
+def test_ambiguous_content_type_is_rejected_before_forwarding(monkeypatch, type_header):
+    import json
+    with configured(monkeypatch, lambda _:pytest.fail('invalid media type forwarded')) as c:
+        response = c.post('/studio-api/respond', content=json.dumps(BODY).encode(),
+                          headers={**AUTH,'content-type':type_header})
+        assert response.status_code == 415
+
+
+def test_explicit_utf8_json_media_type_is_supported(monkeypatch):
+    import json
+    with configured(monkeypatch) as c:
+        r = c.post('/studio-api/respond', content=json.dumps(BODY).encode(),
+                   headers={**AUTH,'content-type':'application/json; charset=utf-8'})
+        assert r.status_code == 200
+
+
+@pytest.mark.parametrize('header', ['authorization','content-type'])
+def test_duplicated_sensitive_headers_are_rejected(monkeypatch, header):
+    import json
+    headers = [('authorization', 'Bearer '+TOKEN), ('content-type', 'application/json')]
+    value = 'Bearer '+TOKEN if header == 'authorization' else 'application/json'
+    headers.append((header, value))
+    expected = 401 if header == 'authorization' else 415
+    with configured(monkeypatch, lambda _:pytest.fail('duplicated HTTP header forwarded')) as c:
+        response = c.post('/studio-api/respond', content=json.dumps(BODY).encode(),
+                          headers=headers)
+        assert response.status_code == expected
+
+
+@pytest.mark.parametrize('raw', [
+    b'{"choices":[{"message":{"content":"bad","content":"good"},"finish_reason":"stop"}]}',
+    b'{"choices":[{"message":{"content":"draft"},"finish_reason":"length","finish_reason":"stop"}]}',
+])
+def test_ambiguous_provider_output_is_rejected_and_recovers(monkeypatch, raw):
+    replies = iter([httpx.Response(200, content=raw), httpx.Response(200, json={
+        'choices':[{'message':{'content':'Recovered draft'},'finish_reason':'stop'}]})])
+    with configured(monkeypatch, lambda _:next(replies)) as c:
+        bad = c.post('/studio-api/respond', json=BODY, headers=AUTH)
+        assert bad.status_code == 502
+        assert 'bad' not in bad.text and 'good' not in bad.text
+        good = c.post('/studio-api/respond', json=BODY, headers=AUTH)
+        assert good.status_code == 200 and good.json()['text'] == 'Recovered draft'
+
+
+@pytest.mark.parametrize('raw', [
+    b'{"consent":true,"messages":[],"x":NaN}',
+    bytes([255]),
+    b'{"nested":{"x":1,"x":2}}',
+])
+def test_strict_json_parser_rejects_nonportable_payloads(raw):
+    with pytest.raises((ValueError, UnicodeError)):
+        model.parse_unambiguous_json(raw)
+
+
+def test_non_utf8_json_with_valid_fields_is_rejected(monkeypatch):
+    import json
+    with configured(monkeypatch, lambda _:pytest.fail('non-UTF8 JSON forwarded')) as c:
+        raw = json.dumps(BODY).encode('utf-16')
+        assert c.post('/studio-api/respond', content=raw,
+                      headers={**AUTH,'content-type':'application/json'}).status_code == 422

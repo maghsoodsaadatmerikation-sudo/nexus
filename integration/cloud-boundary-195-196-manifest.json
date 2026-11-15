@@ -1,0 +1,51 @@
+{
+  "schema": "nexus.integration.cloud-boundary.v1",
+  "base_commit": "b7855b1a1bb9f3776e8f24b682d124cbe334543e",
+  "inputs": [
+    {
+      "pull_request": 195,
+      "head_commit": "b001aa78f6e8235ecf9dc0fdd282c6dad2397fe9",
+      "files": [
+        {
+          "path": "docs/STUDIO-JSON-BOUNDARY-2026-11-14.md",
+          "blob_sha": "1018752b319b14d99168e44633bfce1a477151db"
+        },
+        {
+          "path": "nexus-cloud/studio_model.py",
+          "blob_sha": "44fd937737c08b15fa3af265ef4e675de39167a0"
+        },
+        {
+          "path": "nexus-cloud/tests/test_studio_model.py",
+          "blob_sha": "7522dbded3fc4935a9789b3a25ae46e4fb42a75f"
+        }
+      ]
+    },
+    {
+      "pull_request": 196,
+      "head_commit": "d5895593e56fb56e981828242ec8734c515e1ed8",
+      "files": [
+        {
+          "path": ".github/workflows/pr-verify.yml",
+          "blob_sha": "a6a874a76ab06ad38b58161cc56c5064ef90dd5b"
+        },
+        {
+          "path": "docs/CLOUD-HEADER-CARDINALITY-2026-11-14.md",
+          "blob_sha": "73857d6fc248202280ba661fe2ab2249a195dcb1"
+        },
+        {
+          "path": "nexus-cloud/main.py",
+          "blob_sha": "bfd6bcae1dc38d7f767322113cf30058b421257e"
+        },
+        {
+          "path": "nexus-cloud/tests/test_delegated_header_identity.py",
+          "blob_sha": "cbf1da67917f29668fa155e8470a22ddfd117881"
+        }
+      ]
+    }
+  ],
+  "boundary": {
+    "production_mutation": false,
+    "release_attestation": false,
+    "claim": "source-composition-only"
+  }
+}
