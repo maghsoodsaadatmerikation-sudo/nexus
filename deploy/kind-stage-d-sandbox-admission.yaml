@@ -108,7 +108,7 @@ spec:
       expression: >-
         has(object.spec.containers[0].volumeMounts)
         && object.spec.containers[0].volumeMounts.size() == 2
-        && object.spec.containers[0].volumeMounts.filter(m, m.name == 'data' && m.mountPath == '/data' && m.readOnly == false).size() == 1
+        && object.spec.containers[0].volumeMounts.filter(m, m.name == 'data' && m.mountPath == '/data' && (!has(m.readOnly) || m.readOnly == false)).size() == 1
         && object.spec.containers[0].volumeMounts.filter(m, m.name == 'approval' && m.mountPath == '/run/nexus/approval.json' && m.readOnly == true && m.subPath == 'approval.json').size() == 1
     - message: "Disable host projection, extra containers and Kubernetes execution features"
       expression: >-
