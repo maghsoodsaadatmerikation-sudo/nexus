@@ -119,7 +119,7 @@ impl WorkspaceDelegate for CoreDelegate {
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         self.mutate_workspace(workspace_id, |engine| {
-            engine.add_claim(claim, provenance_id)
+            engine.add_claim(claim, provenance_id).map_err(|_| WorkspaceDelegateError::Invalid)
         })
     }
 
@@ -130,7 +130,8 @@ impl WorkspaceDelegate for CoreDelegate {
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         self.mutate_workspace(workspace_id, |engine| {
-            engine.add_alternative(alternative, provenance_id)
+            engine.add_alternative(alternative, provenance_id);
+            Ok(())
         })
     }
 
@@ -139,7 +140,10 @@ impl WorkspaceDelegate for CoreDelegate {
         workspace_id: &str,
         batch: AnalysisBatch,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
-        self.mutate_workspace(workspace_id, |engine| engine.record_analysis_batch(batch))
+        self.mutate_workspace(workspace_id, |engine| {
+            engine.record_analysis_batch(batch);
+            Ok(())
+        })
     }
 
     fn record_human_judgment(
@@ -149,7 +153,8 @@ impl WorkspaceDelegate for CoreDelegate {
         provenance_id: ProvenanceId,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         self.mutate_workspace(workspace_id, |engine| {
-            engine.record_human_judgment(judgment, provenance_id)
+            engine.record_human_judgment(judgment, provenance_id);
+            Ok(())
         })
     }
 }
@@ -161,7 +166,7 @@ impl CoreDelegate {
         mutate: F,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError>
     where
-        F: FnOnce(&mut WorkspaceEngine),
+        F: FnOnce(&mut WorkspaceEngine) -> Result<(), WorkspaceDelegateError>,
     {
         let mut repository = self
             .workspaces
@@ -173,7 +178,7 @@ impl CoreDelegate {
             .ok_or(WorkspaceDelegateError::NotFound)?;
         let mut engine = WorkspaceEngine::from_snapshot(snapshot)
             .map_err(|_| WorkspaceDelegateError::Invalid)?;
-        mutate(&mut engine);
+        mutate(&mut engine)?;
         let snapshot = engine.snapshot();
         repository
             .save(snapshot.clone())
