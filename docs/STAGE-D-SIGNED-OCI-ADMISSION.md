@@ -94,6 +94,12 @@ This strict review rejects attempts to allow image/entrypoint substitutions, pro
 
 \`scripts/test-stage-d-signed-oci-admission.py\` generates *disposable* Ed25519 keys on a private CI runner and exercises valid signing/verification, wrong key pin, unsigned data tampering, forged signature, unknown release flags, invalid SBOM and public key substitution, unapproved container/volume/entrypoint privileges, duplicate JSON, symlinks, and immutable signed output. The real CI runner has **no long-lived trusted signing key**, so a passing test is only a cryptographic integration test. No private key is committed or published.
 
+### Actual guarded Docker image review in CI
+
+The Stage-240 **real, synthetic guarded Docker build workflow** now also generates a fresh Ed25519 demo-reviewer key **inside that single ephemeral CI job**, signs the exact build's \`manifest.json\` and \`sbom.cdx.json\` and verifies the detached review using that generated public key. It uploads \`ci-demo-signed-review.json\`, \`ci-demo-public-ed25519.pem\` and \`ci-demo-public-der-sha256.txt\` along with the Stage-240 evidence; the private key is stored separately under the temporary build directory and deleted on job cleanup. The artifact's local checksums cover these added review files.
+
+Because the *same CI job generates the key, the evidence and its verification pin*, this process proves **end-to-end cryptographic integration only**, not a signature from an independent release reviewer, independent custody, a trusted build service or authorization to deploy. A real operator review requires a separately held signing key, independently captured public key fingerprint, and a separately retained exact review file digest.
+
 This stage does **not** create a signed image registry artifact or SLSA builder attestation. The next separately approved operational dependency is a published image \`registry/repository@sha256:...\` with independently verified registry provenance, *two distinct key custodians*, an admission policy enforced by the actual orchestrator, and a destructive isolated off-host restore test on a disposable approved volume. None of those are authorized by this PR.
 
 Existing Railway/Render instances and persistent volumes are not awakened, redeployed, touched or converted; the existing Draft PR stack remains unmerged, and production rollout is always blocked.
