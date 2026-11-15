@@ -20,6 +20,7 @@ spec = importlib.util.spec_from_file_location(
 if spec is None or spec.loader is None:
     raise RuntimeError("two-custody evidence verifier unavailable")
 two = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(two)
 stager = two.stager
 trust = two.trust
 v2 = two.v2
