@@ -1,0 +1,69 @@
+name: NEXUS Stage D Guarded OCI Image — Synthetic Only
+on:
+  pull_request:
+    paths:
+      - 'deploy/Dockerfile.stage-d-guarded-synthetic'
+      - 'scripts/stage-d-guarded-image-entrypoint.py'
+      - 'scripts/test-stage-d-guarded-container.py'
+      - 'scripts/workspace-stage-d-startup-guard.py'
+      - 'scripts/workspace-stage-d-data-rollback-screen.py'
+      - 'docs/STAGE-D-GUARDED-OCI-IMAGE.md'
+      - '.github/workflows/stage-d-guarded-container.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/Dockerfile.stage-d-guarded-synthetic'
+      - 'scripts/stage-d-guarded-image-entrypoint.py'
+      - 'scripts/test-stage-d-guarded-container.py'
+      - '.github/workflows/stage-d-guarded-container.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-and-test-synthetic-guarded-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 23
+    steps:
+      - name: Check out exact PR commit and full history without credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build exact historical baseline inside a new guarded OCI image
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          DOCKER_BUILDKIT: '1'
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -B -m py_compile scripts/stage-d-guarded-image-entrypoint.py scripts/test-stage-d-guarded-container.py
+          revision=f4d027bb5f7e715b298f7cf7184fa621a2fb071d
+          git cat-file -e "${revision}^{commit}"
+          scratch="$(mktemp -d "${RUNNER_TEMP:-/tmp}/nexus-guarded-oci-XXXXXXXX")"
+          trap 'git worktree remove --force "$scratch/historical-src" >/dev/null 2>&1 || :; rm -rf "$scratch"' EXIT
+          git worktree add --detach "$scratch/historical-src" "$revision"
+          test "$(git -C "$scratch/historical-src" rev-parse HEAD)" = "$revision"
+          mkdir -p "$scratch/historical-src/scripts"
+          for path in \
+            stage-d-guarded-image-entrypoint.py \
+            workspace-stage-d-startup-guard.py \
+            workspace-stage-d-data-rollback-screen.py \
+            workspace-stage-d-upgrade-rehearsal.py \
+            workspace-stage-d-deploy-coherence.py \
+            workspace-stage-d-railway-preflight.py \
+            workspace-trust.py \
+            workspace-attestation.py \
+            data-snapshot.py
+          do
+            cp "scripts/$path" "$scratch/historical-src/scripts/$path"
+          done
+          docker build --progress=plain \
+            -f deploy/Dockerfile.stage-d-guarded-synthetic \
+            -t nexus-stage-d-guarded-synthetic:ci \
+            "$scratch/historical-src"
+          python3 -B scripts/test-stage-d-guarded-container.py \
+            --synthetic-only \
+            --image nexus-stage-d-guarded-synthetic:ci \
+            --runner-temp "$scratch"
+          echo 'OCI IMAGE TEST ONLY: no registry publish, no Railway/Render deployment'
