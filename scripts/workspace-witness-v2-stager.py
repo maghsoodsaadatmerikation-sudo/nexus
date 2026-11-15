@@ -167,7 +167,6 @@ def advance(args):
     try:
         stored_bytes = read_locked(fd)
         actual = digest(stored_bytes)
-        approved_previous = v2.pinned_sha if hasattr(v2, "pinned_sha") else None
         if not isinstance(args.expected_current_sha256, str) or not v2.HEX.fullmatch(
                 args.expected_current_sha256):
             fail("independently approved predecessor SHA-256 is required")
