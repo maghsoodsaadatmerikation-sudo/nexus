@@ -59,6 +59,28 @@ def private_parent(path):
     return parent
 
 
+def sync_new_directory_parent(child):
+    # A durable child file is not sufficient if its new containing
+    # directory entry was never fsynced on the parent filesystem.
+    parent = private_parent(child)
+    flags = (os.O_RDONLY | os.O_DIRECTORY
+             | getattr(os, "O_CLOEXEC", 0)
+             | getattr(os, "O_NOFOLLOW", 0))
+    fd = os.open(parent, flags)
+    try:
+        descriptor = os.fstat(fd)
+        visible = os.stat(parent, follow_symlinks=False)
+        if ((descriptor.st_dev, descriptor.st_ino)
+                != (visible.st_dev, visible.st_ino)):
+            fail("recovery parent directory changed during durability sync")
+        if (descriptor.st_uid != os.geteuid()
+                or descriptor.st_mode & 0o077):
+            fail("recovery parent is no longer private")
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def independent_proof(args, candidate_bytes, candidate_sha):
     with tempfile.TemporaryDirectory(prefix="nexus-v2-recovery-proof-") as root:
         candidate_path = Path(root) / "candidate.json"
@@ -210,6 +232,9 @@ def restore(args):
         os.mkdir(args.new_store, 0o700)
     except OSError as exc:
         raise RecoveryError("fresh private restore directory is not available") from exc
+    # Persist the newly created directory entry as well as the candidate.
+    # Do not report success if either local filesystem fsync fails.
+    sync_new_directory_parent(args.new_store)
     fd = trust.protected_directory(args.new_store)
     try:
         stager.assert_directory_identity(args.new_store, fd)
