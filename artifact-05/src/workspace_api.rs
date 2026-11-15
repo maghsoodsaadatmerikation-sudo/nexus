@@ -212,6 +212,17 @@ where
     if !workspace_authorized(&state, &headers) {
         return unauthorized();
     }
+    // An unaudited generic claim cannot assert machine provenance.
+    // Check before any delegate call or workspace mutation.
+    if matches!(&input.origin, WireClaimOrigin::MachineAnalysis) {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorResponse {
+                error: "machine_origin_cannot_be_claim_added",
+            }),
+        )
+            .into_response();
+    }
     let claim = Claim {
         id: input.claim_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
         text: input.text,
