@@ -7,8 +7,9 @@ use nexus_artifact_05_gateway::{
     Submission, WorkspaceDelegate, WorkspaceDelegateError,
 };
 use nexus_constitutional_core::{
-    Alternative, AnalysisBatch, Claim, HumanJudgment, InMemoryWorkspaceRepository, ProvenanceId,
-    RequestEnvelope, WorkspaceEngine, WorkspaceRepository, WorkspaceSnapshot,
+    Alternative, AnalysisAdapter, Claim, HumanJudgment, InMemoryWorkspaceRepository,
+    LocalQuestionProbe, ProvenanceId, RequestEnvelope, WorkspaceEngine, WorkspaceRepository,
+    WorkspaceSnapshot,
 };
 use std::{
     sync::{Arc, Mutex},
@@ -88,12 +89,15 @@ impl WorkspaceDelegate for RecordingDelegate {
         })
     }
 
-    fn record_analysis_batch(
+    fn run_local_analysis(
         &self,
         workspace_id: &str,
-        batch: AnalysisBatch,
     ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
         self.mutate(workspace_id, |engine| {
+            let adapter = LocalQuestionProbe::new(uuid::Uuid::new_v4().to_string());
+            let batch = adapter
+                .analyze(engine.workspace())
+                .map_err(|_| WorkspaceDelegateError::Invalid)?;
             engine.record_analysis_batch(batch);
             Ok(())
         })
@@ -382,15 +386,7 @@ async fn workspace_lifecycle_is_delegated_and_auditable() {
         .header("content-type", "application/json")
         .body(Body::from(
             serde_json::json!({
-                "adapter_id": "challenge-adapter",
-                "run_id": "run-http-1",
-                "observations": [{
-                    "id": "m-http",
-                    "kind": "Counterargument",
-                    "text": "A machine-generated counterargument",
-                    "uncertainty": "High",
-                    "source_ids": ["source:example"]
-                }]
+                "kind": "question_probe"
             })
             .to_string(),
         ))
@@ -413,6 +409,31 @@ async fn workspace_lifecycle_is_delegated_and_auditable() {
         analysis_snapshot["workspace"]["claims"][1]["origin"],
         "MachineAnalysis"
     );
+    let recorded = &analysis_snapshot["events"][2];
+    assert_eq!(
+        recorded["kind"]["MachineAnalysisRecorded"]["adapter_id"],
+        "nexus-local-question-probe-v1"
+    );
+    let run_id = recorded["kind"]["MachineAnalysisRecorded"]["run_id"]
+        .as_str()
+        .unwrap();
+    assert!(uuid::Uuid::parse_str(run_id).is_ok());
+    assert_eq!(
+        recorded["provenance_id"],
+        format!("machine:nexus-local-question-probe-v1:{run_id}")
+    );
+    assert_eq!(
+        recorded["kind"]["MachineAnalysisRecorded"]["observation_kind"],
+        "UncertaintyNote"
+    );
+    assert_eq!(
+        recorded["kind"]["MachineAnalysisRecorded"]["source_ids"],
+        serde_json::json!([])
+    );
+    assert!(analysis_snapshot["workspace"]["claims"][1]["text"]
+        .as_str()
+        .unwrap()
+        .contains("not evidence"));
 
     let judgment = Request::builder()
         .method("POST")
