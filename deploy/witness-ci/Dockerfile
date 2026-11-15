@@ -16,6 +16,7 @@ COPY --chown=root:root scripts/workspace-attestation.py \
     scripts/workspace-witness-recovery.py \
     scripts/workspace-witness-host.py \
     scripts/workspace-witness-ssh-client.py \
+    scripts/workspace-witness-live-gate.py \
     /opt/nexus-witness/
 RUN chmod 0755 /opt/nexus-witness && \
     chmod 0644 /opt/nexus-witness/*.py
