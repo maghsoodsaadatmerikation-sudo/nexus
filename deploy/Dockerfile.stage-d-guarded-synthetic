@@ -7,6 +7,8 @@ WORKDIR /nexus
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY artifact-05 ./artifact-05
+# Historical Axum gateway embeds both static pages with include_str!.
+COPY web ./web
 RUN CARGO_HTTP_MULTIPLEXING=false CARGO_HTTP_TIMEOUT=30 CARGO_NET_RETRY=3 \
     cargo build --locked --release --manifest-path artifact-05/Cargo.toml \
       --bin nexus-artifact-05-gateway \
