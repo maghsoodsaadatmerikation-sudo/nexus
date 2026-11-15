@@ -142,9 +142,6 @@ def public_keys(args):
     if len({keys["source_id"], keys["outgoing_id"], keys["incoming_id"]}) != 3:
         fail("signer key IDs cannot be reused across roles")
     ders = {
-        role: trust.derive_ed25519_public_der(keys[role + "_public"])
-        for role in ROLES
-    } if False else {
         "source": trust.derive_ed25519_public_der(keys["source_public"]),
         "outgoing": trust.derive_ed25519_public_der(keys["outgoing_public"]),
         "incoming": trust.derive_ed25519_public_der(keys["incoming_public"]),
@@ -194,8 +191,7 @@ def sign(args):
     if args.role in document["approvals"]:
         fail("a signer role cannot be approved twice")
     private_der = custodian.witness.private_signer(args.private_key)
-    commitment = document["proposal"][args.role + "_public_sha256" if args.role == "source" else
-                                       ("outgoing_public_sha256" if args.role == "outgoing" else "incoming_public_sha256")]
+    commitment = document["proposal"][args.role + "_public_sha256"]
     if fingerprint(private_der) != commitment:
         fail("supplied private key is not the independently committed role identity")
     try:
