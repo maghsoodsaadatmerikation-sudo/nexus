@@ -467,6 +467,104 @@ async fn workspace_lifecycle_is_delegated_and_auditable() {
 }
 
 #[tokio::test]
+async fn analysis_cannot_accept_client_minted_adapter_or_run_provenance() {
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::new(delegate.clone()));
+    let created = Request::builder()
+        .method("POST")
+        .uri("/v1/workspaces")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::json!({
+                "workspace_id": "analysis-trust-boundary",
+                "question": "What would refute this conclusion?",
+                "provenance_id": "human:owner"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(created).await.unwrap().status(),
+        StatusCode::CREATED
+    );
+    let baseline = delegate.get_workspace("analysis-trust-boundary").unwrap();
+
+    let forged = [
+        // Previously accepted raw AnalysisBatch envelope.
+        serde_json::json!({
+            "adapter_id": "claimed-trusted-provider",
+            "run_id": "user-forged-run",
+            "observations": [{
+                "id": "forged",
+                "kind": "EvidenceLead",
+                "text": "Claimed verified external result",
+                "uncertainty": "Low",
+                "source_ids": ["invented"]
+            }]
+        }),
+        // Even a legitimate selector cannot smuggle extra provenance fields.
+        serde_json::json!({
+            "kind": "question_probe",
+            "adapter_id": "claimed-trusted-provider",
+            "run_id": "user-forged-run",
+            "observations": []
+        }),
+        serde_json::json!({"kind": "remote_attested_model"}),
+        serde_json::json!({}),
+    ];
+    for payload in forged {
+        let attempted = Request::builder()
+            .method("POST")
+            .uri("/v1/workspaces/analysis-trust-boundary/analysis")
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))
+            .unwrap();
+        assert_eq!(
+            app.clone().oneshot(attempted).await.unwrap().status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        assert_eq!(
+            delegate.get_workspace("analysis-trust-boundary").unwrap(),
+            baseline,
+            "untrusted analysis requests must never mutate stored state"
+        );
+    }
+
+    let valid = || {
+        Request::builder()
+            .method("POST")
+            .uri("/v1/workspaces/analysis-trust-boundary/analysis")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"kind":"question_probe"}"#))
+            .unwrap()
+    };
+    let one = app.clone().oneshot(valid()).await.unwrap();
+    assert_eq!(one.status(), StatusCode::OK);
+    let one_body = axum::body::to_bytes(one.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let first: serde_json::Value = serde_json::from_slice(&one_body).unwrap();
+
+    let two = app.oneshot(valid()).await.unwrap();
+    assert_eq!(two.status(), StatusCode::OK);
+    let two_body = axum::body::to_bytes(two.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let second: serde_json::Value = serde_json::from_slice(&two_body).unwrap();
+    let run_one = first["events"][1]["kind"]["MachineAnalysisRecorded"]["run_id"]
+        .as_str()
+        .unwrap();
+    let run_two = second["events"][2]["kind"]["MachineAnalysisRecorded"]["run_id"]
+        .as_str()
+        .unwrap();
+    assert_ne!(run_one, run_two, "server must mint a fresh run ID per execution");
+    assert!(uuid::Uuid::parse_str(run_one).is_ok());
+    assert!(uuid::Uuid::parse_str(run_two).is_ok());
+    assert_eq!(second["workspace"]["claims"].as_array().unwrap().len(), 2);
+    assert!(second["workspace"]["judgment"].is_null());
+}
+
+#[tokio::test]
 async fn generic_machine_claim_is_rejected_before_lookup_without_mutation() {
     let delegate = RecordingDelegate::default();
     let app = router(AppState::new(delegate.clone()));
