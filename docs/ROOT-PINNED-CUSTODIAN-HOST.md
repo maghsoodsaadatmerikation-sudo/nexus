@@ -14,6 +14,16 @@ It reads the receiver ledger and signer identity solely from a root-owned
 declarative configuration whose **exact path is fixed by an administrator**
 in the SSH forced-command policy.
 
+## Verified code installation
+
+For a bounded root-only installation of the complete receiver source tree,
+follow [INDEPENDENT-CUSTODIAN-INSTALL.md](INDEPENDENT-CUSTODIAN-INSTALL.md).
+The original independently approved code-bundle bytes and SHA-256 digest
+are both required for subsequent integrity checks. An installer manifest
+stored beside the code is never an independent source of trust. Use the
+root-installed launcher with Python isolated mode (`-I`) for the SSH
+forced command; no real external host is provisioned by the repository.
+
 ## Host configuration
 
 On a separate host administered outside NEXUS, install the program and all
