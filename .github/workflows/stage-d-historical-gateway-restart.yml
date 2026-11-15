@@ -4,14 +4,19 @@ on:
     paths:
       - 'scripts/test-stage-d-historical-gateway-restart.py'
       - 'scripts/test-stage-d-historical-copy-downgrade.py'
+      - 'scripts/workspace-stage-d-startup-guard.py'
+      - 'scripts/test-workspace-stage-d-startup-guard.py'
       - '.github/workflows/stage-d-historical-gateway-restart.yml'
       - 'docs/STAGE-D-HISTORICAL-GATEWAY-RESTART.md'
       - 'docs/STAGE-D-HISTORICAL-COPY-DOWNGRADE.md'
+      - 'docs/STAGE-D-GUARDED-START.md'
   push:
     branches: [main]
     paths:
       - 'scripts/test-stage-d-historical-gateway-restart.py'
       - 'scripts/test-stage-d-historical-copy-downgrade.py'
+      - 'scripts/workspace-stage-d-startup-guard.py'
+      - 'scripts/test-workspace-stage-d-startup-guard.py'
       - '.github/workflows/stage-d-historical-gateway-restart.yml'
   workflow_dispatch:
 permissions:
@@ -34,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          python3 -B -m py_compile scripts/test-stage-d-historical-gateway-restart.py scripts/test-stage-d-historical-copy-downgrade.py
+          python3 -B -m py_compile scripts/test-stage-d-historical-gateway-restart.py scripts/test-stage-d-historical-copy-downgrade.py scripts/workspace-stage-d-startup-guard.py scripts/test-workspace-stage-d-startup-guard.py
           command -v cargo >/dev/null
           command -v rustup >/dev/null
           rustup toolchain install 1.85.0 --profile minimal
@@ -63,6 +68,12 @@ jobs:
             --source-binary "$scratch/nexus-source" \
             --target-binary "$scratch/nexus-target"
           python3 -B scripts/test-stage-d-historical-copy-downgrade.py \
+            --synthetic-only \
+            --runner-temp "$scratch" \
+            --recovery-binary "$scratch/nexus-recovery" \
+            --source-binary "$scratch/nexus-source" \
+            --target-binary "$scratch/nexus-target"
+          python3 -B scripts/test-workspace-stage-d-startup-guard.py \
             --synthetic-only \
             --runner-temp "$scratch" \
             --recovery-binary "$scratch/nexus-recovery" \
