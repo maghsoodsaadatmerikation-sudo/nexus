@@ -186,10 +186,13 @@ def write_exclusive(path: Path, document: dict):
 
 
 def seal(args):
-    if args.output.resolve() == args.state_dir.resolve() / trust.STATE_FILE:
+    protected = args.state_dir.resolve()
+    if args.output.resolve() == protected / trust.STATE_FILE:
         reject("witness cannot replace trust-state")
-    if args.state_dir.resolve() in args.output.resolve().parents:
+    if protected in args.output.resolve().parents:
         reject("witness receipt must be outside the trust directory")
+    if protected in args.witness_private_key.resolve().parents:
+        reject("independent witness signer cannot reside in the trust directory")
     if args.witness_private_key.resolve() == args.output.resolve():
         reject("receipt cannot overwrite private key")
     key_id = trust.valid_key_id(args.witness_key_id)
@@ -223,6 +226,8 @@ def verify(args):
     if args.action == "verify-receipt":
         print("EXTERNAL WITNESS SIGNATURE VALID: independent key only; state NOT checked")
         return
+    if args.state_dir.resolve() in args.receipt.resolve().parents:
+        reject("cannot treat a receipt inside the trust directory as independent")
     current, _state = current_statement(
         args.state_dir, body["witness_key_id"],
         trust.derive_ed25519_public_der(args.trusted_public_key),
