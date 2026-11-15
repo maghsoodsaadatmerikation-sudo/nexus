@@ -191,6 +191,13 @@ def main():
         shorter = save(retained, "shorter", {**bridge, "entries": [entry2]})
         first_pkg = save(retained, "first-v2-pkg",
                          {"schema": v2.PACKAGE_SCHEMA, **entry2})
+        one_entry = verify({
+            "bridge": shorter, "bridge_sha256": sha(shorter),
+            "trusted_new_package": first_pkg,
+            "trusted_new_package_sha256": sha(first_pkg),
+            "minimum_sequence": 2,
+        }); checked += 1
+        assert json.loads(one_entry.stdout)["new_sequence"] == 2
         verify({"bridge": shorter, "bridge_sha256": sha(shorter),
                 "trusted_new_package": first_pkg,
                 "trusted_new_package_sha256": sha(first_pkg)},
@@ -240,10 +247,12 @@ def main():
         unsafe_consent = save(retained, "tampered-consent", compromised)
         verify({"consent": unsafe_consent, "consent_sha256": sha(unsafe_consent)},
                good=False); checked += 1
-        # Consent tampering must be denied EVEN IF bridge document rebinds it.
-        changed_case("bad-approval-in-bridge",
-                     lambda x: x.__setitem__("consent_sha256", sha(unsafe_consent)))
-        checked += 1
+        # Even a bridge repinned to the tampered consent may not bypass 3/3.
+        hostile_bridge = save(retained, "hostile-repinned-bridge",
+                              {**bridge, "consent_sha256": sha(unsafe_consent)})
+        verify({"consent": unsafe_consent, "consent_sha256": sha(unsafe_consent),
+                "bridge": hostile_bridge, "bridge_sha256": sha(hostile_bridge)},
+               good=False); checked += 1
 
         ambiguous = retained / "duplicate-json-fields.json"
         ambiguous.write_bytes(bridge_file.read_bytes().replace(
