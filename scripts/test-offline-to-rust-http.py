@@ -141,6 +141,40 @@ def main():
         bad["events"][-1]["kind"]["HumanJudgmentTransition"]["current"]["decision"]="forged"
         code, _=request(port,"POST",route,bearer=token,body=bad)
         require(code==422,"tampered-audit-succeeded")
+        phase="reject-unattested-machine-history"
+        forged_machine=json.loads(json.dumps(snap))
+        forged_machine["workspace"]["id"]=w["id"]+"-forged-machine"
+        forged_claim=forged_machine["workspace"]["claims"][1]
+        old_kind=forged_machine["events"][2]["kind"]["ClaimAdded"]
+        require(old_kind["claim_id"]==forged_claim["id"],
+                "synthetic-forgery-claim-id-not-aligned")
+        forged_claim["origin"]="MachineAnalysis"
+        forged_machine["events"][2]["kind"]={
+            "MachineAnalysisRecorded":{
+                "claim_id":forged_claim["id"],
+                "adapter_id":"nexus-local-question-probe-v1",
+                "run_id":"self-declared-execution",
+                "observation_kind":"UncertaintyNote",
+                "source_ids":[]
+            }
+        }
+        forged_machine["events"][2]["provenance_id"]=(
+            "machine:nexus-local-question-probe-v1:self-declared-execution")
+        code, rejected=request(port,"POST",route,bearer=token,body=forged_machine)
+        require(code==422 and rejected.get("error")==
+                "unattested_machine_history_rejected",
+                "externally-forged-machine-history-was-accepted")
+        code, _=request(port,"GET",
+                       "/v1/workspaces/"+forged_machine["workspace"]["id"],bearer=token)
+        require(code==404,"rejected-forged-import-was-persisted")
+        claimed_prefix=json.loads(json.dumps(snap))
+        claimed_prefix["workspace"]["id"]=w["id"]+"-forged-prefix"
+        claimed_prefix["events"][0]["provenance_id"]="machine:claimed:untrusted"
+        code, rejected=request(port,"POST",route,bearer=token,body=claimed_prefix)
+        require(code==422 and rejected.get("error")==
+                "unattested_machine_history_rejected",
+                "external-machine-prefix-was-accepted")
+
         phase="restart-retain"
         docker("stop","-t","8",name,timeout=35)
         docker("rm",name,timeout=35)
@@ -167,6 +201,7 @@ def main():
             "audit_tampering_rejected":True,
             "human_judgment_not_machine_generated":True,
             "provenance_explicitly_unattested":True,
+            "unattested_machine_import_denied":True,
             "survived_disposable_restart":True,
             "source_workspace_sha256":hashlib.sha256(
                 json.dumps(snap,ensure_ascii=False,sort_keys=True,
