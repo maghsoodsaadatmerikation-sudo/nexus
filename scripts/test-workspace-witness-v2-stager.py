@@ -685,6 +685,12 @@ def main():
              *changed_flags(audit_arguments, {"restored_store": stale_stage}),
              good=False)
         checked += 1
+        # Two spellings of the same filesystem stage do not establish two
+        # recovered copies, even when all observer signatures are valid.
+        call(DRILL_AUDIT, "verify",
+             *changed_flags(audit_arguments, {"restored_store": store}),
+             good=False)
+        checked += 1
         call(DRILL_AUDIT, "verify",
              *changed_flags(audit_arguments, {"origin_store": stale_stage}),
              good=False)
