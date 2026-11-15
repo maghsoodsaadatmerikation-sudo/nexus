@@ -75,15 +75,19 @@ GITHUB_RUN_ID="$GITHUB_RUN_ID" \
 RUNNER_OS="$RUNNER_OS" \
   bash scripts/verify-docker.sh
 
-# Produce the current-core semantic validator at an explicit host-visible
-# destination. The normal verification gates can configure a different Cargo
-# target directory; this cross-language acceptance test must never guess.
+# Build this validator from a read-only checkout into a separate, private,
+# host-owned CI scratch directory. Never leave Docker-root-owned target files
+# in the checkout: subsequent host Cargo/A06 steps need write access.
+validator_dir="$RUNNER_TEMP/nexus-validator-${GITHUB_RUN_ID}"
+mkdir -m 0700 "$validator_dir"
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
   -e HOME=/tmp/home -e CARGO_HOME=/tmp/cargo \
-  -v "$ROOT:/app" -w /app "$RUST_IMAGE" \
-  sh -euxc 'cargo build --locked --bin nexus-workspace-snapshot-verify --target-dir /app/target; test -x /app/target/debug/nexus-workspace-snapshot-verify'
-test -x "$ROOT/target/debug/nexus-workspace-snapshot-verify"
-NEXUS_WORKSPACE_VALIDATOR_BIN="$ROOT/target/debug/nexus-workspace-snapshot-verify" \
+  -v "$ROOT:/app:ro" -v "$validator_dir:/validator-output" \
+  -w /app "$RUST_IMAGE" \
+  sh -euxc 'cargo build --locked --bin nexus-workspace-snapshot-verify --target-dir /validator-output; test -x /validator-output/debug/nexus-workspace-snapshot-verify'
+test -x "$validator_dir/debug/nexus-workspace-snapshot-verify"
+NEXUS_WORKSPACE_VALIDATOR_BIN="$validator_dir/debug/nexus-workspace-snapshot-verify" \
   python3 scripts/test-workspace-trust.py
 
 GITHUB_SHA="$GITHUB_SHA" \
