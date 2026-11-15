@@ -99,6 +99,22 @@ checkpoints cannot match the latest receipt. A legitimate change after the
 receipt is also a mismatch: **do not ignore the failure**. Seal and externally
 acknowledge the new state, then use that receipt as the new latest reference.
 
+## Separate receipt receiver (operator-side, not deployed)
+
+A standalone recipient-side ledger is now implemented as
+[`workspace-witness-custodian.py`](INDEPENDENT-WITNESS-CUSTODIAN.md).
+It verifies incoming receipts against an independently pinned source public
+key, writes a bounded serialized receipt history, signs acknowledgments using
+a distinct custodian key, and exposes the most recently acknowledged receipt
+for independent verification. Its acceptance order and acknowledgment chain
+help clients detect replay when they retain a **separate minimum sequence**.
+
+**This is not a connected remote custodian or immutable service.** No network
+channel, external administrator, WORM storage, independent key custody,
+public deployment or third-party confirmation is established by these scripts.
+The receiver must be run in an actual separate trust domain for the additional
+boundary to exist.
+
 ## Threat boundaries and deployment requirements
 
 - No off-host witness is actually published or held independently by this PR.
