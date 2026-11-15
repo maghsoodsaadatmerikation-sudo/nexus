@@ -1,0 +1,55 @@
+# Synthetic-only NEXUS image, never a production Dockerfile.
+# Build context MUST be an exact detached historical target checkout plus
+# separately reviewed guard scripts copied by the exact-head GitHub workflow.
+FROM rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e AS compile
+
+WORKDIR /nexus
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY artifact-05 ./artifact-05
+# Historical Axum gateway embeds both static pages with include_str!.
+COPY web ./web
+RUN CARGO_HTTP_MULTIPLEXING=false CARGO_HTTP_TIMEOUT=30 CARGO_NET_RETRY=3 \
+    cargo build --locked --release --manifest-path artifact-05/Cargo.toml \
+      --bin nexus-artifact-05-gateway \
+    && test -s artifact-05/target/release/nexus-artifact-05-gateway
+
+FROM rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
+LABEL org.opencontainers.image.title="NEXUS Stage D guarded synthetic image" \
+      org.opencontainers.image.revision="f4d027bb5f7e715b298f7cf7184fa621a2fb071d" \
+      nexus.release_authority="none" \
+      nexus.runtime_scope="synthetic-only"
+
+# Python is needed by the guard; the external Debian apt repository is NOT
+# a cryptographically pinned reproducible input. Never claim reproducible
+# build provenance or production readiness from this ephemeral candidate.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3-minimal \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --uid 10001 --no-create-home --home-dir /opt/nexus --shell /usr/sbin/nologin nexus \
+    && mkdir -p /opt/nexus /data /run/nexus \
+    && chown nexus:nexus /opt/nexus /data \
+    && chmod 0700 /data
+
+COPY --from=compile --chown=10001:10001 /nexus/artifact-05/target/release/nexus-artifact-05-gateway /opt/nexus/nexus
+COPY scripts/stage-d-guarded-image-entrypoint.py \
+     scripts/workspace-stage-d-startup-guard.py \
+     scripts/workspace-stage-d-data-rollback-screen.py \
+     scripts/workspace-stage-d-upgrade-rehearsal.py \
+     scripts/workspace-stage-d-deploy-coherence.py \
+     scripts/workspace-stage-d-railway-preflight.py \
+     scripts/workspace-trust.py \
+     scripts/workspace-attestation.py \
+     scripts/data-snapshot.py /opt/nexus/
+
+RUN chmod 0700 /opt/nexus/nexus \
+    && python3 -B -m py_compile /opt/nexus/*.py \
+    && chmod 0555 /opt/nexus/*.py \
+    && test -x /opt/nexus/nexus
+
+USER 10001:10001
+WORKDIR /opt/nexus
+ENV PYTHONDONTWRITEBYTECODE=1
+# No CMD or VOLUME directive: missing independently mounted synthetic
+# data and policy always produce hard denial, not an implicit writable layer.
+ENTRYPOINT ["/usr/bin/python3", "-I", "-B", "/opt/nexus/stage-d-guarded-image-entrypoint.py"]

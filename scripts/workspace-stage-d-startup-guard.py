@@ -8,6 +8,7 @@ directory lock is inherited through exec. This is a test-only guard and is
 not retroactively present in deployed historical Railway images.
 """
 import argparse
+import fcntl
 import hashlib
 import importlib.util
 import json
@@ -212,6 +213,29 @@ def check_data(root, rootfd):
             "recovery_quarantine_present": quarantine}
 
 
+def exclusive_private_root(path):
+    """Operator-owned exact directory inode and fail-fast exclusive POSIX lock."""
+    flags = (os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_CLOEXEC", 0)
+             | getattr(os, "O_NOFOLLOW", 0))
+    fd = os.open(path, flags)
+    try:
+        meta = os.fstat(fd)
+        if (not stat.S_ISDIR(meta.st_mode) or meta.st_uid != os.geteuid()
+                or meta.st_mode & 0o077):
+            deny("synthetic data root must be owner-private")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            deny("synthetic data root is already locked by another gateway")
+        visible = os.stat(path, follow_symlinks=False)
+        if ((meta.st_dev, meta.st_ino) != (visible.st_dev, visible.st_ino)):
+            deny("synthetic data root changed while acquiring lock")
+        return fd
+    except Exception:
+        os.close(fd)
+        raise
+
+
 def admit(args):
     if os.name != "posix":
         deny("startup admission requires POSIX directory locks")
@@ -220,7 +244,7 @@ def admit(args):
     contract = read_policy(args)
     binaryfd = check_binary(args)
     try:
-        dirfd = trust.protected_directory(args.data_dir)
+        dirfd = exclusive_private_root(args.data_dir)
     except Exception:
         os.close(binaryfd)
         raise
