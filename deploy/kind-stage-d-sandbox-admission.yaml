@@ -1,0 +1,127 @@
+# Kubernetes v1 ValidatingAdmissionPolicy: admission of synthetic CI Pods only.
+# The image digest below is INTENTIONALLY NONEXISTENT and no Pod is started.
+# Kubernetes does not validate Ed25519 signatures here; this is real API-server
+# admission enforcement of static launch constraints, NOT release authorization.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nexus-stage-d-sandbox
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.34
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nexus-sandbox-reviewer
+  namespace: nexus-stage-d-sandbox
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: synthetic-pod-proposer
+  namespace: nexus-stage-d-sandbox
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: synthetic-pod-proposer
+  namespace: nexus-stage-d-sandbox
+subjects:
+  - kind: ServiceAccount
+    name: nexus-sandbox-reviewer
+    namespace: nexus-stage-d-sandbox
+roleRef:
+  kind: Role
+  name: synthetic-pod-proposer
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: nexus-stage-d-sandbox.nexus.example
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+        operations: ["CREATE", "UPDATE"]
+  matchConditions:
+    # Namespace name, not its mutable labels, controls this test scope.
+    - name: exact-throwaway-namespace
+      expression: "request.namespace == 'nexus-stage-d-sandbox'"
+  validations:
+    - message: "Only a single synthetic review container is admitted"
+      expression: "object.spec.containers.size() == 1 && (!has(object.spec.initContainers) || object.spec.initContainers.size() == 0) && (!has(object.spec.ephemeralContainers) || object.spec.ephemeralContainers.size() == 0)"
+    - message: "Only the exact non-published synthetic image reference may be proposed"
+      expression: >-
+        object.spec.containers[0].image ==
+        'registry.invalid/nexus-stage-d-synthetic@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        && object.spec.containers[0].imagePullPolicy == 'Never'
+    - message: "The OCI default guarded entrypoint must not be overridden by Kubernetes"
+      expression: >-
+        (!has(object.spec.containers[0].command) || object.spec.containers[0].command.size() == 0)
+        && (!has(object.spec.containers[0].args) || object.spec.containers[0].args.size() == 0)
+    - message: "Synthetic pod cannot have runtime environment injection"
+      expression: >-
+        (!has(object.spec.containers[0].env) || object.spec.containers[0].env.size() == 0)
+        && (!has(object.spec.containers[0].envFrom) || object.spec.containers[0].envFrom.size() == 0)
+    - message: "Synthetic gateway must have non-root, read-only and no-capability security context"
+      expression: >-
+        has(object.spec.containers[0].securityContext)
+        && object.spec.containers[0].securityContext.runAsNonRoot == true
+        && object.spec.containers[0].securityContext.runAsUser == 10001
+        && object.spec.containers[0].securityContext.runAsGroup == 10001
+        && object.spec.containers[0].securityContext.readOnlyRootFilesystem == true
+        && object.spec.containers[0].securityContext.allowPrivilegeEscalation == false
+        && (!has(object.spec.containers[0].securityContext.privileged) || object.spec.containers[0].securityContext.privileged == false)
+        && has(object.spec.containers[0].securityContext.capabilities)
+        && object.spec.containers[0].securityContext.capabilities.drop == ['ALL']
+        && (!has(object.spec.containers[0].securityContext.capabilities.add) || object.spec.containers[0].securityContext.capabilities.add.size() == 0)
+    - message: "Synthetic gateway must have restricted pod-level security controls"
+      expression: >-
+        has(object.spec.securityContext)
+        && object.spec.securityContext.runAsNonRoot == true
+        && object.spec.securityContext.runAsUser == 10001
+        && object.spec.securityContext.runAsGroup == 10001
+        && has(object.spec.securityContext.seccompProfile)
+        && object.spec.securityContext.seccompProfile.type == 'RuntimeDefault'
+        && (!has(object.spec.hostNetwork) || object.spec.hostNetwork == false)
+        && (!has(object.spec.hostPID) || object.spec.hostPID == false)
+        && (!has(object.spec.hostIPC) || object.spec.hostIPC == false)
+        && object.spec.automountServiceAccountToken == false
+        && object.spec.serviceAccountName == 'nexus-sandbox-reviewer'
+    - message: "Only two synthetic-only declared volume types are allowed"
+      expression: >-
+        has(object.spec.volumes)
+        && object.spec.volumes.size() == 2
+        && object.spec.volumes.filter(v, v.name == 'data' && has(v.emptyDir) && v.emptyDir.medium == 'Memory').size() == 1
+        && object.spec.volumes.filter(v, v.name == 'approval' && has(v.secret) && v.secret.secretName == 'unavailable-synthetic-approval').size() == 1
+    - message: "Volume mounts cannot reach the host or replace guarded program files"
+      expression: >-
+        has(object.spec.containers[0].volumeMounts)
+        && object.spec.containers[0].volumeMounts.size() == 2
+        && object.spec.containers[0].volumeMounts.filter(m, m.name == 'data' && m.mountPath == '/data' && m.readOnly == false).size() == 1
+        && object.spec.containers[0].volumeMounts.filter(m, m.name == 'approval' && m.mountPath == '/run/nexus/approval.json' && m.readOnly == true && m.subPath == 'approval.json').size() == 1
+    - message: "Disable host projection, extra containers and Kubernetes execution features"
+      expression: >-
+        (!has(object.spec.hostAliases) || object.spec.hostAliases.size() == 0)
+        && (!has(object.spec.imagePullSecrets) || object.spec.imagePullSecrets.size() == 0)
+        && (!has(object.spec.containers[0].lifecycle))
+        && (!has(object.spec.containers[0].ports) || object.spec.containers[0].ports.size() == 0)
+        && (!has(object.spec.containers[0].securityContext.procMount) || object.spec.containers[0].securityContext.procMount == 'Default')
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: nexus-stage-d-sandbox-binding
+spec:
+  policyName: nexus-stage-d-sandbox.nexus.example
+  validationActions: ["Deny"]
