@@ -35,6 +35,7 @@ jobs:
           scratch="$(mktemp -d "${RUNNER_TEMP:-/tmp}/nexus-stage-d-ci-XXXXXXXX")"
           echo "NEXUS_TEMP_ROOT=$scratch" >> "$GITHUB_ENV"
           echo "KUBECONFIG=$scratch/nexus-stage-d-kubeconfig" >> "$GITHUB_ENV"
+          export KUBECONFIG="$scratch/nexus-stage-d-kubeconfig"
           curl -fsSL --retry 3 -o "$scratch/kind" \
             https://github.com/kubernetes-sigs/kind/releases/download/v0.30.0/kind-linux-amd64
           printf '%s  %s\n' 517ab7fc89ddeed5fa65abf71530d90648d9638ef0c4cde22c2c11f8097b8889 "$scratch/kind" | sha256sum -c -
