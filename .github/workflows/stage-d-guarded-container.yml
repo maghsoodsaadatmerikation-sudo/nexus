@@ -9,6 +9,9 @@ on:
       - 'scripts/test-stage-d-oci-image-evidence.py'
       - 'scripts/stage-d-signed-oci-admission.py'
       - 'scripts/test-stage-d-signed-oci-admission.py'
+      - 'scripts/stage-d-two-reviewer-admission.py'
+      - 'scripts/test-stage-d-two-reviewer-admission.py'
+      - 'scripts/stage-d-ci-dual-review-demo.py'
       - 'scripts/workspace-stage-d-startup-guard.py'
       - 'scripts/workspace-stage-d-data-rollback-screen.py'
       - 'docs/STAGE-D-GUARDED-OCI-IMAGE.md'
@@ -25,6 +28,9 @@ on:
       - 'scripts/test-stage-d-oci-image-evidence.py'
       - 'scripts/stage-d-signed-oci-admission.py'
       - 'scripts/test-stage-d-signed-oci-admission.py'
+      - 'scripts/stage-d-two-reviewer-admission.py'
+      - 'scripts/test-stage-d-two-reviewer-admission.py'
+      - 'scripts/stage-d-ci-dual-review-demo.py'
       - '.github/workflows/stage-d-guarded-container.yml'
   workflow_dispatch:
 permissions:
@@ -53,6 +59,8 @@ jobs:
           python3 -B -m py_compile scripts/stage-d-oci-image-evidence.py scripts/test-stage-d-oci-image-evidence.py
           python3 -B scripts/test-stage-d-oci-image-evidence.py
           python3 -B scripts/test-stage-d-signed-oci-admission.py
+          python3 -B -m py_compile scripts/stage-d-two-reviewer-admission.py scripts/test-stage-d-two-reviewer-admission.py scripts/stage-d-ci-dual-review-demo.py
+          python3 -B scripts/test-stage-d-two-reviewer-admission.py
           revision=f4d027bb5f7e715b298f7cf7184fa621a2fb071d
           git cat-file -e "${revision}^{commit}"
           scratch="$(mktemp -d "${RUNNER_TEMP:-/tmp}/nexus-guarded-oci-XXXXXXXX")"
@@ -147,7 +155,17 @@ jobs:
           printf '%s\n' "$demo_public_der_sha" > "$evidence_root/ci-demo-public-der-sha256.txt"
           sha256sum "$demo_public" "$evidence_root/ci-demo-public-der-sha256.txt" \
             "$evidence_root/ci-demo-signed-review.json" >> "$evidence_root/local-checksums.sha256"
-          echo 'DEMO REVIEW KEY ONLY: no independent publisher attestation or release authorization'
+          # A second DISPOSABLE reviewer key signs the same REAL Docker
+          # manifest in this CI job. Two CI keys are not two custodians.
+          python3 -B scripts/stage-d-ci-dual-review-demo.py \
+            --synthetic-only \
+            --reviewed-commit "$APPROVED_CHECKOUT_SHA" \
+            --evidence-root "$evidence_root"
+          sha256sum "$evidence_root"/ci-demo-dual-*.json \
+            "$evidence_root"/ci-demo-recovery-*.pem \
+            "$evidence_root"/ci-demo-recovery-*.json \
+            >> "$evidence_root/local-checksums.sha256"
+          echo 'DEMO DUAL REVIEW ONLY: no independent custodians or release authorization'
           echo 'OCI IMAGE TEST ONLY: no registry publish, no Railway/Render deployment'
       - name: Retain unsigned synthetic build manifest and partial SBOM for review
         if: success()
