@@ -40,7 +40,7 @@ jobs:
           tmp="$(mktemp -d "${RUNNER_TEMP:-/tmp}/nexus-historical-reader-XXXXXXXX")"
           trap 'for role in recovery source target; do git worktree remove --force "$tmp/$role" 2>/dev/null || true; done; rm -rf "$tmp"' EXIT
           python3 -B scripts/generate-workspace-cross-version-fixtures.py "$tmp/fixtures"
-          export CARGO_TARGET_DIR="$tmp/target"
+          export CARGO_TARGET_DIR="$tmp/cargo-build-output"
           checks=0
           legacy_provenance_accepted=0
           for role in recovery source target; do
