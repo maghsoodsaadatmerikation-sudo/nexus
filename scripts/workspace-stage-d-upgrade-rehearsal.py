@@ -118,7 +118,7 @@ def read_comparison(path, pin, repo, old, new, label):
             or type(total) is not int or behind != 0
             or not 0 <= ahead <= 10000 or total != ahead):
         deny(label + " contains inconsistent or ambiguous ancestry counts")
-    if (old == new and (obj.get("status") != "identical" or ahead != 0))
+    if ((old == new and (obj.get("status") != "identical" or ahead != 0))
             or (old != new and (obj.get("status") != "ahead" or ahead == 0))):
         deny(label + " comparison does not prove a monotonic proposed code path")
     # These values are untrusted provider graph metadata, NOT security attestations.
