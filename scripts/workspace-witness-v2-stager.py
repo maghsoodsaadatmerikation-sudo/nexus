@@ -100,6 +100,14 @@ def write_locked(directory_fd, raw, expected):
             pass
 
 
+def assert_directory_identity(path, directory_fd):
+    pinned = os.fstat(directory_fd)
+    visible = os.stat(path, follow_symlinks=False)
+    if (not stat.S_ISDIR(visible.st_mode)
+            or (pinned.st_dev, pinned.st_ino) != (visible.st_dev, visible.st_ino)):
+        fail("staging directory path changed while operation held its lock")
+
+
 def verified_proof(args, candidate_path, candidate_sha, package_path,
                    package_sha, minimum):
     proof = argparse.Namespace(
@@ -149,7 +157,9 @@ def initial(args):
         raise StageError("new staging directory must not already exist") from exc
     fd = trust.protected_directory(args.store)
     try:
+        assert_directory_identity(args.store, fd)
         write_locked(fd, raw, expected=None)
+        assert_directory_identity(args.store, fd)
     finally:
         os.close(fd)
     return commit_report("initialized-verified-v2-candidate", raw, proof)
@@ -165,6 +175,7 @@ def advance(args):
         fail("independent sequence floors cannot decrease")
     fd = trust.protected_directory(args.store)  # flock across cooperating processes
     try:
+        assert_directory_identity(args.store, fd)
         stored_bytes = read_locked(fd)
         actual = digest(stored_bytes)
         if not isinstance(args.expected_current_sha256, str) or not v2.HEX.fullmatch(
@@ -186,7 +197,9 @@ def advance(args):
                     args, args.candidate, args.candidate_sha256,
                     args.trusted_next_package, args.trusted_next_package_sha256,
                     args.next_minimum_sequence)
+                assert_directory_identity(args.store, fd)
                 write_locked(fd, new_bytes, expected=actual)
+                assert_directory_identity(args.store, fd)
                 return commit_report("appended-one-verified-v2-record", new_bytes, next_proof)
             if actual == args.candidate_sha256:
                 # Lost client response AFTER fsync: accept only the exact
@@ -208,6 +221,7 @@ def advance(args):
                     args, args.candidate, args.candidate_sha256,
                     args.trusted_next_package, args.trusted_next_package_sha256,
                     args.next_minimum_sequence)
+                assert_directory_identity(args.store, fd)
                 return commit_report("already-committed-exact-retry", stored_bytes, next_proof)
             fail("conflict: pinned predecessor differs from durable candidate")
     finally:
