@@ -126,6 +126,29 @@ mod tests {
     }
 
     #[test]
+    fn local_probe_is_bounded_questioning_not_external_evidence() {
+        let question = "س".repeat(700);
+        let workspace = DecisionWorkspace::new("local", question);
+        let batch = LocalQuestionProbe::new("local-run-1")
+            .analyze(&workspace)
+            .unwrap();
+        assert_eq!(batch.adapter_id, "nexus-local-question-probe-v1");
+        assert_eq!(batch.run_id, "local-run-1");
+        assert_eq!(batch.observations.len(), 1);
+        let probe = &batch.observations[0];
+        assert_eq!(probe.id, "local-question-probe-local-run-1");
+        assert_eq!(probe.kind, AnalysisObservationKind::UncertaintyNote);
+        assert_eq!(probe.uncertainty, Uncertainty::High);
+        assert!(probe.source_ids.is_empty());
+        assert!(probe.text.contains("not evidence"));
+        assert!(probe.text.chars().count() <= 340);
+        assert!(LocalQuestionProbe::new(" ")
+            .analyze(&workspace)
+            .is_err());
+        assert!(!workspace.has_human_judgment());
+    }
+
+    #[test]
     fn sources_and_uncertainty_remain_explicit() {
         let batch = AnalysisBatch {
             adapter_id: "research".into(),
