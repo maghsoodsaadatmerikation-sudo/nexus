@@ -281,10 +281,10 @@ def init(args):
     print("CUSTODIAN INITIALIZED: public keys pinned, no remote service or import authority")
 
 
-def receive(data, args):
-    if len(data["entries"]) >= MAX_ENTRIES:
-        fail("custodian capacity reached")
-    receipt = parse_limited(args.receipt, witness.MAX_RECEIPT_BYTES)
+def receive(data, args, received=None):
+    receipt = received if received is not None else parse_limited(
+        args.receipt, witness.MAX_RECEIPT_BYTES
+    )
     source_der, ack_der = derived_keys(data)
     with tempfile.TemporaryDirectory(prefix="nexus-custodian-accept-") as directory:
         root = Path(directory)
@@ -294,7 +294,15 @@ def receive(data, args):
     if (any(entry["receipt"]["state_sha256"] == receipt["state_sha256"]
             or digest(entry["receipt"]) == digest(receipt)
             for entry in data["entries"])):
+        if (args.action == "receive-stdin" and data["entries"]
+                and digest(data["entries"][-1]["receipt"]) == digest(receipt)):
+            # Network reply can disappear *after* the durable fsync. Replay
+            # only the exact latest signed acknowledgment; never consume a
+            # new sequence or silently replay a different old revision.
+            return {"schema": PACKAGE_SCHEMA, **data["entries"][-1]}, False
         fail("replay or previously accepted state")
+    if len(data["entries"]) >= MAX_ENTRIES:
+        fail("custodian capacity reached")
     protected = args.store.resolve()
     if protected in args.ack_private_key.resolve().parents:
         fail("custodian private signing key must remain outside the ledger")
@@ -324,7 +332,7 @@ def receive(data, args):
     ack = {**body, "signature_base64": base64.b64encode(sig).decode("ascii")}
     entry = {"receipt": receipt, "ack": ack}
     data["entries"].append(entry)
-    return {"schema": PACKAGE_SCHEMA, **entry}
+    return {"schema": PACKAGE_SCHEMA, **entry}, True
 
 
 def latest(data):
@@ -393,6 +401,10 @@ def main():
     receiver.add_argument("--store", type=Path, required=True)
     receiver.add_argument("--receipt", type=Path, required=True)
     receiver.add_argument("--ack-private-key", type=Path, required=True)
+    stream = modes.add_parser("receive-stdin",
+                              help="Bounded receipt over authenticated SSH forced command")
+    stream.add_argument("--store", type=Path, required=True)
+    stream.add_argument("--ack-private-key", type=Path, required=True)
     query = modes.add_parser("latest")
     query.add_argument("--store", type=Path, required=True)
     verifier = modes.add_parser("verify-package")
@@ -413,12 +425,19 @@ def main():
         if args.action == "verify-package":
             independent_verify_package(parse_limited(args.package, 2 * witness.MAX_RECEIPT_BYTES), args)
             return 0
+        streamed = None
+        if args.action == "receive-stdin":
+            raw = sys.stdin.buffer.read(witness.MAX_RECEIPT_BYTES + 1)
+            if not raw or len(raw) > witness.MAX_RECEIPT_BYTES:
+                fail("streamed source receipt empty or exceeds size limit")
+            streamed = trust.strict_json(raw)
         fd = trust.protected_directory(args.store)
         try:
             data = read_store(fd)
-            if args.action == "receive":
-                package = receive(data, args)
-                write_store(fd, data)
+            if args.action in ("receive", "receive-stdin"):
+                package, advanced = receive(data, args, streamed)
+                if advanced:
+                    write_store(fd, data)
             else:
                 package = latest(data)
         finally:
