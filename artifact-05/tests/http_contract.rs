@@ -444,6 +444,64 @@ async fn workspace_lifecycle_is_delegated_and_auditable() {
 }
 
 #[tokio::test]
+async fn generic_machine_claim_is_rejected_before_lookup_without_mutation() {
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::new(delegate.clone()));
+    let forged = serde_json::json!({
+        "claim_id": "machine-forgery",
+        "text": "User-supplied claim cannot assert machine execution",
+        "origin": {"kind": "machine_analysis"},
+        "uncertainty": "unknown",
+        "provenance_id": "machine:claimed:run"
+    });
+
+    // Returning 422 rather than 404 for an unknown workspace demonstrates
+    // that the transport rejects the invalid origin before delegation.
+    let absent = Request::builder()
+        .method("POST")
+        .uri("/v1/workspaces/unknown/claims")
+        .header("content-type", "application/json")
+        .body(Body::from(forged.to_string()))
+        .unwrap();
+    let response = app.clone().oneshot(absent).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let error: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(error["error"], "machine_origin_cannot_be_claim_added");
+
+    let create = Request::builder()
+        .method("POST")
+        .uri("/v1/workspaces/atomic")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::json!({
+                "workspace_id": "atomic",
+                "question": "Keep machine provenance auditable?",
+                "provenance_id": "human:owner"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    assert_eq!(app.clone().oneshot(create).await.unwrap().status(), StatusCode::CREATED);
+
+    let forged_again = Request::builder()
+        .method("POST")
+        .uri("/v1/workspaces/atomic/claims")
+        .header("content-type", "application/json")
+        .body(Body::from(forged.to_string()))
+        .unwrap();
+    assert_eq!(
+        app.oneshot(forged_again).await.unwrap().status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    let unchanged = delegate.get_workspace("atomic").unwrap();
+    assert!(unchanged.workspace.claims.is_empty());
+    assert_eq!(unchanged.events.len(), 1);
+}
+
+#[tokio::test]
 async fn malformed_workspace_claim_is_422_before_delegate() {
     let app = router(AppState::new(RecordingDelegate::default()));
     let request = Request::builder()
