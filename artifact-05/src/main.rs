@@ -280,10 +280,8 @@ mod import_trust_tests {
 
     #[test]
     fn direct_delegate_import_denies_machine_history_without_creating_storage() {
-        let root = std::env::temp_dir().join(format!(
-            "nexus-machine-import-{}",
-            uuid::Uuid::new_v4()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("nexus-machine-import-{}", uuid::Uuid::new_v4()));
         assert!(!root.exists());
         let delegate = CoreDelegate::new(root.clone());
 
@@ -319,7 +317,10 @@ mod import_trust_tests {
             ProvenanceId::new("offline:owner"),
         )
         .snapshot();
-        assert_eq!(delegate.import_workspace(ordinary.clone()), Ok(ordinary.clone()));
+        assert_eq!(
+            delegate.import_workspace(ordinary.clone()),
+            Ok(ordinary.clone())
+        );
         assert_eq!(delegate.get_workspace("offline-unverified"), Ok(ordinary));
         std::fs::remove_dir_all(root).unwrap();
     }
