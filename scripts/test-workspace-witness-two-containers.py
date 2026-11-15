@@ -274,6 +274,11 @@ def main():
             client_container(client, image, network, client_vol)
             client_setup(client)
             server_container(server, image, network, data_vol, key_vol, host_vol)
+            # No common bind mount: the source signer private key exists
+            # only in the client volume; recipient key only in receiver volume.
+            inside(client, "sh", "-c",
+                   "test ! -e /home/witness/keys/receiver.pem")
+            inside(server, "sh", "-c", "test ! -e /work/witness.pem")
             configure_server(server, initialize=True, renew_host=True,
                              staging=staging, client=client)
             install_pinned_host_public(server, client, staging)
@@ -379,12 +384,18 @@ def main():
             print("NEXUS TWO-CONTAINER WITNESS: PASS "
                   "(real private Docker TCP SSH, isolated volumes, data loss, signed recovery, spoofed host denied)")
         finally:
+            # Cleanup is best effort even when initialization or the SSH
+            # handshake failed; never hide the primary regression traceback.
             for name in (server, client):
-                docker("rm", "-f", name, ok=False)
-            docker("network", "rm", network, ok=False)
+                subprocess.run(["docker", "rm", "-f", name], capture_output=True,
+                               timeout=15, check=False)
+            subprocess.run(["docker", "network", "rm", network],
+                           capture_output=True, timeout=15, check=False)
             for volume in volumes:
-                docker("volume", "rm", volume, ok=False)
-            docker("image", "rm", "-f", image, ok=False)
+                subprocess.run(["docker", "volume", "rm", volume],
+                               capture_output=True, timeout=15, check=False)
+            subprocess.run(["docker", "image", "rm", "-f", image],
+                           capture_output=True, timeout=15, check=False)
 
 
 if __name__ == "__main__":
