@@ -20,6 +20,17 @@ function selectedAttachments(){
  const version=saved?doc().versions.at(-1):null;
  return [...chatAttachments,...(version?[{id:doc().id,name:'Document: '+doc().title+' ('+version.id.slice(0,8)+')',text:version.text}]:[])];
 }
+function stageChatContext(label,material){
+ if(busy||!p()||!chat()||chat().archived||typeof label!=='string'||!label.trim()||
+    label.length>160||typeof material!=='string'||!material.trim()||material.length>131072||
+    chatAttachments.length>=4||chatAttachments.length+1+($('attach-document').checked?1:0)>S.MAX_CHAT_ATTACHMENTS){
+  status('chatAttachmentInvalid');return false;
+ }
+ chatAttachments.push({id:S.uid(),name:label,text:material});
+ stop();renderChatAttachments();status('chatAttachmentAdded');
+ $('conversation-card').scrollIntoView({block:'start',behavior:'smooth'});
+ return true;
+}
 function clearChatAttachments(){attachmentEpoch++;chatAttachments=[];$('chat-file').value='';$('attach-document').checked=false;renderChatAttachments()}
 function renderChatAttachments(){
  const tray=$('chat-attachment-tray');tray.replaceChildren();
@@ -144,6 +155,6 @@ $('language-file').onchange=async event=>{
 };
 $('language').onchange=()=>{stop();language=$('language').value;applyLanguage()};
 window.addEventListener('beforeunload',e=>{if(dirty||forms()||$('message').value){e.preventDefault();e.returnValue=''}});
-window.NexusStudioUI={snapshot:()=>S.copy(data),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}};applyLanguage();
+window.NexusStudioUI={snapshot:()=>S.copy(data),stageChatContext,resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}};applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
