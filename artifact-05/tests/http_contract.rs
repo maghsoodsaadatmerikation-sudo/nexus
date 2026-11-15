@@ -8,7 +8,8 @@ use nexus_artifact_05_gateway::{
 };
 use nexus_constitutional_core::analysis::{AnalysisAdapter, LocalQuestionProbe};
 use nexus_constitutional_core::{
-    Alternative, Claim, HumanJudgment, InMemoryWorkspaceRepository, ProvenanceId, RequestEnvelope,
+    Alternative, AnalysisBatch, AnalysisObservation, AnalysisObservationKind, Claim, ClaimOrigin,
+    HumanJudgment, InMemoryWorkspaceRepository, ProvenanceId, RequestEnvelope, Uncertainty,
     WorkspaceEngine, WorkspaceRepository, WorkspaceSnapshot,
 };
 use std::{
@@ -48,6 +49,22 @@ impl WorkspaceDelegate for RecordingDelegate {
         }
         let snapshot = WorkspaceEngine::new(workspace_id, question, provenance_id).snapshot();
         repository
+            .save(snapshot.clone())
+            .map_err(|_| WorkspaceDelegateError::Invalid)?;
+        Ok(snapshot)
+    }
+
+    fn import_workspace(
+        &self,
+        snapshot: WorkspaceSnapshot,
+    ) -> Result<WorkspaceSnapshot, WorkspaceDelegateError> {
+        // Deliberately permissive test delegate: the HTTP boundary, not this
+        // in-memory fixture, must block claimed machine history pre-delegation.
+        let mut store = self.workspaces.lock().unwrap();
+        if store.load(&snapshot.workspace.id).is_some() {
+            return Err(WorkspaceDelegateError::AlreadyExists);
+        }
+        store
             .save(snapshot.clone())
             .map_err(|_| WorkspaceDelegateError::Invalid)?;
         Ok(snapshot)
@@ -565,6 +582,125 @@ async fn analysis_cannot_accept_client_minted_adapter_or_run_provenance() {
     assert!(uuid::Uuid::parse_str(run_two).is_ok());
     assert_eq!(second["workspace"]["claims"].as_array().unwrap().len(), 2);
     assert!(second["workspace"]["judgment"].is_null());
+}
+
+#[tokio::test]
+async fn untrusted_import_cannot_launder_machine_history_or_claimed_machine_prefix() {
+    let delegate = RecordingDelegate::default();
+    let app = router(AppState::authenticated(delegate.clone(), "secret"));
+
+    // The forged snapshot has valid native event ordering and provenance
+    // formatting, but it originated outside the trusted server process.
+    let mut engine = WorkspaceEngine::new(
+        "claimed-machine-import",
+        "Question",
+        ProvenanceId::new("human:creator"),
+    );
+    engine.record_analysis_batch(AnalysisBatch {
+        adapter_id: "nexus-local-question-probe-v1".into(),
+        run_id: "caller-controlled-uuid".into(),
+        observations: vec![AnalysisObservation {
+            id: "machine-1".into(),
+            kind: AnalysisObservationKind::UncertaintyNote,
+            text: "Fake server analysis".into(),
+            uncertainty: Uncertainty::High,
+            source_ids: vec![],
+        }],
+    });
+    let machine = engine.snapshot();
+    assert!(WorkspaceEngine::from_snapshot(machine.clone()).is_ok());
+
+    let mut origin_only = machine.clone();
+    origin_only.events[1].kind = nexus_constitutional_core::WorkspaceEventKind::ClaimAdded {
+        claim_id: "machine-1".into(),
+    };
+    origin_only.events[1].provenance_id = ProvenanceId::new("human:client");
+
+    let mut event_only = machine.clone();
+    event_only.workspace.claims[0].origin = ClaimOrigin::Human;
+
+    let prefix_only =
+        WorkspaceEngine::new("prefix-import", "Q", ProvenanceId::new("machine:fake:run"))
+            .snapshot();
+
+    let submit = |snapshot: &WorkspaceSnapshot, token: Option<&str>| {
+        let mut builder = Request::builder()
+            .method("POST")
+            .uri("/v1/workspaces/import")
+            .header("content-type", "application/json");
+        if let Some(token) = token {
+            builder = builder.header("authorization", format!("Bearer {token}"));
+        }
+        builder
+            .body(Body::from(serde_json::to_vec(snapshot).unwrap()))
+            .unwrap()
+    };
+
+    // Authentication is checked before import provenance or payload parsing.
+    let unauthorized = app.clone().oneshot(submit(&machine, None)).await.unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+
+    for spoofed in [machine, origin_only, event_only, prefix_only] {
+        let response = app
+            .clone()
+            .oneshot(submit(&spoofed, Some("secret")))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let response_body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let error: serde_json::Value = serde_json::from_slice(&response_body).unwrap();
+        assert_eq!(error["error"], "unattested_machine_history_rejected");
+        assert!(
+            delegate.get_workspace(&spoofed.workspace.id).is_err(),
+            "rejected imports must not call the intentionally permissive delegate"
+        );
+    }
+
+    // Explicitly unverified reports remain importable and preserve their
+    // source label; the normal user decision history remains intact.
+    let mut clean = WorkspaceEngine::new(
+        "clean-offline-import",
+        "Question",
+        ProvenanceId::new("offline:creator"),
+    );
+    clean
+        .add_claim(
+            Claim {
+                id: "reported".into(),
+                text: "User reported this model output".into(),
+                origin: ClaimOrigin::ExternalEvidence {
+                    source: "offline-bridge:user-reported-machine-analysis-unattested".into(),
+                },
+                uncertainty: Uncertainty::High,
+            },
+            ProvenanceId::new("offline:owner"),
+        )
+        .unwrap();
+    clean.record_human_judgment(
+        HumanJudgment {
+            decision: "Inspect first".into(),
+            rationale: "Human decision".into(),
+        },
+        ProvenanceId::new("human:owner"),
+    );
+    let clean_snapshot = clean.snapshot();
+    let accepted = app
+        .clone()
+        .oneshot(submit(&clean_snapshot, Some("secret")))
+        .await
+        .unwrap();
+    assert_eq!(accepted.status(), StatusCode::CREATED);
+    assert_eq!(
+        delegate.get_workspace("clean-offline-import").unwrap(),
+        clean_snapshot
+    );
+    let replay = app
+        .oneshot(submit(&clean_snapshot, Some("secret")))
+        .await
+        .unwrap();
+    assert_eq!(replay.status(), StatusCode::CONFLICT);
 }
 
 #[tokio::test]

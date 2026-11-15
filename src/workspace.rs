@@ -52,6 +52,23 @@ pub struct WorkspaceSnapshot {
     pub events: Vec<WorkspaceEvent>,
 }
 
+impl WorkspaceSnapshot {
+    /// A caller-controlled import cannot authenticate an existing machine
+    /// execution merely by supplying an adapter name, run ID, or audit label.
+    /// This is a trust-boundary check, not a general snapshot-validity check:
+    /// native machine events are still allowed in the core's local store.
+    pub fn claims_unattested_machine_execution(&self) -> bool {
+        self.workspace
+            .claims
+            .iter()
+            .any(|claim| claim.origin == ClaimOrigin::MachineAnalysis)
+            || self.events.iter().any(|event| {
+                matches!(&event.kind, WorkspaceEventKind::MachineAnalysisRecorded { .. })
+                    || event.provenance_id.0.starts_with("machine:")
+            })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorkspaceStoreError {
     UnsupportedSchemaVersion { found: u32, supported: u32 },

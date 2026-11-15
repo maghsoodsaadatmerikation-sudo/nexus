@@ -177,6 +177,17 @@ where
     if !workspace_authorized(&state, &headers) {
         return unauthorized();
     }
+    // A bearer token authenticates the caller, not the authorship of an
+    // externally supplied machine event. Deny it before any delegation.
+    if snapshot.claims_unattested_machine_execution() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorResponse {
+                error: "unattested_machine_history_rejected",
+            }),
+        )
+            .into_response();
+    }
     match state.delegate.import_workspace(snapshot) {
         Ok(snapshot) => (StatusCode::CREATED, Json(snapshot)).into_response(),
         Err(error) => workspace_error_response(error),
