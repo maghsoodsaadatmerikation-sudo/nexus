@@ -475,7 +475,7 @@ async fn generic_machine_claim_is_rejected_before_lookup_without_mutation() {
 
     let create = Request::builder()
         .method("POST")
-        .uri("/v1/workspaces/atomic")
+        .uri("/v1/workspaces")
         .header("content-type", "application/json")
         .body(Body::from(
             serde_json::json!({
