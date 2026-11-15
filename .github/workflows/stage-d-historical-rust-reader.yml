@@ -63,7 +63,7 @@ jobs:
             done
             for case in "$tmp"/fixtures/invalid-*.json; do
               if "$reader" --snapshot "$case" w >/dev/null 2>&1; then
-                echo "NEXUS historical reader unexpectedly accepted an unsafe fixture: $role" >&2
+                echo "NEXUS historical reader unexpectedly accepted an unsafe fixture: $role $(basename "$case")" >&2
                 exit 1
               fi
               checks=$((checks+1))
