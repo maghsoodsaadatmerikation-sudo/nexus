@@ -5,6 +5,7 @@ Runs ONLY on a disposable GitHub Actions runner. Docker daemon privileges
 can override ENTRYPOINT: this test does not claim an unbypassable image.
 No Railway, Render, production data, real secrets or customer workloads.
 """
+from contextlib import contextmanager
 import hashlib
 import http.client
 import json
@@ -44,8 +45,44 @@ def canonical(value):
                        separators=(",", ":"), allow_nan=False) + "\n").encode()
 
 
+# Retain independently computed test digest BEFORE changing the uid to
+# container user 10001. The runner must not reopen this 0600 policy as root.
+TEST_PINNED_DIGESTS = {}
+
+
 def digest(path):
+    if str(path) in TEST_PINNED_DIGESTS:
+        return TEST_PINNED_DIGESTS[str(path)]
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def privileged_bytes(path):
+    proc = subprocess.run(["sudo", "cat", str(path)], capture_output=True,
+                          timeout=10, check=True)
+    return proc.stdout
+
+
+def privileged_mode(path):
+    proc = subprocess.run(["sudo", "stat", "-c", "%a", str(path)],
+                          capture_output=True, text=True, timeout=10, check=True)
+    return int(proc.stdout.strip(), 8)
+
+
+def privileged_exists(path):
+    return subprocess.run(["sudo", "test", "-e", str(path)], timeout=10,
+                          capture_output=True).returncode == 0
+
+
+@contextmanager
+def owner_clean_temp(parent):
+    with tempfile.TemporaryDirectory(prefix="nexus-guarded-oci-", dir=parent) as tmp:
+        try:
+            yield tmp
+        finally:
+            subprocess.run(
+                ["sudo", "chown", "-R", str(os.getuid()) + ":" +
+                 str(os.getgid()), tmp],
+                capture_output=True, timeout=20, check=True)
 
 
 def policy(commit, binary_sha, **changes):
@@ -64,6 +101,7 @@ def policy(commit, binary_sha, **changes):
 
 def private_file(path, contents):
     path.write_bytes(contents)
+    TEST_PINNED_DIGESTS[str(path)] = hashlib.sha256(contents).hexdigest()
     os.chmod(path, 0o600)
     sh(["sudo", "chown", "10001:10001", path])
     return path
@@ -176,8 +214,7 @@ def main():
     assert inspect["Config"]["Labels"]["nexus.runtime_scope"] == "synthetic-only"
     image_id = inspect["Id"]
     checks = 3
-    with tempfile.TemporaryDirectory(prefix="nexus-guarded-oci-",
-                                     dir=args.runner_temp) as temp:
+    with owner_clean_temp(args.runner_temp) as temp:
         root = Path(temp)
         binary_sha = image_binary_sha(image, root)
         checks += 1
@@ -257,15 +294,15 @@ def main():
             stop(name)
 
         request_file = private / "requests" / message["request_id"].encode().hex()
-        assert request_file.is_file()
-        assert request_file.read_bytes() == b"pending\n"
+        assert privileged_exists(request_file)
+        assert privileged_bytes(request_file) == b"pending\n"
         checks += 1
         # Existing HISTORICAL target binary is permissive about umask.
         # Our guard catches this, then operator narrows permissions only on
         # this synthetic clone; the *new candidate Rust fix* is checked by
         # the independent full-head Cargo CI.
-        if (request_file.stat().st_mode & 0o077 or
-                (private / "requests").stat().st_mode & 0o077):
+        if (privileged_mode(request_file) & 0o077 or
+                privileged_mode(private / "requests") & 0o077):
             denied("historical-insecure-request-permissions")
             sh(["sudo", "chmod", "0700", private / "requests"])
             sh(["sudo", "chmod", "0600", request_file])
@@ -314,12 +351,12 @@ def main():
                 dict(message, request_id="synthetic-quarantine-refusal"))
             assert status == 503 and data.get("error") == "recovery_acknowledgment_required"
             checks += 1
-            assert not (private / "requests" /
-                        "synthetic-quarantine-refusal".encode().hex()).exists()
+            assert not privileged_exists(private / "requests" /
+                        "synthetic-quarantine-refusal".encode().hex())
             checks += 1
         finally:
             stop(name)
-        assert quarantine.read_bytes() == b"synthetic-recovery-not-authorized\n"
+        assert privileged_bytes(quarantine) == b"synthetic-recovery-not-authorized\n"
         checks += 1
 
         # Tampered workspace schema must be denied before the gateway is
