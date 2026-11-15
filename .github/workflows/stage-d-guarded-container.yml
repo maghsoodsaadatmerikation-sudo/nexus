@@ -144,8 +144,9 @@ jobs:
             --public-key-der-sha256 "$demo_public_der_sha" \
             --signed-review "$evidence_root/ci-demo-signed-review.json" \
             --expected-signed-sha256 "$demo_signed_sha"
-          printf '%s  %s\n' "$demo_public_der_sha" "$demo_public" >> "$evidence_root/local-checksums.sha256"
-          printf '%s  %s\n' "$demo_signed_sha" "$evidence_root/ci-demo-signed-review.json" >> "$evidence_root/local-checksums.sha256"
+          printf '%s\n' "$demo_public_der_sha" > "$evidence_root/ci-demo-public-der-sha256.txt"
+          sha256sum "$demo_public" "$evidence_root/ci-demo-public-der-sha256.txt" \
+            "$evidence_root/ci-demo-signed-review.json" >> "$evidence_root/local-checksums.sha256"
           echo 'DEMO REVIEW KEY ONLY: no independent publisher attestation or release authorization'
           echo 'OCI IMAGE TEST ONLY: no registry publish, no Railway/Render deployment'
       - name: Retain unsigned synthetic build manifest and partial SBOM for review
