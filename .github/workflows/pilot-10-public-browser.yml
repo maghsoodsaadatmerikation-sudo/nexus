@@ -6,6 +6,7 @@ on:
       - '.github/workflows/pilot-10-public-browser.yml'
       - 'scripts/observe-public-offline-browser.mjs'
       - 'scripts/prepare-public-pilot-witness.sh'
+      - 'scripts/test-public-witness-source-coherence.py'
       - 'scripts/test-offline-pilot-browser.py'
       - 'scripts/test-decision-report-browser.py'
       - 'scripts/test-draft-guard-browser.py'
@@ -21,6 +22,7 @@ on:
       - '.github/workflows/pilot-10-public-browser.yml'
       - 'scripts/observe-public-offline-browser.mjs'
       - 'scripts/prepare-public-pilot-witness.sh'
+      - 'scripts/test-public-witness-source-coherence.py'
       - 'scripts/test-offline-pilot-browser.py'
       - 'scripts/test-decision-report-browser.py'
       - 'scripts/test-draft-guard-browser.py'
@@ -40,7 +42,9 @@ permissions:
 
 concurrency:
   group: nexus-public-browser-${{ github.ref }}
-  cancel-in-progress: false
+  # Superseded PR tests must not block the newest candidate behind stale
+  # public-browser checks. Preserve independent scheduled/manual observations.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   real-public-acceptance:
@@ -57,6 +61,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 scripts/test-public-witness-source-coherence.py
           bash scripts/prepare-public-pilot-witness.sh
           cd "$RUNNER_TEMP/nexus-live-pilot"
           cp web/offline-pilot.html "$RUNNER_TEMP/deployed-source.html"

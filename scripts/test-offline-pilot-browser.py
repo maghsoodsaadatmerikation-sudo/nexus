@@ -146,6 +146,7 @@ window.addEventListener('load', async () => {
     assert(byId('claims').querySelector('img') === null && !window.testXss, 'xss-as-html');
     checks.push('source-required-and-html-escaped');
     fill('origin','machine_analysis'); fill('claim','فقط تحلیل آزمایشی');
+    fill('source','synthetic:model/report;unverified');
     await submit('claim-form');
     assert(byId('decision-view').textContent.includes('هیچ تصمیم انسانی'), 'machine-turned-into-decision');
     checks.push('machine-analysis-non-authority');
@@ -158,7 +159,8 @@ window.addEventListener('load', async () => {
       earlyCore.events.some(e=>e.kind.ClaimAdded) &&
       earlyCore.events.every(e=>e.provenance_id==='offline-bridge:user-supplied-unattested'),
       'core-export-invented-early-human-judgment');
-    assert(earlyCore.workspace.claims[1].origin==='MachineAnalysis' &&
+    assert(earlyCore.workspace.claims[1].origin.ExternalEvidence.source===
+      'offline-bridge:user-reported-machine-analysis-unattested;reported-source=synthetic%3Amodel%2Freport%3Bunverified' &&
       !earlyCore.events.some(e=>e.kind.MachineAnalysisRecorded),
       'core-export-forged-machine-adapter');
     checks.push('core-bridge-before-human-choice-is-nonauthoritative');
@@ -202,7 +204,8 @@ window.addEventListener('load', async () => {
        coreFixture.workspace.claims.length===2 &&
        coreFixture.workspace.claims[0].origin.ExternalEvidence.source==='test:synthetic' &&
        coreFixture.workspace.claims[0].uncertainty==='High' &&
-       coreFixture.workspace.claims[1].origin==='MachineAnalysis' &&
+       coreFixture.workspace.claims[1].origin.ExternalEvidence.source===
+         'offline-bridge:user-reported-machine-analysis-unattested;reported-source=synthetic%3Amodel%2Freport%3Bunverified' &&
        coreFixture.workspace.alternatives[0].consequences.length===2 &&
        coreFixture.workspace.judgment.decision===exported.workspace.judgment.decision &&
        coreFixture.events.length===5 &&

@@ -92,9 +92,16 @@ def main():
             len(snap["events"])==5 and
             all(x["provenance_id"]==PROVENANCE for x in snap["events"]),
             "not-exact-synthetic-browser-fixture")
-    require(w["claims"][1]["origin"]=="MachineAnalysis" and
-            snap["events"][2]["kind"].get("ClaimAdded") is not None,
-            "machine-claim-forged-analysis-event")
+    require(
+        w["claims"][1]["origin"] == {
+            "ExternalEvidence": {
+                "source": "offline-bridge:user-reported-machine-analysis-unattested;reported-source=synthetic%3Amodel%2Freport%3Bunverified"
+            }
+        }
+        and snap["events"][2]["kind"].get("ClaimAdded") is not None
+        and not any("MachineAnalysisRecorded" in e["kind"] for e in snap["events"]),
+        "unattested-machine-report-forged-analysis-event",
+    )
     require(not Path(REPORT).exists(), "existing-report")
     token=secrets.token_urlsafe(48)
     port=32000+int(run_id[-4:])
