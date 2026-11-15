@@ -46,10 +46,15 @@ default is to reject claims of machine authenticity at the import boundary.
   a *new, separately labeled* unverified-evidence export; never silently
   relabel a signed or original history in place.
 
-## Future signed-attestation protocol (not implemented)
+## Signed import remains unimplemented
 
-A secure inter-instance import will need all of the following, **not merely
-an SHA-256 printed beside the imported file**:
+A manual detached Ed25519 signing/verification tool is now available as an
+**offline integrity witness**. See [DETACHED-WORKSPACE-ATTESTATION.md](DETACHED-WORKSPACE-ATTESTATION.md).
+It does not change this HTTP import denial, register trusted signers, or
+establish replay protection.
+
+A secure inter-instance **signed import** still needs all of the following,
+**not merely an SHA-256 printed beside the imported file**:
 
 1. A detached, domain-separated Ed25519 signature over a versioned,
    unambiguous canonical representation of the exact snapshot content,
