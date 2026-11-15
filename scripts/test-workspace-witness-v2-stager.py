@@ -14,6 +14,7 @@ import tempfile
 HERE = Path(__file__).resolve().parent
 STAGER = HERE / "workspace-witness-v2-stager.py"
 RECOVERY = HERE / "workspace-witness-v2-recovery.py"
+TWO_OBSERVERS = HERE / "workspace-witness-two-custody-evidence.py"
 TRUST = HERE / "workspace-trust.py"
 WITNESS = HERE / "workspace-offsite-witness.py"
 CUSTODIAN = HERE / "workspace-witness-custodian.py"
@@ -507,6 +508,148 @@ def main():
         assert (fresh / "candidate.json").read_bytes() == bridges[2].read_bytes()
         checked += 1
 
+        # Two role-separated observers sign the exact same externally
+        # approved challenge and cryptographically verified v2 head. This
+        # fixture uses two local temp directories, NOT two physical hosts.
+        origin_private, origin_public = keypair(root, "origin-observer")
+        restore_private, restore_public = keypair(root, "restore-observer")
+        outsider_private, outsider_public = keypair(root, "outsider-observer")
+        nonce = "a7" * 32
+        shared_observation = [
+            *common,
+            "--trusted-latest-package", packages[2],
+            "--trusted-latest-package-sha256", hash_file(packages[2]),
+            "--expected-bridge-sha256", hash_file(bridges[2]),
+            "--minimum-sequence", "4",
+            "--challenge-hex", nonce,
+        ]
+
+        def observe(role, location, secret, pub, observer_id, report, good=True):
+            return call(
+                TWO_OBSERVERS, "observe", *shared_observation,
+                "--role", role, "--store", location,
+                "--observer-private-key", secret,
+                "--observer-public-key", pub,
+                "--observer-id", observer_id,
+                "--output", report, good=good,
+            )
+
+        origin_report = out / "origin-observer-report.json"
+        recovered_report = out / "restored-observer-report.json"
+        origin_output = json.loads(observe(
+            "origin", store, origin_private, origin_public,
+            "independent-origin-observer", origin_report).stdout)
+        assert origin_output["physical_host_independence_proven"] is False
+        checked += 1
+        recovered_output = json.loads(observe(
+            "recovery", fresh, restore_private, restore_public,
+            "independent-recovery-observer", recovered_report).stdout)
+        assert recovered_output["production_release_authorized"] is False
+        checked += 1
+
+        pair = [
+            "verify-pair", *shared_observation,
+            "--approved-bridge", bridges[2],
+            "--origin-report", origin_report,
+            "--origin-report-sha256", hash_file(origin_report),
+            "--origin-public-key", origin_public,
+            "--origin-observer-id", "independent-origin-observer",
+            "--recovery-report", recovered_report,
+            "--recovery-report-sha256", hash_file(recovered_report),
+            "--recovery-public-key", restore_public,
+            "--recovery-observer-id", "independent-recovery-observer",
+        ]
+        paired = json.loads(call(TWO_OBSERVERS, *pair).stdout)
+        assert paired["status"] == "two-distinct-signer-observations-verified"
+        assert paired["distinct_signer_public_keys_verified"] is True
+        assert paired["physical_host_independence_proven"] is False
+        assert paired["real_offsite_restore_performed"] is False
+        assert paired["production_release_authorized"] is False
+        checked += 1
+
+        for changes in (
+            {"challenge_hex": "c4" * 32},
+            {"challenge_hex": "0" * 64},
+            {"minimum_sequence": "5"},
+            {"expected_bridge_sha256": "d" * 64},
+            {"trusted_latest_package": packages[1],
+             "trusted_latest_package_sha256": hash_file(packages[1])},
+            {"origin_report_sha256": "f" * 64},
+            {"recovery_report_sha256": "f" * 64},
+            {"origin_public_key": outsider_public},
+            {"recovery_public_key": origin_public},
+            {"origin_observer_id": "renamed-observer"},
+            {"recovery_observer_id": "independent-origin-observer"},
+            {"approved_bridge": bridges[1]},
+        ):
+            call(TWO_OBSERVERS, *changed_flags(pair, changes), good=False)
+            checked += 1
+
+        def modified_report(title, mutate):
+            obj = json.loads(origin_report.read_text())
+            mutate(obj)
+            altered = save(out, "forged-observer-" + title, obj)
+            call(TWO_OBSERVERS, *changed_flags(pair, {
+                "origin_report": altered,
+                "origin_report_sha256": hash_file(altered),
+            }), good=False)
+        for title, mutate in (
+            ("signature", lambda d: d.__setitem__("signature_base64", "AAAA")),
+            ("role", lambda d: d.__setitem__("role", "recovery")),
+            ("sequence", lambda d: d.__setitem__("latest_sequence", 3)),
+            ("nonce", lambda d: d.__setitem__("challenge_hex", "b8" * 32)),
+            ("digest", lambda d: d.__setitem__("latest_ack_sha256", "f" * 64)),
+            ("scope", lambda d: d.__setitem__("production_release_authorized", True)),
+            ("boolean", lambda d: d.__setitem__("latest_sequence", True)),
+        ):
+            modified_report(title, mutate)
+            checked += 1
+
+        # Same signing key cannot impersonate two distinct custody roles.
+        same_pub = changed_flags(pair, {
+            "recovery_public_key": origin_public,
+            "recovery_observer_id": "another-person-same-key",
+        })
+        call(TWO_OBSERVERS, *same_pub, good=False)
+        checked += 1
+        rogue_report = out / "invalid-role-key-report.json"
+        observe("recovery", fresh, origin_private, restore_public,
+                "independent-recovery-observer", rogue_report, good=False)
+        assert not rogue_report.exists()
+        checked += 1
+        stale_report = out / "stale-observation.json"
+        observe("recovery", stale_stage, restore_private, restore_public,
+                "independent-recovery-observer", stale_report, good=False)
+        assert not stale_report.exists()
+        checked += 1
+
+        ambiguous_observer = out / "duplicate-observer-keys.json"
+        ambiguous_observer.write_bytes(origin_report.read_bytes().replace(
+            b'"schema":', b'"schema":"evil","schema":', 1))
+        call(TWO_OBSERVERS, *changed_flags(pair, {
+            "origin_report": ambiguous_observer,
+            "origin_report_sha256": hash_file(ambiguous_observer),
+        }), good=False)
+        checked += 1
+        symlink_observer = out / "symlink-observer.json"
+        symlink_observer.symlink_to(origin_report)
+        call(TWO_OBSERVERS, *changed_flags(pair, {
+            "origin_report": symlink_observer,
+            "origin_report_sha256": hash_file(origin_report),
+        }), good=False)
+        checked += 1
+        hardlink_observer = out / "hardlink-observer.json"
+        os.link(origin_report, hardlink_observer)
+        call(TWO_OBSERVERS, *changed_flags(pair, {
+            "origin_report": hardlink_observer,
+            "origin_report_sha256": hash_file(origin_report),
+        }), good=False)
+        checked += 1
+        hardlink_observer.unlink()
+        assert (store / "candidate.json").read_bytes() == bridges[2].read_bytes()
+        assert (fresh / "candidate.json").read_bytes() == bridges[2].read_bytes()
+        checked += 1
+
         assert old_ledger.read_bytes() == old_ledger_initial
         assert (receiver / "custodian.json").read_bytes() == old_ledger_initial
         assert all(bridge.read_bytes() == trust.encode_json(
@@ -514,7 +657,7 @@ def main():
 
     print(json.dumps({
         "status": "PASS", "checks": checked,
-        "scope": "synthetic-atomic-v2-staging-crashes-and-pinned-cold-recovery",
+        "scope": "synthetic-v2-staging-cold-restore-and-two-distinct-observer-signatures",
         "live_receiver_modified": False,
         "production_key_rotation_activated": False,
     }))
