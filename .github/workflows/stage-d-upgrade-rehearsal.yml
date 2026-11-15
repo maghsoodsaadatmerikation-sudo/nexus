@@ -1,0 +1,38 @@
+name: NEXUS Stage D Safe Upgrade Rehearsal
+on:
+  pull_request:
+    paths:
+      - 'scripts/workspace-stage-d-upgrade-rehearsal.py'
+      - 'scripts/test-workspace-stage-d-upgrade-rehearsal.py'
+      - 'scripts/workspace-stage-d-deploy-coherence.py'
+      - 'scripts/workspace-stage-d-railway-preflight.py'
+      - 'scripts/readonly-verification.sh'
+      - 'docs/STAGE-D-SAFE-UPGRADE-REHEARSAL.md'
+      - '.github/workflows/stage-d-upgrade-rehearsal.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/workspace-stage-d-upgrade-rehearsal.py'
+      - 'scripts/test-workspace-stage-d-upgrade-rehearsal.py'
+      - '.github/workflows/stage-d-upgrade-rehearsal.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safe-rehearsal-without-deployment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Checkout exact source without credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify SHA-pinned Git graph and no-production fallback invariants
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -B -m py_compile scripts/workspace-stage-d-upgrade-rehearsal.py scripts/test-workspace-stage-d-upgrade-rehearsal.py
+          python3 -B scripts/test-workspace-stage-d-upgrade-rehearsal.py
