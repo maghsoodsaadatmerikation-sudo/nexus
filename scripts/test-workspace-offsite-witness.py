@@ -155,6 +155,21 @@ def main():
         run(WITNESS, "seal", *args, "--output", state / "inside.json",
             "--witness-key-id", "external-r1",
             "--witness-private-key", witness_secret, success=False)
+        # A receipt copied inside the compromised registry directory is not
+        # an independent witness, even if cryptographically correct.
+        local_receipt = state / "local-only.json"
+        local_receipt.write_bytes(original)
+        run(WITNESS, "check", *args, "--receipt", local_receipt,
+            "--trusted-key-id", "external-r1",
+            "--trusted-public-key", witness_public, success=False)
+        local_receipt.unlink()
+        local_signer = state / "private-inside-store.pem"
+        local_signer.write_bytes(witness_secret.read_bytes())
+        os.chmod(local_signer, 0o600)
+        run(WITNESS, "seal", *args, "--output", distant / "inside-signer.json",
+            "--witness-key-id", "external-r1",
+            "--witness-private-key", local_signer, success=False)
+        local_signer.unlink()
         symlink = distant / "alias.json"
         symlink.symlink_to(record_c)
         run(WITNESS, "check", *args, "--receipt", symlink,
