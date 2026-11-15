@@ -126,7 +126,7 @@ def main():
         # No user-selected paths or shell. The custodian CLI is trusted code;
         # the environment is scrubbed before exec, not propagated from SSH.
         params = [
-            sys.executable, str(HERE / "workspace-witness-custodian.py"),
+            sys.executable, "-I", str(HERE / "workspace-witness-custodian.py"),
             ALLOWED[requested], "--store", str(store),
         ]
         if requested == "nexus-witness-v1 receive":
