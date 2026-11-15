@@ -270,3 +270,57 @@ fn positive_env_u64(name: &str, default: u64) -> u64 {
         .map(|value| value + 1)
         .expect("safety limit must be positive")
 }
+
+#[cfg(test)]
+mod import_trust_tests {
+    use super::*;
+    use nexus_constitutional_core::{
+        AnalysisBatch, AnalysisObservation, AnalysisObservationKind, Uncertainty,
+    };
+
+    #[test]
+    fn direct_delegate_import_denies_machine_history_without_creating_storage() {
+        let root = std::env::temp_dir().join(format!(
+            "nexus-machine-import-{}",
+            uuid::Uuid::new_v4()
+        ));
+        assert!(!root.exists());
+        let delegate = CoreDelegate::new(root.clone());
+
+        // The runtime itself can produce this structurally valid native
+        // snapshot, but an external caller cannot use import to assert that
+        // a trusted server was responsible for the same event labels.
+        let mut engine = WorkspaceEngine::new(
+            "claimed-machine-import",
+            "Question",
+            ProvenanceId::new("human:creator"),
+        );
+        engine.record_analysis_batch(AnalysisBatch {
+            adapter_id: "nexus-local-question-probe-v1".into(),
+            run_id: "caller-run-id".into(),
+            observations: vec![AnalysisObservation {
+                id: "machine-observation".into(),
+                kind: AnalysisObservationKind::UncertaintyNote,
+                text: "self-declared provenance".into(),
+                uncertainty: Uncertainty::High,
+                source_ids: vec![],
+            }],
+        });
+        assert!(WorkspaceEngine::from_snapshot(engine.snapshot()).is_ok());
+        assert_eq!(
+            delegate.import_workspace(engine.snapshot()),
+            Err(WorkspaceDelegateError::Invalid)
+        );
+        assert!(!root.exists(), "denied import must not create a data tree");
+
+        let ordinary = WorkspaceEngine::new(
+            "offline-unverified",
+            "Unverified imported question",
+            ProvenanceId::new("offline:owner"),
+        )
+        .snapshot();
+        assert_eq!(delegate.import_workspace(ordinary.clone()), Ok(ordinary.clone()));
+        assert_eq!(delegate.get_workspace("offline-unverified"), Ok(ordinary));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
