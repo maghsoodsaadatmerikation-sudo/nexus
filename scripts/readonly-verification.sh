@@ -75,9 +75,14 @@ GITHUB_RUN_ID="$GITHUB_RUN_ID" \
 RUNNER_OS="$RUNNER_OS" \
   bash scripts/verify-docker.sh
 
-# Cargo's locked root build above produces the same current-core Rust semantic
-# validator used by the offline signed witness. The Python trust tests require
-# it explicitly and fail closed if missing: no Python-only attestation bypass.
+# Produce the current-core semantic validator at an explicit host-visible
+# destination. The normal verification gates can configure a different Cargo
+# target directory; this cross-language acceptance test must never guess.
+docker run --rm \
+  -e HOME=/tmp/home -e CARGO_HOME=/tmp/cargo \
+  -v "$ROOT:/app" -w /app "$RUST_IMAGE" \
+  sh -euxc 'cargo build --locked --bin nexus-workspace-snapshot-verify --target-dir /app/target; test -x /app/target/debug/nexus-workspace-snapshot-verify'
+test -x "$ROOT/target/debug/nexus-workspace-snapshot-verify"
 NEXUS_WORKSPACE_VALIDATOR_BIN="$ROOT/target/debug/nexus-workspace-snapshot-verify" \
   python3 scripts/test-workspace-trust.py
 
