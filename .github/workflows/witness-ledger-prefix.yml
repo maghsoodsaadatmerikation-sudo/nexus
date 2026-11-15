@@ -1,0 +1,38 @@
+name: NEXUS Witness Ledger Prefix Verification
+on:
+  pull_request:
+    paths:
+      - 'scripts/workspace-witness-ledger-prefix.py'
+      - 'scripts/test-workspace-witness-ledger-prefix.py'
+      - 'docs/WITNESS-LEDGER-PREFIX-CONTINUITY.md'
+      - 'scripts/readonly-verification.sh'
+      - '.github/workflows/witness-ledger-prefix.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/workspace-witness-ledger-prefix.py'
+      - 'scripts/test-workspace-witness-ledger-prefix.py'
+      - 'scripts/readonly-verification.sh'
+      - '.github/workflows/witness-ledger-prefix.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  witness-ledger-prefix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact verification commit without credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify Python syntax and adversarial Ed25519 ledger continuity
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          command -v openssl
+          python3 -B -m py_compile scripts/workspace-witness-ledger-prefix.py scripts/test-workspace-witness-ledger-prefix.py
+          python3 -B scripts/test-workspace-witness-ledger-prefix.py
