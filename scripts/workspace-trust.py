@@ -25,6 +25,11 @@ MAX_STATE_BYTES = 2 * 1024 * 1024
 MAX_KEY_BYTES = 8192
 MAX_KEYS = 64
 MAX_WORKSPACES = 2048
+MAX_ITEMS = 100_000
+CONTENT_FIELDS = {
+    "identity_sha256", "claims_count", "claims_sha256",
+    "alternatives_count", "alternatives_sha256",
+}
 KEY_ROLE = "offline_witness"  # No runtime_import or execution authority.
 ED25519_DER_PREFIX = bytes.fromhex("302a300506032b6570032100")
 SHA256_HEX = re.compile(r"[0-9a-f]{64}\Z")
@@ -159,16 +164,27 @@ def validate_state(value):
             attestation.checked_token(workspace_id, "ledger workspace ID")
         except attestation.AttestationError as exc:
             raise TrustError("invalid ledger workspace ID") from exc
+        base = {"event_count", "events_sha256", "snapshot_sha256", "key_id"}
         if (not isinstance(item, dict)
-                or set(item) != {"event_count", "events_sha256", "snapshot_sha256", "key_id"}
+                or set(item) not in (base, base | CONTENT_FIELDS)
                 or type(item["event_count"]) is not int
-                or not 1 <= item["event_count"] <= 100_000
+                or not 1 <= item["event_count"] <= MAX_ITEMS
                 or not isinstance(item["events_sha256"], str)
                 or not SHA256_HEX.fullmatch(item["events_sha256"])
                 or not isinstance(item["snapshot_sha256"], str)
                 or not SHA256_HEX.fullmatch(item["snapshot_sha256"])
                 or item["key_id"] not in value["keys"]):
             fail("invalid monotonic witness ledger")
+        if CONTENT_FIELDS <= set(item):
+            if (type(item["claims_count"]) is not int
+                    or type(item["alternatives_count"]) is not int
+                    or not 0 <= item["claims_count"] <= MAX_ITEMS
+                    or not 0 <= item["alternatives_count"] <= MAX_ITEMS
+                    or any(not isinstance(item[field], str)
+                           or not SHA256_HEX.fullmatch(item[field])
+                           for field in ("identity_sha256", "claims_sha256",
+                                         "alternatives_sha256"))):
+                fail("invalid anchored content state")
     return value
 
 
@@ -275,11 +291,42 @@ def enroll(state, key_id, der):
     state["keys"][key_id] = key_record(der)
 
 
-def event_digest(events):
+def digest_json(value):
     return hashlib.sha256(json.dumps(
-        events, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+        value, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
         allow_nan=False,
     ).encode("utf-8")).hexdigest()
+
+
+def event_digest(events):
+    return digest_json(events)
+
+
+def workspace_content(doc):
+    workspace = doc.get("workspace")
+    if not isinstance(workspace, dict):
+        fail("snapshot missing workspace")
+    identity_fields = ("id", "question", "goal", "constraints", "values")
+    if any(field not in workspace for field in identity_fields):
+        fail("snapshot missing immutable workspace fields")
+    if (not isinstance(workspace.get("claims"), list)
+            or not isinstance(workspace.get("alternatives"), list)
+            or len(workspace["claims"]) > MAX_ITEMS
+            or len(workspace["alternatives"]) > MAX_ITEMS):
+        fail("invalid workspace content arrays")
+    return workspace
+
+
+def content_anchor(workspace):
+    identity = {key: workspace[key] for key in
+                ("id", "question", "goal", "constraints", "values")}
+    return {
+        "identity_sha256": digest_json(identity),
+        "claims_count": len(workspace["claims"]),
+        "claims_sha256": digest_json(workspace["claims"]),
+        "alternatives_count": len(workspace["alternatives"]),
+        "alternatives_sha256": digest_json(workspace["alternatives"]),
+    }
 
 
 def checked_events(raw):
@@ -343,17 +390,49 @@ def verify_witness(state, args):
             raise TrustError("detached signature verifier unavailable") from exc
     if verified.returncode != 0:
         fail("detached Ed25519 verification failed")
+    # The operator explicitly chooses a trusted compiled validator; its
+    # execution rejects any signed JSON inconsistent with the Rust core.
+    validator = args.rust_validator
+    if (not validator.is_absolute() or not validator.is_file()
+            or validator.is_symlink() or not os.access(validator, os.X_OK)):
+        fail("trusted compiled Rust validator binary required")
+    try:
+        with tempfile.TemporaryDirectory(prefix="nexus-semantic-snapshot-") as directory:
+            snapshot_path = Path(directory) / "snapshot.json"
+            snapshot_path.write_bytes(raw)
+            semantic = subprocess.run([
+                str(validator), "--snapshot", str(snapshot_path),
+                "--expected-workspace-id", actual_id,
+            ], capture_output=True, timeout=30, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise TrustError("Rust semantic validator unavailable") from exc
+    if semantic.returncode != 0:
+        fail("Rust workspace semantic validation failed")
     return raw, key_id
 
 
 def record_witness(state, raw, key_id, workspace_id):
+    doc = strict_json(raw)
     events = checked_events(raw)
+    workspace = workspace_content(doc)
+    new_anchor = content_anchor(workspace)
     previous = state["workspaces"].get(workspace_id)
     if previous is not None:
+        if not CONTENT_FIELDS <= set(previous):
+            fail("legacy witness lacks content anchor: run anchor on exact signed prior snapshot")
         if len(events) <= previous["event_count"]:
             fail("replayed or rolled-back witness revision")
         if event_digest(events[:previous["event_count"]]) != previous["events_sha256"]:
             fail("witness event history fork or rewrite")
+        if new_anchor["identity_sha256"] != previous["identity_sha256"]:
+            fail("immutable workspace metadata rewritten")
+        if (new_anchor["claims_count"] < previous["claims_count"]
+                or new_anchor["alternatives_count"] < previous["alternatives_count"]
+                or digest_json(workspace["claims"][:previous["claims_count"]])
+                != previous["claims_sha256"]
+                or digest_json(workspace["alternatives"][:previous["alternatives_count"]])
+                != previous["alternatives_sha256"]):
+            fail("prior signed claim or alternative content rewritten")
     elif len(state["workspaces"]) >= MAX_WORKSPACES:
         fail("workspace ledger capacity exceeded")
     state["workspaces"][workspace_id] = {
@@ -361,7 +440,20 @@ def record_witness(state, raw, key_id, workspace_id):
         "events_sha256": event_digest(events),
         "snapshot_sha256": hashlib.sha256(raw).hexdigest(),
         "key_id": key_id,
+        **new_anchor,
     }
+
+
+def anchor_legacy_witness(state, raw, workspace_id):
+    prior = state["workspaces"].get(workspace_id)
+    if prior is None or CONTENT_FIELDS <= set(prior):
+        fail("no legacy unanchored checkpoint exists")
+    events = checked_events(raw)
+    if (len(events) != prior["event_count"]
+            or event_digest(events) != prior["events_sha256"]
+            or hashlib.sha256(raw).hexdigest() != prior["snapshot_sha256"]):
+        fail("signed original bytes do not match legacy checkpoint")
+    prior.update(content_anchor(workspace_content(strict_json(raw))))
 
 
 def run(args):
@@ -391,14 +483,18 @@ def run(args):
             state["keys"][old_id]["status"] = "revoked"
             write_state(fd, state)
             print("KEY ROTATED ATOMICALLY: old key revoked; new offline witness key active")
-        elif args.action in ("inspect", "record"):
+        elif args.action in ("inspect", "record", "anchor"):
             raw, key_id = verify_witness(state, args)
             if args.action == "record":
                 record_witness(state, raw, key_id, args.workspace_id)
                 write_state(fd, state)
-                print("OFFLINE WITNESS RECORDED: append-only history checked; NOT imported")
+                print("OFFLINE WITNESS RECORDED: Rust-validated and content-anchored; NOT imported")
+            elif args.action == "anchor":
+                anchor_legacy_witness(state, raw, args.workspace_id)
+                write_state(fd, state)
+                print("LEGACY WITNESS ANCHORED: exact prior signed bytes; NOT imported")
             else:
-                print("TRUSTED OFFLINE SIGNATURE VERIFIED: replay ledger unchanged; NOT imported")
+                print("TRUSTED OFFLINE SIGNATURE VERIFIED: Rust-valid; ledger unchanged; NOT imported")
         elif args.action == "status":
             report = {
                 "schema": STATE_SCHEMA,
@@ -416,7 +512,7 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
-    for command in ("init", "enroll", "revoke", "rotate", "inspect", "record", "status"):
+    for command in ("init", "enroll", "revoke", "rotate", "inspect", "record", "anchor", "status"):
         action = sub.add_parser(command)
         action.add_argument("--state-dir", type=Path, required=True)
         if command in ("enroll", "revoke"):
@@ -427,10 +523,11 @@ def main():
             action.add_argument("--old-key-id", required=True)
             action.add_argument("--new-key-id", required=True)
             action.add_argument("--new-public-key", type=Path, required=True)
-        if command in ("inspect", "record"):
+        if command in ("inspect", "record", "anchor"):
             action.add_argument("--snapshot", type=Path, required=True)
             action.add_argument("--attestation", type=Path, required=True)
             action.add_argument("--workspace-id", required=True)
+            action.add_argument("--rust-validator", type=Path, required=True)
     args = parser.parse_args()
     try:
         run(args)

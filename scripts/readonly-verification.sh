@@ -35,7 +35,6 @@ esac
 # registry. No production key, runtime trust or machine-history import is granted.
 command -v openssl >/dev/null || { echo 'OpenSSL missing' >&2; exit 1; }
 python3 scripts/test-workspace-attestation.py
-python3 scripts/test-workspace-trust.py
 python3 scripts/test-release-intent-triage.py
 python3 scripts/test-stage-d-encrypted-escrow.py
 python3 scripts/verify_test_matrix.py
@@ -75,6 +74,21 @@ GITHUB_SHA="$GITHUB_SHA" \
 GITHUB_RUN_ID="$GITHUB_RUN_ID" \
 RUNNER_OS="$RUNNER_OS" \
   bash scripts/verify-docker.sh
+
+# Build this validator from a read-only checkout into a separate, private,
+# host-owned CI scratch directory. Never leave Docker-root-owned target files
+# in the checkout: subsequent host Cargo/A06 steps need write access.
+validator_dir="$RUNNER_TEMP/nexus-validator-${GITHUB_RUN_ID}"
+mkdir -m 0700 "$validator_dir"
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -e HOME=/tmp/home -e CARGO_HOME=/tmp/cargo \
+  -v "$ROOT:/app:ro" -v "$validator_dir:/validator-output" \
+  -w /app "$RUST_IMAGE" \
+  sh -euxc 'cargo build --locked --bin nexus-workspace-snapshot-verify --target-dir /validator-output; test -x /validator-output/debug/nexus-workspace-snapshot-verify'
+test -x "$validator_dir/debug/nexus-workspace-snapshot-verify"
+NEXUS_WORKSPACE_VALIDATOR_BIN="$validator_dir/debug/nexus-workspace-snapshot-verify" \
+  python3 scripts/test-workspace-trust.py
 
 GITHUB_SHA="$GITHUB_SHA" \
 GITHUB_RUN_ID="$GITHUB_RUN_ID" \
