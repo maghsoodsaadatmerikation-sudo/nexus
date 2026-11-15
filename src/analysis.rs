@@ -52,6 +52,46 @@ impl AnalysisBatch {
     }
 }
 
+/// A bounded, deterministic question probe executed inside the server.
+/// It does not fetch evidence, call a model, or make a factual assertion.
+/// The trusted gateway, rather than the HTTP caller, supplies the run ID.
+#[derive(Debug, Clone)]
+pub struct LocalQuestionProbe {
+    run_id: String,
+}
+
+impl LocalQuestionProbe {
+    pub fn new(run_id: impl Into<String>) -> Self {
+        Self {
+            run_id: run_id.into(),
+        }
+    }
+}
+
+impl AnalysisAdapter for LocalQuestionProbe {
+    fn analyze(&self, workspace: &DecisionWorkspace) -> Result<AnalysisBatch, AnalysisError> {
+        if self.run_id.trim().is_empty() {
+            return Err(AnalysisError {
+                message: "missing-local-run-id".into(),
+            });
+        }
+        let question: String = workspace.question.chars().take(240).collect();
+        Ok(AnalysisBatch {
+            adapter_id: "nexus-local-question-probe-v1".into(),
+            run_id: self.run_id.clone(),
+            observations: vec![AnalysisObservation {
+                id: format!("local-question-probe-{}", self.run_id),
+                kind: AnalysisObservationKind::UncertaintyNote,
+                text: format!(
+                    "Local rule-based question (not evidence): What observation could disconfirm: {question}"
+                ),
+                uncertainty: Uncertainty::High,
+                source_ids: Vec::new(),
+            }],
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
