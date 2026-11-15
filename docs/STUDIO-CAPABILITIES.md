@@ -44,6 +44,20 @@ quality, truthfulness, model availability, provider billing, or model quality.
 The local reflection guide remains visibly non-generative. No automatic fallback
 pretends a reflection prompt is an AI answer.
 
+## Chat-first temporary file context (November 2026 follow-up)
+
+The conversation composer now supports explicitly selected **one-turn text file
+excerpts** (TXT/Markdown/CSV/TSV/JSON), plus the latest saved writing
+document. Bounded local retrieval and the exact passages are visible in the
+existing reviewed model request. Source files are not stored in the project
+archive; only filenames are associated with human chat turns, with an
+explicit "not saved" warning. The local scripted guide cannot read them.
+The model is still optional and requires a properly configured real provider.
+See [the operational and security contract](STUDIO-CHAT-ATTACHMENTS.md).
+
+This is *not* multimodal model vision, PDF/OCR parsing, unrestricted file
+uploads, source verification or a substitute for real ChatGPT model quality.
+
 ## Remaining gaps and their actual prerequisites
 
 | ChatGPT capability | NEXUS boundary after this change | Required next dependency |
