@@ -7,6 +7,16 @@ It does **not** provision an SSH host, create a remote account, configure
 authorized_keys, publish receipts, or grant NEXUS runtime authority. The actual
 source and recipient must be administered by separate operators.
 
+## Root-owned deployment policy
+
+For real independent host deployment, use the **root-owned configuration and
+preflight launcher** described in
+[ROOT-PINNED-CUSTODIAN-HOST.md](ROOT-PINNED-CUSTODIAN-HOST.md).
+The earlier environment-selected `workspace-witness-ssh-receiver.py`
+example is retained for synthetic compatibility fixtures, **not as an
+approved production entrypoint**. Never trust receiver ledger and signer key
+paths from SSH client-controlled environment.
+
 ## Independent custodian SSH setup
 
 On a **separate custodian-controlled host**, initialize the recipient ledger
