@@ -54,6 +54,18 @@ The receiver checks the entire existing chain under a POSIX locked directory, ve
 
 **The receiver's ledger is not WORM or tamper-proof against its own system administrator.** Signatures allow independent verification and make undetected edits difficult *without key compromise*, but a sufficiently privileged attacker can restore the full receiver directory or delete newer records. Preserve and pin periodically retrieved signed acknowledgments under a **second independent retention domain** if your threat model includes the receiver being compromised.
 
+## Authenticated SSH handoff and exact-receipt retry
+
+A separately operated SSH forced-command adapter and pinned SSH client are
+now available in [PINNED-SSH-WITNESS-HANDOFF.md](PINNED-SSH-WITNESS-HANDOFF.md).
+The receiver accepts a **bounded, authenticated stdin receipt** and the
+client verifies both Ed25519 signatures before saving the acknowledgment.
+A lost reply after a committed write can be recovered by resending the
+**exact latest signed receipt** without advancing the receiver's sequence.
+
+No external host, SSH account, pinned production host key or genuine
+independent receipt delivery is provisioned by the repository.
+
 ## Independent verification from the NEXUS side
 
 The user/operator must **obtain the package from the independently authenticated custodian**, not from a mutable local NEXUS folder, and independently select the custodian's public key and the source witness public key. A local sequence floor anchored outside NEXUS detects a subsequently supplied stale package.
