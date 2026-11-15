@@ -177,6 +177,7 @@ def main():
 
         # On a new externally retained checkpoint the current local state is
         # allowed again. Concurrency may acknowledge only once.
+        before_third_receipt = (recipient / "custodian.json").read_bytes()
         receive_args = [
             sys.executable, str(CUSTODIAN), "receive", "--store", str(recipient),
             "--receipt", str(c), "--ack-private-key", str(ack_priv),
@@ -192,6 +193,20 @@ def main():
         assert package3["ack"]["previous_ack_sha256"] != "0" * 64
         verify_package(package3, minimum=3)
         verify_package(package2, minimum=3, succeeds=False)
+
+        # A receiver administrator could also restore an earlier *valid*
+        # receiver ledger. The client must pin the last acknowledged sequence
+        # elsewhere and reject that stale (but authentic) returned package.
+        receiver_ledger = recipient / "custodian.json"
+        current_receiver_ledger = receiver_ledger.read_bytes()
+        receiver_ledger.write_bytes(before_third_receipt)
+        returned_old_package = json.loads(
+            call(CUSTODIAN, "latest", "--store", recipient).stdout
+        )
+        assert returned_old_package["ack"]["sequence"] == 2
+        verify_package(returned_old_package, minimum=3, succeeds=False)
+        receiver_ledger.write_bytes(current_receiver_ledger)
+        verify_package(package3, minimum=3)
 
         # Corruption must prevent BOTH reads and new writes, rather than
         # silently reinitializing the receiver or resetting receipt sequence.
