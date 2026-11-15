@@ -64,7 +64,7 @@ window.addEventListener('load',async()=>{
   $('data-chat').click();assert($('chat-attachment-tray').textContent.includes('local.csv'),'analysis-result-staged');
   assert(providerCalls===2,'data-analysis-does-not-auto-send');
   $('prepare').click();reviewed=JSON.parse($('request-context').textContent);
-  assert(reviewed.messages[0].content.includes('mean='),'analysis-summary-retrieved-for-chat');
+  assert(reviewed.messages[0].content.includes('Data analysis')&&reviewed.messages[0].content.includes('local.csv'),'analysis-summary-retrieved-for-chat');
   assert(reviewed.messages[0].content.includes('UNTRUSTED'),'analysis-not-model-policy');
   $('clear-chat-files').click();
   assert($('chat-attachment-tray').textContent.includes(EN.chatNoFiles),'explicit-clear-from-chat');
