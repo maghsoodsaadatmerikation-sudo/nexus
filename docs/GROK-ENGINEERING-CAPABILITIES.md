@@ -360,3 +360,14 @@ prepare/execute/receipt, private export permissions, no-effect preview, stale
 approval and replay denial, sanitized output, interruption-state labeling, and
 oversized/symlink input denial. Dedicated CI must PASS at the committed SHA;
 no deployment, merge or production readiness is implied by local test success.
+
+
+## Phase 7 — Engineering review embedded in Studio (draft branch only)
+
+- Add a conversation-area Engineering Agent panel with a strictly bounded, in-browser read-only parser for `nexus.engineering.proposal.v1`, `nexus.engineering.review.v1`, and `nexus.engineering.chat-receipt.v1`.
+- Only sanitized summaries display step tool, risk, status, workspace digest and plan digest. Raw source/command strings remain in a private proposal textbox and are **never** silently staged into chat.
+- Exact-content review and an explicit checkbox precede manual proposal download or summary handoff to the existing one-turn Studio chat attachment mechanism. Staged summaries still require separate per-message model-request review.
+- No Docker process, shell, remote agent, GitHub write, privileged model tool call, or new server endpoint is invoked by the browser panel. Execution continues to require an operator-run v3 plan and its single-use approval journal; UI inspection is **not** executable approval.
+- Input is bounded to 32,768 bytes with strict duplicate JSON-key detection, exact recognized field names, workspace and step checks, and status restrictions. A secure importer invalidates stale file reads after lock or chat/project switches. No proposal is saved to the Studio archive.
+- Node contract tests, real Chromium narrow/wide behavioral checks, deterministic Studio bundle and static integrity verification are CI gates. Static site deployment is **not** part of this PR.
+- The local operator remains responsible for full private plan examination and independent authorization, and the browser's parser is not equivalent to the operator's Python validator.

@@ -54,3 +54,20 @@ CSV analysis. It checks no automatic provider submission, non-persistent
 source selection, visible reviewed content, untrusted provenance and
 hand-off cancellation. The static installable Studio bundle and service
 worker use the exact deterministic updated HTML digest.
+
+
+## Engineering Agent handoff (Phase 7 candidate)
+
+The conversation card includes a local Engineering Agent panel. It accepts a
+bounded **proposal**, **operator review summary**, or **operator result receipt**
+through explicit paste or local file selection. The proposed tool steps are shown
+with only their names and risk categories; private command arguments, source
+code, paths and logs never appear in the summary. The user can explicitly export
+a private proposal for local operator preparation, or add only a reviewed
+summary/receipt to the existing one-turn chat attachment tray. Edits and project,
+branch or lock changes revoke the panel's review and clear its temporary state.
+
+This is **not** an execution endpoint. Browser approval is only for local download
+or conversation handoff; it cannot approve or invoke Docker or change GitHub.
+The operator's v3 plan digest and one-time execution authorization remain separate.
+A shareable receipt reports a local outcome, **not** independent attestation.
