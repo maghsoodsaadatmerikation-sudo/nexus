@@ -122,7 +122,7 @@ def test_private_install_and_smoke_from_installed_tree(tmp_path):
     assert not (target/".nexus-operator.token").exists()
     assert not (target/"acceptance").exists()
     cli=target/"scripts"/"nexus-operator-pilot.py"
-    result=subprocess.run([sys.executable,str(cli),"smoke","--approve-disposable"],
+    result=subprocess.run([sys.executable,"-B",str(cli),"smoke","--approve-disposable"],
                           capture_output=True,text=True,timeout=20)
     assert result.returncode==0,result.stderr
     assert json.loads(result.stdout)["status"]=="disposable-operator-cycle-passed"
