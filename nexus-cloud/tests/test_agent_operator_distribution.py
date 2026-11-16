@@ -196,3 +196,53 @@ def test_source_symlink_or_missing_cannot_build(tmp_path):
     with pytest.raises((OSError,distribution.DistributionDenied)):
         distribution.build(root,tmp_path/"none.zip")
     assert not (tmp_path/"none.zip").exists()
+
+
+def test_verify_pins_zip_snapshot_even_when_path_swapped(tmp_path, monkeypatch):
+    """Verified ZIP membership must come from the same bytes as the digest."""
+    archive, report = package(tmp_path)
+    old_reader = distribution._read_archive_snapshot
+    replacement = tmp_path / "replacement.zip"
+    replacement.write_bytes(b"not-a-trusted-zip")
+    def swap_path_after_snapshot(path):
+        snapshot = old_reader(path)
+        os.replace(replacement, path)
+        return snapshot
+    monkeypatch.setattr(distribution, "_read_archive_snapshot",
+                        swap_path_after_snapshot)
+    result = distribution.verify(
+        archive, expected_sha256=report["archive_sha256"])
+    assert result["archive_sha256"] == report["archive_sha256"]
+    assert result["archive_digest_matched"] is True
+    assert archive.read_bytes() == b"not-a-trusted-zip"
+
+
+@pytest.mark.skipif(os.getuid()==0, reason="installation requires nonroot OS user")
+def test_install_extracts_only_verified_snapshot_after_path_mutation(tmp_path, monkeypatch):
+    """An archive changed after verification cannot change installed code."""
+    archive, report = package(tmp_path)
+    payload_path = "scripts/nexus-operator-pilot.py"
+    with zipfile.ZipFile(archive, "r") as bundle:
+        verified_script = bundle.read(payload_path)
+    old_verify = distribution._verify_archive_bytes
+    def replace_after_verification(raw_zip, *, expected_sha256=None):
+        result = old_verify(raw_zip, expected_sha256=expected_sha256)
+        archive.write_bytes(b"replaced-after-hash-validation")
+        return result
+    monkeypatch.setattr(distribution, "_verify_archive_bytes",
+                        replace_after_verification)
+    destination = tmp_path / "installed-snapshot"
+    result = distribution.install(archive, destination,
+                                  expected_sha256=report["archive_sha256"])
+    assert result["status"] == "installed-not-executed"
+    assert (destination / payload_path).read_bytes() == verified_script
+    assert distribution.installed_verify(destination)["status"] == "installed-integrity-verified"
+    assert archive.read_bytes() == b"replaced-after-hash-validation"
+
+
+def test_archive_symlink_is_denied_before_digest_validation(tmp_path):
+    archive, report = package(tmp_path)
+    alias = tmp_path / "archive-alias.zip"
+    alias.symlink_to(archive)
+    with pytest.raises(OSError):
+        distribution.verify(alias, expected_sha256=report["archive_sha256"])
