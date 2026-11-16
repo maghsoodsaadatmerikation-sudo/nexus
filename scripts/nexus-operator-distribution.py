@@ -119,22 +119,60 @@ def _manifest(blobs: dict[str, bytes]) -> bytes:
 
 
 def _read_source(root: Path) -> dict[str, bytes]:
+    """Read only allowlisted files through pinned no-follow directory handles.
+
+    Name-based lstat followed by Path.read_bytes() permits a source path to
+    become a symlink between checks. Each component is now opened relative
+    to an already opened directory. In-place changes are detected where
+    possible; this is NOT an atomic multi-file checkout snapshot.
+    """
     if not root.is_dir():
         raise DistributionDenied("source-root-missing")
-    result = {}
-    for name in FILES:
-        file = root / name
-        st = file.lstat()
-        if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_FILE_BYTES:
-            raise DistributionDenied("source-not-regular-or-too-large")
-        if any((root / Path(*Path(name).parts[:i])).is_symlink()
-               for i in range(1, len(Path(name).parts))):
-            raise DistributionDenied("source-parent-is-symlink")
-        data = file.read_bytes()
-        if len(data) > MAX_FILE_BYTES:
-            raise DistributionDenied("source-too-large")
-        result[name] = data
-    return result
+    directory_flags = (os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW |
+                       os.O_CLOEXEC)
+    root_fd = os.open(root, directory_flags)
+    try:
+        result = {}
+        for name in FILES:
+            parts = Path(name).parts  # Static, audited inventory only.
+            parent_fd = os.dup(root_fd)
+            try:
+                for part in parts[:-1]:
+                    child_fd = os.open(part, directory_flags, dir_fd=parent_fd)
+                    os.close(parent_fd)
+                    parent_fd = child_fd
+                file_fd = os.open(parts[-1],
+                                  os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                                  dir_fd=parent_fd)
+                try:
+                    before = os.fstat(file_fd)
+                    if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                            or before.st_size > MAX_FILE_BYTES):
+                        raise DistributionDenied("source-not-regular-or-too-large")
+                    chunks = []
+                    remaining = MAX_FILE_BYTES + 1
+                    while remaining:
+                        piece = os.read(file_fd, min(65536, remaining))
+                        if not piece:
+                            break
+                        chunks.append(piece)
+                        remaining -= len(piece)
+                    if remaining == 0:
+                        raise DistributionDenied("source-too-large")
+                    data = b"".join(chunks)
+                    after = os.fstat(file_fd)
+                    identity = lambda st: (st.st_dev, st.st_ino, st.st_size,
+                                           st.st_mtime_ns, st.st_ctime_ns)
+                    if len(data) != before.st_size or identity(before) != identity(after):
+                        raise DistributionDenied("source-mutated-during-build")
+                    result[name] = data
+                finally:
+                    os.close(file_fd)
+            finally:
+                os.close(parent_fd)
+        return result
+    finally:
+        os.close(root_fd)
 
 
 def build(root: Path, archive: Path) -> dict:
