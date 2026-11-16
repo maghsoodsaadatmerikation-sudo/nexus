@@ -200,3 +200,78 @@ def test_pinned_installed_verification_without_mutation(tmp_path):
     assert actual["manifest_sha256"] == info["manifest_sha256"]
     with pytest.raises(dist.DistributionDenied, match="anchor-mismatch"):
         dist.installed_verify(installed, expected_manifest_sha256="f" * 64)
+
+
+def synthetic_legacy_install(tmp_path, files, name):
+    """A canonical, private old-layout fixture with current controlled bytes."""
+    target = tmp_path / name
+    target.mkdir(mode=0o700)
+    source_entries = []
+    for rel in files:
+        dst = target / rel
+        dst.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        payload = (SOURCE / rel).read_bytes()
+        dst.write_bytes(payload)
+        dst.chmod(0o600)
+        source_entries.append({
+            "path": rel, "sha256": dist._sha(payload), "bytes": len(payload)})
+    manifest = dist._json({
+        "schema": dist.SCHEMA, "platform": "linux-nonroot-operator-pilot",
+        "minimum_python": "3.13", "authenticated": False,
+        "source_files": source_entries})
+    metadata = target / dist.MANIFEST
+    metadata.write_bytes(manifest)
+    metadata.chmod(0o600)
+    return target, dist._sha(manifest)
+
+
+@nonroot
+@pytest.mark.parametrize("files,added", [
+    (dist._V23_FILES, ["docs/PHASE24-SIDE-BY-SIDE-REVIEW.md"]),
+    (dist._V22_FILES, [
+        "docs/PHASE23-VERIFIED-FIRST-RUN.md",
+        "docs/PHASE24-SIDE-BY-SIDE-REVIEW.md",
+        "scripts/nexus-operator-launch.py",
+    ]),
+])
+def test_prior_audited_installed_file_layouts_are_reviewable(tmp_path, files, added):
+    prior, prior_sha = synthetic_legacy_install(tmp_path, files, "historical")
+    archive, info = bundle(tmp_path)
+    next_version = tmp_path / "candidate"
+    dist.install(archive, next_version, expected_sha256=info["archive_sha256"])
+    report = dist.compare_installed(
+        prior, next_version, expected_current_manifest_sha256=prior_sha,
+        expected_candidate_manifest_sha256=info["manifest_sha256"])
+    assert report["status"] == "review-required"
+    assert report["added_paths"] == sorted(added)
+    assert report["removed_paths"] == []
+    assert report["modified_paths"] == []
+    assert report["previous_file_count"] == len(files)
+    assert report["candidate_file_count"] == len(dist.FILES)
+    assert report["upgrade_authorized"] is False
+    assert dist.installed_verify(prior, expected_manifest_sha256=prior_sha)["file_count"] == len(files)
+
+
+@nonroot
+def test_previous_version_removal_direction_is_reported_not_applied(tmp_path):
+    old_version, old_sha = synthetic_legacy_install(
+        tmp_path, dist._V23_FILES, "previous")
+    archive, info = bundle(tmp_path)
+    current = tmp_path / "current"
+    dist.install(archive, current, expected_sha256=info["archive_sha256"])
+    report = dist.compare_installed(current, old_version,
+        expected_current_manifest_sha256=info["manifest_sha256"],
+        expected_candidate_manifest_sha256=old_sha)
+    assert report["removed_paths"] == ["docs/PHASE24-SIDE-BY-SIDE-REVIEW.md"]
+    assert report["added_paths"] == []
+    assert report["upgrade_authorized"] is False
+    assert (current / "docs/PHASE24-SIDE-BY-SIDE-REVIEW.md").exists()
+
+
+@nonroot
+def test_unrecognized_old_manifest_file_inventory_fails_closed(tmp_path):
+    suspicious = tuple(p for p in dist._V23_FILES
+                       if p != "scripts/nexus-engineering-plan.py")
+    target, sha = synthetic_legacy_install(tmp_path, suspicious, "unknown")
+    with pytest.raises(dist.DistributionDenied, match="unknown-installed-file-layout"):
+        dist.installed_verify(target, expected_manifest_sha256=sha)
