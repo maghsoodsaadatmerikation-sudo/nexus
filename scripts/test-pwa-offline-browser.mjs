@@ -120,10 +120,19 @@ try{
  await rpc('Page.reload',{ignoreCache:true});
  await poll(()=>retryJs("document.getElementById('offline-install') && navigator.onLine===false"),15000,'offline-navigation-not-served');
  checks.push('real-chrome-network-offline-reload-served-cached-app');
- const offline=await js("(()=>{document.getElementById('load-demo').click();return {question:document.getElementById('question-view').textContent,claims:document.getElementById('claims').querySelectorAll('.entry').length,options:document.getElementById('alternatives').querySelectorAll('.entry').length,decision:document.getElementById('decision-view').textContent,net:navigator.onLine}})()");
- assert(offline.question.includes('ساختگی')&&offline.claims===2&&offline.options===2&&
- offline.decision.includes('هیچ تصمیم انسانی')&&offline.net===false,
- 'offline-content-unavailable-or-created-a-judgment');
+ // DOM readiness alone is insufficient to prove locale initialization.
+ // Reconfirm the Persian interface after the real offline navigation before
+ // evaluating its translated demonstration. No real user content is inspected.
+ await poll(()=>retryJs("document.documentElement.lang==='fa'&&document.getElementById('ui-language')?.value==='fa'"),8000,'offline-persian-locale-not-active');
+ // This browser is disposable and operates on a fictional example. Stub only
+ // the *test's* native confirmation dialog, never production application code.
+ await js("window.confirm=()=>true;document.getElementById('load-demo').click();true");
+ const demo=await poll(()=>retryJs("(()=>({lang:document.documentElement.lang,question:document.getElementById('question-view')?.textContent.includes('ساختگی'),claims:document.getElementById('claims')?.querySelectorAll('.entry').length,options:document.getElementById('alternatives')?.querySelectorAll('.entry').length,decision:document.getElementById('decision-view')?.textContent.includes('هیچ تصمیم انسانی'),net:navigator.onLine===false}))()"),8000,'offline-demonstration-not-rendered');
+ assert(demo.lang==='fa','offline-demonstration-locale-changed');
+ assert(demo.question===true,'offline-demo-question-not-fictional');
+ assert(demo.claims===2&&demo.options===2,'offline-demo-counts-not-complete');
+ assert(demo.decision===true,'offline-demo-human-judgment-not-empty');
+ assert(demo.net===true,'offline-demo-browser-regained-network');
  checks.push('real-offline-synthetic-workflow-preserves-human-authority');
  const cached=await js("(async()=>{const ns=await caches.keys();const c=await caches.open(ns[0]);return {keys:(await c.keys()).map(x=>x.url),locals:localStorage.length}})()");
  assert(cached.keys.length===1&&cached.keys[0]===ORIGIN&&cached.locals===0,
