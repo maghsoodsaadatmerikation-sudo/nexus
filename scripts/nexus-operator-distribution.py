@@ -12,6 +12,7 @@ import argparse
 import ctypes
 import errno
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -161,24 +162,56 @@ def build(root: Path, archive: Path) -> dict:
     return report
 
 
-def verify(archive: Path, *, expected_sha256: str | None = None) -> dict:
-    """Validate all bytes, names, entry types, lengths, hashes and manifest.
+def _read_archive_snapshot(archive: Path) -> bytes:
+    """Read a single bounded, no-follow regular-file snapshot.
 
-    Internal hashes ensure integrity only; authenticity requires a trusted,
-    out-of-band expected ZIP SHA-256 supplied by the operator.
+    Validation and installation both consume these exact bytes; opening the
+    pathname a second time would permit a replace-between-check-and-use race.
+    Digest pinning authenticates only the bytes, not a publisher identity.
+    """
+    fd = os.open(archive, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_ARCHIVE_BYTES:
+            raise DistributionDenied("unsafe-or-oversized-archive")
+        parts = []
+        remaining = MAX_ARCHIVE_BYTES + 1
+        while remaining:
+            chunk = os.read(fd, min(65536, remaining))
+            if not chunk:
+                break
+            parts.append(chunk)
+            remaining -= len(chunk)
+        if remaining == 0:
+            raise DistributionDenied("unsafe-or-oversized-archive")
+        return b"".join(parts)
+    finally:
+        os.close(fd)
+
+
+def verify(archive: Path, *, expected_sha256: str | None = None) -> dict:
+    """Verify exactly the on-disk snapshot read once, without reopening."""
+    return _verify_archive_bytes(_read_archive_snapshot(archive),
+                                 expected_sha256=expected_sha256)
+
+
+def _verify_archive_bytes(raw_zip: bytes, *,
+                          expected_sha256: str | None = None) -> dict:
+    """Validate bytes, entry types and manifest against one immutable view.
+
+    An externally supplied SHA-256 protects the byte identity. It is NOT a
+    publisher signature and does not authorize production execution.
     """
     if expected_sha256 is not None and (
         not isinstance(expected_sha256, str) or not SHA.fullmatch(expected_sha256)
     ):
         raise DistributionDenied("invalid-expected-archive-sha")
-    st = archive.lstat()
-    if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_ARCHIVE_BYTES:
+    if len(raw_zip) > MAX_ARCHIVE_BYTES:
         raise DistributionDenied("unsafe-or-oversized-archive")
-    raw_zip = archive.read_bytes()
     digest = _sha(raw_zip)
     if expected_sha256 is not None and digest != expected_sha256:
         raise DistributionDenied("archive-sha-mismatch")
-    with zipfile.ZipFile(archive, "r", allowZip64=False) as bundle:
+    with zipfile.ZipFile(io.BytesIO(raw_zip), "r", allowZip64=False) as bundle:
         infos = bundle.infolist()
         names = [i.filename for i in infos]
         if (len(names) != len(FILES) + 1 or len(set(names)) != len(names)
@@ -410,10 +443,11 @@ def install(archive: Path, destination: Path, *, expected_sha256: str) -> dict:
     _private_parent(destination.parent)
     if os.path.lexists(destination):
         raise DistributionDenied("destination-exists-no-overwrite")
-    report = verify(archive, expected_sha256=expected_sha256)
+    pinned_zip_bytes = _read_archive_snapshot(archive)
+    report = _verify_archive_bytes(pinned_zip_bytes, expected_sha256=expected_sha256)
     stage = Path(tempfile.mkdtemp(prefix=".nexus-pilot-stage-", dir=destination.parent))
     try:
-        with zipfile.ZipFile(archive, "r") as bundle:
+        with zipfile.ZipFile(io.BytesIO(pinned_zip_bytes), "r") as bundle:
             for name in (*FILES, MANIFEST):
                 output = stage / name
                 output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
