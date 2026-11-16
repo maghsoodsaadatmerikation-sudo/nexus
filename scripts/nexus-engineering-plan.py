@@ -19,13 +19,18 @@ def main():
     args = parser.parse_args()
     try:
         plan, digest = parse_plan(Path(args.plan).read_bytes())
-        preview = {"plan_sha256": digest, "workspace": plan["workspace"],
-                   "tools": [step["tool"] for step in plan["steps"]],
-                   "network": "disabled", "status": "awaiting-approval"}
+        # Preview remains nonmutating with respect to project files; creating a
+        # dedicated empty workspace is the same behavior as the execution path.
+        workspace = Workspace(args.root, plan["workspace"])
+        observed = workspace.manifest()
+        matches = (plan["version"] != 2 or observed["sha256"] == plan["expected_workspace_sha256"])
+        preview = {"plan_sha256": digest, "plan_version": plan["version"],
+                   "workspace": plan["workspace"], "current_workspace_sha256": observed["sha256"],
+                   "state_matches": matches, "tools": [step["tool"] for step in plan["steps"]],
+                   "network": "disabled", "status": "awaiting-approval" if matches else "state-mismatch"}
         if not args.approve_digest:
             print(json.dumps(preview))
             return 0
-        workspace = Workspace(args.root, plan["workspace"])
         receipt = execute_plan(workspace, plan, digest, approved_digest=args.approve_digest)
         print(json.dumps(asdict(receipt)))
         return 0 if receipt.status == "complete" else 1

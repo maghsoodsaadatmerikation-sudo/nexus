@@ -17,6 +17,14 @@ is treated as a requirements list, not proof of vendor features.
   disables networking, uses a read-only container root, and bounds CPU, memory,
   PID count, output and duration. Only the selected private workspace is bind
   mounted read/write; no host home, Docker socket or secrets are mounted.
+- `Workspace.manifest()` and the CLI `manifest` command give a bounded,
+  deterministic SHA-256 of all visible workspace files (including dotfiles) and
+  empty directories; symlinks/hardlinks/special files fail closed. A **version 2**
+  plan requires `expected_workspace_sha256` and refuses to execute if the
+  current snapshot differs, *before the first side effect*. This prevents stale
+  plan approval for a changed workspace at execution start. Filesystem contents
+  can still race after the preflight check; this is not a transactional lock or
+  an isolation guarantee against concurrent writers or container processes.
 - `nexus-cloud/engineering_agent.py` and `scripts/nexus-engineering-plan.py`:
   a deterministic, 12-step maximum execution plan supporting `read`, `write`,
   `edit`, `run`, `verify_sha256`, `package`. The complete plan is canonicalized
@@ -45,8 +53,9 @@ with permission mode 0700. Example `plan.json`:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "workspace": "demo",
+  "expected_workspace_sha256": "<64-character SHA-256 from the manifest command>",
   "steps": [
     {"tool": "write", "path": "hello.py", "text": "print('Hello NEXUS')\n"},
     {"tool": "read", "path": "hello.py"}
@@ -56,6 +65,8 @@ with permission mode 0700. Example `plan.json`:
 
 ```bash
 mkdir -m 700 -p "$HOME/nexus-workspaces"
+python scripts/nexus-agent-workspace.py --root "$HOME/nexus-workspaces" --workspace demo manifest
+# Put the returned sha256 under expected_workspace_sha256 in plan.json.
 python scripts/nexus-engineering-plan.py --root "$HOME/nexus-workspaces" --plan plan.json
 # Inspect the plan, and copy the returned plan_sha256 after independent review.
 python scripts/nexus-engineering-plan.py --root "$HOME/nexus-workspaces" \

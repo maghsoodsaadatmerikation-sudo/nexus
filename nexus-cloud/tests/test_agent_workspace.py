@@ -156,3 +156,52 @@ def test_rejects_comma_in_root_docker_mount_source(tmp_path):
     root.mkdir(mode=0o700)
     with pytest.raises(WorkspaceDenied):
         Workspace(root, "trial")
+
+
+def test_manifest_is_deterministic_and_includes_hidden_files_and_empty_directories(ws):
+    (ws.path / "empty").mkdir()
+    ws.write(".hidden", b"private")
+    ws.write("src/x.py", b"print(1)", create_parents=True)
+    first = ws.manifest()
+    second = Workspace(ws.root, ws.name).manifest()
+    assert first == second
+    assert first["file_count"] == 2 and first["directory_count"] == 2
+    assert first["total_bytes"] == len(b"privateprint(1)")
+    assert sorted(x["path"] for x in first["files"]) == [".hidden", "src/x.py"]
+    assert all(len(x["sha256"]) == 64 for x in first["files"])
+    ws.write("src/x.py", b"print(2)")
+    assert ws.manifest()["sha256"] != first["sha256"]
+    ws.write("src/x.py", b"print(1)")
+    (ws.path / "another-empty").mkdir()
+    assert ws.manifest()["sha256"] != first["sha256"]
+
+
+def test_manifest_rejects_symlink_hardlink_and_fifo(ws):
+    ws.write("actual", b"safe")
+    os.link(ws.path / "actual", ws.path / "alias")
+    with pytest.raises(WorkspaceDenied, match="hardlinks"):
+        ws.manifest()
+    (ws.path / "alias").unlink()
+    (ws.path / "link").symlink_to("actual")
+    with pytest.raises(WorkspaceDenied, match="links-and-special"):
+        ws.manifest()
+    (ws.path / "link").unlink()
+    os.mkfifo(ws.path / "fifo")
+    with pytest.raises(WorkspaceDenied, match="links-and-special"):
+        ws.manifest()
+
+
+def test_manifest_limits_large_files_and_directory_fanout(ws):
+    (ws.path / "oversize").write_bytes(b"x" * (MAX_FILE_BYTES + 1))
+    with pytest.raises(WorkspaceDenied, match="large-files"):
+        ws.manifest()
+    (ws.path / "oversize").unlink()
+    for idx in range(401):
+        (ws.path / f"d{idx:03}").mkdir()
+    with pytest.raises(WorkspaceDenied, match="entry-limit"):
+        ws.manifest()
+
+
+def test_malformed_unicode_path_rejected_instead_of_unicode_exception():
+    with pytest.raises(WorkspaceDenied, match="encoding"):
+        safe_parts("folder/\ud800")

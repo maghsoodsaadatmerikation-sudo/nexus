@@ -26,6 +26,7 @@ def main(argv=None):
     edit.add_argument("path")
     edit.add_argument("--old-file", required=True)
     edit.add_argument("--new-file", required=True)
+    operations.add_parser("manifest", help="List bounded files and current content identity (no mutation)")
     package = operations.add_parser("package")
     package.add_argument("--output", required=True)
     run = operations.add_parser("run")
@@ -44,6 +45,8 @@ def main(argv=None):
         elif args.operation == "edit":
             workspace.edit(args.path, Path(args.old_file).read_bytes(), Path(args.new_file).read_bytes())
             print(json.dumps({"status": "edited", "path": args.path}))
+        elif args.operation == "manifest":
+            print(json.dumps(workspace.manifest(), ensure_ascii=False))
         elif args.operation == "package":
             print(json.dumps(workspace.package(args.output)))
         elif args.operation == "run":

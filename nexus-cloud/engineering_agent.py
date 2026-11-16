@@ -22,7 +22,13 @@ HASH = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _text(value: Any, *, allow_empty: bool = False) -> str:
-    if not isinstance(value, str) or (not allow_empty and not value) or len(value.encode("utf-8")) > MAX_FILE_BYTES:
+    if not isinstance(value, str) or (not allow_empty and not value):
+        raise WorkspaceDenied("invalid-text")
+    try:
+        encoded_size = len(value.encode("utf-8"))
+    except UnicodeError as exc:
+        raise WorkspaceDenied("invalid-text-encoding") from exc
+    if encoded_size > MAX_FILE_BYTES:
         raise WorkspaceDenied("invalid-text")
     return value
 
@@ -44,8 +50,16 @@ def parse_plan(raw: bytes) -> tuple[dict[str, Any], str]:
         raise
     except (UnicodeError, ValueError) as exc:
         raise WorkspaceDenied("plan-json") from exc
-    if not isinstance(plan, dict) or set(plan) != {"version", "workspace", "steps"} or type(plan["version"]) is not int or plan["version"] != 1:
+    if not isinstance(plan, dict) or type(plan.get("version")) is not int or plan["version"] not in (1, 2):
         raise WorkspaceDenied("plan-schema")
+    expected_keys = {"version", "workspace", "steps"}
+    if plan["version"] == 2:
+        expected_keys.add("expected_workspace_sha256")
+    if set(plan) != expected_keys:
+        raise WorkspaceDenied("plan-schema")
+    if plan["version"] == 2 and (not isinstance(plan["expected_workspace_sha256"], str)
+                                  or not HASH.fullmatch(plan["expected_workspace_sha256"])):
+        raise WorkspaceDenied("plan-workspace-state")
     if not isinstance(plan["workspace"], str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}", plan["workspace"]):
         raise WorkspaceDenied("plan-workspace")
     steps = plan["steps"]
@@ -82,7 +96,10 @@ def parse_plan(raw: bytes) -> tuple[dict[str, Any], str]:
             raise WorkspaceDenied("plan-expected-hash")
         if tool == "package" and (not isinstance(step["output"], str) or not Path(step["output"]).is_absolute()):
             raise WorkspaceDenied("plan-package-output")
-    canonical = json.dumps(plan, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    try:
+        canonical = json.dumps(plan, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    except UnicodeError as exc:
+        raise WorkspaceDenied("invalid-plan-encoding") from exc
     return plan, hashlib.sha256(canonical).hexdigest()
 
 
@@ -98,9 +115,19 @@ class PlanReceipt:
 def execute_plan(workspace: Workspace, plan: dict[str, Any], digest: str, *, approved_digest: str) -> PlanReceipt:
     if not isinstance(approved_digest, str) or approved_digest != digest or not HASH.fullmatch(digest):
         raise WorkspaceDenied("exact-plan-approval-required")
-    checked, actual_digest = parse_plan(json.dumps(plan, ensure_ascii=False).encode("utf-8"))
+    try:
+        serialized = json.dumps(plan, ensure_ascii=False).encode("utf-8")
+    except (ValueError, TypeError, UnicodeError) as exc:
+        raise WorkspaceDenied("invalid-plan-encoding") from exc
+    checked, actual_digest = parse_plan(serialized)
     if actual_digest != digest or checked["workspace"] != workspace.name:
         raise WorkspaceDenied("plan-changed-or-wrong-workspace")
+    # Version 2 couples the approved plan to the observed *entire* workspace.
+    # The check occurs before the first mutation or executable command.
+    if checked["version"] == 2:
+        observed = workspace.manifest()["sha256"]
+        if observed != checked["expected_workspace_sha256"]:
+            raise WorkspaceDenied("workspace-state-changed-reapproval-required")
     results: list[dict[str, Any]] = []
     status = "complete"
     for index, step in enumerate(checked["steps"]):

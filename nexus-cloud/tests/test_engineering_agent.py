@@ -78,3 +78,84 @@ def test_duplicate_plan_keys_rejected():
     raw = b'{"version":1,"workspace":"example","workspace":"other","steps":[{"tool":"read","path":"a"}]}'
     with pytest.raises(WorkspaceDenied, match="duplicate-plan-key"):
         parse_plan(raw)
+
+
+def test_v2_plan_binds_workspace_state_before_mutation(ws):
+    state = ws.manifest()["sha256"]
+    payload = {"version": 2, "workspace": ws.name, "expected_workspace_sha256": state,
+               "steps": [{"tool": "write", "path": "new", "text": "created"}]}
+    plan, digest = parse_plan(json.dumps(payload).encode())
+    result = execute_plan(ws, plan, digest, approved_digest=digest)
+    assert result.status == "complete" and ws.read("new") == b"created"
+    with pytest.raises(WorkspaceDenied, match="workspace-state-changed"):
+        execute_plan(ws, plan, digest, approved_digest=digest)
+
+
+def test_v2_stale_state_blocks_run_and_all_other_side_effects(ws, monkeypatch):
+    state = ws.manifest()["sha256"]
+    payload = {"version": 2, "workspace": ws.name, "expected_workspace_sha256": state,
+               "steps": [{"tool": "write", "path": "must-not-exist", "text": "danger"},
+                         {"tool": "run", "image": "repo@sha256:" + "a"*64, "argv": ["true"], "timeout_seconds": 4}]}
+    plan, digest = parse_plan(json.dumps(payload).encode())
+    ws.write("unreviewed-change", b"different")
+    monkeypatch.setattr("engineering_agent.run_container", lambda *_args, **_kwargs: pytest.fail("unreviewed command"))
+    with pytest.raises(WorkspaceDenied, match="reapproval"):
+        execute_plan(ws, plan, digest, approved_digest=digest)
+    assert not (ws.path / "must-not-exist").exists()
+
+
+def test_v2_state_digest_changes_entire_plan_approval(ws):
+    state = ws.manifest()["sha256"]
+    payload = {"version": 2, "workspace": ws.name, "expected_workspace_sha256": state,
+               "steps": [{"tool": "read", "path": "a"}]}
+    plan, digest = parse_plan(json.dumps(payload).encode())
+    plan["expected_workspace_sha256"] = "1"*64
+    with pytest.raises(WorkspaceDenied, match="plan-changed"):
+        execute_plan(ws, plan, digest, approved_digest=digest)
+
+
+@pytest.mark.parametrize("raw", [
+    b'{"version":2,"workspace":"example","steps":[{"tool":"read","path":"a"}]}',
+    b'{"version":2,"workspace":"example","expected_workspace_sha256":"bad","steps":[{"tool":"read","path":"a"}]}',
+    b'{"version":3,"workspace":"example","steps":[{"tool":"read","path":"a"}]}',
+    b'{"version":2,"workspace":"example","expected_workspace_sha256":"' + b'0'*64 + b'","unexpected":true,"steps":[{"tool":"read","path":"a"}]}',
+])
+def test_v2_invalid_schema_denied(raw):
+    with pytest.raises(WorkspaceDenied):
+        parse_plan(raw)
+
+
+def test_malformed_unicode_plan_denied_without_crash():
+    invalid = ('{"version":1,"workspace":"example","steps":[{"tool":"write",'
+               '"path":"a","text":"\\ud800"}]}').encode()
+    with pytest.raises(WorkspaceDenied, match="encoding"):
+        parse_plan(invalid)
+
+
+def test_v2_cli_manifest_preview_execute_and_stale_rejection(ws, tmp_path):
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    tool = repo_root / "scripts/nexus-agent-workspace.py"
+    planner = repo_root / "scripts/nexus-engineering-plan.py"
+    base = [sys.executable, str(tool), "--root", str(ws.root), "--workspace", ws.name]
+    snapshot = subprocess.run(base + ["manifest"], capture_output=True, text=True, check=True)
+    state = json.loads(snapshot.stdout)["sha256"]
+    raw = {"version": 2, "workspace": ws.name, "expected_workspace_sha256": state,
+           "steps": [{"tool": "write", "path": "hello", "text": "NEXUS"}]}
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(json.dumps(raw))
+    cmd = [sys.executable, str(planner), "--root", str(ws.root), "--plan", str(plan_file)]
+    preview = json.loads(subprocess.run(cmd, capture_output=True, text=True, check=True).stdout)
+    assert preview["current_workspace_sha256"] == state
+    assert preview["plan_version"] == 2
+    assert preview["state_matches"] is True
+    digest = preview["plan_sha256"]
+    applied = subprocess.run(cmd + ["--approve-digest", digest], capture_output=True, text=True)
+    assert applied.returncode == 0, applied.stderr
+    assert ws.read("hello") == b"NEXUS"
+    stale = subprocess.run(cmd + ["--approve-digest", digest], capture_output=True, text=True)
+    assert stale.returncode == 2
+    assert json.loads(stale.stderr)["reason"] == "workspace-state-changed-reapproval-required"

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import os
 import re
+import hashlib
+import json
 import selectors
 import shutil
 import stat
@@ -38,7 +40,11 @@ def safe_parts(path: str) -> tuple[str, ...]:
     if not isinstance(path, str) or len(path) > 512 or not path or "\\" in path or "\x00" in path:
         raise WorkspaceDenied("invalid-path")
     parts = tuple(path.split("/"))
-    if any(p in ("", ".", "..") or len(p.encode("utf-8")) > 128 for p in parts):
+    try:
+        invalid = any(p in ("", ".", "..") or len(p.encode("utf-8")) > 128 for p in parts)
+    except UnicodeError as exc:
+        raise WorkspaceDenied("invalid-path-encoding") from exc
+    if invalid:
         raise WorkspaceDenied("invalid-path")
     return parts
 
@@ -154,6 +160,49 @@ class Workspace:
         if original.count(old) != 1:
             raise WorkspaceDenied("edit-requires-exactly-one-match")
         self.write(path, original.replace(old, new, 1))
+
+    def manifest(self) -> dict[str, object]:
+        """Deterministic content identity for a bounded private workspace.
+
+        Hashes every file, including dotfiles, and records empty directories.
+        The returned digest identifies a snapshot observation, not a lock on
+        future filesystem changes. Symlinks, hardlinks and special files fail
+        closed rather than being silently skipped.
+        """
+        files = []
+        directories = []
+        total_bytes = 0
+        total_entries = 0
+        for current, subdirs, names in os.walk(self.path, topdown=True, followlinks=False):
+            subdirs.sort()
+            names.sort()
+            for name in subdirs + names:
+                full = Path(current) / name
+                stat_result = full.lstat()
+                if stat.S_ISLNK(stat_result.st_mode) or not (
+                    stat.S_ISDIR(stat_result.st_mode) or stat.S_ISREG(stat_result.st_mode)
+                ):
+                    raise WorkspaceDenied("manifest-rejects-links-and-special-files")
+                rel = full.relative_to(self.path).as_posix()
+                safe_parts(rel)
+                total_entries += 1
+                if total_entries > 400:
+                    raise WorkspaceDenied("manifest-entry-limit")
+                if stat.S_ISDIR(stat_result.st_mode):
+                    directories.append(rel)
+                else:
+                    if stat_result.st_nlink != 1 or stat_result.st_size > MAX_FILE_BYTES:
+                        raise WorkspaceDenied("manifest-rejects-hardlinks-and-large-files")
+                    total_bytes += stat_result.st_size
+                    if len(files) >= MAX_ARCHIVE_FILES or total_bytes > MAX_ARCHIVE_BYTES:
+                        raise WorkspaceDenied("manifest-size-limit")
+                    data = self.read(rel)
+                    files.append({"path": rel, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()})
+        state = {"version": 1, "directories": sorted(directories), "files": sorted(files, key=lambda row: row["path"])}
+        canonical = json.dumps(state, sort_keys=True, ensure_ascii=True, separators=(",", ":")).encode("ascii")
+        return {"workspace": self.name, "sha256": hashlib.sha256(canonical).hexdigest(),
+                "file_count": len(files), "directory_count": len(directories), "total_bytes": total_bytes,
+                "files": state["files"], "directories": state["directories"]}
 
     def package(self, destination: str | Path) -> dict[str, int]:
         dest = Path(destination)
