@@ -105,3 +105,28 @@ same-UID process from modifying installed code, make source-tree reads atomic,
 or certify a production deployment. Install remains explicit, nonroot,
 Linux/Python 3.13+, with an independent whole-archive digest and a new
 private destination. PR #244 stays Draft until exact-head CI passes.
+
+
+## Phase 26 — source-tree read hardening for reproducible builds
+
+The operator bundle builder previously checked each source path with `lstat`
+and then opened it again by pathname, leaving a replace-after-check window.
+The source reader now opens the repository root and each allowlisted directory
+component using directory file descriptors and `O_NOFOLLOW`. Each file is
+opened relative to its pinned parent directory with `O_NOFOLLOW`, required
+to be a single-link regular file, and read with the existing per-file size
+ceiling. File size and metadata (device/inode, size and high-resolution
+modification/change time) are checked again after the read. A detected
+in-place mutation causes the build to be denied before a ZIP is created.
+
+Tests cover symlinked source files/directories/root, hardlinked file inputs,
+a malicious final-path swap immediately before open, and mid-read mutation.
+The existing reproducible double-build, verified-install and smoke tests remain
+the CI acceptance gate.
+
+**Limits:** A directory-handle walk and per-file metadata comparison do not
+provide an atomic snapshot of the entire checkout. A same-UID hostile process,
+mutating checkout between distinct files, or a compromised build runner remain
+outside the pilot's assurance. For release provenance, use an isolated
+immutable commit checkout and independently attest the source commit and
+final ZIP digest. No model, browser or Docker privilege was expanded here.
