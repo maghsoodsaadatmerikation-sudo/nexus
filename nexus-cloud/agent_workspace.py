@@ -374,6 +374,7 @@ class RunResult:
 def run_container(
     workspace: Workspace, image: str, command: list[str], *,
     approved: bool, timeout_seconds: int = 30, docker_executable: str = "docker",
+    cancel_event=None,
 ) -> RunResult:
     """Execute an approved foreground command in a Docker daemon sandbox.
 
@@ -392,6 +393,8 @@ def run_container(
         raise WorkspaceDenied("invalid-timeout")
     if os.name != "posix" or os.getuid() == 0:
         raise WorkspaceDenied("run-requires-unprivileged-linux-host-user")
+    if cancel_event is not None and cancel_event.is_set():
+        return RunResult(-1, "", "", 0, "cancelled")
     if shutil.which(docker_executable) is None:
         raise WorkspaceDenied("docker-unavailable")
     with tempfile.TemporaryDirectory(prefix="nexus-agent-cid-") as temp:
@@ -417,6 +420,9 @@ def run_container(
                     os.set_blocking(pipe.fileno(), False)
                     sel.register(pipe, selectors.EVENT_READ, target)
                 while sel.get_map():
+                    if cancel_event is not None and cancel_event.is_set():
+                        status = "cancelled"
+                        break
                     remaining = timeout_seconds - (time.monotonic() - start)
                     if remaining <= 0:
                         status = "timeout"
@@ -433,7 +439,16 @@ def run_container(
                     if status != "complete":
                         break
                 if status == "complete":
-                    proc.wait(timeout=max(0.1, timeout_seconds - (time.monotonic() - start)))
+                    # Do not block in wait() without checking external cancel.
+                    # A process may have closed its pipes and remained alive.
+                    while proc.poll() is None:
+                        if cancel_event is not None and cancel_event.is_set():
+                            status = "cancelled"
+                            break
+                        if time.monotonic() - start >= timeout_seconds:
+                            status = "timeout"
+                            break
+                        time.sleep(0.05)
             except subprocess.TimeoutExpired:
                 status = "timeout"
             finally:

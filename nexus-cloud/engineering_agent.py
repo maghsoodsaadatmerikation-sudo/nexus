@@ -131,7 +131,7 @@ class PlanReceipt:
     workspace_sha256_after: str | None = None
 
 
-def execute_plan(workspace: Workspace, plan: dict[str, Any], digest: str, *, approved_digest: str) -> PlanReceipt:
+def execute_plan(workspace: Workspace, plan: dict[str, Any], digest: str, *, approved_digest: str, cancel_event=None) -> PlanReceipt:
     if not isinstance(approved_digest, str) or approved_digest != digest or not HASH.fullmatch(digest):
         raise WorkspaceDenied("exact-plan-approval-required")
     try:
@@ -158,6 +158,9 @@ def execute_plan(workspace: Workspace, plan: dict[str, Any], digest: str, *, app
         results: list[dict[str, Any]] = []
         status = "complete"
         for index, step in enumerate(checked["steps"]):
+            if cancel_event is not None and cancel_event.is_set():
+                status = "cancelled"
+                break
             tool = step["tool"]
             try:
                 if tool == "write":
@@ -185,12 +188,14 @@ def execute_plan(workspace: Workspace, plan: dict[str, Any], digest: str, *, app
                     info = workspace.package(step["output"])
                     item = {"index": index, "tool": tool, **info}
                 elif tool == "run":
-                    receipt = run_container(workspace, step["image"], step["argv"], approved=True, timeout_seconds=step["timeout_seconds"])
+                    receipt = run_container(workspace, step["image"], step["argv"], approved=True, timeout_seconds=step["timeout_seconds"], **({"cancel_event": cancel_event} if cancel_event is not None else {}))
                     item = {"index": index, "tool": tool, "exit_code": receipt.exit_code, "status": receipt.status,
                             "stdout_sha256": hashlib.sha256(receipt.stdout.encode()).hexdigest(),
                             "stderr_sha256": hashlib.sha256(receipt.stderr.encode()).hexdigest(),
                             "duration_ms": receipt.duration_ms}
-                    if receipt.status != "complete" or receipt.exit_code != 0:
+                    if receipt.status == "cancelled":
+                        status = "cancelled"
+                    elif receipt.status != "complete" or receipt.exit_code != 0:
                         status = "execution-failed"
                 else:
                     raise WorkspaceDenied("unknown-tool")
@@ -201,6 +206,8 @@ def execute_plan(workspace: Workspace, plan: dict[str, Any], digest: str, *, app
                 status = "step-denied"
                 results.append({"index": index, "tool": tool, "status": "denied", "reason": type(exc).__name__})
                 break
+        if status == "complete" and cancel_event is not None and cancel_event.is_set():
+            status = "cancelled"
         try:
             workspace_sha256_after = workspace.manifest()["sha256"]
         except (WorkspaceDenied, OSError):
@@ -208,10 +215,11 @@ def execute_plan(workspace: Workspace, plan: dict[str, Any], digest: str, *, app
             # claim a clean end state when its integrity cannot be observed.
             workspace_sha256_after = None
             status = "post-state-unverifiable"
-        completed = sum(item.get("status") != "denied" for item in results)
+        completed = sum(item.get("status") in (None, "complete") for item in results)
         summaries = [{"index": item["index"], "tool": item["tool"],
                       "status": "denied" if item.get("status") == "denied" else
-                      ("failed" if item.get("status") not in (None, "complete") else "completed")}
+                      ("cancelled" if item.get("status") == "cancelled" else
+                      ("failed" if item.get("status") not in (None, "complete") else "completed"))}
                      for item in results]
         try:
             journal.finish(digest, status=status, workspace_after=workspace_sha256_after,

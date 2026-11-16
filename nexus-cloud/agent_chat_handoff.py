@@ -107,14 +107,14 @@ def chat_receipt(journal: dict) -> dict:
         raise WorkspaceDenied("invalid-journal-hash")
     state = journal["state"]
     status = journal.get("result") if state == "finished" else "interrupted-or-in-progress"
-    if state == "finished" and (not isinstance(status, str) or status not in {"complete", "execution-failed", "step-denied", "post-state-unverifiable"}):
+    if state == "finished" and (not isinstance(status, str) or status not in {"complete", "execution-failed", "step-denied", "post-state-unverifiable", "cancelled"}):
         raise WorkspaceDenied("invalid-journal-result")
     steps = journal.get("steps", []) if state == "finished" else []
     if not isinstance(steps, list) or len(steps) > 12:
         raise WorkspaceDenied("invalid-journal-steps")
     safe_steps = []
     for item in steps:
-        if not isinstance(item, dict) or type(item.get("index")) is not int or item["index"] < 0 or item["index"] > 11 or item.get("tool") not in {"read","write","edit","run","verify_sha256","package","search","preview_edit","research"} or item.get("status") not in {"completed", "failed", "denied"}:
+        if not isinstance(item, dict) or type(item.get("index")) is not int or item["index"] < 0 or item["index"] > 11 or item.get("tool") not in {"read","write","edit","run","verify_sha256","package","search","preview_edit","research"} or item.get("status") not in {"completed", "failed", "denied", "cancelled"}:
             raise WorkspaceDenied("invalid-journal-steps")
         safe_steps.append({"index": item["index"], "tool": item["tool"], "status": item["status"]})
     result = {"schema": RESULT_SCHEMA, "origin": "local-engineering-worker",

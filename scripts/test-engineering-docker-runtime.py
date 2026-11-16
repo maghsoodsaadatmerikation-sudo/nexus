@@ -3,6 +3,7 @@
 import os
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 
 from agent_workspace import Workspace, run_container
@@ -35,7 +36,21 @@ def main():
                                  approved=True, timeout_seconds=1)
         assert deadline.status == "timeout" and deadline.exit_code == -1, deadline
         assert ws.manifest()["file_count"] == 2
-        print("NEXUS real Docker acceptance PASS (nonroot, write, rootfs deny, timeout, cleanup)")
+
+        # A second operator process can set this event while Docker is active.
+        # This verifies the live CLI/container cleanup path, not just mocks.
+        signal = threading.Event()
+        trigger = threading.Timer(1.0, signal.set)
+        trigger.start()
+        try:
+            stopped = run_container(ws, image, ["sleep", "25"],
+                                    approved=True, timeout_seconds=30,
+                                    cancel_event=signal)
+        finally:
+            trigger.cancel()
+        assert stopped.status == "cancelled" and stopped.exit_code == -1, stopped
+        assert ws.manifest()["file_count"] == 2
+        print("NEXUS real Docker acceptance PASS (nonroot, write, rootfs deny, timeout, cancel, cleanup)")
 
 
 if __name__ == "__main__":

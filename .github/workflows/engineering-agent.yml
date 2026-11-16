@@ -6,6 +6,9 @@ on:
       - 'nexus-cloud/engineering_agent.py'
       - 'nexus-cloud/agent_journal.py'
       - 'nexus-cloud/agent_chat_handoff.py'
+      - 'nexus-cloud/agent_operator_service.py'
+      - 'nexus-cloud/tests/test_agent_operator_service.py'
+      - 'scripts/nexus-operator-service.py'
       - 'nexus-cloud/tests/test_agent_chat_handoff.py'
       - 'scripts/nexus-chat-engineering.py'
       - 'nexus-cloud/tests/test_agent_journal.py'
@@ -43,7 +46,8 @@ jobs:
             nexus-cloud/tests/test_agent_tools_upgrade.py \
             nexus-cloud/tests/test_agent_lifecycle.py \
             nexus-cloud/tests/test_agent_journal.py \
-            nexus-cloud/tests/test_agent_chat_handoff.py
+            nexus-cloud/tests/test_agent_chat_handoff.py \
+            nexus-cloud/tests/test_agent_operator_service.py
 
   docker-runtime:
     # No repository write permissions/secrets. Only on disposable Ubuntu runners.
