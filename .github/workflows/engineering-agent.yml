@@ -12,6 +12,9 @@ on:
       - 'scripts/nexus-operator-pilot.py'
       - 'nexus-cloud/tests/test_agent_operator_pilot.py'
       - 'docs/PHASE21-OPERATOR-PILOT-ACCEPTANCE.md'
+      - 'scripts/nexus-operator-distribution.py'
+      - 'nexus-cloud/tests/test_agent_operator_distribution.py'
+      - 'docs/PHASE22-OPERATOR-DISTRIBUTION.md'
       - 'docs/PHASE20-DOCKER-CLEANUP-FENCE.md'
       - 'docs/PHASE19-HOST-CENSUS.md'
       - 'nexus-cloud/tests/test_agent_orphan_quarantine.py'
@@ -71,6 +74,7 @@ jobs:
             nexus-cloud/tests/test_agent_host_census.py \
             nexus-cloud/tests/test_agent_docker_cleanup_fence.py \
             nexus-cloud/tests/test_agent_operator_pilot.py \
+            nexus-cloud/tests/test_agent_operator_distribution.py \
             nexus-cloud/tests/test_agent_orphan_quarantine.py \
             nexus-cloud/tests/test_agent_chat_handoff.py \
             nexus-cloud/tests/test_agent_operator_service.py \
