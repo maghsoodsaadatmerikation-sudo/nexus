@@ -362,62 +362,6 @@ oversized/symlink input denial. Dedicated CI must PASS at the committed SHA;
 no deployment, merge or production readiness is implied by local test success.
 
 
-## Phase 7 — Engineering review embedded in Studio (draft branch only)
-
-- Add a conversation-area Engineering Agent panel with a strictly bounded, in-browser read-only parser for `nexus.engineering.proposal.v1`, `nexus.engineering.review.v1`, and `nexus.engineering.chat-receipt.v1`.
-- Only sanitized summaries display step tool, risk, status, workspace digest and plan digest. Raw source/command strings remain in a private proposal textbox and are **never** silently staged into chat.
-- Exact-content review and an explicit checkbox precede manual proposal download or summary handoff to the existing one-turn Studio chat attachment mechanism. Staged summaries still require separate per-message model-request review.
-- No Docker process, shell, remote agent, GitHub write, privileged model tool call, or new server endpoint is invoked by the browser panel. Execution continues to require an operator-run v3 plan and its single-use approval journal; UI inspection is **not** executable approval.
-- Input is bounded to 32,768 bytes with strict duplicate JSON-key detection, exact recognized field names, workspace and step checks, and status restrictions. A secure importer invalidates stale file reads after lock or chat/project switches. No proposal is saved to the Studio archive.
-- Node contract tests, real Chromium narrow/wide behavioral checks, deterministic Studio bundle and static integrity verification are CI gates. Static site deployment is **not** part of this PR.
-- The local operator remains responsible for full private plan examination and independent authorization, and the browser's parser is not equivalent to the operator's Python validator.
-
-
-## Phase 10 — Private operator service and cancellation
-
-The engineering agent now supports a **local, non-root Linux operator service**
-over a private Unix socket (no HTTP listener or public Docker API). A 0600
-random token plus Linux SO_PEERCRED same-user verification protects the local
-channel. The owner chooses and reviews the **entire private plan** and supplies
-the exact canonical digest; generated model text alone never grants authority.
-A v3 nonce, workspace-state precondition and crash-conscious single-use journal
-remain enforced. Replays are rejected.
-
-Operator workflow:
-
-1. Prepare a private v3 proposal using scripts/nexus-chat-engineering.py;
-   store it in an owned 0700 outbox outside the owned 0700 workspace root.
-2. Start scripts/nexus-operator-service.py with the serve action and --root
-   in a foreground operator terminal. The token remains local and is never
-   printed, transmitted to a browser or persisted in a transcript.
-3. From another terminal use start --root --workspace --digest --plan after
-   inspecting the complete plan. Submitted means queued, not verified.
-4. Read status --root --workspace --digest; optional --out writes a sanitized
-   0600 result file for manual import in the Studio Engineering Agent panel.
-5. To request stopping an active plan, use stop --root --workspace --digest.
-   Stop-requested is not completion; inspect a durable terminal receipt.
-   When cancellation is observed it is recorded as CANCELLED, not PASS.
-   File edits that happened before stop are NOT rolled back.
-
-The socket refuses oversized or malformed JSON, duplicate keys, unsafe plan
-paths, invalid peer identity or token, unapproved digests and multiple active
-plans for one workspace. The protocol returns only status and sanitized
-hashes/step summaries; raw code, stdout, stderr, passwords and source text
-are not returned. A same-UID process is within the same operator trust domain:
-this is **not** hostile same-user isolation or multi-tenant production hosting.
-
-Local Python contract tests and CI cover replay, peer/token rejection,
-privacy-preserving export, a simulated mid-command stop, and actual Docker
-termination using a digest-pinned test image on an unprivileged ephemeral host.
-Studio's strict inert parser now accepts cancelled receipts as non-success.
-The deterministic Studio and offline service worker are regenerated together.
-
-There remains **no browser-driven execution**, autonomous tool loop, remote
-tenant container host, deployed service, general browsing, or independent
-production-security attestation. The model never holds an operator capability.
-Keep PR #244 in Draft until all required CI and security checks are reviewed.
-
-
 ## Phase 11 — safe preflight and review-only Studio boundary
 
 **Security issue addressed.** A local daemon could previously acknowledge a
@@ -478,21 +422,34 @@ operator account and its host directories remain a trusted boundary. The
 model has zero operator capabilities (`A_out <= A_in`).
 
 
-Additional Phase-11 defense: the operator daemon now accepts executable
-private plan files only when the file descriptor confirms a regular,
-single-linked file owned by the service UID with no group/other permission
-bits (`0600` or stricter). This is checked **after opening with O_NOFOLLOW**,
-preventing a path-only permission check from being bypassed by a rename race.
-The more general proposal importer retains its separate bounded untrusted
-file intake contract; it is not automatically treated as an approved plan.
-Tests exercise 0644 plans and hardlinks, and verify both are refused without
-consuming a one-time approval or causing writes.
+### Phase 13 — Tenant egress/export boundary and supplementary group safety
+
+- The strict tenant operator now rejects **whole plans** containing `run`,
+  `research` or `package` at admission, before any source edit, network request,
+  archive export or single-use journal claim. Reviewing such a plan remains
+  inert and does not grant permission. This avoids leaking private data via a
+  public archive target or third-party metadata API before egress isolation
+  exists. The single-human operator mode is unchanged.
+- The strict tenant startup refuses inherited **non-primary supplementary
+  groups** (including docker, lxd or disk access), even when none is root.
+  Existing UID/GID/cgroup/NoNewPrivs/capability preflight remains mandatory.
+- CI regression covers mixed safe+forbidden plans and checks no prior safe
+  step ran, the workspace hash remained unchanged and no journal was claimed.
+  This remains host UID and cgroup admission, **not** container security,
+  network namespace isolation, hostile-root resistance or production approval.
 
 
-### Phase 13 — Tenant egress/export admission and supplementary group hardening
+## Phase 14 — dedicated rootless namespace **experiment**, not tenant execution
 
-- Strict tenant mode rejects complete plans with `run`, `research` or `package` before side effects or one-time journal claim, including mixed safe/unsafe steps. It keeps only six workspace-bound tools. Inert review is not execution authority.
-- Dedicated tenant startup now refuses **all** unrelated supplementary Linux groups, not only gid 0; independent `/proc/PID/status` audit also requires the `Groups` field to contain no cross-tenant or daemon-capable GID.
-- The existing private Unix socket, exact reviewed plan digest, per-UID cgroup gate and crash-conscious journal remain unchanged. Host OS networking is NOT sandboxed by this application-level tool filter. See `docs/PHASE13-TENANT-ADMISSION.md`.
-- A separate crowded-runner PR Workspace UI test increased its bounded VM execution limit from 1s to 5s, without changing application timeouts or acceptance assertions.
-- Nonroot local validation: 72/72 focused Python checks and real cross-UID filesystem/Unix-socket regression PASS. The branch's GitHub CI and production readiness still require separate confirmation; this is not a release, merge, public API or model execution grant.
+`agent_rootless_probe.py` and `scripts/nexus-rootless-probe.py` add an
+operator-invoked laboratory probe with a pinned private static ELF, independent
+user/mount/net/pid/ipc/uts namespaces, a read-only project bind mount and a
+bounded ephemeral tmpfs. Output metadata is hash-only and no agent can request
+this primitive. `scripts/rootless-sandbox-probe.c` is an actual Linux boundary
+fixture, including network, host filesystem, workspace write and PID checks.
+
+See `docs/PHASE14-ROOTLESS-PROBE.md`. This is not wired to the multi-tenant
+`run` tool or any public service. Host cgroup and disk quota certification,
+robust host separation, and production network namespace policy still require
+a dedicated deployment and independent review; the phase does not enable
+model-controlled code execution.

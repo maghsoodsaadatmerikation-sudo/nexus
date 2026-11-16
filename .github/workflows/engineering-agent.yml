@@ -8,6 +8,11 @@ on:
       - 'nexus-cloud/agent_chat_handoff.py'
       - 'nexus-cloud/agent_operator_service.py'
       - 'nexus-cloud/agent_tenant_boundary.py'
+      - 'nexus-cloud/agent_rootless_probe.py'
+      - 'nexus-cloud/tests/test_agent_rootless_probe.py'
+      - 'scripts/nexus-rootless-probe.py'
+      - 'scripts/rootless-sandbox-probe.c'
+      - 'docs/PHASE14-ROOTLESS-PROBE.md'
       - 'nexus-cloud/tests/test_agent_tenant_boundary.py'
       - 'scripts/nexus-tenant-host-audit.py'
       - 'scripts/nexus-tenant-service.py'
@@ -29,7 +34,6 @@ on:
       - 'scripts/nexus-engineering-plan.py'
       - '.github/workflows/engineering-agent.yml'
       - 'docs/GROK-ENGINEERING-CAPABILITIES.md'
-      - 'docs/PHASE13-TENANT-ADMISSION.md'
   workflow_dispatch:
 permissions:
   contents: read
@@ -98,3 +102,28 @@ jobs:
           persist-credentials: false
       - name: Exercise actual cross-UID Linux filesystem and Unix-socket denial
         run: sudo -n python3 scripts/test-tenant-cross-uid.py
+
+  rootless-namespace:
+    # Purely disposable, explicitly consented static ELF proof. No sudo,
+    # Docker, HTTP, browser privileges, user creation, secrets or deploys.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - name: Exercise static ELF validation, real rootless namespaces, read-only project, no network, timeout and output cap
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(id -u)" != 0
+          command -v cc
+          command -v unshare
+          command -v mount
+          python -m pip install --disable-pip-version-check 'pytest==8.4.2'
+          PYTHONPATH=nexus-cloud python -m pytest -q nexus-cloud/tests/test_agent_rootless_probe.py
