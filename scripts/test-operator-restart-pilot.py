@@ -198,7 +198,12 @@ def acceptance(installed: Path, expected_manifest_sha256: str) -> dict:
                   "restart-did-not-recover-finished-receipt")
             again = client(root, workspace="acceptance", digest=digest,
                            action="start", plan_path=str(plan_path))
-            check(again.get("status") == "already-consumed",
+            # A completed write changes the pre-state digest. The server
+            # may deny the old plan as stale *before* inspecting its single-use
+            # receipt, or may report the consumed digest directly. Both are
+            # safe rejections; neither is permission to run the plan again.
+            check(again.get("status") in
+                  ("already-consumed", "stale-plan-reapproval-required"),
                   "restart-allowed-approved-plan-replay")
             with ws.operation_lock():
                 journal_after = ApprovalJournal(ws).read(digest)
