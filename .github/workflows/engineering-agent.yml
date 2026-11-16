@@ -9,6 +9,10 @@ on:
       - 'nexus-cloud/agent_operator_service.py'
       - 'nexus-cloud/agent_tenant_boundary.py'
       - 'nexus-cloud/agent_rootless_probe.py'
+      - 'nexus-cloud/agent_rootless_job.py'
+      - 'nexus-cloud/tests/test_agent_rootless_job.py'
+      - 'scripts/nexus-rootless-job.py'
+      - 'docs/PHASE16-ROOTLESS-OPERATOR-JOBS.md'
       - 'nexus-cloud/tests/test_agent_rootless_probe.py'
       - 'scripts/nexus-rootless-probe.py'
       - 'scripts/rootless-sandbox-probe.c'
@@ -58,6 +62,7 @@ jobs:
             nexus-cloud/tests/test_agent_lifecycle.py \
             nexus-cloud/tests/test_agent_journal.py \
             nexus-cloud/tests/test_agent_chat_handoff.py \
+            nexus-cloud/tests/test_agent_rootless_job.py \
             nexus-cloud/tests/test_agent_operator_service.py \
             nexus-cloud/tests/test_agent_tenant_boundary.py
 
@@ -143,3 +148,4 @@ jobs:
           unshare --user --map-root-user --mount --net --pid --fork /usr/bin/true
           python -m pip install --disable-pip-version-check 'pytest==8.4.2'
           NEXUS_ROOTLESS_ACCEPTANCE=required PYTHONPATH=nexus-cloud python -m pytest -q nexus-cloud/tests/test_agent_rootless_probe.py
+          NEXUS_ROOTLESS_ACCEPTANCE=required NEXUS_ROOTLESS_REAL_JOB=true PYTHONPATH=nexus-cloud python -m pytest -q nexus-cloud/tests/test_agent_rootless_job.py

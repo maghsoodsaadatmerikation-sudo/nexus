@@ -20,6 +20,8 @@ from pathlib import Path
 
 from agent_chat_handoff import REVIEW_SCHEMA, chat_receipt, private_export_dir, read_operator_file
 from agent_journal import ApprovalJournal
+from agent_rootless_job import parse_job, summarize_job
+from agent_rootless_probe import private_executable, run_probe
 from agent_workspace import Workspace, WorkspaceDenied, WORKSPACE_ID
 from engineering_agent import HASH, execute_plan, parse_plan
 
@@ -96,16 +98,19 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
     allow_reuse_address = False
     request_queue_size = 8
 
-    def __init__(self, root: str | Path, *, allow_container: bool = True):
-        if type(allow_container) is not bool:
-            raise WorkspaceDenied("invalid-container-policy")
+    def __init__(self, root: str | Path, *, allow_container: bool = True,
+                 allow_rootless: bool = False):
+        if type(allow_container) is not bool or type(allow_rootless) is not bool or (allow_rootless and not allow_container):
+            raise WorkspaceDenied("invalid-operator-execution-policy")
         self._allow_container = allow_container
+        self._allow_rootless = allow_rootless
         if os.name != "posix" or not hasattr(socket, "SO_PEERCRED") or os.getuid() == 0:
             raise WorkspaceDenied("operator-service-needs-unprivileged-linux")
         self.root = _root(root)
         self._state_lock = threading.Lock()
         self._clients = threading.BoundedSemaphore(MAX_ACTIVE_CLIENTS)
         self._running: dict[str, tuple[str, threading.Event]] = {}
+        self._running_types: dict[str, str] = {}
         self._token = _token_file(self.root, create=True)
         self._socket = self.root / SOCKET_NAME
         try:
@@ -161,6 +166,139 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
             with self._state_lock:
                 if self._running.get(ws.name, (None, None))[0] == digest:
                     del self._running[ws.name]
+                    self._running_types.pop(ws.name, None)
+
+    def _run_probe(self, ws: Workspace, plan: dict, digest: str, event: threading.Event) -> None:
+        """Durable claim was fsynced by dispatch before this worker started."""
+        status = "execution-failed"
+        try:
+            receipt = run_probe(ws.root, ws.name, plan["executable"], plan["executable_sha256"],
+                                args=plan["argv"], timeout=plan["timeout_seconds"],
+                                approved=True, expected_workspace_sha256=plan["workspace_sha256"],
+                                cancel_event=event)
+            if receipt.get("status") == "cancelled":
+                status = "cancelled"
+            elif receipt.get("status") == "complete" and receipt.get("exit_code") == 0:
+                status = "complete"
+        except Exception:
+            # The started approval remains consumed even if sandbox setup fails.
+            pass
+        try:
+            with ws.operation_lock():
+                try:
+                    after = ws.manifest()["sha256"]
+                except (OSError, WorkspaceDenied):
+                    after = None
+                    status = "post-state-unverifiable"
+                ApprovalJournal(ws).finish(
+                    digest, status=status, workspace_after=after,
+                    completed_steps=1 if status == "complete" else 0,
+                    step_summaries=[{"index": 0, "tool": "run",
+                                     "status": ("completed" if status == "complete" else
+                                                "cancelled" if status == "cancelled" else "failed")}])
+        except Exception:
+            # Keep the started (non-replayable) record if finalization fails.
+            pass
+        finally:
+            with self._state_lock:
+                if self._running.get(ws.name, (None, None))[0] == digest:
+                    del self._running[ws.name]
+                    self._running_types.pop(ws.name, None)
+
+    def _dispatch_probe(self, action: str, name: str, digest: str, value: dict) -> dict:
+        """Separate opt-in control, never exposed by public/tenant services."""
+        if not self._allow_rootless:
+            return {"status": "denied"}
+        has_plan = "plan_path" in value
+        if action in ("probe-review", "probe-start"):
+            if not has_plan or not isinstance(value["plan_path"], str) or len(value["plan_path"]) > 1024:
+                return {"status": "denied"}
+            try:
+                path = Path(value["plan_path"])
+                if (not path.is_absolute() or path.is_symlink() or
+                        path.name != f"nexus-plan-{digest[:16]}.json"):
+                    return {"status": "denied"}
+                plan, observed = parse_job(read_operator_file(path, require_private=True))
+                if observed != digest or plan["workspace"] != name:
+                    return {"status": "denied"}
+                if not (self.root / name).exists():
+                    return {"status": "denied"}
+                ws = Workspace(self.root, name)
+                private_export_dir(path.parent, ws)
+                # The reviewed ELF is checked before consuming approval and
+                # checked AGAIN by the worker before guest execution.
+                private_executable(plan["executable"], plan["executable_sha256"])
+                with ws.operation_lock():
+                    if ws.manifest()["sha256"] != plan["workspace_sha256"]:
+                        return {"status": "stale-plan-reapproval-required", "authority": "none"}
+                    try:
+                        ApprovalJournal(ws).read(digest)
+                    except FileNotFoundError:
+                        pass
+                    except (OSError, WorkspaceDenied):
+                        return {"status": "unverifiable"}
+                    else:
+                        return {"status": "already-consumed"}
+                    with self._state_lock:
+                        if name in self._running:
+                            return {"status": "busy"}
+                        if action == "probe-review":
+                            return {"status": "review", "summary": {
+                                "schema": "nexus.rootless.operator-review.v1", "status": "not-executed",
+                                "authority": "none", "review_required": True,
+                                "plan_sha256": digest, "workspace": name,
+                                "workspace_sha256": plan["workspace_sha256"],
+                                "executable_sha256": plan["executable_sha256"],
+                                "time_limit_seconds": plan["timeout_seconds"],
+                                "argument_count": len(plan["argv"]),
+                                "note": "Review full private plan and independently approve exact digest. No guest executed."}}
+                        # The claim is durable BEFORE acknowledging a queued
+                        # worker. A daemon crash can never replay this plan.
+                        ApprovalJournal(ws).claim(
+                            digest, version=4, workspace_before=plan["workspace_sha256"],
+                            execution_nonce=plan["nonce"])
+                        event = threading.Event()
+                        self._running[name] = (digest, event)
+                        self._running_types[name] = "probe"
+                        worker = threading.Thread(target=self._run_probe,
+                                                  args=(ws, plan, digest, event), daemon=False)
+                        try:
+                            worker.start()
+                        except BaseException:
+                            del self._running[name]
+                            self._running_types.pop(name, None)
+                            raise
+                return {"status": "submitted-not-verified",
+                        "plan_sha256": digest, "authority": "operator-only"}
+            except (OSError, WorkspaceDenied, UnicodeError, ValueError, RuntimeError):
+                return {"status": "denied"}
+        if has_plan or action not in ("probe-status", "probe-stop"):
+            return {"status": "denied"}
+        if action == "probe-stop":
+            with self._state_lock:
+                target = self._running.get(name)
+                if (not target or target[0] != digest or
+                        self._running_types.get(name) != "probe"):
+                    return {"status": "not-active"}
+                target[1].set()
+            return {"status": "stop-requested-not-confirmed",
+                    "plan_sha256": digest, "authority": "operator-only"}
+        try:
+            if not (self.root / name).exists():
+                return {"status": "not-found", "authority": "none"}
+            ws = Workspace(self.root, name)
+            record = ApprovalJournal(ws).read(digest)
+            if record.get("plan_version") != 4:
+                return {"status": "denied"}
+            return {"status": "receipt", **summarize_job(record)}
+        except FileNotFoundError:
+            with self._state_lock:
+                target = self._running.get(name)
+                active = target and target[0] == digest and self._running_types.get(name) == "probe"
+            return {"status": "queued-not-verified" if active else "not-found",
+                    "plan_sha256": digest, "authority": "none"}
+        except (OSError, WorkspaceDenied, ValueError):
+            return {"status": "unverifiable", "plan_sha256": digest, "authority": "none"}
 
     def dispatch(self, value: object, peer_uid: int) -> dict:
         if peer_uid != os.getuid() or not isinstance(value, dict) or set(value) not in (
@@ -175,6 +313,8 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
         if not isinstance(name, str) or not WORKSPACE_ID.fullmatch(name) or not isinstance(digest, str) or not HASH.fullmatch(digest):
             return {"status": "denied"}
         has_plan = "plan_path" in value
+        if action.startswith("probe-"):
+            return self._dispatch_probe(action, name, digest, value)
         if action in ("review", "start"):
             if not has_plan:
                 return {"status": "denied"}
@@ -248,10 +388,12 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
                     event = threading.Event()
                     worker = threading.Thread(target=self._run, args=(ws, candidate, digest, event), daemon=False)
                     self._running[name] = (digest, event)
+                    self._running_types[name] = "plan"
                     try:
                         worker.start()
                     except BaseException:
                         del self._running[name]
+                        self._running_types.pop(name, None)
                         raise
                 return {"status": "submitted-not-verified", "plan_sha256": digest, "authority": "operator-only"}
             except (OSError, WorkspaceDenied, UnicodeError, ValueError, RuntimeError):
@@ -261,13 +403,15 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
         if action == "stop":
             with self._state_lock:
                 target = self._running.get(name)
-                if not target or target[0] != digest:
+                if not target or target[0] != digest or self._running_types.get(name) != "plan":
                     return {"status": "not-active"}
                 target[1].set()
             return {"status": "stop-requested-not-confirmed", "plan_sha256": digest, "authority": "operator-only"}
         try:
             ws = Workspace(self.root, name)
             record = ApprovalJournal(ws).read(digest)
+            if record.get("plan_version") != 3:
+                return {"status": "denied"}
             return {"status": "receipt", **chat_receipt(record)}
         except FileNotFoundError:
             with self._state_lock:

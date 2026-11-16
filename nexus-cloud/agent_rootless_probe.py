@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import threading
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agent_workspace import Workspace, WorkspaceDenied
@@ -239,7 +240,8 @@ def _enter(root: str, workspace: str, args: list[str]) -> None:
               {'PATH': '/bin', 'HOME': '/tmp', 'LANG': 'C', 'TMPDIR': '/tmp'})
 
 
-def _pump(proc: subprocess.Popen, timeout: int) -> tuple[str, int, bytes, bytes]:
+def _pump(proc: subprocess.Popen, timeout: int, *,
+          cancel_event: threading.Event | None = None) -> tuple[str, int, bytes, bytes]:
     out, err = bytearray(), bytearray()
     deadline = time.monotonic() + timeout
     reason = 'complete'
@@ -248,6 +250,9 @@ def _pump(proc: subprocess.Popen, timeout: int) -> tuple[str, int, bytes, bytes]
             os.set_blocking(stream.fileno(), False)
             select.register(stream, selectors.EVENT_READ, buf)
         while select.get_map() or proc.poll() is None:
+            if cancel_event is not None and cancel_event.is_set():
+                reason = 'cancelled'
+                break
             if time.monotonic() >= deadline:
                 reason = 'timeout'
                 break
@@ -278,12 +283,19 @@ def _pump(proc: subprocess.Popen, timeout: int) -> tuple[str, int, bytes, bytes]
 
 def run_probe(root: str | Path, workspace: str, executable: str | Path,
               expected_sha256: str, *, args: list[str] | None = None,
-              timeout: int = 6, approved: bool = False) -> dict:
+              timeout: int = 6, approved: bool = False,
+              expected_workspace_sha256: str | None = None,
+              cancel_event: threading.Event | None = None) -> dict:
     """Operator action only. No agent-plan execution or browser export."""
     if approved is not True or os.name != 'posix' or not sys.platform.startswith('linux') or os.getuid() == 0:
         raise WorkspaceDenied('rootless-needs-separate-unprivileged-operator-approval')
     args = [] if args is None else args
     validate_args(args, timeout)
+    if expected_workspace_sha256 is not None and (not isinstance(expected_workspace_sha256, str)
+            or not DIGEST.fullmatch(expected_workspace_sha256)):
+        raise WorkspaceDenied('rootless-expected-workspace-digest')
+    if cancel_event is not None and not isinstance(cancel_event, threading.Event):
+        raise WorkspaceDenied('rootless-invalid-cancel-event')
     blob = private_executable(executable, expected_sha256)
     if not Path('/usr/bin/unshare').is_file() or not Path('/usr/bin/mount').is_file():
         raise WorkspaceDenied('rootless-linux-tools-unavailable')
@@ -291,6 +303,18 @@ def run_probe(root: str | Path, workspace: str, executable: str | Path,
     started = time.monotonic()
     with ws.operation_lock():
         observed = ws.manifest()['sha256']  # refuse symlinks / hardlinks / devices
+        if expected_workspace_sha256 is not None and observed != expected_workspace_sha256:
+            raise WorkspaceDenied('rootless-workspace-changed-reapproval-required')
+        if cancel_event is not None and cancel_event.is_set():
+            return {'schema': 'nexus.rootless-probe.v1', 'status': 'cancelled',
+                    'exit_code': -1, 'stdout_sha256': hashlib.sha256(b'').hexdigest(),
+                    'stderr_sha256': hashlib.sha256(b'').hexdigest(),
+                    'stdout_bytes': 0, 'stderr_bytes': 0,
+                    'source_sha256': expected_sha256,
+                    'workspace_sha256_at_start': observed, 'duration_ms': 0,
+                    'namespace_policy': 'user+mount+net+pid+ipc+uts;ro-workspace;tmpfs-only',
+                    'tenant_execution_enabled': False,
+                    'production_isolation_attested': False, 'authority': 'operator-only'}
         with tempfile.TemporaryDirectory(prefix='.nexus-rootless-', dir=ws.root) as stage:
             top = Path(stage)
             sandbox = top / 'rootfs'
@@ -309,7 +333,7 @@ def run_probe(root: str | Path, workspace: str, executable: str | Path,
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     close_fds=True, start_new_session=True,
                                     env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
-            status, code, out, err = _pump(proc, timeout)
+            status, code, out, err = _pump(proc, timeout, cancel_event=cancel_event)
     # The caller gets proof metadata only, not arbitrary untrusted stdout.
     # Any bootstrap failure is fail-closed, never an isolation success.
     if status == 'complete' and code != 0:

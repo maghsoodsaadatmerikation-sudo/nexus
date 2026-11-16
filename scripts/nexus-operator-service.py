@@ -14,6 +14,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("action", choices=("serve", "review", "start", "stop", "status"))
     ap.add_argument("--root", required=True, help="Absolute operator-owned 0700 workspace root")
+    ap.add_argument("--enable-rootless-probe", action="store_true",
+                    help="Explicit single-owner server opt-in for rootless proof jobs, never tenant mode")
     ap.add_argument("--workspace", help="Workspace name for start/stop/status")
     ap.add_argument("--digest", help="Exact canonical SHA-256 of a separately reviewed v3 plan")
     ap.add_argument("--plan", help="Private 0600 v3 plan from operator's export folder")
@@ -23,15 +25,17 @@ def main():
         if a.action == "serve":
             if a.workspace or a.digest or a.plan or a.out:
                 raise WorkspaceDenied("serve-has-no-plan-arguments")
-            with OperatorServer(a.root) as server:
+            with OperatorServer(a.root, allow_rootless=a.enable_rootless_probe) as server:
                 # Keep this private owner terminal attached; do not background
                 # execution, create a public endpoint or expose the session token.
-                print(json.dumps({"status": "operator-local-ready", "transport": "private-unix-socket", "authority": "operator-only"}),flush=True)
+                print(json.dumps({"status": "operator-local-ready", "transport": "private-unix-socket", "authority": "operator-only", "rootless_probe_opt_in": a.enable_rootless_probe}),flush=True)
                 try:
                     server.serve_forever(poll_interval=0.1)
                 except KeyboardInterrupt:
                     pass
             return 0
+        if a.enable_rootless_probe:
+            raise WorkspaceDenied("rootless-opt-in-server-only")
         if not a.workspace or not a.digest or bool(a.plan) != (a.action in ("review", "start")) or (a.out and a.action not in ("status", "review")):
             raise WorkspaceDenied("command-arguments")
         result = client(a.root, workspace=a.workspace, digest=a.digest, action=a.action, plan_path=a.plan)
