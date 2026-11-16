@@ -45,6 +45,8 @@ def preflight_scratch(root: Path) -> Path:
     st = root.stat()
     if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
         raise WorkspaceDenied("cross-runner-unsafe-scratch")
+    # Check every parent with O_NOFOLLOW before creating even synthetic files.
+    snapshot.private_root(root)
     if any(root.iterdir()):
         raise WorkspaceDenied("cross-runner-scratch-must-be-empty")
     return root
@@ -235,7 +237,8 @@ def main(argv=None) -> int:
                              options.expected_workspace_sha256)
         print(json.dumps(result, sort_keys=True))
         return 0
-    except (OSError, WorkspaceDenied, ValueError, KeyError, AssertionError) as exc:
+    except (OSError, WorkspaceDenied, ValueError, KeyError, AssertionError,
+            zipfile.BadZipFile, zipfile.LargeZipFile) as exc:
         print(json.dumps({"status": "denied", "reason": type(exc).__name__,
                           "authority": "none", "production_ready": False}),
               file=sys.stderr)
