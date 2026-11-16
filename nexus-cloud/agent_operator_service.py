@@ -336,6 +336,9 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
                         return {"status": "unverifiable"}
                     else:
                         return {"status": "already-consumed"}
+                    if action == "probe-start":
+                        if ApprovalJournal(ws).audit()["status"] != "clear":
+                            return {"status": "workspace-quarantined", "authority": "none"}
                     with self._state_lock:
                         if name in self._running:
                             return {"status": "busy"}
@@ -462,6 +465,9 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
                         return {"status": "unverifiable"}
                     else:
                         return {"status": "already-consumed"}
+                    if action == "start":
+                        if ApprovalJournal(ws).audit()["status"] != "clear":
+                            return {"status": "workspace-quarantined", "authority": "none"}
                 with self._state_lock:
                     if name in self._running:
                         return {"status": "busy"}

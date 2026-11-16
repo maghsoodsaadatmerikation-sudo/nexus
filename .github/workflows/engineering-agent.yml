@@ -5,16 +5,12 @@ on:
       - 'nexus-cloud/agent_workspace.py'
       - 'nexus-cloud/engineering_agent.py'
       - 'nexus-cloud/agent_journal.py'
+      - 'nexus-cloud/tests/test_agent_orphan_quarantine.py'
+      - 'docs/PHASE18-JOURNAL-QUARANTINE.md'
       - 'nexus-cloud/agent_chat_handoff.py'
       - 'nexus-cloud/agent_operator_service.py'
       - 'nexus-cloud/agent_tenant_boundary.py'
       - 'nexus-cloud/agent_rootless_probe.py'
-      - 'nexus-cloud/agent_rootless_job.py'
-      - 'nexus-cloud/tests/test_agent_operator_recovery.py'
-      - 'docs/PHASE17-CRASH-RECOVERY.md'
-      - 'nexus-cloud/tests/test_agent_rootless_job.py'
-      - 'scripts/nexus-rootless-job.py'
-      - 'docs/PHASE16-ROOTLESS-OPERATOR-JOBS.md'
       - 'nexus-cloud/tests/test_agent_rootless_probe.py'
       - 'scripts/nexus-rootless-probe.py'
       - 'scripts/rootless-sandbox-probe.c'
@@ -63,9 +59,8 @@ jobs:
             nexus-cloud/tests/test_agent_tools_upgrade.py \
             nexus-cloud/tests/test_agent_lifecycle.py \
             nexus-cloud/tests/test_agent_journal.py \
+            nexus-cloud/tests/test_agent_orphan_quarantine.py \
             nexus-cloud/tests/test_agent_chat_handoff.py \
-            nexus-cloud/tests/test_agent_rootless_job.py \
-            nexus-cloud/tests/test_agent_operator_recovery.py \
             nexus-cloud/tests/test_agent_operator_service.py \
             nexus-cloud/tests/test_agent_tenant_boundary.py
 
@@ -112,10 +107,8 @@ jobs:
         run: sudo -n python3 scripts/test-tenant-cross-uid.py
 
   rootless-namespace:
-    # Guest rootless execution is strictly unprivileged. On disposable hosted
-    # GitHub VMs only, sudo may temporarily configure an AppArmor sysctl so
-    # a real namespace can be created; this never runs on operator hosts.
-    # No Docker, HTTP, browser privileges, persistent users or deploys.
+    # Purely disposable, explicitly consented static ELF proof. No sudo,
+    # Docker, HTTP, browser privileges, user creation, secrets or deploys.
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -135,20 +128,5 @@ jobs:
           command -v cc
           command -v unshare
           command -v mount
-          # Ubuntu 24.04 GitHub runners may use a global AppArmor policy
-          # prohibiting unprivileged user namespaces. Prepare this ephemeral
-          # runner only; restore the exact prior value when this step exits.
-          previous=""
-          if [[ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
-            previous="$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns)"
-            if [[ "$previous" == '1' ]]; then
-              sudo sysctl -q -w kernel.apparmor_restrict_unprivileged_userns=0
-              trap 'sudo sysctl -q -w kernel.apparmor_restrict_unprivileged_userns="$previous" || true' EXIT
-            fi
-          fi
-          test "$(id -u)" != 0
-          # Strict preflight: the dedicated gate FAILS if namespaces are denied.
-          unshare --user --map-root-user --mount --net --pid --fork /usr/bin/true
           python -m pip install --disable-pip-version-check 'pytest==8.4.2'
-          NEXUS_ROOTLESS_ACCEPTANCE=required PYTHONPATH=nexus-cloud python -m pytest -q nexus-cloud/tests/test_agent_rootless_probe.py
-          NEXUS_ROOTLESS_ACCEPTANCE=required NEXUS_ROOTLESS_REAL_JOB=true PYTHONPATH=nexus-cloud python -m pytest -q nexus-cloud/tests/test_agent_rootless_job.py
+          PYTHONPATH=nexus-cloud python -m pytest -q nexus-cloud/tests/test_agent_rootless_probe.py

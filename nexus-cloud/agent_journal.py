@@ -102,6 +102,54 @@ class ApprovalJournal:
             raise WorkspaceDenied("journal-record-corrupt")
         return obj
 
+    def audit(self) -> dict:
+        """Read-only, fail-closed inspection of every claim for this workspace.
+
+        Call while holding Workspace.operation_lock. A STARTED record may be
+        active, crashed, or orphaned: no automatic retry or clean-up is safe.
+        Unknown files (including abandoned atomic-write temporaries), corrupt
+        receipts, hardlinks and symlinks make the result unverifiable. No file
+        contents, tool arguments or model messages are returned.
+        """
+        try:
+            dirfd = self._directory()
+        except FileNotFoundError:
+            return {"status": "clear", "finished_count": 0,
+                    "unfinished_digests": [], "authority": "none"}
+        try:
+            names = os.listdir(dirfd)
+            if len(names) > _MAX_RECORDS:
+                raise WorkspaceDenied("journal-capacity-or-unverifiable")
+            finished = 0
+            pending = []
+            for filename in names:
+                if (len(filename) != 69 or not filename.endswith(".json") or
+                        not _DIGEST.fullmatch(filename[:-5])):
+                    # An interrupted atomic replacement is not proof of a
+                    # finished receipt; never silently delete/ignore it.
+                    raise WorkspaceDenied("journal-unverifiable-extra-entry")
+                record = self.read(filename[:-5])
+                if record["state"] == "started":
+                    pending.append(filename[:-5])
+                else:
+                    # Reject a forged/incomplete finished marker; no trust is
+                    # granted merely because state was edited to 'finished'.
+                    if (not isinstance(record.get("finished_utc"), str) or
+                            not record["finished_utc"] or
+                            record.get("result") not in {
+                                "complete", "execution-failed", "step-denied",
+                                "post-state-unverifiable", "cancelled"} or
+                            not isinstance(record.get("steps"), list) or
+                            type(record.get("completed_steps")) is not int or
+                            record["completed_steps"] < 0):
+                        raise WorkspaceDenied("journal-unverifiable-finished-record")
+                    finished += 1
+            return {"status": "blocked-unfinished" if pending else "clear",
+                    "finished_count": finished,
+                    "unfinished_digests": sorted(pending), "authority": "none"}
+        finally:
+            os.close(dirfd)
+
     def claim(self, digest: str, *, version: int, workspace_before: str,
               execution_nonce: str | None) -> dict:
         name = self._name(digest)
@@ -115,6 +163,13 @@ class ApprovalJournal:
             # Limit persistent claims; never silently prune approval evidence.
             if len(os.listdir(dirfd)) >= _MAX_RECORDS:
                 raise WorkspaceDenied("journal-capacity-reached")
+            # Preserve legacy exact-digest replay semantics even if its old
+            # record became corrupt; O_EXCL below remains the final guard.
+            if name in os.listdir(dirfd):
+                raise WorkspaceDenied("approval-already-consumed")
+            state = self.audit()
+            if state["status"] != "clear":
+                raise WorkspaceDenied("workspace-quarantined-unfinished-approval")
             try:
                 fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
                              os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=dirfd)

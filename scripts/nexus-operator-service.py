@@ -8,11 +8,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "nexus-cloud"))
 from agent_operator_service import OperatorServer, client, recover_stale_service
 from agent_workspace import Workspace, WorkspaceDenied
 from agent_chat_handoff import private_export_dir, shareable_json, write_export
+from agent_journal import ApprovalJournal
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("action", choices=("serve", "review", "start", "stop", "status", "recover-stale"))
+    ap.add_argument("action", choices=("serve", "review", "start", "stop", "status", "recover-stale", "audit-journal"))
     ap.add_argument("--root", required=True, help="Absolute operator-owned 0700 workspace root")
     ap.add_argument("--acknowledge-possible-orphans", action="store_true",
                     help="Explicitly accept that transport recovery does NOT verify or terminate orphaned jobs")
@@ -24,6 +25,21 @@ def main():
     ap.add_argument("--out", help="Private 0700 folder to export a sanitized review or receipt for Studio")
     a = ap.parse_args()
     try:
+        if a.action == "audit-journal":
+            if (not a.workspace or a.digest or a.plan or a.out or
+                    a.enable_rootless_probe or a.acknowledge_possible_orphans):
+                raise WorkspaceDenied("audit-journal-arguments")
+            directory = Path(a.root)
+            if not (directory / a.workspace).is_dir():
+                raise WorkspaceDenied("audit-workspace-not-found")
+            ws = Workspace(a.root, a.workspace)
+            with ws.operation_lock():
+                report = ApprovalJournal(ws).audit()
+            print(json.dumps({"schema": "nexus.operator.journal-audit.v1",
+                              "workspace": ws.name, **report,
+                              "jobs_restarted": False,
+                              "orphaned_processes_ruled_out": False}, sort_keys=True))
+            return 0 if report["status"] == "clear" else 2
         if a.action == "recover-stale":
             if a.workspace or a.digest or a.plan or a.out or a.enable_rootless_probe:
                 raise WorkspaceDenied("recovery-has-no-plan-arguments")
@@ -68,7 +84,7 @@ def main():
         if a.out:
             raise WorkspaceDenied("cannot-export-unverified-status")
         print(json.dumps(result, sort_keys=True))
-        return 0 if result.get("status") not in ("denied", "unverifiable", "not-found", "busy", "already-consumed", "stale-plan-reapproval-required") else 2
+        return 0 if result.get("status") not in ("denied", "unverifiable", "not-found", "busy", "already-consumed", "stale-plan-reapproval-required", "workspace-quarantined") else 2
     except (OSError, ValueError, WorkspaceDenied) as exc:
         print(json.dumps({"status": "denied", "reason": type(exc).__name__}), file=sys.stderr)
         return 2
