@@ -9,6 +9,8 @@ No root, Docker, network, auto-execution, workspace import or upgrade occurs.
 from __future__ import annotations
 
 import argparse
+import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -44,10 +46,12 @@ FILES = tuple(sorted((
     "scripts/nexus-agent-workspace.py",
     "scripts/nexus-rootless-probe.py",
     "scripts/nexus-operator-distribution.py",
+    "scripts/nexus-operator-launch.py",
     "scripts/rootless-sandbox-probe.c",
     "docs/PHASE16-ROOTLESS-OPERATOR-JOBS.md",
     "docs/PHASE20-DOCKER-CLEANUP-FENCE.md",
     "docs/PHASE21-OPERATOR-PILOT-ACCEPTANCE.md",
+    "docs/PHASE23-VERIFIED-FIRST-RUN.md",
 )))
 assert len(FILES) == len(set(FILES))
 
@@ -204,7 +208,8 @@ def verify(archive: Path, *, expected_sha256: str | None = None) -> dict:
         "archive_sha256": digest,
         "manifest_sha256": _sha(manifest_bytes),
         "file_count": len(FILES),
-        "publisher_authenticated": expected_sha256 is not None,
+        "publisher_authenticated": False,
+        "archive_digest_matched": expected_sha256 is not None,
         "production_ready": False,
         "authority": "none",
     }
@@ -266,6 +271,27 @@ def installed_verify(destination: Path) -> dict:
             "authority": "none"}
 
 
+def _publish_no_replace(stage: Path, destination: Path) -> None:
+    """Linux renameat2(RENAME_NOREPLACE): no destination-clobber race.
+
+    Refuse platforms without this Linux syscall; never fall back to os.rename.
+    Same-UID adversaries and unsafe parent replacement are outside the pilot.
+    """
+    libc = ctypes.CDLL(None, use_errno=True)
+    renameat2 = getattr(libc, 'renameat2', None)
+    if renameat2 is None:
+        raise DistributionDenied("atomic-no-replace-unavailable")
+    renameat2.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int,
+                          ctypes.c_char_p, ctypes.c_uint]
+    renameat2.restype = ctypes.c_int
+    # AT_FDCWD=-100, RENAME_NOREPLACE=1
+    if renameat2(-100, os.fsencode(stage), -100, os.fsencode(destination), 1):
+        err = ctypes.get_errno()
+        if err == errno.EEXIST:
+            raise DistributionDenied("destination-exists-no-overwrite")
+        raise DistributionDenied("atomic-install-publication-denied")
+
+
 def install(archive: Path, destination: Path, *, expected_sha256: str) -> dict:
     """Install only after operator-supplied independent archive digest.
 
@@ -297,18 +323,18 @@ def install(archive: Path, destination: Path, *, expected_sha256: str) -> dict:
                 finally:
                     os.close(fd)
         installed_verify(stage)
-        if os.path.lexists(destination):
-            raise DistributionDenied("destination-exists-no-overwrite")
-        os.rename(stage, destination)
+        _private_parent(destination.parent)
+        _publish_no_replace(stage, destination)
     finally:
         if stage.exists():
             shutil.rmtree(stage)
     return {"status": "installed-not-executed",
             "archive_sha256": report["archive_sha256"],
             "file_count": report["file_count"],
-            "publisher_authenticated": True,
+            "publisher_authenticated": False,
+            "archive_digest_matched": True,
             "production_ready": False, "authority": "none",
-            "next_command": "python <installed>/scripts/nexus-operator-pilot.py smoke --approve-disposable"}
+            "next_command": "python -I -B <installed>/scripts/nexus-operator-launch.py doctor"}
 
 
 def main(argv=None) -> int:
