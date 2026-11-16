@@ -15,23 +15,23 @@ permissions:
   contents: read
 
 jobs:
-  export-runner:
+  export_runner:
     # Only synthetic data. Separate completed job precedes restoration runner.
     runs-on: ubuntu-24.04
     permissions:
       contents: read
     timeout-minutes: 7
     outputs:
-      archive_sha256: ${{ steps.evidence.outputs.archive_sha256 }
-      workspace_sha256: ${{ steps.evidence.outputs.workspace_sha256 }
-      source_sha: ${{ steps.evidence.outputs.source_sha }
-      artifact_id: ${{ steps.upload.outputs.artifact-id }
+      archive_sha256: ${{ steps.evidence.outputs.archive_sha256 }}
+      workspace_sha256: ${{ steps.evidence.outputs.workspace_sha256 }}
+      source_sha: ${{ steps.evidence.outputs.source_sha }}
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
     steps:
       - name: Checkout reviewed PR head without persisted credentials
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha || github.sha }
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.13'
@@ -71,15 +71,15 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: nexus-operator-cross-runner-synthetic-plaintext-only
-          path: ${{ runner.temp }/nexus-p29-producer/transfer/snapshot.zip
+          path: ${{ runner.temp }}/nexus-p29-producer/transfer/snapshot.zip
           retention-days: 1
           if-no-files-found: error
 
-  restore-runner:
+  restore_runner:
     # A new disposable runner has no access to the producer source directory.
     # Archive SHA is passed as a separate job output, not read from the ZIP.
     runs-on: ubuntu-24.04
-    needs: export-runner
+    needs: export_runner
     permissions:
       contents: read
     timeout-minutes: 7
@@ -88,21 +88,21 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-          ref: ${{ needs.export-runner.outputs.source_sha }
+          ref: ${{ needs.export_runner.outputs.source_sha }}
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.13'
       - name: Download only artifact created by this producer job
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          artifact-ids: ${{ needs.export-runner.outputs.artifact_id }
-          path: ${{ runner.temp }/nexus-p29-received
+          artifact-ids: ${{ needs.export_runner.outputs.artifact_id }}
+          path: ${{ runner.temp }}/nexus-p29-received
       - name: Reject wrong hashes/corruption and restore exact finished receipt
         shell: bash
         env:
-          EXPECTED_ARCHIVE_SHA256: ${{ needs.export-runner.outputs.archive_sha256 }
-          EXPECTED_WORKSPACE_SHA256: ${{ needs.export-runner.outputs.workspace_sha256 }
-          SOURCE_SHA: ${{ needs.export-runner.outputs.source_sha }
+          EXPECTED_ARCHIVE_SHA256: ${{ needs.export_runner.outputs.archive_sha256 }}
+          EXPECTED_WORKSPACE_SHA256: ${{ needs.export_runner.outputs.workspace_sha256 }}
+          SOURCE_SHA: ${{ needs.export_runner.outputs.source_sha }}
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
           set -euo pipefail
