@@ -27,7 +27,7 @@ def main():
         preview = {"plan_sha256": digest, "plan_version": plan["version"],
                    "workspace": plan["workspace"], "current_workspace_sha256": observed["sha256"],
                    "state_matches": matches, "tools": [step["tool"] for step in plan["steps"]],
-                   "network": "disabled", "status": "awaiting-approval" if matches else "state-mismatch"}
+                   "network": "fixed-provider-metadata-only" if "research" in [step["tool"] for step in plan["steps"]] else "disabled", "status": "awaiting-approval" if matches else "state-mismatch"}
         if not args.approve_digest:
             print(json.dumps(preview))
             return 0

@@ -11,6 +11,7 @@ import os
 import re
 import hashlib
 import json
+import difflib
 import selectors
 import shutil
 import stat
@@ -203,6 +204,73 @@ class Workspace:
         return {"workspace": self.name, "sha256": hashlib.sha256(canonical).hexdigest(),
                 "file_count": len(files), "directory_count": len(directories), "total_bytes": total_bytes,
                 "files": state["files"], "directories": state["directories"]}
+
+    def search(self, query: str, *, case_sensitive: bool = False) -> dict[str, object]:
+        """Bounded literal cross-file search, returning inert user-reviewable excerpts.
+
+        No regex execution, symlink following, shell commands, network or model.
+        Binary/non-UTF-8 documents are not interpreted as code or text.
+        """
+        if not isinstance(query, str) or not query or len(query) > 128 or "\x00" in query or "\n" in query or "\r" in query:
+            raise WorkspaceDenied("invalid-search-query")
+        if type(case_sensitive) is not bool:
+            raise WorkspaceDenied("invalid-search-mode")
+        observed = self.manifest()
+        matches: list[dict[str, object]] = []
+        scanned = 0
+        skipped = 0
+        truncated = False
+        term = query if case_sensitive else query.casefold()
+        for entry in observed["files"]:
+            raw = self.read(entry["path"])
+            try:
+                content = raw.decode("utf-8")
+            except UnicodeError:
+                skipped += 1
+                continue
+            if "\x00" in content:
+                skipped += 1
+                continue
+            scanned += 1
+            for number, line in enumerate(content.splitlines(), 1):
+                haystack = line if case_sensitive else line.casefold()
+                if term not in haystack:
+                    continue
+                if len(matches) >= 50:
+                    truncated = True
+                    break
+                matches.append({"path": entry["path"], "line": number, "excerpt": line[:180]})
+            if truncated:
+                break
+        return {"query": query, "matches": matches, "match_count": len(matches),
+                "scanned_files": scanned, "skipped_binary_files": skipped,
+                "truncated": truncated, "workspace_sha256_at_scan_start": observed["sha256"]}
+
+    def preview_edit(self, path: str, old: bytes, new: bytes) -> dict[str, object]:
+        """Show an exact-one-match code patch without modifying any file."""
+        if not isinstance(old, bytes) or not old or not isinstance(new, bytes) or len(old) > MAX_FILE_BYTES or len(new) > MAX_FILE_BYTES:
+            raise WorkspaceDenied("invalid-exact-edit")
+        original = self.read(path)
+        if original.count(old) != 1:
+            raise WorkspaceDenied("edit-requires-exactly-one-match")
+        proposed = original.replace(old, new, 1)
+        if len(proposed) > MAX_FILE_BYTES:
+            raise WorkspaceDenied("file-too-large")
+        try:
+            before_lines = original.decode("utf-8").splitlines(keepends=True)
+            after_lines = proposed.decode("utf-8").splitlines(keepends=True)
+        except UnicodeError as exc:
+            raise WorkspaceDenied("preview-requires-utf8-text") from exc
+        # An adversarial giant text file should not cause quadratic diff work.
+        if len(original) > 131_072 or len(proposed) > 131_072 or len(before_lines) > 2_000 or len(after_lines) > 2_000:
+            raise WorkspaceDenied("preview-line-limit")
+        diff = "".join(difflib.unified_diff(before_lines, after_lines,
+                   fromfile="a/" + path, tofile="b/" + path, n=3))
+        if len(diff.encode("utf-8")) > 32_768:
+            raise WorkspaceDenied("preview-diff-limit")
+        return {"path": path, "old_sha256": hashlib.sha256(original).hexdigest(),
+                "proposed_sha256": hashlib.sha256(proposed).hexdigest(),
+                "proposed_bytes": len(proposed), "diff": diff, "applied": False}
 
     def package(self, destination: str | Path) -> dict[str, int]:
         dest = Path(destination)

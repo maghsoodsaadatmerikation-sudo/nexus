@@ -33,6 +33,25 @@ is treated as a requirements list, not proof of vendor features.
   parameter fail closed. A per-step result receipt is machine-readable, with
   only output hashes for command execution. Failed verification stops the plan;
   already written files are not rolled back.
+- **Operator-only code inspection and patch review**: `Workspace.search()` provides
+  Unicode-aware literal search through bounded UTF-8 project files, with path/line
+  labels and at most 50 visible excerpts. Invalid UTF-8 and NUL-containing files
+  are skipped; links, hardlinks and special files deny scanning. `preview_edit()`
+  compares an exact-once replacement as a bounded unified diff plus proposed SHA-256;
+  it **does not write** any file. Preview refuses large/expensive diffs. The new
+  `search` and `preview_edit` plan steps and local CLI support review-before-edit.
+- **User-approved public developer metadata**: `nexus-cloud/agent_research.py`
+  reads *only* PyPI, crates.io, or GitHub latest-release metadata by fixed HTTPS
+  endpoints with restricted name syntax. No arbitrary URL, proxy inheritance,
+  redirect, credentials, dynamic hostname, method, or header is exposed. Each
+  request has an 8-second timeout and a 1 MiB response cap. A source URL,
+  timestamp, raw response SHA-256 and explicitly **unverified** provenance label
+  accompany the reported version. The `research` plan step needs the same exact
+  operator-approved plan digest; direct CLI use needs `--approve-research`.
+  This HTTPS metadata fetch occurs in the local operator process, **outside the
+  Docker runner**, which stays `--network none`; it is not general search or
+  network-enabled execution. Real provider availability has not been verified
+  by these offline/mock-based tests. Remote metadata is inert untrusted text.
 - Tests cover path traversal, symlink escape, hardlinks, FIFO handling, bounds,
   persistence, ZIP, approval, image pinning, fixed Docker invocation and
   plan mutation, and run as an independent CI check without Docker credentials.
@@ -86,11 +105,11 @@ mount secrets, or expose the Docker daemon to untrusted parties.
 | --- | --- | --- |
 | Persistent Linux filesystem | Local private per-workspace directory **implemented** | Remote multi-tenant persistence, quotas and lifecycle |
 | Shell / Python / Rust / Go / C++ | Docker foreground runner **implemented** behind operator approval | Pinned runtime images, real Docker acceptance, arbitrary task portability |
-| Multi-file read/write/edit + ZIP | **Implemented** with bounded file operations | Rich project indexing/diff review/UI |
+| Multi-file read/write/edit + ZIP | **Implemented** with bounded file operations, literal code search and nonmutating diff previews | Semantic indexing and frontend diff review |
 | Tool-using agent loop | Deterministic reviewed multi-tool plan **implemented** | Reliable model planner, step-by-step consent in Studio, evaluation |
 | Internet inside sandbox | **Not enabled**; `--network none` is mandatory | Restrictive authenticated egress proxy, DNS/SSRF policy, rate/budget consent |
 | Background processes / long jobs | **Not implemented** | Durable queue, lease/recovery, cancellation and accounting |
-| Web search/current API verification | Existing human-directed Wikipedia/Crossref retrieval | Multiple search providers, provenance checks, content sanitation |
+| Web search/current API verification | Existing Wikipedia/Crossref UI and operator-only fixed-provider package/release metadata | General web search, independent source verification and full-page retrieval |
 | Browser automation/screenshots/network traces | **Not implemented** | Isolated browser, domain allowlist, explicit user review |
 | GitHub operations | GitHub integration possible externally with user-granted access | Per-action OAuth scopes + NEXUS constitutional authorization |
 | DOCX, PPTX, XLSX, PDF, ffmpeg | Existing local basic file generation; new runner can run installed tools in pinned images | Format-specific adapters, golden-file visual QA, preview/consent |
@@ -113,3 +132,31 @@ mount secrets, or expose the Docker daemon to untrusted parties.
    the static CI tests do not certify live runtime hardening.
 5. Only then connect reviewed plans to Studio. Never claim the new features are
    live on the public hosted NEXUS site until independently observed there.
+
+## Additional tools and approval examples (Grok-inspired phase 3)
+
+```bash
+# Search only the selected private project; output may include private snippets.
+python scripts/nexus-agent-workspace.py --root "$HOME/nexus-workspaces" \
+  --workspace demo search "TODO"
+
+# Check a patch without changing files. before.txt/after.txt are local UTF-8 snippets.
+python scripts/nexus-agent-workspace.py --root "$HOME/nexus-workspaces" \
+  --workspace demo preview-edit hello.py --old-file before.txt --new-file after.txt
+
+# Explicitly release one public metadata query, not the workspace contents.
+python scripts/nexus-agent-workspace.py --root "$HOME/nexus-workspaces" \
+  --workspace demo research --provider pypi --name httpx --approve-research
+```
+
+A version 2 approved plan can include `{"tool":"research","provider":"crates","name":"serde"}`,
+`{"tool":"search","query":"TODO","case_sensitive":false}`, or
+`{"tool":"preview_edit","path":"hello.py","before":"old","after":"new"}`.
+The source is not an executable instruction or established truth. GitHub release
+lookups may return 404 for a project without a conventional latest release; no
+answer is fabricated. Search excerpts/plan receipts may contain private content
+and should not be posted to public logs.
+
+Tests for the code-inspection and metadata tools use local synthetic fixtures.
+A separate real network acceptance check is still required on an appropriately
+authorized operator host. The tooling is not a public Studio or API feature.

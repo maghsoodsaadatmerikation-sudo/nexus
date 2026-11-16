@@ -4,8 +4,11 @@ on:
     paths:
       - 'nexus-cloud/agent_workspace.py'
       - 'nexus-cloud/engineering_agent.py'
+      - 'nexus-cloud/agent_research.py'
       - 'nexus-cloud/tests/test_agent_workspace.py'
       - 'nexus-cloud/tests/test_engineering_agent.py'
+      - 'nexus-cloud/tests/test_agent_research.py'
+      - 'nexus-cloud/tests/test_agent_tools_upgrade.py'
       - 'scripts/nexus-agent-workspace.py'
       - 'scripts/nexus-engineering-plan.py'
       - '.github/workflows/engineering-agent.yml'
@@ -28,4 +31,6 @@ jobs:
           python -m pip install --disable-pip-version-check 'pytest==8.4.2'
           PYTHONPATH=nexus-cloud python -m pytest -q \
             nexus-cloud/tests/test_agent_workspace.py \
-            nexus-cloud/tests/test_engineering_agent.py
+            nexus-cloud/tests/test_engineering_agent.py \
+            nexus-cloud/tests/test_agent_research.py \
+            nexus-cloud/tests/test_agent_tools_upgrade.py

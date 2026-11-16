@@ -14,10 +14,12 @@ from typing import Any
 
 from agent_workspace import (IMAGE_DIGEST, MAX_FILE_BYTES, Workspace, WorkspaceDenied,
                              run_container, safe_parts)
+from agent_research import ResearchDenied, endpoint, fetch_metadata
 
 MAX_PLAN_BYTES = 32_768
 MAX_STEPS = 12
-TOOLS = frozenset(("read", "write", "edit", "run", "verify_sha256", "package"))
+TOOLS = frozenset(("read", "write", "edit", "run", "verify_sha256", "package",
+                   "search", "preview_edit", "research"))
 HASH = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -72,6 +74,9 @@ def parse_plan(raw: bytes) -> tuple[dict[str, Any], str]:
         "run": {"tool", "image", "argv", "timeout_seconds"},
         "verify_sha256": {"tool", "path", "expected_sha256"},
         "package": {"tool", "output"},
+        "search": {"tool", "query", "case_sensitive"},
+        "preview_edit": {"tool", "path", "before", "after"},
+        "research": {"tool", "provider", "name"},
     }
     for step in steps:
         if not isinstance(step, dict) or step.get("tool") not in TOOLS or set(step) != shapes[step["tool"]]:
@@ -81,9 +86,15 @@ def parse_plan(raw: bytes) -> tuple[dict[str, Any], str]:
             safe_parts(step["path"])
         if tool == "write":
             _text(step["text"], allow_empty=True)
-        if tool == "edit":
+        if tool in ("edit", "preview_edit"):
             _text(step["before"])
             _text(step["after"], allow_empty=True)
+        if tool == "search":
+            query = step["query"]
+            if not isinstance(query, str) or not query or len(query) > 128 or any(c in query for c in ("\x00", "\r", "\n")) or type(step["case_sensitive"]) is not bool:
+                raise WorkspaceDenied("invalid-search-query")
+        if tool == "research":
+            endpoint(step["provider"], step["name"])
         if tool == "run":
             if not isinstance(step["image"], str) or not IMAGE_DIGEST.fullmatch(step["image"]):
                 raise WorkspaceDenied("plan-image-digest")
@@ -145,6 +156,15 @@ def execute_plan(workspace: Workspace, plan: dict[str, Any], digest: str, *, app
                 if tool == "verify_sha256" and digest_file != step["expected_sha256"]:
                     raise WorkspaceDenied("file-hash-mismatch")
                 item = {"index": index, "tool": tool, "sha256": digest_file, "bytes": len(data)}
+            elif tool == "search":
+                info = workspace.search(step["query"], case_sensitive=step["case_sensitive"])
+                item = {"index": index, "tool": tool, **info}
+            elif tool == "preview_edit":
+                info = workspace.preview_edit(step["path"], step["before"].encode(), step["after"].encode())
+                item = {"index": index, "tool": tool, **info}
+            elif tool == "research":
+                info = fetch_metadata(step["provider"], step["name"])
+                item = {"index": index, "tool": tool, **info}
             elif tool == "package":
                 info = workspace.package(step["output"])
                 item = {"index": index, "tool": tool, **info}
@@ -161,7 +181,7 @@ def execute_plan(workspace: Workspace, plan: dict[str, Any], digest: str, *, app
             results.append(item)
             if status != "complete":
                 break
-        except (OSError, WorkspaceDenied, ValueError) as exc:
+        except (OSError, WorkspaceDenied, ResearchDenied, ValueError) as exc:
             status = "step-denied"
             results.append({"index": index, "tool": tool, "status": "denied", "reason": type(exc).__name__})
             break
