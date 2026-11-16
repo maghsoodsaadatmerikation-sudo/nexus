@@ -172,6 +172,7 @@ def test_postinstall_edits_and_new_unexpected_files_are_detected(tmp_path):
         distribution.installed_verify(target)
     script.write_bytes(zipfile.ZipFile(archive).read("scripts/nexus-operator-pilot.py"))
     (target/"unexpected.txt").write_text("not from bundle")
+    (target/"unexpected.txt").chmod(0o600)
     with pytest.raises(distribution.DistributionDenied,match="installed-files-changed"):
         distribution.installed_verify(target)
 
