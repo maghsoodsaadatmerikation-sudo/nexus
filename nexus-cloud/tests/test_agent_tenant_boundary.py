@@ -8,15 +8,15 @@ from pathlib import Path
 import pytest
 from agent_tenant_boundary import (
     _private_root, _pid_owns_listening_socket, audit_tenants, cgroup_location, inspect_tenant,
-    quota_values, read_proc_status, harden_tenant_daemon)
+    quota_values, read_proc_status, harden_tenant_daemon, require_dedicated_groups)
 from agent_workspace import WorkspaceDenied
 from agent_operator_service import TOKEN_NAME, SOCKET_NAME
 
 
-def proof(uid, gid=None, *, nnp='1', caps='0000000000000000', uids=None):
+def proof(uid, gid=None, *, nnp='1', caps='0000000000000000', uids=None, extra_groups=None):
     if gid is None: gid=uid
     return ('Name:\tnexus-tenant\nUid:\t'+(uids or (' '.join([str(uid)]*4)))+
-            '\nGid:\t'+' '.join([str(gid)]*4)+'\nNoNewPrivs:\t'+nnp+ '\nCapEff:\t'+caps+'\n')
+            '\nGid:\t'+' '.join([str(gid)]*4)+'\nGroups:\t'+(str(gid) if extra_groups is None else extra_groups)+'\nNoNewPrivs:\t'+nnp+ '\nCapEff:\t'+caps+'\n')
 
 
 def test_exact_process_identity_required():
@@ -24,6 +24,8 @@ def test_exact_process_identity_required():
     for value in [proof(0),proof(1234,nnp='0'),proof(1234,caps='0010'),
                   proof(1234,uids='1234 1234 0 1234'),proof(1234,gid=0),
                   proof(1234).replace('NoNewPrivs:\t1\n',''),
+                  proof(1234).replace('Groups:\t1234\n',''),
+                  proof(1234,extra_groups='1234 9999'),
                   proof(1234)+'Uid:\t1234 1234 1234 1234\n']:
         with pytest.raises(WorkspaceDenied): read_proc_status(value)
 
@@ -171,3 +173,59 @@ def test_strict_tenant_operator_keeps_safe_steps_available(tmp_path):
             time.sleep(.01)
         assert receipt['state']=='finished' and receipt['result']=='complete'
         assert ws.read('safe.txt')==b'owner-only'
+
+
+def test_strict_daemon_refuses_privileged_supplementary_groups():
+    # Multiple nonroot groups are not harmless: one could own Docker.sock.
+    require_dedicated_groups(61001, [])
+    require_dedicated_groups(61001, [61001])
+    for groups in ([61001, 61002], [61002], [0], [61001, 0], [61001, 61001, 61002], [True], ["61001"]):
+        with pytest.raises(WorkspaceDenied,match='supplementary-groups-not-dedicated'):
+            require_dedicated_groups(61001, groups)
+    with pytest.raises(WorkspaceDenied):
+        require_dedicated_groups(0, [])
+
+
+@pytest.mark.skipif(os.getuid()==0, reason='requires a nonroot tenant operator')
+@pytest.mark.parametrize('unsafe_step', [
+    {'tool':'research','provider':'pypi','name':'requests'},
+    {'tool':'package','output':'/tmp/nexus-tenant-public-archive.zip'},
+    {'tool':'run','image':'busybox@sha256:'+'a'*64,
+     'argv':['sh','-c','echo SHOULD_NOT_RUN'],'timeout_seconds':5},
+])
+def test_tenant_refuses_network_export_and_execution_before_journal(tmp_path, unsafe_step):
+    from agent_chat_handoff import PROPOSAL_SCHEMA, prepare, write_export
+    from agent_operator_service import OperatorServer
+    from agent_workspace import Workspace
+    from agent_journal import ApprovalJournal
+
+    root=tmp_path/'tenant'; root.mkdir(mode=0o700)
+    out=tmp_path/'private-out'; out.mkdir(mode=0o700)
+    ws=Workspace(root,'alpha'); ws.write('private.txt',b'not public')
+    raw,review=prepare(ws,{'schema':PROPOSAL_SCHEMA,'workspace':'alpha',
+                          'steps':[{'tool':'write','path':'never-created.txt','text':'not executed'},
+                                   unsafe_step]})
+    digest=review['plan_sha256']
+    path=write_export(out,f'nexus-plan-{digest[:16]}.json',raw)
+    before=ws.manifest()['sha256']
+    with OperatorServer(root,allow_container=False) as service:
+        base={'workspace':'alpha','digest':digest,'token':service._token,
+              'plan_path':str(path)}
+        # Safe review is permitted but does not consume a one-time approval.
+        assert service.dispatch({'action':'review',**base},os.getuid())['status']=='review'
+        assert service.dispatch({'action':'start',**base},os.getuid())=={'status':'denied'}
+        assert service.dispatch({'action':'status', **{k:v for k,v in base.items()
+            if k!='plan_path'}},os.getuid())['status']=='not-found'
+        assert not service._running
+    assert ws.manifest()['sha256']==before
+    assert not (ws.path/'never-created.txt').exists()
+    with pytest.raises(FileNotFoundError):
+        ApprovalJournal(ws).read(digest)
+
+
+def test_restricted_tenant_tool_allowlist_is_closed():
+    # A new privileged tool cannot silently become part of the tenant runtime.
+    from engineering_agent import TOOLS
+    approved={'read','write','edit','verify_sha256','search','preview_edit'}
+    forbidden={'run','research','package'}
+    assert set(TOOLS)==approved | forbidden

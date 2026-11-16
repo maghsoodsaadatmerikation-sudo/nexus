@@ -29,8 +29,16 @@ account provisioning, privilege escalation or public deployment.
   container execution. The older local **single-operator** CLI remains separate
   and has not magically become multi-tenant secure.
 - File operations remain constrained to the operator account and its private
-  workspace. Package/research steps retain their existing explicit operator
-  approval and size/network limits.
+  workspace. Strict tenant mode now forbids **run, package, and research**
+  execution: package accepts an arbitrary absolute export target, and research
+  contacts an external metadata service, neither of which belongs in a
+  network/egress-unattested shared tenant environment. Inert review may show
+  those tool types, but **start rejects the entire plan before journal claim**.
+  Allowed steps are only read/write/edit/verify_sha256/search/preview_edit.
+- The dedicated tenant GID must not be accompanied by **any** unrelated
+  supplementary group (not only root group 0). In particular, inherited
+  docker/lxd/disk groups can invalidate UID-only isolation. The tenant daemon
+  refuses to start before socket creation when getgroups() contains another GID.
 
 ## Start and audit, after independent host provisioning
 

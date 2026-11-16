@@ -100,16 +100,17 @@ def read_proc_status(text: str) -> tuple[int, int]:
     """Return fully matched real/effective/saved/filesystem UID and GID."""
     values = {}
     for line in text.splitlines():
-        for key in ('Uid', 'Gid', 'NoNewPrivs', 'CapEff'):
+        for key in ('Uid', 'Gid', 'Groups', 'NoNewPrivs', 'CapEff'):
             if line.startswith(key + ':'):
                 if key in values:
                     _deny('duplicate-process-status')
                 values[key] = line.split(':', 1)[1].strip()
-    if set(values) != {'Uid', 'Gid', 'NoNewPrivs', 'CapEff'}:
+    if set(values) != {'Uid', 'Gid', 'Groups', 'NoNewPrivs', 'CapEff'}:
         _deny('incomplete-process-status')
     try:
         ids = [int(x) for x in values['Uid'].split()]
         groups = [int(x) for x in values['Gid'].split()]
+        supplementary = [int(x) for x in values['Groups'].split()]
         capabilities = int(values['CapEff'], 16)
     except ValueError:
         _deny('process-status-format')
@@ -117,6 +118,7 @@ def read_proc_status(text: str) -> tuple[int, int]:
             len(set(groups)) != 1 or ids[0] <= 0 or groups[0] <= 0 or
             values['NoNewPrivs'] != '1' or capabilities != 0):
         _deny('privileged-or-mixed-identity')
+    require_dedicated_groups(groups[0], supplementary)
     return ids[0], groups[0]
 
 
@@ -218,6 +220,22 @@ def audit_tenants(tenants: list[tuple[str | Path, int]], *, cgroup_base: Path = 
             'authority': 'none'}
 
 
+
+def require_dedicated_groups(primary_gid: int, supplementary_groups: list[int]) -> None:
+    """Forbid ambient docker/host-operator groups, not just root group.
+
+    Linux group 0 is not the only dangerous supplementary group: membership
+    in docker, disk, lxd or an operator service group could defeat the UID
+    boundary. Tenant operators must have their own dedicated primary GID and
+    no additional supplementary GID. The primary GID may appear in getgroups().
+    """
+    if (type(primary_gid) is not int or primary_gid <= 0 or
+            not isinstance(supplementary_groups, (list, tuple)) or
+            any(type(g) is not int or g != primary_gid
+                for g in supplementary_groups)):
+        _deny('supplementary-groups-not-dedicated')
+
+
 def harden_tenant_daemon(root: str | Path) -> dict:
     """Enforce host quotas and Linux NNP *before* creating a service socket.
 
@@ -231,9 +249,9 @@ def harden_tenant_daemon(root: str | Path) -> dict:
     if os.name != 'posix' or not hasattr(os, 'getresuid'):
         _deny('requires-linux')
     uids, gids = os.getresuid(), os.getresgid()
-    if (0 in uids or 0 in gids or len(set(uids)) != 1 or len(set(gids)) != 1
-            or 0 in os.getgroups()):
+    if (0 in uids or 0 in gids or len(set(uids)) != 1 or len(set(gids)) != 1):
         _deny('daemon-not-dedicated-unprivileged-user')
+    require_dedicated_groups(gids[0], os.getgroups())
     _private_root(Path(root), os.getuid())
     group = cgroup_location(Path('/proc/self/cgroup').read_text())
     if group.rsplit('/', 1)[-1] not in (f'nexus-tenant-{os.getuid()}', f'nexus-tenant-{os.getuid()}.scope'):

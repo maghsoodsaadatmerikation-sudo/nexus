@@ -487,3 +487,12 @@ The more general proposal importer retains its separate bounded untrusted
 file intake contract; it is not automatically treated as an approved plan.
 Tests exercise 0644 plans and hardlinks, and verify both are refused without
 consuming a one-time approval or causing writes.
+
+
+### Phase 13 — Tenant egress/export admission and supplementary group hardening
+
+- Strict tenant mode rejects complete plans with `run`, `research` or `package` before side effects or one-time journal claim, including mixed safe/unsafe steps. It keeps only six workspace-bound tools. Inert review is not execution authority.
+- Dedicated tenant startup now refuses **all** unrelated supplementary Linux groups, not only gid 0; independent `/proc/PID/status` audit also requires the `Groups` field to contain no cross-tenant or daemon-capable GID.
+- The existing private Unix socket, exact reviewed plan digest, per-UID cgroup gate and crash-conscious journal remain unchanged. Host OS networking is NOT sandboxed by this application-level tool filter. See `docs/PHASE13-TENANT-ADMISSION.md`.
+- A separate crowded-runner PR Workspace UI test increased its bounded VM execution limit from 1s to 5s, without changing application timeouts or acceptance assertions.
+- Nonroot local validation: 72/72 focused Python checks and real cross-UID filesystem/Unix-socket regression PASS. The branch's GitHub CI and production readiness still require separate confirmation; this is not a release, merge, public API or model execution grant.

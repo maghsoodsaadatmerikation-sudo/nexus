@@ -189,10 +189,16 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
                 candidate, observed = parse_plan(read_operator_file(path, require_private=True))
                 if observed != digest or candidate["workspace"] != name or candidate["version"] != 3:
                     return {"status": "denied"}
-                # Tenant processes may not inherit a rootful shared Docker
-                # daemon. Strict mode refuses run steps *before* admission.
+                # The tenant entrypoint has no verified container OR network
+                # egress isolation. Do not allow an approved plan to reach the
+                # Docker daemon, contact even fixed third-party metadata hosts,
+                # or export a private workspace archive to a caller-chosen
+                # absolute location. Reject the WHOLE plan before admission;
+                # read/write/edit/search/verify/preview remain workspace-bound.
+                # Review is inert and may still describe forbidden steps.
                 if action == "start" and not self._allow_container and any(
-                    item["tool"] == "run" for item in candidate["steps"]
+                    item["tool"] in {"run", "research", "package"}
+                    for item in candidate["steps"]
                 ):
                     return {"status": "denied"}
                 # Review must not manufacture a workspace merely because an

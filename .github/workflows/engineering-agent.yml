@@ -29,6 +29,7 @@ on:
       - 'scripts/nexus-engineering-plan.py'
       - '.github/workflows/engineering-agent.yml'
       - 'docs/GROK-ENGINEERING-CAPABILITIES.md'
+      - 'docs/PHASE13-TENANT-ADMISSION.md'
   workflow_dispatch:
 permissions:
   contents: read
