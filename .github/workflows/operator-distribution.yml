@@ -4,8 +4,10 @@ on:
     paths:
       - 'nexus-cloud/*.py'
       - 'nexus-cloud/tests/test_agent_operator_distribution.py'
+      - 'nexus-cloud/tests/test_agent_operator_upgrade_review.py'
       - 'nexus-cloud/tests/test_agent_operator_first_run.py'
       - 'docs/PHASE23-VERIFIED-FIRST-RUN.md'
+      - 'docs/PHASE24-SIDE-BY-SIDE-REVIEW.md'
       - 'scripts/nexus-operator-*.py'
       - 'scripts/nexus-chat-engineering.py'
       - 'scripts/nexus-engineering-plan.py'
@@ -64,14 +66,28 @@ jobs:
             --archive operator-dist-candidate/pilot-a.zip \
             --expected-sha256 "$expected" \
             --destination "$PWD/operator-dist-candidate/installed"
-          python -I -B operator-dist-candidate/installed/scripts/nexus-operator-launch.py doctor
+          manifest_sha="$(python -c 'import json;print(json.load(open("operator-dist-candidate/build.json"))["manifest_sha256"])')"
+          test "$(printf '%s' "$manifest_sha" | wc -c)" -eq 64
+          python -I -B operator-dist-candidate/installed/scripts/nexus-operator-launch.py doctor --expected-manifest-sha256 "$manifest_sha"
           mkdir -m 700 operator-dist-candidate/private-root
           python -I -B operator-dist-candidate/installed/scripts/nexus-operator-launch.py \
             check --root "$PWD/operator-dist-candidate/private-root"
           python -I -B operator-dist-candidate/installed/scripts/nexus-operator-launch.py \
-            smoke --approve-disposable
+            smoke --approve-disposable --expected-manifest-sha256 "$manifest_sha"
           python -I -B operator-dist-candidate/installed/scripts/nexus-operator-distribution.py \
-            verify-installed --destination "$PWD/operator-dist-candidate/installed"
+            verify-installed --destination "$PWD/operator-dist-candidate/installed" \
+            --expected-manifest-sha256 "$manifest_sha"
+          python scripts/nexus-operator-distribution.py install \
+            --archive operator-dist-candidate/pilot-a.zip \
+            --expected-sha256 "$expected" \
+            --destination "$PWD/operator-dist-candidate/candidate"
+          python -I -B operator-dist-candidate/installed/scripts/nexus-operator-distribution.py \
+            compare-installed --current "$PWD/operator-dist-candidate/installed" \
+            --candidate "$PWD/operator-dist-candidate/candidate" \
+            --expected-manifest-sha256 "$manifest_sha" \
+            --expected-candidate-manifest-sha256 "$manifest_sha" \
+            > operator-dist-candidate/upgrade-review.json
+          python -c 'import json; r=json.load(open("operator-dist-candidate/upgrade-review.json")); assert r["status"]=="same-file-content" and r["upgrade_authorized"] is False and r["candidate_manifest_anchor_matched"] is True'
           sha256sum operator-dist-candidate/pilot-a.zip \
             > operator-dist-candidate/SHA256SUMS
           cp operator-dist-candidate/pilot-a.zip \
@@ -86,6 +102,7 @@ jobs:
             operator-dist-candidate/nexus-operator-pilot.zip
             operator-dist-candidate/SHA256SUMS
             operator-dist-candidate/build.json
+            operator-dist-candidate/upgrade-review.json
             scripts/nexus-operator-distribution.py
           retention-days: 7
           if-no-files-found: error
