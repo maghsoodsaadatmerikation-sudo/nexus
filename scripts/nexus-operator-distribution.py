@@ -52,6 +52,7 @@ FILES = tuple(sorted((
     "docs/PHASE20-DOCKER-CLEANUP-FENCE.md",
     "docs/PHASE21-OPERATOR-PILOT-ACCEPTANCE.md",
     "docs/PHASE23-VERIFIED-FIRST-RUN.md",
+    "docs/PHASE24-SIDE-BY-SIDE-REVIEW.md",
 )))
 assert len(FILES) == len(set(FILES))
 
@@ -233,31 +234,47 @@ def _private_parent(parent: Path) -> None:
         os.close(fd)
 
 
-def installed_verify(destination: Path) -> dict:
-    """Check installed file bytes; no execution and no self-update."""
+def _installed_snapshot(destination: Path) -> tuple[dict, dict[str, dict], str]:
+    """Verify the COMPLETE installed tree before returning content hashes.
+
+    The private parent/installation and canonical manifest must be safe.
+    Never import, execute or write into the installation.
+    """
     if not destination.is_absolute() or ".." in destination.parts:
         raise DistributionDenied("invalid-installed-path")
-    if destination.is_symlink() or not destination.is_dir():
-        raise DistributionDenied("installation-not-found")
+    _private_parent(destination.parent)
+    st = destination.lstat()
+    if (not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid()
+            or st.st_mode & 0o077):
+        raise DistributionDenied("installation-directory-unsafe")
     metadata = destination / MANIFEST
-    if metadata.is_symlink() or not metadata.is_file():
+    mst = metadata.lstat()
+    if (not stat.S_ISREG(mst.st_mode) or mst.st_uid != os.getuid()
+            or mst.st_nlink != 1 or mst.st_mode & 0o077
+            or mst.st_size > MAX_FILE_BYTES):
         raise DistributionDenied("installed-manifest-unsafe")
     manifest_bytes = metadata.read_bytes()
     obj = _load_json(manifest_bytes)
-    if obj.get("schema") != SCHEMA or obj.get("source_files") is None:
+    if (set(obj) != {"schema", "platform", "minimum_python",
+                     "authenticated", "source_files"}
+            or obj["schema"] != SCHEMA
+            or obj["platform"] != "linux-nonroot-operator-pilot"
+            or obj["minimum_python"] != "3.13"
+            or obj["authenticated"] is not False
+            or not isinstance(obj["source_files"], list)
+            or len(obj["source_files"]) != len(FILES)):
         raise DistributionDenied("invalid-installed-manifest")
     current = {}
     for node in destination.rglob("*"):
         rel = node.relative_to(destination).as_posix()
-        if node.is_symlink():
-            raise DistributionDenied("installed-symlink")
-        if node.is_dir():
-            if node.stat().st_mode & 0o077:
+        st = node.lstat()
+        if stat.S_ISDIR(st.st_mode):
+            if st.st_uid != os.getuid() or st.st_mode & 0o077:
                 raise DistributionDenied("installed-directory-unsafe")
             continue
-        st = node.lstat()
-        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or (
-            st.st_mode & 0o077) or st.st_size > MAX_FILE_BYTES:
+        if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid()
+                or st.st_nlink != 1 or st.st_mode & 0o077
+                or st.st_size > MAX_FILE_BYTES):
             raise DistributionDenied("installed-file-unsafe")
         current[rel] = {"path": rel, "sha256": _sha(node.read_bytes()),
                         "bytes": st.st_size}
@@ -265,10 +282,64 @@ def installed_verify(destination: Path) -> dict:
         raise DistributionDenied("installed-files-changed")
     if obj["source_files"] != [current[name] for name in FILES]:
         raise DistributionDenied("installed-file-digest-mismatch")
-    return {"status": "installed-integrity-verified",
-            "schema": SCHEMA, "file_count": len(FILES),
+    return obj, current, _sha(manifest_bytes)
+
+
+def installed_verify(destination: Path, *, expected_manifest_sha256: str | None = None) -> dict:
+    """Verify installed files, optionally against an INDEPENDENT trust digest."""
+    if expected_manifest_sha256 is not None and (
+            not isinstance(expected_manifest_sha256, str)
+            or not SHA.fullmatch(expected_manifest_sha256)):
+        raise DistributionDenied("invalid-expected-manifest-sha")
+    _, _, actual_sha = _installed_snapshot(destination)
+    if expected_manifest_sha256 is not None and actual_sha != expected_manifest_sha256:
+        raise DistributionDenied("installed-manifest-anchor-mismatch")
+    return {"status": "installed-integrity-verified", "schema": SCHEMA,
+            "manifest_sha256": actual_sha, "file_count": len(FILES),
+            "manifest_anchor_matched": expected_manifest_sha256 is not None,
             "publisher_authenticated": False, "production_ready": False,
             "authority": "none"}
+
+
+def compare_installed(current: Path, candidate: Path, *,
+                      expected_candidate_manifest_sha256: str,
+                      expected_current_manifest_sha256: str | None = None) -> dict:
+    """Non-mutating side-by-side review; no upgrades, rollback or self-update.
+
+    The candidate must be pinned to an independently supplied manifest digest.
+    This is not a publisher signature or an authorization to promote it.
+    """
+    if (not isinstance(expected_candidate_manifest_sha256, str)
+            or not SHA.fullmatch(expected_candidate_manifest_sha256)):
+        raise DistributionDenied("candidate-manifest-sha-required")
+    if current == candidate:
+        raise DistributionDenied("distinct-installations-required")
+    old = installed_verify(current,
+                           expected_manifest_sha256=expected_current_manifest_sha256)
+    new = installed_verify(candidate,
+                           expected_manifest_sha256=expected_candidate_manifest_sha256)
+    old_entries = _installed_snapshot(current)[1]
+    new_entries = _installed_snapshot(candidate)[1]
+    changed = [name for name in FILES
+               if old_entries[name]["sha256"] != new_entries[name]["sha256"]]
+    return {
+        "status": "review-required" if changed else "same-file-content",
+        "schema": "nexus.operator.upgrade-review.v1",
+        "previous_manifest_sha256": old["manifest_sha256"],
+        "candidate_manifest_sha256": new["manifest_sha256"],
+        "candidate_manifest_anchor_matched": True,
+        "previous_manifest_anchor_matched": expected_current_manifest_sha256 is not None,
+        "file_count": len(FILES),
+        "changed_file_count": len(changed),
+        "changed_paths": changed,
+        "unchanged_file_count": len(FILES) - len(changed),
+        "files_changed_by_review": False,
+        "data_migrated": False,
+        "upgrade_authorized": False,
+        "publisher_authenticated": False,
+        "production_ready": False,
+        "authority": "none",
+    }
 
 
 def _publish_no_replace(stage: Path, destination: Path) -> None:
@@ -339,34 +410,56 @@ def install(archive: Path, destination: Path, *, expected_sha256: str) -> dict:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("build", "verify", "install", "verify-installed"))
+    parser.add_argument("action", choices=("build", "verify", "install", "verify-installed", "compare-installed"))
     parser.add_argument("--source", type=Path, help="NEXUS source root for build")
     parser.add_argument("--archive", type=Path, help="ZIP archive for build/verify/install")
     parser.add_argument("--output", type=Path, help="New ZIP output for build")
     parser.add_argument("--destination", type=Path, help="Private new installation directory")
     parser.add_argument("--expected-sha256", help="Independent SHA-256 of complete ZIP")
+    parser.add_argument("--expected-manifest-sha256", help="Independent SHA-256 of installed manifest for verification")
+    parser.add_argument("--current", type=Path, help="Existing private installation to compare")
+    parser.add_argument("--candidate", type=Path, help="New, separately installed candidate")
+    parser.add_argument("--expected-candidate-manifest-sha256", help="Independent candidate manifest SHA-256")
     args = parser.parse_args(argv)
     try:
-        if args.action == "build":
+        if args.action == "compare-installed":
+            if (not args.current or not args.candidate
+                    or not args.expected_candidate_manifest_sha256
+                    or args.source or args.archive or args.output
+                    or args.destination or args.expected_sha256):
+                raise DistributionDenied("invalid-compare-options")
+            result = compare_installed(
+                args.current, args.candidate,
+                expected_current_manifest_sha256=args.expected_manifest_sha256,
+                expected_candidate_manifest_sha256=args.expected_candidate_manifest_sha256)
+        elif args.action == "build":
             if (not args.source or not args.output or args.archive or
-                    args.destination or args.expected_sha256):
+                    args.destination or args.expected_sha256 or
+                    args.expected_manifest_sha256 or args.current or args.candidate
+                    or args.expected_candidate_manifest_sha256):
                 raise DistributionDenied("invalid-build-options")
             result = build(args.source, args.output)
         elif args.action == "verify":
-            if (not args.archive or args.source or args.output or args.destination):
+            if (not args.archive or args.source or args.output or args.destination
+                    or args.expected_manifest_sha256 or args.current or args.candidate
+                    or args.expected_candidate_manifest_sha256):
                 raise DistributionDenied("invalid-verify-options")
             result = verify(args.archive, expected_sha256=args.expected_sha256)
         elif args.action == "install":
             if (not args.archive or not args.destination or not args.expected_sha256
-                    or args.source or args.output):
+                    or args.source or args.output or args.current or args.candidate
+                    or args.expected_candidate_manifest_sha256
+                    or args.expected_manifest_sha256):
                 raise DistributionDenied("invalid-install-options")
             result = install(args.archive, args.destination,
                              expected_sha256=args.expected_sha256)
         else:
             if (not args.destination or args.source or args.output
-                    or args.archive or args.expected_sha256):
+                    or args.archive or args.expected_sha256 or args.current
+                    or args.candidate or args.expected_candidate_manifest_sha256):
                 raise DistributionDenied("invalid-installed-verify-options")
-            result = installed_verify(args.destination)
+            result = installed_verify(args.destination,
+                     expected_manifest_sha256=args.expected_manifest_sha256)
         print(json.dumps(result, sort_keys=True))
         return 0
     except (OSError, ValueError, zipfile.BadZipFile,
