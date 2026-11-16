@@ -5,6 +5,7 @@ These tests exercise local harness validation and strict refusal paths.
 """
 import importlib.util
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -146,3 +147,41 @@ def test_cli_rejects_receive_without_explicit_digest_and_approval(tmp_path):
     reply = run_cli("receive", "--scratch", scratch, "--approve-synthetic-ci")
     assert reply.returncode == 2 and not reply.stdout
     assert not list(scratch.iterdir())
+
+
+@pytest.mark.skipif(os.getuid() == 0, reason="requires nonroot")
+def test_cli_bad_crc_returns_bounded_denial_without_partial_restore(synthetic_source, tmp_path):
+    root, evidence = synthetic_source
+    source = root / "transfer" / "snapshot.zip"
+    raw = bytearray(source.read_bytes())
+    idx = raw.find(module.OUTPUT)
+    assert idx >= 0
+    raw[idx] ^= 1
+    corrupt = tmp_path / "modified.zip"
+    corrupt.write_bytes(raw)
+    corrupt.chmod(0o600)
+    receiver = tmp_path / "receiver"
+    receiver.mkdir(mode=0o700)
+    attempt = run_cli("receive", "--scratch", receiver, "--archive", corrupt,
+                      "--expected-sha256", hashlib.sha256(raw).hexdigest(),
+                      "--expected-workspace-sha256", evidence["workspace_sha256"],
+                      "--approve-synthetic-ci")
+    assert attempt.returncode == 2 and not attempt.stdout
+    assert "denied" in attempt.stderr
+    assert "Traceback" not in attempt.stderr
+    assert list(receiver.iterdir()) == []
+
+
+@pytest.mark.skipif(os.getuid() == 0, reason="requires nonroot")
+def test_symlink_in_scratch_ancestor_is_denied_before_files_created(tmp_path):
+    real = tmp_path / "private"
+    real.mkdir(mode=0o700)
+    scratch = real / "scratch"
+    scratch.mkdir(mode=0o700)
+    alias = tmp_path / "alias"
+    alias.symlink_to(real, target_is_directory=True)
+    reply = run_cli("produce", "--scratch", alias / "scratch",
+                    "--approve-synthetic-ci")
+    assert reply.returncode == 2 and not reply.stdout
+    assert "denied" in reply.stderr
+    assert list(scratch.iterdir()) == []
