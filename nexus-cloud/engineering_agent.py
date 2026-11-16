@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_workspace import (IMAGE_DIGEST, MAX_FILE_BYTES, Workspace, WorkspaceDenied,
-                             run_container, safe_parts)
+                             CleanupUnverifiable, run_container, safe_parts)
 from agent_research import ResearchDenied, endpoint, fetch_metadata
 from agent_journal import ApprovalJournal
 
@@ -202,6 +202,10 @@ def execute_plan(workspace: Workspace, plan: dict[str, Any], digest: str, *, app
                 results.append(item)
                 if status != "complete":
                     break
+            except CleanupUnverifiable:
+                # Neither daemon cleanup nor a durable host fence was
+                # confirmed. Keep the approval STARTED and non-replayable.
+                raise
             except (OSError, WorkspaceDenied, ResearchDenied, ValueError) as exc:
                 status = "step-denied"
                 results.append({"index": index, "tool": tool, "status": "denied", "reason": type(exc).__name__})
