@@ -127,13 +127,15 @@ def chat_receipt(journal: dict) -> dict:
     return result
 
 
-def read_operator_file(path: str | Path) -> bytes:
-    """Bounded local file intake; refuse links, devices and overlarge files."""
+def read_operator_file(path: str | Path, *, require_private: bool = False) -> bytes:
+    """Bounded file intake; daemon plan files additionally require owner-only mode."""
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
     try:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or st.st_size > MAX_PLAN_BYTES:
             raise WorkspaceDenied("operator-input-not-bounded-regular-file")
+        if require_private and (st.st_uid != os.getuid() or st.st_mode & 0o077):
+            raise WorkspaceDenied("operator-plan-requires-private-owner-only-file")
         chunks = bytearray()
         while len(chunks) <= MAX_PLAN_BYTES:
             chunk = os.read(fd, min(65536, MAX_PLAN_BYTES + 1 - len(chunks)))

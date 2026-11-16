@@ -350,3 +350,25 @@ def test_operator_review_cli_cannot_export_stale_plan(operator):
     assert result.returncode == 2
     assert "stale-plan-reapproval-required" in result.stdout or "denied" in result.stderr
     assert not (out / f"nexus-review-{digest[:16]}.txt").exists()
+
+
+@pytest.mark.parametrize("action", ["review", "start"])
+def test_operator_refuses_nonprivate_plan_file_even_inside_private_outbox(operator, action):
+    root, ws, out, server = operator
+    digest, plan = candidate(ws, out, [{"tool": "write", "path": "not-written.txt", "text": "secret"}])
+    plan.chmod(0o644)
+    assert state(root, digest, action=action, plan=plan)["status"] == "denied"
+    assert state(root, digest)["status"] == "not-found"
+    assert not (ws.path / "not-written.txt").exists()
+    plan.chmod(0o600)
+    assert state(root, digest, action="review", plan=plan)["status"] == "review"
+
+
+def test_reject_hardlinked_plan_without_consuming_approval(operator):
+    root, ws, out, server = operator
+    digest, plan = candidate(ws, out, [{"tool": "write", "path": "not-written.txt", "text": "secret"}])
+    link = out / "second-link-to-plan.json"
+    os.link(plan, link)
+    assert state(root, digest, action="start", plan=plan)["status"] == "denied"
+    assert state(root, digest)["status"] == "not-found"
+    assert not (ws.path / "not-written.txt").exists()

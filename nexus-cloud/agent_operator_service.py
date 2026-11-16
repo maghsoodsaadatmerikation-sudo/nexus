@@ -183,7 +183,7 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
                 if (not path.is_absolute() or path.name != f"nexus-plan-{digest[:16]}.json"
                         or path.is_symlink()):
                     return {"status": "denied"}
-                candidate, observed = parse_plan(read_operator_file(path))
+                candidate, observed = parse_plan(read_operator_file(path, require_private=True))
                 if observed != digest or candidate["workspace"] != name or candidate["version"] != 3:
                     return {"status": "denied"}
                 # Review must not manufacture a workspace merely because an
@@ -239,7 +239,7 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
                         del self._running[name]
                         raise
                 return {"status": "submitted-not-verified", "plan_sha256": digest, "authority": "operator-only"}
-            except (OSError, WorkspaceDenied, UnicodeError, ValueError):
+            except (OSError, WorkspaceDenied, UnicodeError, ValueError, RuntimeError):
                 return {"status": "denied"}
         if has_plan or action not in ("status", "stop"):
             return {"status": "denied"}

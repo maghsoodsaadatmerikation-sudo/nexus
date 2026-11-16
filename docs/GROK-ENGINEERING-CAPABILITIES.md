@@ -476,3 +476,14 @@ proof against hostile same-UID processes, transactional file isolation,
 container-free remote execution or a production deployment**. The same
 operator account and its host directories remain a trusted boundary. The
 model has zero operator capabilities (`A_out <= A_in`).
+
+
+Additional Phase-11 defense: the operator daemon now accepts executable
+private plan files only when the file descriptor confirms a regular,
+single-linked file owned by the service UID with no group/other permission
+bits (`0600` or stricter). This is checked **after opening with O_NOFOLLOW**,
+preventing a path-only permission check from being bypassed by a rename race.
+The more general proposal importer retains its separate bounded untrusted
+file intake contract; it is not automatically treated as an approved plan.
+Tests exercise 0644 plans and hardlinks, and verify both are refused without
+consuming a one-time approval or causing writes.
