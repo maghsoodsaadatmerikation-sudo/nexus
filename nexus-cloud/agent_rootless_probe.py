@@ -8,6 +8,8 @@ except a read-only workspace. Failure to establish every boundary is fatal.
 from __future__ import annotations
 
 import ctypes
+import errno
+import platform
 import hashlib
 import os
 from pathlib import Path
@@ -184,8 +186,7 @@ def _enter(root: str, workspace: str, args: list[str]) -> None:
     # irreversible under NO_NEW_PRIVS and returns EPERM without side effects.
     # Architecture mismatch or x86 x32 ABI attempts kill the guest, not fall
     # through to a weaker ABI policy.
-    import platform
-    import errno
+    # Python modules are imported before chroot: /usr/lib is unavailable here.
     architecture = platform.machine().lower()
     if architecture == 'x86_64':
         audit_arch = 0xC000003E
