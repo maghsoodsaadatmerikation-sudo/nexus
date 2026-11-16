@@ -371,3 +371,48 @@ no deployment, merge or production readiness is implied by local test success.
 - Input is bounded to 32,768 bytes with strict duplicate JSON-key detection, exact recognized field names, workspace and step checks, and status restrictions. A secure importer invalidates stale file reads after lock or chat/project switches. No proposal is saved to the Studio archive.
 - Node contract tests, real Chromium narrow/wide behavioral checks, deterministic Studio bundle and static integrity verification are CI gates. Static site deployment is **not** part of this PR.
 - The local operator remains responsible for full private plan examination and independent authorization, and the browser's parser is not equivalent to the operator's Python validator.
+
+
+## Phase 10 — Private operator service and cancellation
+
+The engineering agent now supports a **local, non-root Linux operator service**
+over a private Unix socket (no HTTP listener or public Docker API). A 0600
+random token plus Linux SO_PEERCRED same-user verification protects the local
+channel. The owner chooses and reviews the **entire private plan** and supplies
+the exact canonical digest; generated model text alone never grants authority.
+A v3 nonce, workspace-state precondition and crash-conscious single-use journal
+remain enforced. Replays are rejected.
+
+Operator workflow:
+
+1. Prepare a private v3 proposal using scripts/nexus-chat-engineering.py;
+   store it in an owned 0700 outbox outside the owned 0700 workspace root.
+2. Start scripts/nexus-operator-service.py with the serve action and --root
+   in a foreground operator terminal. The token remains local and is never
+   printed, transmitted to a browser or persisted in a transcript.
+3. From another terminal use start --root --workspace --digest --plan after
+   inspecting the complete plan. Submitted means queued, not verified.
+4. Read status --root --workspace --digest; optional --out writes a sanitized
+   0600 result file for manual import in the Studio Engineering Agent panel.
+5. To request stopping an active plan, use stop --root --workspace --digest.
+   Stop-requested is not completion; inspect a durable terminal receipt.
+   When cancellation is observed it is recorded as CANCELLED, not PASS.
+   File edits that happened before stop are NOT rolled back.
+
+The socket refuses oversized or malformed JSON, duplicate keys, unsafe plan
+paths, invalid peer identity or token, unapproved digests and multiple active
+plans for one workspace. The protocol returns only status and sanitized
+hashes/step summaries; raw code, stdout, stderr, passwords and source text
+are not returned. A same-UID process is within the same operator trust domain:
+this is **not** hostile same-user isolation or multi-tenant production hosting.
+
+Local Python contract tests and CI cover replay, peer/token rejection,
+privacy-preserving export, a simulated mid-command stop, and actual Docker
+termination using a digest-pinned test image on an unprivileged ephemeral host.
+Studio's strict inert parser now accepts cancelled receipts as non-success.
+The deterministic Studio and offline service worker are regenerated together.
+
+There remains **no browser-driven execution**, autonomous tool loop, remote
+tenant container host, deployed service, general browsing, or independent
+production-security attestation. The model never holds an operator capability.
+Keep PR #244 in Draft until all required CI and security checks are reviewed.
