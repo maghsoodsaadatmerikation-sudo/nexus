@@ -183,7 +183,8 @@ def test_cli_verify_with_digest_and_refuse_unknown_options(tmp_path):
          "--expected-sha256",report["archive_sha256"]]
     good=subprocess.run(cmd,capture_output=True,text=True,timeout=6)
     assert good.returncode==0,good.stderr
-    assert json.loads(good.stdout)["publisher_authenticated"] is True
+    assert json.loads(good.stdout)["publisher_authenticated"] is False
+    assert json.loads(good.stdout)["archive_digest_matched"] is True
     wrong=subprocess.run([*cmd,"--destination",str(tmp_path/"target")],
                          capture_output=True,text=True,timeout=6)
     assert wrong.returncode==2
