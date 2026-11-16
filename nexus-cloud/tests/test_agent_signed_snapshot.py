@@ -11,6 +11,12 @@ import shutil
 import sys
 
 import pytest
+
+# Broad Cloud Adapter jobs intentionally do not install operator-only crypto.
+# The dedicated signed-snapshot CI installs pinned cryptography and MUST run
+# every case; elsewhere do not fail collection or pull a crypto dependency
+# into the public API/runtime just for these operator tests.
+pytest.importorskip("cryptography", reason="operator-only crypto is tested in dedicated CI")
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
