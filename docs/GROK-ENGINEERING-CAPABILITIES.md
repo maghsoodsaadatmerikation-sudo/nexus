@@ -160,3 +160,47 @@ and should not be posted to public logs.
 Tests for the code-inspection and metadata tools use local synthetic fixtures.
 A separate real network acceptance check is still required on an appropriately
 authorized operator host. The tooling is not a public Studio or API feature.
+
+## Phase 4 — serialized execution and real Docker acceptance (16 November 2026)
+
+This incremental candidate adds **advisory cross-process serialization** and
+observable before/after project integrity to the reviewed engineering agent.
+It is still an operator-only, local engineering capability, not a public
+model-controlled shell or an auto-deployed NEXUS Studio feature.
+
+- `Workspace.operation_lock()` takes an exclusive, time-bounded Linux `flock`
+  on a private, persistent inode **outside** the hashed workspace directory.
+  The lock is checked to be a single-link regular file owned by the current
+  user, with no group/world permission. The lock is never unlinked while
+  sessions may be active. This prevents two cooperating NEXUS CLI processes
+  from approving and changing the same workspace simultaneously.
+- Both approved whole-plan execution and the direct operator workspace CLI
+  acquire this same lock. A second local CLI attempt fails with `workspace-busy`
+  rather than silently overlapping a running plan. Individual `Workspace`
+  library calls by third-party code remain an **internal API**, and callers
+  using it directly must acquire the lock themselves.
+- A `PlanReceipt` now records `workspace_sha256_before` and
+  `workspace_sha256_after`. A failed sequence retains any earlier committed
+  edits and records their actual final hash; there is **no rollback claim**.
+  If a container or tool produces an invalid filesystem tree (e.g., symlink,
+  special file, excessive size), the receipt reports `post-state-unverifiable`
+  and never asserts a valid final snapshot.
+- A separate, disposable GitHub-hosted CI job invokes a **real Docker daemon**,
+  rather than mocking `subprocess.Popen`. It fetches BusyBox 1.36.1, obtains the
+  pulled image's digest and passes that digest to the existing runner. It checks
+  an unprivileged process, a workspace write, read-only container root and
+  timeout/cleanup, with no repository write token or host secrets mounted.
+  This verifies a particular CI host; it is **not** a multi-tenant isolation
+  penetration test or evidence that all OCI images are trustworthy.
+
+### Remaining trust boundary
+
+`flock` is cooperative among processes using this implementation. Another
+program using the same Unix account, a hostile host administrator or a running
+container with a writeable workspace bind can still alter files; a plan-state
+hash does not create an atomic snapshot of every external writer. This is why
+neither the local Docker CLI nor its socket is exposed to remote users or
+untrusted model outputs. A remote service still needs dedicated disposable
+workers, authenticated policy mediation, nonshared storage, quotas and isolated
+attestation. All CI claims must refer to an actually completed GitHub run;
+adding a CI step is not evidence that the step has passed.

@@ -49,32 +49,33 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         workspace = Workspace(args.root, args.workspace)
-        if args.operation == "read":
-            sys.stdout.buffer.write(workspace.read(args.path))
-        elif args.operation == "write":
-            workspace.write(args.path, Path(args.from_file).read_bytes(), create_parents=args.create_parents)
-            print(json.dumps({"status": "written", "path": args.path}))
-        elif args.operation == "edit":
-            workspace.edit(args.path, Path(args.old_file).read_bytes(), Path(args.new_file).read_bytes())
-            print(json.dumps({"status": "edited", "path": args.path}))
-        elif args.operation == "preview-edit":
-            print(json.dumps(workspace.preview_edit(args.path, Path(args.old_file).read_bytes(), Path(args.new_file).read_bytes())))
-        elif args.operation == "search":
-            print(json.dumps(workspace.search(args.query, case_sensitive=args.case_sensitive), ensure_ascii=False))
-        elif args.operation == "research":
-            if not args.approve_research:
-                raise ResearchDenied("research-requires-explicit-approval")
-            print(json.dumps(fetch_metadata(args.provider, args.name)))
-        elif args.operation == "manifest":
-            print(json.dumps(workspace.manifest(), ensure_ascii=False))
-        elif args.operation == "package":
-            print(json.dumps(workspace.package(args.output)))
-        elif args.operation == "run":
-            command = args.command[1:] if args.command[:1] == ["--"] else args.command
-            result = run_container(workspace, args.image, command,
-                                   approved=args.approve_run, timeout_seconds=args.timeout)
-            print(json.dumps(result.__dict__))
-            return 0 if result.status == "complete" and result.exit_code == 0 else 1
+        with workspace.operation_lock():
+            if args.operation == "read":
+                sys.stdout.buffer.write(workspace.read(args.path))
+            elif args.operation == "write":
+                workspace.write(args.path, Path(args.from_file).read_bytes(), create_parents=args.create_parents)
+                print(json.dumps({"status": "written", "path": args.path}))
+            elif args.operation == "edit":
+                workspace.edit(args.path, Path(args.old_file).read_bytes(), Path(args.new_file).read_bytes())
+                print(json.dumps({"status": "edited", "path": args.path}))
+            elif args.operation == "preview-edit":
+                print(json.dumps(workspace.preview_edit(args.path, Path(args.old_file).read_bytes(), Path(args.new_file).read_bytes())))
+            elif args.operation == "search":
+                print(json.dumps(workspace.search(args.query, case_sensitive=args.case_sensitive), ensure_ascii=False))
+            elif args.operation == "research":
+                if not args.approve_research:
+                    raise ResearchDenied("research-requires-explicit-approval")
+                print(json.dumps(fetch_metadata(args.provider, args.name)))
+            elif args.operation == "manifest":
+                print(json.dumps(workspace.manifest(), ensure_ascii=False))
+            elif args.operation == "package":
+                print(json.dumps(workspace.package(args.output)))
+            elif args.operation == "run":
+                command = args.command[1:] if args.command[:1] == ["--"] else args.command
+                result = run_container(workspace, args.image, command,
+                                       approved=args.approve_run, timeout_seconds=args.timeout)
+                print(json.dumps(result.__dict__))
+                return 0 if result.status == "complete" and result.exit_code == 0 else 1
     except (WorkspaceDenied, ResearchDenied, OSError, ValueError) as exc:
         print(json.dumps({"status": "denied", "reason": str(exc)}), file=sys.stderr)
         return 2

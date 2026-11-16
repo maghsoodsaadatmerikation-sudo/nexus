@@ -12,6 +12,8 @@ import re
 import hashlib
 import json
 import difflib
+import fcntl
+from contextlib import contextmanager
 import selectors
 import shutil
 import stat
@@ -72,6 +74,59 @@ class Workspace:
         st = self.path.lstat()
         if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
             raise WorkspaceDenied("workspace-must-be-private-owned-directory")
+
+    @contextmanager
+    def operation_lock(self, *, timeout_seconds: float = 3.0):
+        """Advisory cross-process lock covering plan admission and all its steps.
+
+        The persistent lock inode is stored OUTSIDE the manifest-hashed project
+        directory so merely reviewing or executing a plan does not change the
+        manifest. All official local CLI commands honor this lock. This does not
+        prevent an unrelated host process or Docker container from writing to
+        the filesystem: the operator must dedicate the host account/workspace.
+        """
+        if type(timeout_seconds) not in (float, int) or not 0 <= timeout_seconds <= 30:
+            raise WorkspaceDenied("invalid-lock-timeout")
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+        rootfd = os.open(self.root, flags)
+        fd = None
+        try:
+            st = os.fstat(rootfd)
+            if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
+                raise WorkspaceDenied("unsafe-workspace-root")
+            # O_NOFOLLOW and the private root block replacement of the lock
+            # with a link to a sensitive filesystem object.
+            fd = os.open(f".nexus-agent-{self.name}.lock",
+                         os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC,
+                         0o600, dir_fd=rootfd)
+            lockstat = os.fstat(fd)
+            if (not stat.S_ISREG(lockstat.st_mode) or lockstat.st_uid != os.getuid()
+                    or lockstat.st_nlink != 1 or lockstat.st_mode & 0o077):
+                raise WorkspaceDenied("unsafe-workspace-lock")
+        except BaseException:
+            if fd is not None:
+                os.close(fd)
+            raise
+        finally:
+            os.close(rootfd)
+        assert fd is not None
+        acquired = False
+        try:
+            deadline = time.monotonic() + timeout_seconds
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    acquired = True
+                    break
+                except BlockingIOError as exc:
+                    if time.monotonic() >= deadline:
+                        raise WorkspaceDenied("workspace-busy") from exc
+                    time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+            yield
+        finally:
+            if acquired:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
 
     def _parent(self, path: str, *, create: bool = False) -> tuple[int, str]:
         parts = safe_parts(path)

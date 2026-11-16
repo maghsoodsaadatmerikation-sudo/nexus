@@ -121,6 +121,8 @@ class PlanReceipt:
     completed_steps: int
     results: tuple[dict[str, Any], ...]
     authority: str = "operator-reviewed-only"
+    workspace_sha256_before: str = ""
+    workspace_sha256_after: str | None = None
 
 
 def execute_plan(workspace: Workspace, plan: dict[str, Any], digest: str, *, approved_digest: str) -> PlanReceipt:
@@ -133,56 +135,67 @@ def execute_plan(workspace: Workspace, plan: dict[str, Any], digest: str, *, app
     checked, actual_digest = parse_plan(serialized)
     if actual_digest != digest or checked["workspace"] != workspace.name:
         raise WorkspaceDenied("plan-changed-or-wrong-workspace")
-    # Version 2 couples the approved plan to the observed *entire* workspace.
-    # The check occurs before the first mutation or executable command.
-    if checked["version"] == 2:
-        observed = workspace.manifest()["sha256"]
-        if observed != checked["expected_workspace_sha256"]:
-            raise WorkspaceDenied("workspace-state-changed-reapproval-required")
-    results: list[dict[str, Any]] = []
-    status = "complete"
-    for index, step in enumerate(checked["steps"]):
-        tool = step["tool"]
-        try:
-            if tool == "write":
-                workspace.write(step["path"], step["text"].encode(), create_parents=True)
-                item = {"index": index, "tool": tool, "sha256": hashlib.sha256(workspace.read(step["path"])).hexdigest()}
-            elif tool == "edit":
-                workspace.edit(step["path"], step["before"].encode(), step["after"].encode())
-                item = {"index": index, "tool": tool, "sha256": hashlib.sha256(workspace.read(step["path"])).hexdigest()}
-            elif tool in ("read", "verify_sha256"):
-                data = workspace.read(step["path"])
-                digest_file = hashlib.sha256(data).hexdigest()
-                if tool == "verify_sha256" and digest_file != step["expected_sha256"]:
-                    raise WorkspaceDenied("file-hash-mismatch")
-                item = {"index": index, "tool": tool, "sha256": digest_file, "bytes": len(data)}
-            elif tool == "search":
-                info = workspace.search(step["query"], case_sensitive=step["case_sensitive"])
-                item = {"index": index, "tool": tool, **info}
-            elif tool == "preview_edit":
-                info = workspace.preview_edit(step["path"], step["before"].encode(), step["after"].encode())
-                item = {"index": index, "tool": tool, **info}
-            elif tool == "research":
-                info = fetch_metadata(step["provider"], step["name"])
-                item = {"index": index, "tool": tool, **info}
-            elif tool == "package":
-                info = workspace.package(step["output"])
-                item = {"index": index, "tool": tool, **info}
-            elif tool == "run":
-                receipt = run_container(workspace, step["image"], step["argv"], approved=True, timeout_seconds=step["timeout_seconds"])
-                item = {"index": index, "tool": tool, "exit_code": receipt.exit_code, "status": receipt.status,
-                        "stdout_sha256": hashlib.sha256(receipt.stdout.encode()).hexdigest(),
-                        "stderr_sha256": hashlib.sha256(receipt.stderr.encode()).hexdigest(),
-                        "duration_ms": receipt.duration_ms}
-                if receipt.status != "complete" or receipt.exit_code != 0:
-                    status = "execution-failed"
-            else:
-                raise WorkspaceDenied("unknown-tool")
-            results.append(item)
-            if status != "complete":
+    with workspace.operation_lock():
+        # Version 2 couples the approved plan to the observed *entire* workspace.
+        # The check occurs before the first mutation or executable command.
+        if checked["version"] == 2:
+            observed = workspace.manifest()["sha256"]
+            if observed != checked["expected_workspace_sha256"]:
+                raise WorkspaceDenied("workspace-state-changed-reapproval-required")
+        workspace_sha256_before = workspace.manifest()["sha256"]
+        results: list[dict[str, Any]] = []
+        status = "complete"
+        for index, step in enumerate(checked["steps"]):
+            tool = step["tool"]
+            try:
+                if tool == "write":
+                    workspace.write(step["path"], step["text"].encode(), create_parents=True)
+                    item = {"index": index, "tool": tool, "sha256": hashlib.sha256(workspace.read(step["path"])).hexdigest()}
+                elif tool == "edit":
+                    workspace.edit(step["path"], step["before"].encode(), step["after"].encode())
+                    item = {"index": index, "tool": tool, "sha256": hashlib.sha256(workspace.read(step["path"])).hexdigest()}
+                elif tool in ("read", "verify_sha256"):
+                    data = workspace.read(step["path"])
+                    digest_file = hashlib.sha256(data).hexdigest()
+                    if tool == "verify_sha256" and digest_file != step["expected_sha256"]:
+                        raise WorkspaceDenied("file-hash-mismatch")
+                    item = {"index": index, "tool": tool, "sha256": digest_file, "bytes": len(data)}
+                elif tool == "search":
+                    info = workspace.search(step["query"], case_sensitive=step["case_sensitive"])
+                    item = {"index": index, "tool": tool, **info}
+                elif tool == "preview_edit":
+                    info = workspace.preview_edit(step["path"], step["before"].encode(), step["after"].encode())
+                    item = {"index": index, "tool": tool, **info}
+                elif tool == "research":
+                    info = fetch_metadata(step["provider"], step["name"])
+                    item = {"index": index, "tool": tool, **info}
+                elif tool == "package":
+                    info = workspace.package(step["output"])
+                    item = {"index": index, "tool": tool, **info}
+                elif tool == "run":
+                    receipt = run_container(workspace, step["image"], step["argv"], approved=True, timeout_seconds=step["timeout_seconds"])
+                    item = {"index": index, "tool": tool, "exit_code": receipt.exit_code, "status": receipt.status,
+                            "stdout_sha256": hashlib.sha256(receipt.stdout.encode()).hexdigest(),
+                            "stderr_sha256": hashlib.sha256(receipt.stderr.encode()).hexdigest(),
+                            "duration_ms": receipt.duration_ms}
+                    if receipt.status != "complete" or receipt.exit_code != 0:
+                        status = "execution-failed"
+                else:
+                    raise WorkspaceDenied("unknown-tool")
+                results.append(item)
+                if status != "complete":
+                    break
+            except (OSError, WorkspaceDenied, ResearchDenied, ValueError) as exc:
+                status = "step-denied"
+                results.append({"index": index, "tool": tool, "status": "denied", "reason": type(exc).__name__})
                 break
-        except (OSError, WorkspaceDenied, ResearchDenied, ValueError) as exc:
-            status = "step-denied"
-            results.append({"index": index, "tool": tool, "status": "denied", "reason": type(exc).__name__})
-            break
-    return PlanReceipt(digest, status, sum(item.get("status") != "denied" for item in results), tuple(results))
+        try:
+            workspace_sha256_after = workspace.manifest()["sha256"]
+        except (WorkspaceDenied, OSError):
+            # A command may have created a symlink, FIFO or oversized file. Never
+            # claim a clean end state when its integrity cannot be observed.
+            workspace_sha256_after = None
+            status = "post-state-unverifiable"
+        return PlanReceipt(digest, status, sum(item.get("status") != "denied" for item in results), tuple(results),
+                           workspace_sha256_before=workspace_sha256_before,
+                           workspace_sha256_after=workspace_sha256_after)
