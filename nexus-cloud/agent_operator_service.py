@@ -7,6 +7,8 @@ A stop signal is cooperative; cancellation is not a filesystem rollback.
 """
 from __future__ import annotations
 
+import errno
+import fcntl
 import hmac
 import json
 import os
@@ -16,6 +18,7 @@ import socketserver
 import stat
 import struct
 import threading
+import time
 from pathlib import Path
 
 from agent_chat_handoff import REVIEW_SCHEMA, chat_receipt, private_export_dir, read_operator_file
@@ -30,6 +33,7 @@ MAX_RESPONSE_BYTES = 16_384
 MAX_ACTIVE_CLIENTS = 12
 SOCKET_NAME = ".nexus-operator.sock"
 TOKEN_NAME = ".nexus-operator.token"
+LOCK_NAME = ".nexus-operator.lock"
 
 
 def _root(root: str | Path) -> Path:
@@ -92,6 +96,77 @@ def _token_file(root: Path, *, create: bool = False) -> str:
         os.close(dfd)
 
 
+
+def _service_lock(root: Path) -> int:
+    """Single owner-only lifetime/recovery lock; not a network lease."""
+    dfd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        fd = os.open(LOCK_NAME, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC,
+                     0o600, dir_fd=dfd)
+        try:
+            _regular_private(fd, max_size=0)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise WorkspaceDenied('operator-service-still-active') from exc
+            return fd
+        except BaseException:
+            os.close(fd)
+            raise
+    finally:
+        os.close(dfd)
+
+
+def recover_stale_service(root: str | Path, *, acknowledge_possible_orphans: bool = False) -> dict:
+    """Explicit LOCAL revocation of stale transport credentials, not job recovery.
+
+    It does not restart any job, delete/finish journals or claim that processes
+    survived/terminated. Operator must separately audit possible orphaned work.
+    """
+    if os.name != 'posix' or os.getuid() == 0 or acknowledge_possible_orphans is not True:
+        raise WorkspaceDenied('operator-recovery-requires-explicit-unprivileged-acknowledgment')
+    directory = _root(root)
+    lockfd = _service_lock(directory)
+    dfd = None
+    try:
+        dfd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        entries = {}
+        for name, socket_file in ((TOKEN_NAME, False), (SOCKET_NAME, True)):
+            try:
+                st = os.stat(name, dir_fd=dfd, follow_symlinks=False)
+            except FileNotFoundError:
+                entries[name] = False
+                continue
+            if (st.st_uid != os.getuid() or st.st_mode & 0o077 or
+                    (not stat.S_ISSOCK(st.st_mode) if socket_file else
+                     not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or st.st_size != 64)):
+                raise WorkspaceDenied('operator-recovery-unsafe-credential')
+            entries[name] = True
+        if entries[TOKEN_NAME]:
+            _token_file(directory)  # content/owner/mode/symlink invariant
+        if entries[SOCKET_NAME]:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                sock.settimeout(.5)
+                failure = sock.connect_ex(str(directory / SOCKET_NAME))
+            if failure != errno.ECONNREFUSED:
+                # 0 means a live daemon; any other error is uncertain.
+                raise WorkspaceDenied('operator-recovery-active-or-unverifiable-socket')
+        removed = bool(entries[TOKEN_NAME] or entries[SOCKET_NAME])
+        # Never remove the lifetime lock or any single-use journal evidence.
+        if entries[SOCKET_NAME]:
+            os.unlink(SOCKET_NAME, dir_fd=dfd)
+        if entries[TOKEN_NAME]:
+            os.unlink(TOKEN_NAME, dir_fd=dfd)
+        os.fsync(dfd)
+        return {'status': 'stale-transport-revoked' if removed else 'no-stale-transport',
+                'authority': 'operator-only', 'journal_preserved': True,
+                'jobs_restarted': False, 'orphaned_processes_ruled_out': False}
+    finally:
+        if dfd is not None:
+            os.close(dfd)
+        os.close(lockfd)
+
+
 class OperatorServer(socketserver.ThreadingUnixStreamServer):
     daemon_threads = True
     block_on_close = False
@@ -111,18 +186,27 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
         self._clients = threading.BoundedSemaphore(MAX_ACTIVE_CLIENTS)
         self._running: dict[str, tuple[str, threading.Event]] = {}
         self._running_types: dict[str, str] = {}
-        self._token = _token_file(self.root, create=True)
+        self._worker_threads: dict[str, threading.Thread] = {}
+        self._service_lock_fd = _service_lock(self.root)
         self._socket = self.root / SOCKET_NAME
+        token_created = False
+        socket_created = False
         try:
+            self._token = _token_file(self.root, create=True)
+            token_created = True
             # The private directory prevents client access before chmod below.
             super().__init__(str(self._socket), OperatorHandler)
+            socket_created = True
             os.chmod(self._socket, 0o600)
             st = self._socket.lstat()
             if not stat.S_ISSOCK(st.st_mode) or st.st_uid != os.getuid():
                 raise WorkspaceDenied("unsafe-operator-socket")
         except BaseException:
-            self._socket.unlink(missing_ok=True)
-            (self.root / TOKEN_NAME).unlink(missing_ok=True)
+            if socket_created:
+                self._socket.unlink(missing_ok=True)
+            if token_created:
+                (self.root / TOKEN_NAME).unlink(missing_ok=True)
+            os.close(self._service_lock_fd)
             raise
 
     def process_request(self, request, client_address):
@@ -144,16 +228,27 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
             self._clients.release()
 
     def server_close(self):
-        # Closing a service while work is running would abandon a live Docker
-        # subprocess. Its cancel flag is set and workers get a bounded join.
+        # Revoke new admissions and request cooperative cancellation. Do not
+        # drop the service lock while any worker is still alive: a new daemon
+        # could otherwise start alongside an old container/namespace process.
         with self._state_lock:
             for _, event in self._running.values():
                 event.set()
+            workers = tuple(self._worker_threads.values())
         try:
             super().server_close()
+            deadline = time.monotonic() + 20
+            for worker in workers:
+                if worker is not threading.current_thread():
+                    worker.join(max(0, deadline - time.monotonic()))
         finally:
             self._socket.unlink(missing_ok=True)
             (self.root / TOKEN_NAME).unlink(missing_ok=True)
+            if self._service_lock_fd >= 0 and all(not worker.is_alive() for worker in workers):
+                os.close(self._service_lock_fd)
+                self._service_lock_fd = -1
+            # If a worker failed to stop, keep the lock FD deliberately open
+            # in this process until exit. Never advertise safe restart here.
 
     def _run(self, ws: Workspace, plan: dict, digest: str, event: threading.Event) -> None:
         try:
@@ -167,6 +262,7 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
                 if self._running.get(ws.name, (None, None))[0] == digest:
                     del self._running[ws.name]
                     self._running_types.pop(ws.name, None)
+                    self._worker_threads.pop(ws.name, None)
 
     def _run_probe(self, ws: Workspace, plan: dict, digest: str, event: threading.Event) -> None:
         """Durable claim was fsynced by dispatch before this worker started."""
@@ -204,6 +300,7 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
                 if self._running.get(ws.name, (None, None))[0] == digest:
                     del self._running[ws.name]
                     self._running_types.pop(ws.name, None)
+                    self._worker_threads.pop(ws.name, None)
 
     def _dispatch_probe(self, action: str, name: str, digest: str, value: dict) -> dict:
         """Separate opt-in control, never exposed by public/tenant services."""
@@ -262,11 +359,13 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
                         self._running_types[name] = "probe"
                         worker = threading.Thread(target=self._run_probe,
                                                   args=(ws, plan, digest, event), daemon=False)
+                        self._worker_threads[name] = worker
                         try:
                             worker.start()
                         except BaseException:
                             del self._running[name]
                             self._running_types.pop(name, None)
+                            self._worker_threads.pop(name, None)
                             raise
                 return {"status": "submitted-not-verified",
                         "plan_sha256": digest, "authority": "operator-only"}
@@ -389,11 +488,13 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
                     worker = threading.Thread(target=self._run, args=(ws, candidate, digest, event), daemon=False)
                     self._running[name] = (digest, event)
                     self._running_types[name] = "plan"
+                    self._worker_threads[name] = worker
                     try:
                         worker.start()
                     except BaseException:
                         del self._running[name]
                         self._running_types.pop(name, None)
+                        self._worker_threads.pop(name, None)
                         raise
                 return {"status": "submitted-not-verified", "plan_sha256": digest, "authority": "operator-only"}
             except (OSError, WorkspaceDenied, UnicodeError, ValueError, RuntimeError):

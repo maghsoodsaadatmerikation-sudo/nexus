@@ -240,6 +240,44 @@ def _enter(root: str, workspace: str, args: list[str]) -> None:
               {'PATH': '/bin', 'HOME': '/tmp', 'LANG': 'C', 'TMPDIR': '/tmp'})
 
 
+
+# A daemon crash must not leave its unshare/guest subtree running just because
+# the approval journal is permanently consumed. A tiny trusted Python launcher
+# installs Linux PR_SET_PDEATHSIG *before* execve(unshare). Unlike Popen's
+# preexec_fn, this is safe to use from the operator server's worker threads.
+# The parent-PID check closes the race where the daemon died before prctl.
+_PARENT_GUARD = r"""
+import ctypes, os, signal, sys
+try:
+    parent = int(sys.argv[1])
+    executable = sys.argv[2]
+    arguments = sys.argv[3:]
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(1, signal.SIGKILL, 0, 0, 0) != 0:  # PR_SET_PDEATHSIG
+        os._exit(120)
+    if os.getppid() != parent:
+        os._exit(120)
+    os.execve(executable, [executable, *arguments],
+              {'PATH': '/usr/bin:/bin', 'LANG': 'C'})
+except BaseException:
+    os._exit(120)
+"""
+
+
+def _guarded_command(executable: str, argv: list[str], *,
+                     parent_pid: int | None = None) -> list[str]:
+    """Linux parent-death supervision without unsafe subprocess preexec_fn."""
+    if not sys.platform.startswith('linux') or not isinstance(executable, str) or not executable.startswith('/'):
+        raise WorkspaceDenied('rootless-parent-guard-unavailable')
+    if not isinstance(argv, list) or not all(isinstance(x, str) for x in argv):
+        raise WorkspaceDenied('rootless-parent-guard-arguments')
+    expected = os.getpid() if parent_pid is None else parent_pid
+    if type(expected) is not int or expected <= 1:
+        raise WorkspaceDenied('rootless-parent-guard-pid')
+    return [sys.executable, '-I', '-c', _PARENT_GUARD,
+            str(expected), executable, *argv]
+
+
 def _pump(proc: subprocess.Popen, timeout: int, *,
           cancel_event: threading.Event | None = None) -> tuple[str, int, bytes, bytes]:
     out, err = bytearray(), bytearray()
@@ -329,7 +367,11 @@ def run_probe(root: str | Path, workspace: str, executable: str | Path,
                    '--net', '--pid', '--ipc', '--uts', '--fork', '--kill-child',
                    '--propagation', 'private', sys.executable, '-I', __file__,
                    '__enter__', str(sandbox), str(ws.path), *args]
-            proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL,
+            # The unshare parent inherits an irrevocable SIGKILL-on-parent-
+            # death rule; unshare's --kill-child then terminates the private
+            # PID namespace. No unsafe preexec_fn or background daemon.
+            proc = subprocess.Popen(_guarded_command('/usr/bin/unshare', cmd[1:]),
+                                    stdin=subprocess.DEVNULL,
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     close_fds=True, start_new_session=True,
                                     env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})

@@ -10,6 +10,8 @@ on:
       - 'nexus-cloud/agent_tenant_boundary.py'
       - 'nexus-cloud/agent_rootless_probe.py'
       - 'nexus-cloud/agent_rootless_job.py'
+      - 'nexus-cloud/tests/test_agent_operator_recovery.py'
+      - 'docs/PHASE17-CRASH-RECOVERY.md'
       - 'nexus-cloud/tests/test_agent_rootless_job.py'
       - 'scripts/nexus-rootless-job.py'
       - 'docs/PHASE16-ROOTLESS-OPERATOR-JOBS.md'
@@ -63,6 +65,7 @@ jobs:
             nexus-cloud/tests/test_agent_journal.py \
             nexus-cloud/tests/test_agent_chat_handoff.py \
             nexus-cloud/tests/test_agent_rootless_job.py \
+            nexus-cloud/tests/test_agent_operator_recovery.py \
             nexus-cloud/tests/test_agent_operator_service.py \
             nexus-cloud/tests/test_agent_tenant_boundary.py
 

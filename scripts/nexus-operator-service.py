@@ -5,15 +5,17 @@ import json
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "nexus-cloud"))
-from agent_operator_service import OperatorServer, client
+from agent_operator_service import OperatorServer, client, recover_stale_service
 from agent_workspace import Workspace, WorkspaceDenied
 from agent_chat_handoff import private_export_dir, shareable_json, write_export
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("action", choices=("serve", "review", "start", "stop", "status"))
+    ap.add_argument("action", choices=("serve", "review", "start", "stop", "status", "recover-stale"))
     ap.add_argument("--root", required=True, help="Absolute operator-owned 0700 workspace root")
+    ap.add_argument("--acknowledge-possible-orphans", action="store_true",
+                    help="Explicitly accept that transport recovery does NOT verify or terminate orphaned jobs")
     ap.add_argument("--enable-rootless-probe", action="store_true",
                     help="Explicit single-owner server opt-in for rootless proof jobs, never tenant mode")
     ap.add_argument("--workspace", help="Workspace name for start/stop/status")
@@ -22,6 +24,14 @@ def main():
     ap.add_argument("--out", help="Private 0700 folder to export a sanitized review or receipt for Studio")
     a = ap.parse_args()
     try:
+        if a.action == "recover-stale":
+            if a.workspace or a.digest or a.plan or a.out or a.enable_rootless_probe:
+                raise WorkspaceDenied("recovery-has-no-plan-arguments")
+            print(json.dumps(recover_stale_service(
+                a.root, acknowledge_possible_orphans=a.acknowledge_possible_orphans), sort_keys=True))
+            return 0
+        if a.acknowledge_possible_orphans:
+            raise WorkspaceDenied("recovery-acknowledgment-only")
         if a.action == "serve":
             if a.workspace or a.digest or a.plan or a.out:
                 raise WorkspaceDenied("serve-has-no-plan-arguments")

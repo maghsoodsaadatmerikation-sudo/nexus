@@ -157,3 +157,47 @@ def test_no_unbounded_output_or_unbounded_lifetime(tmp_path):
     slow = run_probe(root, 'alpha', exe, digest, args=['--sleep'], approved=True, timeout=2)
     assert slow['status'] == 'timeout' and slow['exit_code'] != 0
     assert not (project / 'pwned.txt').exists()
+
+
+def test_parent_guard_refuses_wrong_parent_pid_and_remains_unprivileged():
+    from agent_rootless_probe import _guarded_command
+    cmd = _guarded_command('/usr/bin/true', [], parent_pid=os.getpid() + 100000)
+    result = subprocess.run(cmd, capture_output=True, timeout=4)
+    assert result.returncode == 120
+    assert result.stdout == b'' and result.stderr == b''
+    good = subprocess.run(_guarded_command('/usr/bin/true', []),
+                          capture_output=True, timeout=4)
+    assert good.returncode == 0
+    with pytest.raises(WorkspaceDenied):
+        _guarded_command('bin/unshare', [])
+
+
+def test_parent_guard_terminates_guest_on_abrupt_operator_death(tmp_path):
+    """Real SIGKILL of operator process; no mock parent or guest lifecycle."""
+    from agent_rootless_probe import _guarded_command
+    start = tmp_path / 'started'; done = tmp_path / 'done'
+    guest = tmp_path / 'guest.py'
+    guest.write_text('import pathlib,sys,time\npathlib.Path(sys.argv[1]).write_text("started")\ntime.sleep(2.5)\npathlib.Path(sys.argv[2]).write_text("done")\n')
+    owner = tmp_path / 'owner.py'
+    owner.write_text('import os,subprocess,sys\nfrom agent_rootless_probe import _guarded_command\n'
+                     'p=subprocess.Popen(_guarded_command(sys.executable, ["-I", sys.argv[1],sys.argv[2],sys.argv[3]]), '
+                     'stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,close_fds=True)\n'
+                     'print(p.pid,flush=True)\np.wait()\n')
+    env = {**os.environ, 'PYTHONPATH': str(Path(__file__).resolve().parents[1])}
+    owner_proc = subprocess.Popen([sys.executable, str(owner), str(guest),str(start),str(done)],
+                                  stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                                  text=True, env=env)
+    try:
+        child_pid = int(owner_proc.stdout.readline().strip())
+        limit = time.monotonic() + 4
+        while not start.exists() and time.monotonic() < limit:
+            time.sleep(.02)
+        assert start.exists(), 'guarded child never started'
+        os.kill(owner_proc.pid, 9)
+        owner_proc.wait(timeout=4)
+        time.sleep(2.9)
+        assert not done.exists(), 'orphaned guest survived operator SIGKILL'
+    finally:
+        if owner_proc.poll() is None:
+            owner_proc.kill(); owner_proc.wait(timeout=3)
+        owner_proc.stdout.close();owner_proc.stderr.close()
