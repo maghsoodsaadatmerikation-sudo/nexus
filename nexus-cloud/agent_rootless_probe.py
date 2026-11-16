@@ -109,6 +109,8 @@ def _mount(*args: str) -> None:
 
 def _enter(root: str, workspace: str, args: list[str]) -> None:
     """Trusted bootstrap, executed only after unshare installed all namespaces."""
+    global _bootstrap_stage
+    _bootstrap_stage = 1  # entered mapped user/PID namespace
     import socket
     # This runs as uid 0 *inside a new user namespace*, mapped to the calling
     # unprivileged host UID, not as privileged host root.
@@ -119,6 +121,7 @@ def _enter(root: str, workspace: str, args: list[str]) -> None:
     # protects the obvious case where a wrapper simply omitted --net.
     if not net.startswith('net:['):
         raise WorkspaceDenied('rootless-network-namespace-unavailable')
+    _bootstrap_stage = 2  # valid initial namespace; setting limits/mounts
     for k, limit in ((resource.RLIMIT_FSIZE, 4 * 1024 * 1024),
                      (resource.RLIMIT_NOFILE, 64), (resource.RLIMIT_CORE, 0),
                      (resource.RLIMIT_NPROC, 64), (resource.RLIMIT_CPU, 7)):
@@ -133,6 +136,7 @@ def _enter(root: str, workspace: str, args: list[str]) -> None:
     _mount('-o', 'remount,bind,ro', root + '/workspace')
     _mount('-t', 'tmpfs', '-o', 'size=16m,nosuid,nodev,noexec,mode=700',
            'tmpfs', root + '/tmp')
+    _bootstrap_stage = 3  # mounts installed; checking read-only boundaries
     if not os.statvfs(root).f_flag & os.ST_RDONLY:
         raise WorkspaceDenied('rootless-root-not-readonly')
     if not os.statvfs(root + '/workspace').f_flag & os.ST_RDONLY:
@@ -145,8 +149,10 @@ def _enter(root: str, workspace: str, args: list[str]) -> None:
         raise WorkspaceDenied('rootless-nnp-failed')
     # Finalize the chroot while the trusted bootstrap still has CAP_SYS_CHROOT.
     # The guest must never receive that capability.
+    _bootstrap_stage = 4  # entering private rootfs
     os.chroot(root)
     os.chdir('/workspace')
+    _bootstrap_stage = 5  # chroot complete; dropping privileges
     # The bootstrap needs CAP_SYS_ADMIN *inside* the new user namespace to
     # finish its mounts. The guest must not inherit that capability: otherwise
     # a static ELF could remount the read-only workspace or create mounts.
@@ -172,6 +178,7 @@ def _enter(root: str, workspace: str, args: list[str]) -> None:
     data = (CapData * 2)()
     if capset(ctypes.byref(header), data) != 0:
         raise WorkspaceDenied('rootless-capability-drop-failed')
+    _bootstrap_stage = 6  # capabilities dropped; installing syscall filter
     # Defensive seccomp policy: even a guest that tries to create new user or
     # mount namespaces cannot use privilege-related syscalls. The filter is
     # irreversible under NO_NEW_PRIVS and returns EPERM without side effects.
@@ -224,6 +231,7 @@ def _enter(root: str, workspace: str, args: list[str]) -> None:
     program = SockFprog(len(instructions), filters)
     if libc.prctl(22, 2, ctypes.byref(program), 0, 0) != 0:  # PR_SET_SECCOMP
         raise WorkspaceDenied('rootless-seccomp-install-failed')
+    _bootstrap_stage = 7  # execve sealed test fixture only
     # User-namespace root is deliberately retained for the mapped host UID,
     # but effective/permitted/ambient capabilities must all be zero in guest.
     os.execve('/bin/probe', ['/bin/probe', *args],
@@ -317,6 +325,8 @@ def run_probe(root: str | Path, workspace: str, executable: str | Path,
             'production_isolation_attested': False, 'authority': 'operator-only'}
 
 
+_bootstrap_stage = 0
+
 if __name__ == '__main__' and len(sys.argv) >= 4 and sys.argv[1] == '__enter__':
     try:
         _enter(sys.argv[2], sys.argv[3], sys.argv[4:])
@@ -334,6 +344,9 @@ if __name__ == '__main__' and len(sys.argv) >= 4 and sys.argv[1] == '__enter__':
             'rootless-seccomp-install-failed': 128,
         }
         os._exit(stage_codes.get(exc.args[0] if exc.args else '', 120))
+    except OSError:
+        # Stage-only classification; never expose errno, paths or guest output.
+        os._exit(140 + min(_bootstrap_stage, 9))
     except BaseException:
         # All unrelated bootstrap exceptions are indistinguishable by design.
         os._exit(120)
