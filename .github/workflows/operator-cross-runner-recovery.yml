@@ -108,7 +108,8 @@ jobs:
           set -euo pipefail
           test "$(id -u)" != 0
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
-          archive="$RUNNER_TEMP/nexus-p29-received/snapshot.zip"
+          # The download action isolates each artifact under its name.
+          archive="$RUNNER_TEMP/nexus-p29-received/nexus-operator-cross-runner-synthetic-plaintext-only/snapshot.zip"
           test -f "$archive" && test ! -L "$archive"
           chmod 700 "$RUNNER_TEMP/nexus-p29-received"
           chmod 600 "$archive"
