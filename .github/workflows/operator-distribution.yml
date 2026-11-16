@@ -4,6 +4,8 @@ on:
     paths:
       - 'nexus-cloud/*.py'
       - 'nexus-cloud/tests/test_agent_operator_distribution.py'
+      - 'nexus-cloud/tests/test_agent_operator_first_run.py'
+      - 'docs/PHASE23-VERIFIED-FIRST-RUN.md'
       - 'scripts/nexus-operator-*.py'
       - 'scripts/nexus-chat-engineering.py'
       - 'scripts/nexus-engineering-plan.py'
@@ -62,9 +64,13 @@ jobs:
             --archive operator-dist-candidate/pilot-a.zip \
             --expected-sha256 "$expected" \
             --destination "$PWD/operator-dist-candidate/installed"
-          python -B operator-dist-candidate/installed/scripts/nexus-operator-pilot.py \
+          python -I -B operator-dist-candidate/installed/scripts/nexus-operator-launch.py doctor
+          mkdir -m 700 operator-dist-candidate/private-root
+          python -I -B operator-dist-candidate/installed/scripts/nexus-operator-launch.py \
+            check --root "$PWD/operator-dist-candidate/private-root"
+          python -I -B operator-dist-candidate/installed/scripts/nexus-operator-launch.py \
             smoke --approve-disposable
-          python -B operator-dist-candidate/installed/scripts/nexus-operator-distribution.py \
+          python -I -B operator-dist-candidate/installed/scripts/nexus-operator-distribution.py \
             verify-installed --destination "$PWD/operator-dist-candidate/installed"
           sha256sum operator-dist-candidate/pilot-a.zip \
             > operator-dist-candidate/SHA256SUMS
