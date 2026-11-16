@@ -16,7 +16,10 @@ window.addEventListener('load',async()=>{
  const proposal=()=>JSON.stringify({schema:'nexus.engineering.proposal.v1',workspace:'demo',steps:[{tool:'write',path:'src/private.py',text:'PRIVATE_AGENT_SECRET_CODE'}]});
  const review=()=>JSON.stringify({schema:'nexus.engineering.review.v1',authority:'none',plan_sha256:h,workspace_sha256:w,workspace:'demo',plan_version:3,steps:[{index:0,tool:'write',risk:'writes-files'}],status:'not-executed',review_required:true,note:'Untrusted'});
  const receipt=()=>JSON.stringify({schema:'nexus.engineering.chat-receipt.v1',origin:'local-engineering-worker',authority:'none',verification:'not-independent-attestation',plan_sha256:h,journal_state:'finished',execution_status:'complete',workspace_sha256_before:w,workspace_sha256_after:other,steps:[{index:0,tool:'write',status:'completed'}],note:'Not an independent attestation'});
- let network=0,downloads=0;window.fetch=()=>{network++;throw Error('unexpected-network')};
+ let network=0,downloads=0;
+ // Never let native confirmation dialogs block the private CDP test runner.
+ window.confirm=()=>true;
+ window.fetch=()=>{network++;throw Error('unexpected-network')};
  const originalClick=HTMLAnchorElement.prototype.click;
  HTMLAnchorElement.prototype.click=function(){downloads++};
  try{
