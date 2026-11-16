@@ -314,19 +314,23 @@ def compare_installed(current: Path, candidate: Path, *,
         raise DistributionDenied("candidate-manifest-sha-required")
     if current == candidate:
         raise DistributionDenied("distinct-installations-required")
-    old = installed_verify(current,
-                           expected_manifest_sha256=expected_current_manifest_sha256)
-    new = installed_verify(candidate,
-                           expected_manifest_sha256=expected_candidate_manifest_sha256)
-    old_entries = _installed_snapshot(current)[1]
-    new_entries = _installed_snapshot(candidate)[1]
+    # Snapshot each installation once. Re-reading files after verification
+    # would introduce a needless TOCTOU window and inconsistent comparison.
+    _, old_entries, old_sha = _installed_snapshot(current)
+    _, new_entries, new_sha = _installed_snapshot(candidate)
+    if (expected_current_manifest_sha256 is not None
+            and (not SHA.fullmatch(expected_current_manifest_sha256)
+                 or old_sha != expected_current_manifest_sha256)):
+        raise DistributionDenied("previous-manifest-anchor-mismatch")
+    if new_sha != expected_candidate_manifest_sha256:
+        raise DistributionDenied("candidate-manifest-anchor-mismatch")
     changed = [name for name in FILES
                if old_entries[name]["sha256"] != new_entries[name]["sha256"]]
     return {
         "status": "review-required" if changed else "same-file-content",
         "schema": "nexus.operator.upgrade-review.v1",
-        "previous_manifest_sha256": old["manifest_sha256"],
-        "candidate_manifest_sha256": new["manifest_sha256"],
+        "previous_manifest_sha256": old_sha,
+        "candidate_manifest_sha256": new_sha,
         "candidate_manifest_anchor_matched": True,
         "previous_manifest_anchor_matched": expected_current_manifest_sha256 is not None,
         "file_count": len(FILES),
