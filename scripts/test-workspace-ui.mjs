@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 // Execute the actual inline application code with a bounded synthetic DOM/transport.
+// Each VM evaluation has a 5s CPU limit: the original 1s budget was flaky
+// under crowded CI hosts, but a non-returning script still fails closed.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -38,9 +40,9 @@ function app() {
     Blob, URL: {createObjectURL: () => 'blob:synthetic', revokeObjectURL() {}},
     setTimeout, clearTimeout, AbortController, TextEncoder, console,
   });
-  vm.runInContext(code, context, {timeout: 1000});
+  vm.runInContext(code, context, {timeout: 5000});
   return {element, calls, downloads,
-    run: expression => vm.runInContext(expression, context, {timeout: 1000}),
+    run: expression => vm.runInContext(expression, context, {timeout: 5000}),
     transport: handler => {transport = handler},
     select(id) {element('workspaceId').value = id; context.workspaceSelectionChanged()},
     async load(id) {this.select(id); await context.loadWorkspace()},

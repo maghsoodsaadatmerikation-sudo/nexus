@@ -1,0 +1,182 @@
+name: NEXUS Engineering Agent Contract
+on:
+  pull_request:
+    paths:
+      - 'nexus-cloud/agent_workspace.py'
+      - 'nexus-cloud/engineering_agent.py'
+      - 'nexus-cloud/agent_journal.py'
+      - 'nexus-cloud/agent_host_census.py'
+      - 'nexus-cloud/tests/test_agent_host_census.py'
+      - 'nexus-cloud/tests/test_agent_docker_cleanup_fence.py'
+      - 'nexus-cloud/agent_operator_pilot.py'
+      - 'scripts/nexus-operator-pilot.py'
+      - 'nexus-cloud/tests/test_agent_operator_pilot.py'
+      - 'docs/PHASE21-OPERATOR-PILOT-ACCEPTANCE.md'
+      - 'scripts/nexus-operator-distribution.py'
+      - 'nexus-cloud/tests/test_agent_operator_distribution.py'
+      - 'nexus-cloud/tests/test_agent_operator_upgrade_review.py'
+      - 'docs/PHASE24-SIDE-BY-SIDE-REVIEW.md'
+      - 'nexus-cloud/tests/test_agent_operator_first_run.py'
+      - 'scripts/nexus-operator-launch.py'
+      - 'docs/PHASE23-VERIFIED-FIRST-RUN.md'
+      - 'docs/PHASE22-OPERATOR-DISTRIBUTION.md'
+      - 'docs/PHASE20-DOCKER-CLEANUP-FENCE.md'
+      - 'docs/PHASE19-HOST-CENSUS.md'
+      - 'nexus-cloud/tests/test_agent_orphan_quarantine.py'
+      - 'nexus-cloud/tests/test_agent_cross_runner.py'
+      - 'scripts/test-operator-cross-runner.py'
+      - 'scripts/nexus-operator-snapshot.py'
+      - 'docs/PHASE29-CROSS-RUNNER-RECOVERY.md'
+      - 'docs/PHASE18-JOURNAL-QUARANTINE.md'
+      - 'nexus-cloud/agent_chat_handoff.py'
+      - 'nexus-cloud/agent_operator_service.py'
+      - 'nexus-cloud/agent_tenant_boundary.py'
+      - 'nexus-cloud/agent_rootless_probe.py'
+      - 'nexus-cloud/tests/test_agent_rootless_probe.py'
+      - 'scripts/nexus-rootless-probe.py'
+      - 'scripts/rootless-sandbox-probe.c'
+      - 'docs/PHASE14-ROOTLESS-PROBE.md'
+      - 'nexus-cloud/tests/test_agent_tenant_boundary.py'
+      - 'scripts/nexus-tenant-host-audit.py'
+      - 'scripts/nexus-tenant-service.py'
+      - 'scripts/test-tenant-cross-uid.py'
+      - 'docs/PHASE12-TENANT-ISOLATION.md'
+      - 'nexus-cloud/tests/test_agent_operator_service.py'
+      - 'scripts/nexus-operator-service.py'
+      - 'nexus-cloud/tests/test_agent_chat_handoff.py'
+      - 'scripts/nexus-chat-engineering.py'
+      - 'nexus-cloud/tests/test_agent_journal.py'
+      - 'nexus-cloud/agent_research.py'
+      - 'nexus-cloud/tests/test_agent_workspace.py'
+      - 'nexus-cloud/tests/test_engineering_agent.py'
+      - 'nexus-cloud/tests/test_agent_research.py'
+      - 'nexus-cloud/tests/test_agent_tools_upgrade.py'
+      - 'nexus-cloud/tests/test_agent_lifecycle.py'
+      - 'scripts/test-engineering-docker-runtime.py'
+      - 'scripts/nexus-agent-workspace.py'
+      - 'scripts/nexus-engineering-plan.py'
+      - '.github/workflows/engineering-agent.yml'
+      - 'docs/GROK-ENGINEERING-CAPABILITIES.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - name: Run isolated agent contract tests (no Docker / network required)
+        run: |
+          python -m pip install --disable-pip-version-check 'pytest==8.4.2'
+          PYTHONPATH=nexus-cloud python -m pytest -q \
+            nexus-cloud/tests/test_agent_workspace.py \
+            nexus-cloud/tests/test_engineering_agent.py \
+            nexus-cloud/tests/test_agent_research.py \
+            nexus-cloud/tests/test_agent_tools_upgrade.py \
+            nexus-cloud/tests/test_agent_lifecycle.py \
+            nexus-cloud/tests/test_agent_journal.py \
+            nexus-cloud/tests/test_agent_host_census.py \
+            nexus-cloud/tests/test_agent_docker_cleanup_fence.py \
+            nexus-cloud/tests/test_agent_operator_pilot.py \
+            nexus-cloud/tests/test_agent_operator_distribution.py \
+            nexus-cloud/tests/test_agent_operator_upgrade_review.py \
+            nexus-cloud/tests/test_agent_operator_first_run.py \
+            nexus-cloud/tests/test_agent_orphan_quarantine.py \
+            nexus-cloud/tests/test_agent_cross_runner.py \
+            nexus-cloud/tests/test_agent_chat_handoff.py \
+            nexus-cloud/tests/test_agent_operator_service.py \
+            nexus-cloud/tests/test_agent_tenant_boundary.py
+
+  docker-runtime:
+    # No repository write permissions/secrets. Only on disposable Ubuntu runners.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - name: Pull a disposable runtime image and discover its immutable digest
+        run: |
+          set -euo pipefail
+          docker pull busybox:1.36.1
+          IMAGE="$(docker image inspect --format '{{index .RepoDigests 0}}' busybox:1.36.1)"
+          case "$IMAGE" in
+            *@sha256:*) ;;
+            *) echo 'No verified image digest available' >&2; exit 1 ;;
+          esac
+          echo "NEXUS_TEST_IMAGE_DIGEST=$IMAGE" >> "$GITHUB_ENV"
+      - name: Run a real isolated Docker container and exercise termination
+        run: PYTHONPATH=nexus-cloud python scripts/test-engineering-docker-runtime.py
+
+
+  tenant-os-boundary:
+    # Root exists solely inside the ephemeral CI runner to spawn two isolated
+    # unprivileged UIDs; it cannot publish artifacts, open public servers or
+    # access operator-owned projects. No host users are permanently created.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Exercise actual cross-UID Linux filesystem and Unix-socket denial
+        run: sudo -n python3 scripts/test-tenant-cross-uid.py
+
+  rootless-namespace:
+    # Purely disposable, explicitly consented static ELF proof. No sudo,
+    # Docker, HTTP, browser privileges, user creation, secrets or deploys.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - name: Exercise static ELF validation, real rootless namespaces, read-only project, no network, timeout and output cap
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(id -u)" != 0
+          command -v cc
+          command -v unshare
+          command -v mount
+          python -m pip install --disable-pip-version-check 'pytest==8.4.2'
+          PYTHONPATH=nexus-cloud python -m pytest -q nexus-cloud/tests/test_agent_rootless_probe.py
+
+
+  operator-pilot:
+    # Real local Unix-socket roundtrip with a fixed disposable synthetic plan.
+    # No model-run, Docker, public server, privileged host setup or write token.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - name: Exercise actual operator socket, fixed private plan and one-use receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(id -u)" != 0
+          python scripts/nexus-operator-pilot.py smoke --approve-disposable

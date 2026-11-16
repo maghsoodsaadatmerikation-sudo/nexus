@@ -2,7 +2,7 @@
 # Exact source of independently observed public assets; provider deployment commit is not inferred.
 # Candidate source is tested separately and NEVER silently treated as published.
 set -euo pipefail
-baseline=35be3d4b0da0d0f21e04a4a8a61f45e316a0058e
+baseline=f90162d46040be03341769f3c30206cb7f0f476d
 test -n "${RUNNER_TEMP:-}"
 target="$RUNNER_TEMP/nexus-live-pilot"
 test ! -e "$target"

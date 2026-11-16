@@ -3,7 +3,7 @@
 </style></head><body><main>
 <div class="row"><div><h1>NEXUS <span>Studio</span></h1><p class="help" data-t="subtitle">Your conversations, sources and drafts — under your control.</p></div><select id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option></select></div>
 <details><summary data-t="languagePacks">Interface language packs</summary><p class="help" data-t="languageHelp">Up to eight complete translation packs can be kept in this tab. They contain labels only, not your projects.</p><button id="language-template" class="secondary" data-t="languageTemplate">Download English label template</button><input id="language-file" type="file" accept="application/json" aria-label="Import interface language pack"></details>
-<nav class="tool-nav" aria-label="Studio tools"><a href="#conversation-card" data-t="conversation">Conversation</a><a href="#data-card" data-t="dataTitle">Data analysis</a><a href="#research-card" data-t="research">Research</a><a href="#code-card" data-t="codeLab">Code</a><a href="#tasks-card" data-t="tasks">Tasks</a><a href="#chart-card" data-t="chartLab">Chart</a><a href="#astrology-card" data-t="astroTitle">Astrology</a><a href="#sky-card" data-t="skyTitle">Sky</a><a href="#canvas-card" data-t="canvas">Canvas</a><a href="#vault-card" data-t="archive">Archive</a></nav>
+<nav class="tool-nav" aria-label="Studio tools"><a href="#conversation-card" data-t="conversation">Conversation</a><a href="#engineering-panel" data-t="engineering">Engineering Agent</a><a href="#data-card" data-t="dataTitle">Data analysis</a><a href="#research-card" data-t="research">Research</a><a href="#code-card" data-t="codeLab">Code</a><a href="#tasks-card" data-t="tasks">Tasks</a><a href="#chart-card" data-t="chartLab">Chart</a><a href="#astrology-card" data-t="astroTitle">Astrology</a><a href="#sky-card" data-t="skyTitle">Sky</a><a href="#canvas-card" data-t="canvas">Canvas</a><a href="#vault-card" data-t="archive">Archive</a></nav>
 <details><summary data-t="capabilitiesTitle">Capability status & shortcuts</summary><p class="help" data-t="shortcutsHelp"></p><ul id="capability-status"></ul></details>
 <button id="undo-removal" class="secondary" data-t="undoRemoval" disabled>Undo last removal</button><p id="status" role="status" aria-live="polite"></p><p class="notice" id="retention"></p>
 <div class="grid"><aside>
@@ -19,7 +19,19 @@
 <button id="clear-chat-files" class="secondary" data-t="chatClearAttachments">Clear attachments</button></details>
 <label class="inline"><input id="use-memory" type="checkbox"><span data-t="useMemory">Include this project's reviewed memory</span></label><label class="inline"><input id="use-sources" type="checkbox"><span data-t="useSources">Include relevant project source excerpts</span></label><div class="row"><button id="guide" data-t="guide">Use local reflection guide</button><button id="prepare" data-t="prepare">Prepare model request</button><button id="regenerate" data-t="regenerate">Prepare another answer</button><button id="stop" data-t="stop">Stop</button></div>
 <details><summary data-t="modelSettings">Optional generative model connection</summary><p class="help" data-t="modelHelp">An operator must configure a model gateway. A ChatGPT subscription is not an API credential. Provider keys stay on the gateway; only its access token is entered here, for this tab.</p><label for="gateway" data-t="gatewayOrigin">Model gateway origin</label><input id="gateway" placeholder="https://your-gateway.example" aria-label="Model gateway URL"><label for="gateway-token" data-t="gatewayAccess">Gateway access token (not the provider API key)</label><input id="gateway-token" type="password" autocomplete="off" aria-label="Studio gateway access token"><button id="check-model" class="secondary" data-t="checkModel">Check configured model</button><pre id="model-status"></pre><label for="model-mode" data-t="modelMode"></label><select id="model-mode"><option value="standard" data-t="modeDefault"></option><option value="thinking" data-t="modeThinking"></option><option value="non-thinking" data-t="modeFast"></option></select><label for="model-budget" data-t="modelBudget"></label><input id="model-budget" type="number" min="1" max="8192" value="2048"></details>
-<div id="request-review" hidden><h3 data-t="requestReview">Exact context to send</h3><pre id="request-context"></pre><label class="inline"><input id="consent" type="checkbox"><span data-t="consent">Send this exact context to the configured provider once.</span></label><button id="send-model" data-t="send">Send approved request</button></div></section>
+<div id="request-review" hidden><h3 data-t="requestReview">Exact context to send</h3><pre id="request-context"></pre><label class="inline"><input id="consent" type="checkbox"><span data-t="consent">Send this exact context to the configured provider once.</span></label><button id="send-model" data-t="send">Send approved request</button></div><details id="engineering-panel"><summary data-t="engineering">Engineering Agent</summary>
+<p class="help" data-t="engineeringHelp">Review an engineering proposal, local plan summary or receipt. No code runs here.</p>
+<label for="engineering-file" data-t="engineeringImport">Import a local JSON/TXT file</label>
+<input id="engineering-file" type="file" accept=".json,.txt,application/json,text/plain">
+<label for="engineering-text" data-t="engineeringInput">Proposal or local operator summary (JSON)</label>
+<textarea id="engineering-text" maxlength="32768" spellcheck="false" dir="ltr"></textarea>
+<div class="row"><button id="engineering-inspect" class="secondary" data-t="engineeringInspect">Inspect safely</button><button id="engineering-reset" class="secondary" data-t="engineeringReset">Clear engineering draft</button></div>
+<p id="engineering-status" class="help" role="status"></p>
+<pre id="engineering-report" aria-live="polite"></pre>
+<label class="inline"><input id="engineering-consent" type="checkbox"><span data-t="engineeringConsent">I reviewed this exact content and select this action; command execution needs a separate operator approval.</span></label>
+<div class="row"><button id="engineering-download" data-t="engineeringDownload" disabled>Download proposal for operator</button><button id="engineering-chat" data-t="engineeringChat" disabled>Attach reviewed summary to next chat</button></div>
+<p class="help" data-t="engineeringNoExecution">Review only; no browser shell, Docker or GitHub write access.</p>
+</details></section>
 <section class="card"><h2 data-t="profile">Project assistant & memory</h2><label for="instructions" data-t="instructions">Custom instructions (preferences, not authority)</label><textarea id="instructions" maxlength="2000" dir="auto"></textarea><label for="memories" data-t="memories">Reviewed memory — one item per line, up to 30</label><textarea id="memories" maxlength="15030" dir="auto"></textarea><button id="apply-profile" data-t="applyProfile">Apply project preferences</button><p class="help" data-t="memoryHelp">Nothing is learned automatically. Memory is isolated to this project and sent only when selected. Removing memory does not remove earlier transcript text.</p></section>
 <section class="card"><h2 data-t="sources">Local source search</h2><p class="help" data-t="sourceHelp">Select UTF-8 TXT, Markdown, CSV, TSV or JSON files together, up to 256 KiB each and 12 per project. A batch is added only if every file is valid. Excerpts are local lexical search results, not verified facts. Files are never executed.</p><input id="source-file" type="file" multiple accept=".txt,.md,.csv,.json,.tsv"><input id="source-query" maxlength="200" data-placeholder="sourceQuery" aria-label="Search project sources"><button id="search-sources" data-t="searchSources">Search sources</button><div id="source-list"></div><pre id="source-results"></pre></section>
 <section class="card" id="sky-card"><h2 data-t="skyTitle"></h2><label class="inline"><input type="checkbox" id="sky-tone" checked><span data-t="skyEnabled"></span></label><p class="help" data-t="skyHelp"></p><details><summary data-t="skyDetails"></summary><button id="sky-inspect" class="secondary" data-t="skyInspect"></button><pre id="sky-summary"></pre><a href="https://github.com/cosinekitty/astronomy/tree/v2.1.19" target="_blank" rel="noopener noreferrer">Astronomy Engine 2.1.19 · MIT · Don Cross</a></details></section>
@@ -846,7 +858,101 @@ class Vault{
 }
 root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,empty,project,thread,readSources,path,append,context,search,retrieve,guide,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
 })(globalThis);
-</script><script>/* Explicit public research, isolated local JavaScript, and inert chart data. */
+</script><script>/* NEXUS Studio Engineering Agent: inert, bounded review of local handoff artifacts.
+   This module does not execute commands, contact a server, or approve a plan. */
+(function(root){'use strict';
+const MAX_BYTES=32768,enc=new TextEncoder();
+const TOOLS={read:['tool','path'],write:['tool','path','text'],edit:['tool','path','before','after'],run:['tool','image','argv','timeout_seconds'],verify_sha256:['tool','path','expected_sha256'],package:['tool','output'],search:['tool','query','case_sensitive'],preview_edit:['tool','path','before','after'],research:['tool','provider','name']};
+const RISK={read:'read-only',write:'writes-files',edit:'writes-files',run:'executes-container',verify_sha256:'read-only',package:'exports-archive',search:'read-only',preview_edit:'read-only',research:'network-metadata'};
+const HASH=/^[0-9a-f]{64}$/,WORKSPACE=/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}$/;
+const deny=x=>{throw Error('engineering-'+x)};
+const obj=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
+const string=(s,min=0,max=1024)=>typeof s==='string'&&s.length>=min&&s.length<=max;
+const keys=(x,expected)=>obj(x)&&Object.keys(x).length===expected.length&&expected.every(k=>Object.hasOwn(x,k));
+const path=s=>string(s,1,512)&&!/[\\\x00]/.test(s)&&s.split('/').every(p=>p!==''&&p!=='.'&&p!=='..'&&enc.encode(p).length<=128);
+function decode(raw){
+ if(!string(raw,1,MAX_BYTES)||enc.encode(raw).length>MAX_BYTES)deny('size');
+ let val;try{val=JSON.parse(raw)}catch{deny('json')}
+ // First parse JSON syntax, then reject all duplicate object keys (including
+ // escaped-key aliases). JSON strings are tokenized before structural braces.
+ const scopes=[];const tokens=raw.match(/"(?:\\[\s\S]|[^"\\])*"(?:[ \t\r\n]*:)?|[{}]/g)||[];
+ for(const token of tokens){
+  if(token==='{')scopes.push(new Set());
+  else if(token==='}')scopes.pop();
+  else if(token.endsWith(':')){
+   const name=JSON.parse(token.slice(0,-1));const scope=scopes[scopes.length-1];
+   if(!scope||scope.has(name))deny('duplicate-key');scope.add(name);
+  }
+ }
+ return val;
+}
+function steps(xs){
+ if(!Array.isArray(xs)||xs.length<1||xs.length>12)deny('step-count');
+ return xs.map((s,i)=>{
+  if(!obj(s)||!Object.hasOwn(TOOLS,s.tool)||!keys(s,TOOLS[s.tool]))deny('step-shape');
+  if('path'in s&&!path(s.path))deny('path');
+  if(s.tool==='write'&&(!string(s.text,0,1048576)||enc.encode(s.text).length>1048576))deny('text');
+  if(['edit','preview_edit'].includes(s.tool)&&(!string(s.before,1,1048576)||!string(s.after,0,1048576)))deny('edit');
+  if(s.tool==='run'&&(!string(s.image,1,300)||!/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*@sha256:[0-9a-f]{64}$/.test(s.image)||!Array.isArray(s.argv)||s.argv.length<1||s.argv.length>64||s.argv.some(a=>!string(a,1,16384)||a.includes('\0'))||!Number.isInteger(s.timeout_seconds)||s.timeout_seconds<1||s.timeout_seconds>120))deny('run');
+  if(s.tool==='verify_sha256'&&!HASH.test(s.expected_sha256))deny('hash');
+  if(s.tool==='package'&&(!string(s.output,1,1024)||!s.output.startsWith('/')))deny('archive');
+  if(s.tool==='search'&&(!string(s.query,1,128)||/[\x00\r\n]/.test(s.query)||typeof s.case_sensitive!=='boolean'))deny('search');
+  if(s.tool==='research'&&(!['pypi','crates','github-release'].includes(s.provider)||!string(s.name,1,128)||!(s.provider==='github-release'?/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(s.name):/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(s.name))))deny('research');
+  return {index:i,tool:s.tool,risk:RISK[s.tool]};
+ });
+}
+function labeledSteps(s,{status=false}={}){
+ if(!Array.isArray(s)||s.length>12)deny('steps');
+ return s.map((x,i)=>{
+  if(!obj(x)||!Number.isInteger(x.index)||x.index!==i||!Object.hasOwn(TOOLS,x.tool))deny('step-metadata');
+  if(status){if(!keys(x,['index','tool','status'])||!['completed','failed','denied','cancelled'].includes(x.status))deny('step-status')}
+  else if(!keys(x,['index','tool','risk'])||x.risk!==RISK[x.tool])deny('step-risk');
+  return {index:x.index,tool:x.tool,risk:RISK[x.tool],...(status?{status:x.status}:{})};
+ });
+}
+function inspect(raw){
+ const value=decode(raw);
+ if(!obj(value)||!string(value.schema,1,80))deny('schema');
+ if(value.schema==='nexus.engineering.proposal.v1'){
+  if(!keys(value,['schema','workspace','steps'])||!WORKSPACE.test(value.workspace))deny('proposal');
+  return {kind:'proposal',workspace:value.workspace,state:'proposal-not-executed',authority:'none',steps:steps(value.steps),private:true,raw};
+ }
+ if(value.schema==='nexus.engineering.review.v1'){
+  if(!keys(value,['schema','authority','plan_sha256','workspace_sha256','workspace','plan_version','steps','status','review_required','note'])||
+    value.authority!=='none'||!HASH.test(value.plan_sha256)||!HASH.test(value.workspace_sha256)||!WORKSPACE.test(value.workspace)||
+    value.plan_version!==3||value.status!=='not-executed'||value.review_required!==true||!string(value.note,1,2048))deny('review');
+  return {kind:'review',workspace:value.workspace,state:'not-executed',authority:'none',plan_sha256:value.plan_sha256,workspace_sha256:value.workspace_sha256,steps:labeledSteps(value.steps),private:false};
+ }
+ if(value.schema==='nexus.engineering.chat-receipt.v1'){
+  if(!keys(value,['schema','origin','authority','verification','plan_sha256','journal_state','execution_status','workspace_sha256_before','workspace_sha256_after','steps','note'])||
+    value.origin!=='local-engineering-worker'||value.authority!=='none'||value.verification!=='not-independent-attestation'||
+    !HASH.test(value.plan_sha256)||!HASH.test(value.workspace_sha256_before)||!string(value.note,1,2048))deny('receipt');
+  const started=value.journal_state==='started',finished=value.journal_state==='finished';
+  if(!started&&!finished)deny('journal-state');
+  if(started&&(value.execution_status!=='interrupted-or-in-progress'||value.workspace_sha256_after!==null||!Array.isArray(value.steps)||value.steps.length!==0))deny('started');
+  if(finished&&(!['complete','execution-failed','step-denied','post-state-unverifiable','cancelled'].includes(value.execution_status)||
+    (value.workspace_sha256_after!==null&&!HASH.test(value.workspace_sha256_after))))deny('finished');
+  return {kind:'receipt',state:value.execution_status,authority:'none',plan_sha256:value.plan_sha256,workspace_sha256:value.workspace_sha256_before,
+    ...(typeof value.workspace_sha256_after==='string'?{workspace_after:value.workspace_sha256_after}:{}),steps:labeledSteps(value.steps,{status:true}),private:false};
+ }
+ deny('unknown-schema');
+}
+function report(view){
+ if(!view||!['proposal','review','receipt'].includes(view.kind))deny('uninspected');
+ const lines=['NEXUS Engineering Agent · '+view.kind,'Execution state: '+view.state,'Authority: none','Verified independently: no'];
+ if(view.workspace)lines.push('Workspace label: '+view.workspace);
+ if(view.plan_sha256)lines.push('Plan SHA-256: '+view.plan_sha256);
+ if(view.workspace_sha256)lines.push('Workspace SHA-256 (before): '+view.workspace_sha256);
+ if(view.workspace_after)lines.push('Workspace SHA-256 (after): '+view.workspace_after);
+ lines.push('Steps: '+view.steps.length);
+ for(const s of view.steps)lines.push((s.index+1)+'. '+s.tool+' · '+s.risk+(s.status?' · '+s.status:''));
+ lines.push('Untrusted operator-local metadata. This is neither authorization nor a verified human decision. Full private plans and commands are not included.');
+ return lines.join('\n');
+}
+root.NexusEngineering=Object.freeze({inspect,report,MAX_BYTES});
+})(globalThis);
+
+/* Explicit public research, isolated local JavaScript, and inert chart data. */
 (function(root){'use strict';
 const enc=new TextEncoder();
 const fail=x=>{throw Error(x)},bounded=(s,n)=>typeof s==='string'?s.slice(0,n):'';
@@ -1359,5 +1465,67 @@ $('data-chat').onclick=()=>{if(analysis&&!busy)window.NexusStudioUI?.stageChatCo
 $('data-export').onclick=()=>{if(!analysis||!confirm(t('plain')))return;const group=Number($('data-group').value),metric=Number($('data-metric').value);download(JSON.stringify({...analysis.report,...T.groupReport(analysis.table,group,metric)},null,2),'nexus-analysis.json','application/json')};
 window.addEventListener('keydown',event=>{if(event.key==='Escape'){stop();return}if(!(event.ctrlKey||event.metaKey)||event.altKey)return;if(event.key==='Enter'&&event.target===$('message')){event.preventDefault();if(busy)return;(modelInfo?.configured?$('prepare'):$('guide')).click()}if(event.shiftKey&&event.key.toLowerCase()==='s'){event.preventDefault();if(!$('save').disabled)$('save').click()}});
 window.NexusQualityUI=Object.freeze({cancel,clear,render,refreshStatus:capabilities});applyLanguage();
+})();
+</script><script>/* Local-only Engineering Agent import/review panel in the Studio conversation.
+   No server-side execution, direct Docker access, or model tool privileges. */
+(function(){'use strict';
+const E=window.NexusEngineering,$=id=>document.getElementById(id);
+Object.assign(EN,{
+ engineering:'Engineering Agent',engineeringHelp:'Review a local engineering proposal, a prepared-plan summary or an execution receipt. This panel cannot run code or authorize commands. Private proposal files may include source code and secrets; keep them on your own device.',
+ engineeringInput:'Proposal or local operator summary (JSON)',engineeringImport:'Import a local JSON/TXT file',engineeringInspect:'Inspect safely',engineeringDownload:'Download proposal for operator',engineeringChat:'Attach reviewed summary to next chat',engineeringConsent:'I inspected this exact content and choose this action. A separate operator approval is required for any command.',engineeringNoExecution:'Review only — no shell, Docker, GitHub write access or network execution is available from this panel.',engineeringReady:'Validated as untrusted local data. Not independently verified.',engineeringInvalid:'Invalid or oversized engineering handoff. No action was performed.',engineeringReset:'Clear engineering draft',engineeringPrivate:'Private proposal: download only after review. Do not attach full code or secrets to chat automatically.'
+});
+Object.assign(FA,{
+ engineering:'عامل مهندسی',engineeringHelp:'پیشنهاد مهندسی، خلاصهٔ برنامه یا رسید اجرا را بررسی کن. این پنل نه کدی اجرا می‌کند و نه مجوز فرمان می‌دهد. فایل پیشنهاد ممکن است حاوی کد یا اطلاعات محرمانه باشد؛ آن را خصوصی نگه دار.',
+ engineeringInput:'پیشنهاد یا گزارش محلی عامل (JSON)',engineeringImport:'بارگذاری فایل محلی JSON یا TXT',engineeringInspect:'بازبینی ایمن',engineeringDownload:'دریافت پیشنهاد برای اپراتور',engineeringChat:'افزودن خلاصهٔ بررسی‌شده به گفت‌وگوی بعدی',engineeringConsent:'این محتوای دقیق را بررسی کرده‌ام و این اقدام را انتخاب می‌کنم؛ اجرای فرمان نیازمند تأیید مجزای اپراتور است.',engineeringNoExecution:'فقط بازبینی — اجرای Shell یا Docker، نوشتن در GitHub و اجرای شبکه‌ای از این پنل ممکن نیست.',engineeringReady:'دادهٔ محلی نامعتبر از نظر اعتماد، اما ساختار آن بررسی شد؛ راستی‌آزمایی مستقل نیست.',engineeringInvalid:'فایل مهندسی نامعتبر یا بزرگ است؛ هیچ اقدامی انجام نشد.',engineeringReset:'پاک‌کردن پیش‌نویس',engineeringPrivate:'پیشنهاد خصوصی: فقط پس از بررسی دریافت کن. کد کامل یا اسرار به صورت خودکار به گفتگو افزوده نمی‌شوند.'
+});
+let revision=0,approved=null;
+const active=()=>($('projects')?.value||'')+'|'+(typeof threadId==='string'?threadId:'')+'|'+($('branch')?.value||'');
+function refresh(){
+ const okay=approved&&approved.raw===$('engineering-text').value&&approved.scope===active()&&$('engineering-consent').checked;
+ $('engineering-download').disabled=!okay||approved?.view.kind!=='proposal';
+ $('engineering-chat').disabled=!okay||approved?.view.kind==='proposal';
+}
+function invalidate(){revision++;approved=null;$('engineering-consent').checked=false;$('engineering-report').textContent='';$('engineering-status').textContent='';refresh()}
+function clear(){invalidate();$('engineering-text').value='';$('engineering-file').value=''}
+function inspect(){
+ invalidate();const raw=$('engineering-text').value;
+ try{const view=E.inspect(raw);approved={raw,view,scope:active()};$('engineering-report').textContent=E.report(view);$('engineering-status').textContent=t('engineeringReady');if(view.kind==='proposal')$('engineering-status').textContent+=' '+t('engineeringPrivate')}
+ catch{$('engineering-status').textContent=t('engineeringInvalid')}
+ refresh();
+}
+$('engineering-text').addEventListener('input',invalidate);
+$('engineering-consent').onchange=refresh;
+$('engineering-inspect').onclick=inspect;
+$('engineering-reset').onclick=clear;
+$('engineering-file').onchange=async event=>{
+ invalidate();const file=event.target.files?.[0];event.target.value='';
+ const stamp=revision,scope=active();
+ if(!file||file.size>E.MAX_BYTES||file.size<1){$('engineering-status').textContent=t('engineeringInvalid');return}
+ try{
+  const bytes=await file.arrayBuffer();
+  if(stamp!==revision||scope!==active())return;
+  if(bytes.byteLength>E.MAX_BYTES)throw Error('size');
+  const raw=new TextDecoder('utf-8',{fatal:true}).decode(bytes);
+  $('engineering-text').value=raw;inspect();
+ }catch{if(stamp===revision&&scope===active()){$('engineering-status').textContent=t('engineeringInvalid');refresh()}}
+};
+$('engineering-download').onclick=()=>{
+ refresh();if($('engineering-download').disabled)return;
+ const doc=approved;const blob=new Blob([doc.raw],{type:'application/json;charset=utf-8'}),url=URL.createObjectURL(blob);
+ try{const a=document.createElement('a');a.href=url;a.download='nexus-proposal-'+doc.view.workspace+'.json';a.rel='noopener';a.click()}finally{setTimeout(()=>URL.revokeObjectURL(url),1000)}
+};
+$('engineering-chat').onclick=()=>{
+ refresh();if($('engineering-chat').disabled)return;
+ const v=approved.view;
+ const staged=window.NexusStudioUI?.stageChatContext('Engineering '+v.kind+' · unverified',E.report(v));
+ if(staged){invalidate()}else $('engineering-status').textContent=t('engineeringInvalid');
+};
+$('history').addEventListener('click',clear);
+for(const id of ['projects','branch'])$(id).addEventListener('change',clear);
+for(const id of ['new-project','new-thread','delete-project','archive-thread','delete-thread','undo-removal','lock','unlock','restore','erase','restore-file']){
+ const node=$(id);if(node){node.addEventListener('click',clear);node.addEventListener('change',clear)}
+}
+window.NexusEngineeringUI=Object.freeze({clear,inspect});
+applyLanguage();refresh();
 })();
 </script></body></html>

@@ -1,0 +1,128 @@
+name: NEXUS Operator Pilot Distribution
+on:
+  pull_request:
+    paths:
+      - 'nexus-cloud/*.py'
+      - 'nexus-cloud/tests/test_agent_operator_distribution.py'
+      - 'nexus-cloud/tests/test_agent_operator_upgrade_review.py'
+      - 'nexus-cloud/tests/test_agent_operator_first_run.py'
+      - 'docs/PHASE23-VERIFIED-FIRST-RUN.md'
+      - 'docs/PHASE24-SIDE-BY-SIDE-REVIEW.md'
+      - 'scripts/nexus-operator-*.py'
+      - 'scripts/test-operator-restart-pilot.py'
+      - 'scripts/nexus-chat-engineering.py'
+      - 'scripts/nexus-engineering-plan.py'
+      - 'scripts/nexus-agent-workspace.py'
+      - 'scripts/nexus-rootless-*.py'
+      - 'scripts/rootless-sandbox-probe.c'
+      - 'docs/PHASE*-OPERATOR-*.md'
+      - '.github/workflows/operator-distribution.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reproducible-install:
+    # Unprivileged, disposable; no Docker, sudo, secrets, deployment or token write.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          # Pin artifact bytes to the exact reviewed PR HEAD, not GitHub's
+          # synthetic pull_request merge commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - name: Deterministic double build, digest-gated install and installed smoke
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          test "$(id -u)" != 0
+          mkdir -m 700 operator-dist-candidate
+          python scripts/nexus-operator-distribution.py build \
+            --source . --output operator-dist-candidate/pilot-a.zip \
+            > operator-dist-candidate/build.json
+          python scripts/nexus-operator-distribution.py build \
+            --source . --output operator-dist-candidate/pilot-b.zip \
+            > operator-dist-candidate/build-again.json
+          cmp operator-dist-candidate/pilot-a.zip operator-dist-candidate/pilot-b.zip
+          expected="$(sha256sum operator-dist-candidate/pilot-a.zip | awk '{print $1}')"
+          test "$(printf '%s' "$expected" | wc -c)" -eq 64
+          python scripts/nexus-operator-distribution.py verify \
+            --archive operator-dist-candidate/pilot-a.zip \
+            --expected-sha256 "$expected"
+          # A wrong operator-supplied digest must fail without any install.
+          if python scripts/nexus-operator-distribution.py install \
+            --archive operator-dist-candidate/pilot-a.zip \
+            --expected-sha256 "$(printf '%064d' 0)" \
+            --destination "$PWD/operator-dist-candidate/invalid-install"; then
+            echo "Unexpected install acceptance with invalid digest" >&2
+            exit 1
+          fi
+          test ! -e operator-dist-candidate/invalid-install
+          python scripts/nexus-operator-distribution.py install \
+            --archive operator-dist-candidate/pilot-a.zip \
+            --expected-sha256 "$expected" \
+            --destination "$PWD/operator-dist-candidate/installed"
+          manifest_sha="$(python -c 'import json;print(json.load(open("operator-dist-candidate/build.json"))["manifest_sha256"])')"
+          test "$(printf '%s' "$manifest_sha" | wc -c)" -eq 64
+          python -I -B operator-dist-candidate/installed/scripts/nexus-operator-launch.py doctor --expected-manifest-sha256 "$manifest_sha"
+          mkdir -m 700 operator-dist-candidate/private-root
+          python -I -B operator-dist-candidate/installed/scripts/nexus-operator-launch.py \
+            check --root "$PWD/operator-dist-candidate/private-root"
+          python -I -B operator-dist-candidate/installed/scripts/nexus-operator-launch.py \
+            smoke --approve-disposable --expected-manifest-sha256 "$manifest_sha"
+          python -I -B operator-dist-candidate/installed/scripts/nexus-operator-distribution.py \
+            verify-installed --destination "$PWD/operator-dist-candidate/installed" \
+            --expected-manifest-sha256 "$manifest_sha"
+          python scripts/nexus-operator-distribution.py install \
+            --archive operator-dist-candidate/pilot-a.zip \
+            --expected-sha256 "$expected" \
+            --destination "$PWD/operator-dist-candidate/candidate"
+          python -I -B operator-dist-candidate/installed/scripts/nexus-operator-distribution.py \
+            compare-installed --current "$PWD/operator-dist-candidate/installed" \
+            --candidate "$PWD/operator-dist-candidate/candidate" \
+            --expected-manifest-sha256 "$manifest_sha" \
+            --expected-candidate-manifest-sha256 "$manifest_sha" \
+            > operator-dist-candidate/upgrade-review.json
+          python -c 'import json; r=json.load(open("operator-dist-candidate/upgrade-review.json")); assert r["status"]=="same-file-content" and r["upgrade_authorized"] is False and r["candidate_manifest_anchor_matched"] is True'
+          cp operator-dist-candidate/pilot-a.zip \
+            operator-dist-candidate/nexus-operator-pilot.zip
+          (cd operator-dist-candidate && \
+            sha256sum nexus-operator-pilot.zip > SHA256SUMS && \
+            sha256sum -c SHA256SUMS)
+          printf 'Verified source HEAD: %s\n' "$(git rev-parse HEAD)"
+      - name: Crash and restart real installed operator subprocesses (disposable only)
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          test "$(id -u)" != 0
+          manifest_sha="$(python -c 'import json;print(json.load(open("operator-dist-candidate/build.json"))["manifest_sha256"])')"
+          python -I -B scripts/test-operator-restart-pilot.py \
+            --installed "$PWD/operator-dist-candidate/installed" \
+            --expected-manifest-sha256 "$manifest_sha" \
+            --approve-disposable
+          # The synthetic restart test must not mutate any installed bytes.
+          python -I -B operator-dist-candidate/installed/scripts/nexus-operator-distribution.py \
+            verify-installed --destination "$PWD/operator-dist-candidate/installed" \
+            --expected-manifest-sha256 "$manifest_sha"
+      - name: Retain verified operator-only pilot candidate
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-operator-pilot-unattested-candidate
+          path: |
+            operator-dist-candidate/nexus-operator-pilot.zip
+            operator-dist-candidate/SHA256SUMS
+            operator-dist-candidate/build.json
+            operator-dist-candidate/upgrade-review.json
+            scripts/nexus-operator-distribution.py
+          retention-days: 7
+          if-no-files-found: error
