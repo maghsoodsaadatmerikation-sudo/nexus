@@ -268,3 +268,95 @@ Phase 5 adds positive and negative tests for read-only replay, partial failure,
 crash-before-completion, forged/insecure journal paths, restrictive modes,
 unique nonce reapproval, CLI receipt lookup, fsync failure and output privacy.
 GitHub CI must independently validate this phase's new commit before promotion.
+
+## Phase 6 — explicit NEXUS Studio ⇄ operator handoff (candidate, 16 November 2026)
+
+This phase **does not** add a browser-controlled shell or an autonomous agent.
+It adds an operator-only, local, file-based handoff between Studio's existing
+**explicit text attachment** feature and the reviewed engineering CLI. The
+proposal and executable code are *untrusted input*, not model authority.
+
+### What is implemented
+
+- `agent_chat_handoff.py`: a strict, bounded `nexus.engineering.proposal.v1`
+  JSON intake. Duplicate keys, unknown fields, traversal paths, unpinned
+  images, invalid command arguments, malformed numbers and excess steps are
+  rejected through the same `engineering_agent.parse_plan` schema.
+- `prepare` builds a **v3 private plan** from the live local workspace manifest
+  and a new cryptographic execution nonce. It creates a 0600 file containing
+  the complete private plan and a separate, sanitized review `.txt`. The
+  review includes plan/workspace SHA-256, ordered tool types and risk flags,
+  but **no file contents, filenames, shell arguments, provider results or logs**.
+- `execute` requires the exact reviewed SHA-256 typed separately by the
+  operator. It uses existing single-use approvals, workspace lock, bounded
+  Docker and durable journal; there is no new execution bypass. It exports a
+  separate sanitized `.txt` status receipt for the next Studio chat turn.
+- `receipt` inspects an already claimed or finished plan **without rerunning**
+  anything. An interrupted/started record is labeled ambiguous, never PASS.
+- All output files are exclusive (`O_EXCL`, 0600), in a private operator-owned
+  directory separate from workspace content. Candidate plan input is bounded,
+  regular-file-only with no-follow semantics. Failed or stale approvals do not
+  trigger local execution. Output artifacts and execution receipts are not
+  stored on a hosted server by this bridge.
+
+### Human-operated Studio workflow
+
+Create dedicated 0700 folders for the local workspace and outbox. Take an
+**untrusted** proposal from Studio's writing area or conversation into a local
+`proposal.json` file, e.g.:
+
+```json
+{
+  "schema": "nexus.engineering.proposal.v1",
+  "workspace": "demo",
+  "steps": [{"tool":"write", "path":"hello.py", "text":"print('hello NEXUS')\n"}]
+}
+```
+
+```bash
+mkdir -m 700 -p "$HOME/nexus-agent-workspaces" "$HOME/nexus-agent-outbox"
+python scripts/nexus-chat-engineering.py prepare \
+  --root "$HOME/nexus-agent-workspaces" --workspace demo \
+  --proposal proposal.json --out "$HOME/nexus-agent-outbox"
+
+# READ THE ENTIRE GENERATED PRIVATE nexus-plan-<prefix>.json BEFORE APPROVAL.
+# The reviewed plan SHA-256 is printed in prepare's JSON output.
+python scripts/nexus-chat-engineering.py execute \
+  --root "$HOME/nexus-agent-workspaces" --workspace demo \
+  --plan "$HOME/nexus-agent-outbox/nexus-plan-<prefix>.json" \
+  --approve-digest '<EXACT-REVIEWED-64-HEX-PLAN-SHA256>' \
+  --out "$HOME/nexus-agent-outbox"
+
+# No execution — query the durable journal by a known local plan.
+python scripts/nexus-chat-engineering.py receipt \
+  --root "$HOME/nexus-agent-workspaces" --workspace demo \
+  --plan "$HOME/nexus-agent-outbox/nexus-plan-<prefix>.json"
+```
+
+The operator may attach the resulting `nexus-review-*.txt` or
+`nexus-result-*.txt` to **one next Studio chat message** using Studio's
+existing **Attach text files** control, and then separately review/approve any
+configured model send. Studio's local guide remains non-generative. Do **not**
+attach the private `nexus-plan-*.json` to a hosted model unless the operator
+intends to transmit its full contents; generated plans can include private
+code, paths and commands. A review file contains only opaque hashes/statuses,
+so a model cannot infer full implementation details from it.
+
+### Limitations and admission gates
+
+This bridge is a **manual local file exchange**, not a new native Studio tab,
+remotely hosted service, model-controlled tool loop, or direct in-browser
+execution. A prepared plan is **not** an approval; operator review and explicit
+`execute` are still required. The local machine needs a compatible Linux
+installation and a Docker daemon for `run` steps. Ctrl+C can leave a
+**consumed** approval and partially changed files; inspect `receipt` and review
+a **new** plan instead of silently retrying. The journal is local evidence, not
+a cryptographic signature or independent attestation. No automatic cloud
+persistence, cross-device sync, network-enabled container, background daemon or
+untrusted multi-tenant isolation is added. Keep `A_out <= A_in`.
+
+Verification: deterministic unit tests for hostile proposals, real local
+prepare/execute/receipt, private export permissions, no-effect preview, stale
+approval and replay denial, sanitized output, interruption-state labeling, and
+oversized/symlink input denial. Dedicated CI must PASS at the committed SHA;
+no deployment, merge or production readiness is implied by local test success.
