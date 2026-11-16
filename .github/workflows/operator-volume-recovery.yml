@@ -1,0 +1,51 @@
+name: NEXUS Operator Volume Recovery (Disposable)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/nexus-operator-snapshot.py'
+      - 'scripts/test-operator-volume-restore.py'
+      - 'nexus-cloud/agent_workspace.py'
+      - 'nexus-cloud/agent_journal.py'
+      - 'nexus-cloud/agent_host_census.py'
+      - 'nexus-cloud/agent_operator_service.py'
+      - '.github/workflows/operator-volume-recovery.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  two-isolated-volumes:
+    # An ephemeral GitHub runner controls both containers and their volumes.
+    # This is NOT an independent off-host durable restore or production grant.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact reviewed source (no persisted credentials)
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Discover digest of disposable Python runtime image
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(id -u)" != 0
+          docker pull python:3.13-slim
+          IMAGE="$(docker image inspect --format '{{index .RepoDigests 0}}' python:3.13-slim)"
+          case "$IMAGE" in
+            *@sha256:*) ;;
+            *) echo 'No immutable image digest provided' >&2; exit 1 ;;
+          esac
+          echo "NEXUS_P28_PYTHON_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+      - name: Delete source volume and verify offline restore, journal and anti-replay
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          python3 -B scripts/test-operator-volume-restore.py --image "$NEXUS_P28_PYTHON_IMAGE"
+          printf 'Verified source HEAD: %s\n' "$(git rev-parse HEAD)"
