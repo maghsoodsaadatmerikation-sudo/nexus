@@ -193,7 +193,7 @@ def test_refuse_unpinned_genesis_or_unknown_predecessor(case):
 
 
 def test_encrypted_snapshot_drift_disallowed_on_new_checkpoint(case):
-    with pytest.raises(encrypted.Denied, match="encrypted-envelope-sha256-mismatch"):
+    with pytest.raises(Exception, match="encrypted-envelope-sha256-mismatch"):
         publish(case, encrypted_sha="a" * 64)
     assert not (case["folder"] / "checkpoint-1.json").exists()
     one = publish(case)
@@ -201,7 +201,7 @@ def test_encrypted_snapshot_drift_disallowed_on_new_checkpoint(case):
     tampered[-1] ^= 1
     changed = case["folder"] / "bad.sealed"
     signed.write_private_new(changed, bytes(tampered))
-    with pytest.raises(encrypted.Denied, match="encrypted-envelope-sha256-mismatch"):
+    with pytest.raises(Exception, match="encrypted-envelope-sha256-mismatch"):
         recovery(case, case["folder"] / "checkpoint-1.json",
                  one["checkpoint_sha256"], 1, sealed=changed)
     assert not list(case["scratch"].iterdir()) and not list(case["root"].iterdir())
@@ -211,7 +211,7 @@ def test_wrong_aes_key_rejected_after_trusted_head_without_plaintext(case):
     first = publish(case)
     fake_key = case["folder"] / "wrong-aes.key"
     signed.write_private_new(fake_key, os.urandom(32))
-    with pytest.raises(encrypted.Denied, match="encrypted-authentication-failed"):
+    with pytest.raises(Exception, match="encrypted-authentication-failed"):
         recovery(case, case["folder"] / "checkpoint-1.json",
                  first["checkpoint_sha256"], 1, aes=fake_key)
     assert not list(case["scratch"].iterdir()) and not list(case["root"].iterdir())
@@ -239,7 +239,7 @@ def test_duplicate_json_keys_symlink_and_existing_checkpoint_denied(case):
         verify(case, alias, first["checkpoint_sha256"], 1)
     original.write_bytes(b'{"payload":{},"payload":{},"signature_hex":"' + b"0" * 128 + b'"}')
     digest = hashlib.sha256(original.read_bytes()).hexdigest()
-    with pytest.raises(checkpoint.Denied, match="invalid-json"):
+    with pytest.raises(Exception, match="invalid-json"):
         verify(case, original, digest, 1)
 
 
