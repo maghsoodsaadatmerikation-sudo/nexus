@@ -13,6 +13,7 @@ ok('proposal approved shape',()=>assert.equal(E.inspect(preview).kind,'proposal'
 ok('sanitized report',()=>{const s=E.report(E.inspect(preview));assert(!s.includes('print(1)')&&!s.includes('code/a.py')&&!s.includes('python@'))});
 ok('review shape',()=>assert.equal(E.inspect(JSON.stringify(review)).state,'not-executed'));
 ok('receipt shape',()=>assert.equal(E.inspect(JSON.stringify(receipt)).state,'complete'));
+ok('cancelled receipt is never complete',()=>{const s=E.inspect(JSON.stringify({...receipt,execution_status:'cancelled',steps:[{index:0,tool:'run',status:'cancelled'}]}));assert.equal(s.state,'cancelled');assert.equal(s.steps[0].status,'cancelled');assert(E.report(s).includes('cancelled'))});
 ok('nested duplicate key',()=>deny(preview.replace('"tool":"run"','"tool":"run","tool":"read"')));
 ok('escaped duplicate key',()=>deny(preview.replace('"workspace":"demo"','"workspace":"demo","\\u0077orkspace":"evil"')));
 ok('path traversal',()=>deny(JSON.stringify({...proposal,steps:[{tool:'read',path:'../secret'}]})));

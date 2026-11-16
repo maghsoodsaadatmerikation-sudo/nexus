@@ -905,7 +905,7 @@ function labeledSteps(s,{status=false}={}){
  if(!Array.isArray(s)||s.length>12)deny('steps');
  return s.map((x,i)=>{
   if(!obj(x)||!Number.isInteger(x.index)||x.index!==i||!Object.hasOwn(TOOLS,x.tool))deny('step-metadata');
-  if(status){if(!keys(x,['index','tool','status'])||!['completed','failed','denied'].includes(x.status))deny('step-status')}
+  if(status){if(!keys(x,['index','tool','status'])||!['completed','failed','denied','cancelled'].includes(x.status))deny('step-status')}
   else if(!keys(x,['index','tool','risk'])||x.risk!==RISK[x.tool])deny('step-risk');
   return {index:x.index,tool:x.tool,risk:RISK[x.tool],...(status?{status:x.status}:{})};
  });
@@ -930,7 +930,7 @@ function inspect(raw){
   const started=value.journal_state==='started',finished=value.journal_state==='finished';
   if(!started&&!finished)deny('journal-state');
   if(started&&(value.execution_status!=='interrupted-or-in-progress'||value.workspace_sha256_after!==null||!Array.isArray(value.steps)||value.steps.length!==0))deny('started');
-  if(finished&&(!['complete','execution-failed','step-denied','post-state-unverifiable'].includes(value.execution_status)||
+  if(finished&&(!['complete','execution-failed','step-denied','post-state-unverifiable','cancelled'].includes(value.execution_status)||
     (value.workspace_sha256_after!==null&&!HASH.test(value.workspace_sha256_after))))deny('finished');
   return {kind:'receipt',state:value.execution_status,authority:'none',plan_sha256:value.plan_sha256,workspace_sha256:value.workspace_sha256_before,
     ...(typeof value.workspace_sha256_after==='string'?{workspace_after:value.workspace_sha256_after}:{}),steps:labeledSteps(value.steps,{status:true}),private:false};
