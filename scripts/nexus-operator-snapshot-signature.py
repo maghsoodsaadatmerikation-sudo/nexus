@@ -27,10 +27,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 
 SCHEMA = "nexus.operator.snapshot-signature.v1"
 SNAPSHOT_SCHEMA = "nexus.operator.offline-snapshot.v1"
-DOMAIN = b"NEXUS-OPERATOR-SNAPSHOT-SIGNATURE-V1\\0"
-SHA = re.compile(r"[0-9a-f]{64}\\Z")
-SIGNATURE = re.compile(r"[0-9a-f]{128}\\Z")
-WORKSPACE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\\Z")
+DOMAIN = b"NEXUS-OPERATOR-SNAPSHOT-SIGNATURE-V1\0"
+SHA = re.compile(r"[0-9a-f]{64}\Z")
+SIGNATURE = re.compile(r"[0-9a-f]{128}\Z")
+WORKSPACE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z")
 MAX_ARCHIVE = 32 * 1024 * 1024
 
 
