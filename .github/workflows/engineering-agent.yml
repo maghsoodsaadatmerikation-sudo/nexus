@@ -4,6 +4,8 @@ on:
     paths:
       - 'nexus-cloud/agent_workspace.py'
       - 'nexus-cloud/engineering_agent.py'
+      - 'nexus-cloud/agent_journal.py'
+      - 'nexus-cloud/tests/test_agent_journal.py'
       - 'nexus-cloud/agent_research.py'
       - 'nexus-cloud/tests/test_agent_workspace.py'
       - 'nexus-cloud/tests/test_engineering_agent.py'
@@ -36,7 +38,8 @@ jobs:
             nexus-cloud/tests/test_engineering_agent.py \
             nexus-cloud/tests/test_agent_research.py \
             nexus-cloud/tests/test_agent_tools_upgrade.py \
-            nexus-cloud/tests/test_agent_lifecycle.py
+            nexus-cloud/tests/test_agent_lifecycle.py \
+            nexus-cloud/tests/test_agent_journal.py
 
   docker-runtime:
     # No repository write permissions/secrets. Only on disposable Ubuntu runners.

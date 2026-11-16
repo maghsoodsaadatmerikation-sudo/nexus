@@ -204,3 +204,67 @@ untrusted model outputs. A remote service still needs dedicated disposable
 workers, authenticated policy mediation, nonshared storage, quotas and isolated
 attestation. All CI claims must refer to an actually completed GitHub run;
 adding a CI step is not evidence that the step has passed.
+
+## Phase 5 — crash-conscious approval consumption and durable receipts
+
+**Local operator-only; draft branch, not deployed into Studio or the public service.**
+
+Every reviewed engineering plan (versions 1–3) now consumes its exact canonical
+SHA-256 approval **at most once** on a particular private workspace root. Under
+the existing cross-process workspace lock, after an optional workspace-state
+check and **before any plan step**, the worker creates a 0600 exclusive journal
+record and fsyncs its data and parent directory. The per-workspace 0700 journal
+is adjacent to, not inside, the project's content manifest directory. Existing
+completed or incomplete approvals deny replay, including read-only plans,
+network metadata calls, and shell commands that produced no file changes.
+
+A clean return atomically replaces the record with a bounded final receipt:
+plan SHA-256, workspace SHA-256 before/after, execution status, and sanitized
+per-step status. It deliberately **excludes** file text, source excerpts,
+command output, API results and plan contents. If the process is terminated
+between claim and completion, the record remains `started`; an operator can
+inspect it but **cannot** implicitly resume/replay an unknown partial execution.
+If final receipt persistence fails, the CLI reports an ambiguous result rather
+than claiming success; the consumed approval remains unavailable.
+
+**Plan v3** additionally requires both the complete workspace-state digest and
+an independently generated, lowercase, 128-bit `execution_nonce` (32 hex
+characters). A deliberately repeated operation must obtain a new nonce, a new
+plan SHA-256 and a new explicit operator approval. The prior v1/v2 schemas
+remain readable but new plans should use v3. An illustrative plan:
+
+```json
+{
+  "version": 3,
+  "workspace": "demo",
+  "expected_workspace_sha256": "<current 64-hex digest from manifest>",
+  "execution_nonce": "<fresh 32-hex nonce from secrets.token_hex(16)>",
+  "steps": [{"tool": "read", "path": "hello.py"}]
+}
+```
+
+```bash
+# Review first (does not spend the approval):
+python scripts/nexus-engineering-plan.py --root "$HOME/nexus-workspaces" --plan plan.json
+# Execute with the exact reviewed digest, once:
+python scripts/nexus-engineering-plan.py --root "$HOME/nexus-workspaces" \
+  --plan plan.json --approve-digest '<plan_sha256>'
+# Read a persisted sanitized receipt; this does NOT execute or grant approval:
+python scripts/nexus-engineering-plan.py --root "$HOME/nexus-workspaces" \
+  --plan plan.json --receipt
+```
+
+Receipts live on the *same host and filesystem*. They are **not** a distributed
+exactly-once transaction, a signed audit log, an anti-root tamper seal, or a
+rollback implementation. A privileged process, direct filesystem writes, host
+loss, symlink races by an external co-owner, and Docker daemon access remain
+outside this boundary. The operator must keep the private root, journal files,
+backups and permissions intact. At most 1,024 retained records are allowed per
+workspace; there is deliberately no automatic pruning of spent approvals.
+
+The previous phase's **real Docker CI job passed** on commit `9370b9c` in a
+disposable GitHub runner; this does not establish multi-tenant production safety.
+Phase 5 adds positive and negative tests for read-only replay, partial failure,
+crash-before-completion, forged/insecure journal paths, restrictive modes,
+unique nonce reapproval, CLI receipt lookup, fsync failure and output privacy.
+GitHub CI must independently validate this phase's new commit before promotion.

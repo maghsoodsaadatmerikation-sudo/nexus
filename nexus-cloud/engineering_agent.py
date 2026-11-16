@@ -15,6 +15,7 @@ from typing import Any
 from agent_workspace import (IMAGE_DIGEST, MAX_FILE_BYTES, Workspace, WorkspaceDenied,
                              run_container, safe_parts)
 from agent_research import ResearchDenied, endpoint, fetch_metadata
+from agent_journal import ApprovalJournal
 
 MAX_PLAN_BYTES = 32_768
 MAX_STEPS = 12
@@ -52,16 +53,21 @@ def parse_plan(raw: bytes) -> tuple[dict[str, Any], str]:
         raise
     except (UnicodeError, ValueError) as exc:
         raise WorkspaceDenied("plan-json") from exc
-    if not isinstance(plan, dict) or type(plan.get("version")) is not int or plan["version"] not in (1, 2):
+    if not isinstance(plan, dict) or type(plan.get("version")) is not int or plan["version"] not in (1, 2, 3):
         raise WorkspaceDenied("plan-schema")
     expected_keys = {"version", "workspace", "steps"}
-    if plan["version"] == 2:
+    if plan["version"] in (2, 3):
         expected_keys.add("expected_workspace_sha256")
+    if plan["version"] == 3:
+        expected_keys.add("execution_nonce")
     if set(plan) != expected_keys:
         raise WorkspaceDenied("plan-schema")
-    if plan["version"] == 2 and (not isinstance(plan["expected_workspace_sha256"], str)
+    if plan["version"] in (2, 3) and (not isinstance(plan["expected_workspace_sha256"], str)
                                   or not HASH.fullmatch(plan["expected_workspace_sha256"])):
         raise WorkspaceDenied("plan-workspace-state")
+    if plan["version"] == 3 and (not isinstance(plan["execution_nonce"], str)
+                                  or not re.fullmatch(r"[0-9a-f]{32}", plan["execution_nonce"])):
+        raise WorkspaceDenied("invalid-execution-nonce")
     if not isinstance(plan["workspace"], str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}", plan["workspace"]):
         raise WorkspaceDenied("plan-workspace")
     steps = plan["steps"]
@@ -136,13 +142,19 @@ def execute_plan(workspace: Workspace, plan: dict[str, Any], digest: str, *, app
     if actual_digest != digest or checked["workspace"] != workspace.name:
         raise WorkspaceDenied("plan-changed-or-wrong-workspace")
     with workspace.operation_lock():
-        # Version 2 couples the approved plan to the observed *entire* workspace.
+        # Versions 2 and 3 couple the approved plan to the entire workspace.
         # The check occurs before the first mutation or executable command.
-        if checked["version"] == 2:
+        if checked["version"] in (2, 3):
             observed = workspace.manifest()["sha256"]
             if observed != checked["expected_workspace_sha256"]:
                 raise WorkspaceDenied("workspace-state-changed-reapproval-required")
         workspace_sha256_before = workspace.manifest()["sha256"]
+        journal = ApprovalJournal(workspace)
+        # Crash-safe single-use approval is consumed before any side effects.
+        # An interrupted process leaves a STARTED record, never safe to retry.
+        journal.claim(digest, version=checked["version"],
+                      workspace_before=workspace_sha256_before,
+                      execution_nonce=checked.get("execution_nonce"))
         results: list[dict[str, Any]] = []
         status = "complete"
         for index, step in enumerate(checked["steps"]):
@@ -196,6 +208,16 @@ def execute_plan(workspace: Workspace, plan: dict[str, Any], digest: str, *, app
             # claim a clean end state when its integrity cannot be observed.
             workspace_sha256_after = None
             status = "post-state-unverifiable"
-        return PlanReceipt(digest, status, sum(item.get("status") != "denied" for item in results), tuple(results),
+        completed = sum(item.get("status") != "denied" for item in results)
+        summaries = [{"index": item["index"], "tool": item["tool"],
+                      "status": "denied" if item.get("status") == "denied" else
+                      ("failed" if item.get("status") not in (None, "complete") else "completed")}
+                     for item in results]
+        try:
+            journal.finish(digest, status=status, workspace_after=workspace_sha256_after,
+                           completed_steps=completed, step_summaries=summaries)
+        except (OSError, WorkspaceDenied) as exc:
+            raise WorkspaceDenied("durable-receipt-failed-workspace-may-have-changed") from exc
+        return PlanReceipt(digest, status, completed, tuple(results),
                            workspace_sha256_before=workspace_sha256_before,
                            workspace_sha256_after=workspace_sha256_after)
