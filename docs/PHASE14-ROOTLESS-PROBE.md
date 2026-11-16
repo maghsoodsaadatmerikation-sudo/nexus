@@ -61,3 +61,34 @@ production tenant service or re-enable its deliberately denied `run` tool.
 The real GitHub Actions `rootless-namespace` job is a strict acceptance gate.
 If the hosted runner disables unprivileged user namespaces, it fails rather
 than pretending an isolated guest ran. The existing PR remains **Draft**.
+
+## Phase 15 — fail-closed kernel hardening and host capability distinction
+
+The bootstrap now finishes its trusted mounts and chroot **before** irreversibly
+removing all effective, permitted and inheritable Linux capabilities. Locked
+`SECBIT_NOROOT` and `SECBIT_NO_SETUID_FIXUP` prevent the nested UID 0 from
+reacquiring root capabilities at `execve`; `PR_SET_NO_NEW_PRIVS` is mandatory.
+A seccomp BPF program explicitly checks native `AUDIT_ARCH`, kills mismatched
+architectures and x86 x32 ABI calls, and returns EPERM for clone/fork, new
+namespaces, mount/remount, pivot/chroot, ptrace, BPF and similar high-risk
+syscalls. An unrecognized CPU architecture or failed filter installation
+prevents any guest launch. This remains a **bounded lab proof**, not a safe
+universal executable sandbox or a substitute for a dedicated host/VM.
+
+The static ELF probe refuses to return PASS unless it observes: zero guest
+capability sets, `NoNewPrivs=1`, seccomp filter mode, a denied `unshare` call,
+and a denied workspace remount. The executable's ancestors are opened through
+`O_NOFOLLOW` dirfds, requiring private paths except root-owned sticky `/tmp`.
+Workspace source integrity and file/time/output boundaries are unchanged.
+
+GitHub-hosted Ubuntu runners can prohibit *unprivileged* user namespaces by
+a global AppArmor restriction. Generic CI runs still execute static/negative
+contract tests and mark real OS acceptance **SKIPPED** when unavailable.
+A separate, mandatory `rootless-namespace` job temporarily configures the
+**disposable CI runner only** for the required rootless userns test and
+restores its previous sysctl setting on exit; tests themselves still run as a
+non-root user. If the host cannot be configured or the namespace cannot be
+established, that dedicated job fails, and the PR cannot be promoted. No
+production host setting is changed, and this is not independent security
+attestation. In a real operator host, the admin must choose and maintain an
+appropriate security policy; there is no automatic sysctl alteration.

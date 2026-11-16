@@ -15,6 +15,23 @@ from agent_workspace import WorkspaceDenied
 SOURCE = Path(__file__).resolve().parents[2] / 'scripts' / 'rootless-sandbox-probe.c'
 
 
+def require_real_namespaces():
+    """Only the dedicated OS job may claim a real namespace acceptance PASS.
+
+    General-purpose CI/static jobs can run on kernels with unprivileged userns
+    disabled. They must label the OS portion SKIPPED, never fabricate PASS.
+    The separately configured rootless-namespace CI job requires this probe.
+    """
+    result = subprocess.run(['unshare', '--user', '--map-root-user', '--mount',
+                             '--net', '--pid', '--fork', '/usr/bin/true'],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            timeout=3, check=False)
+    if result.returncode != 0:
+        if os.environ.get('NEXUS_ROOTLESS_ACCEPTANCE') == 'required':
+            pytest.fail('mandatory-rootless-OS-namespace-unavailable')
+        pytest.skip('real-rootless-OS-namespace-unavailable; separate mandatory CI job is authoritative')
+
+
 def build_binary(tmp_path):
     if not shutil.which('cc'):
         pytest.fail('rootless acceptance requires static C compiler')
@@ -70,6 +87,22 @@ def test_plan_provenance_requires_exact_reviewed_static_elf(tmp_path):
         private_executable(exe, digest)
 
 
+def test_executable_rejects_ancestor_symlink_and_writable_parent(tmp_path):
+    exe, digest = build_binary(tmp_path)
+    alias = tmp_path / 'linked-directory'
+    alias.symlink_to(exe.parent, target_is_directory=True)
+    with pytest.raises((OSError, WorkspaceDenied)):
+        private_executable(alias / exe.name, digest)
+    alias.unlink()
+    # The immediate directory remains private, but its ancestor becomes
+    # group/world writable and can be replaced by another local account.
+    exe.parent.parent.chmod(0o777)
+    with pytest.raises(WorkspaceDenied, match='writable-ancestor'):
+        private_executable(exe, digest)
+    exe.parent.parent.chmod(0o700)
+    assert private_executable(exe, digest) == exe.read_bytes()
+
+
 def test_argv_timeout_and_approval_boundary(tmp_path):
     for arguments in [["\x00"], ['x'] * 17, ['é' * 2200], 'unsafe']:
         with pytest.raises(WorkspaceDenied):
@@ -85,6 +118,7 @@ def test_argv_timeout_and_approval_boundary(tmp_path):
 
 @pytest.mark.skipif(os.getuid() == 0, reason='rootless must execute as nonroot')
 def test_actual_unprivileged_namespace_limits_and_no_network(tmp_path):
+    require_real_namespaces()
     root, project = fixture(tmp_path)
     exe, digest = build_binary(tmp_path)
     before = sorted(p.name for p in project.iterdir())
@@ -93,6 +127,8 @@ def test_actual_unprivileged_namespace_limits_and_no_network(tmp_path):
     assert receipt['status'] == 'complete' and receipt['exit_code'] == 0, receipt
     assert receipt['stdout_sha256'] == hashlib.sha256(b'NEXUS_ROOTLESS_PROBE_PASS\n').hexdigest()
     assert receipt['stderr_bytes'] == 0
+    # The trusted C fixture also asserts zero effective/permitted/inheritable
+    # capabilities, no-new-privileges, and denial of guest remount attempts.
     assert not receipt['tenant_execution_enabled'] and not receipt['production_isolation_attested']
     assert sorted(p.name for p in project.iterdir()) == before
     assert not (project / 'pwned.txt').exists()
@@ -113,6 +149,7 @@ def test_source_mutation_or_workspace_links_block_before_execution(tmp_path):
 
 @pytest.mark.skipif(os.getuid() == 0, reason='rootless must execute as nonroot')
 def test_no_unbounded_output_or_unbounded_lifetime(tmp_path):
+    require_real_namespaces()
     root, project = fixture(tmp_path)
     exe, digest = build_binary(tmp_path)
     spam = run_probe(root, 'alpha', exe, digest, args=['--spam'], approved=True, timeout=10)

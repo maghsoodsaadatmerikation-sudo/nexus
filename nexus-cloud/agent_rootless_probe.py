@@ -51,25 +51,42 @@ def private_executable(path: str | Path, digest: str) -> bytes:
     p = Path(path)
     if not p.is_absolute() or '..' in p.parts or p.is_symlink():
         raise WorkspaceDenied('rootless-executable-path')
-    parent = p.parent.stat()
-    if (p.parent.is_symlink() or not stat.S_ISDIR(parent.st_mode) or
-            parent.st_uid != os.getuid() or parent.st_mode & 0o077):
-        raise WorkspaceDenied('rootless-executable-parent-not-private')
-    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
-    fd = os.open(p, flags)
+    # Resolve *every* ancestor via directory descriptors; checking only the
+    # immediate parent misses a symlink earlier in an otherwise private path.
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    directory_fd = os.open('/', directory_flags)
     try:
-        st = os.fstat(fd)
-        if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or
-                st.st_mode & 0o077 or st.st_nlink != 1 or not 64 <= st.st_size <= MAX_EXEC_BYTES):
-            raise WorkspaceDenied('rootless-executable-not-private')
-        data = os.read(fd, MAX_EXEC_BYTES + 1)
-        if len(data) != st.st_size or len(data) > MAX_EXEC_BYTES or not static_elf(data):
-            raise WorkspaceDenied('rootless-executable-not-static-elf')
-        if hashlib.sha256(data).hexdigest() != digest:
-            raise WorkspaceDenied('rootless-executable-digest-mismatch')
-        return data
+        for part in p.parts[1:-1]:
+            next_fd = os.open(part, directory_flags, dir_fd=directory_fd)
+            os.close(directory_fd)
+            directory_fd = next_fd
+            ancestor = os.fstat(directory_fd)
+            # Public /tmp is acceptable only when it is root-owned and sticky.
+            if ancestor.st_mode & 0o022 and not (
+                ancestor.st_uid == 0 and ancestor.st_mode & stat.S_ISVTX
+            ):
+                raise WorkspaceDenied('rootless-executable-writable-ancestor')
+        parent = os.fstat(directory_fd)
+        if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.getuid()
+                or parent.st_mode & 0o077):
+            raise WorkspaceDenied('rootless-executable-parent-not-private')
+        flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+        fd = os.open(p.name, flags, dir_fd=directory_fd)
+        try:
+            st = os.fstat(fd)
+            if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or
+                    st.st_mode & 0o077 or st.st_nlink != 1 or not 64 <= st.st_size <= MAX_EXEC_BYTES):
+                raise WorkspaceDenied('rootless-executable-not-private')
+            data = os.read(fd, MAX_EXEC_BYTES + 1)
+            if len(data) != st.st_size or len(data) > MAX_EXEC_BYTES or not static_elf(data):
+                raise WorkspaceDenied('rootless-executable-not-static-elf')
+            if hashlib.sha256(data).hexdigest() != digest:
+                raise WorkspaceDenied('rootless-executable-digest-mismatch')
+            return data
+        finally:
+            os.close(fd)
     finally:
-        os.close(fd)
+        os.close(directory_fd)
 
 
 def validate_args(argv: list[str], timeout: int) -> None:
@@ -126,8 +143,89 @@ def _enter(root: str, workspace: str, args: list[str]) -> None:
     libc = ctypes.CDLL(None, use_errno=True)
     if libc.prctl(38, 1, 0, 0, 0) != 0:
         raise WorkspaceDenied('rootless-nnp-failed')
+    # Finalize the chroot while the trusted bootstrap still has CAP_SYS_CHROOT.
+    # The guest must never receive that capability.
     os.chroot(root)
     os.chdir('/workspace')
+    # The bootstrap needs CAP_SYS_ADMIN *inside* the new user namespace to
+    # finish its mounts. The guest must not inherit that capability: otherwise
+    # a static ELF could remount the read-only workspace or create mounts.
+    # Securebits NOROOT is locked before exec, preventing UID 0 in this user
+    # namespace from re-acquiring capabilities at execve time.
+    SECBIT_NOROOT_LOCKED = 0x03
+    SECBIT_NO_SETUID_FIXUP_LOCKED = 0x0c
+    if libc.prctl(28, SECBIT_NOROOT_LOCKED | SECBIT_NO_SETUID_FIXUP_LOCKED,
+                  0, 0, 0) != 0:  # PR_SET_SECUREBITS
+        raise WorkspaceDenied('rootless-securebits-unavailable')
+
+    class CapHeader(ctypes.Structure):
+        _fields_ = [('version', ctypes.c_uint32), ('pid', ctypes.c_int)]
+
+    class CapData(ctypes.Structure):
+        _fields_ = [('effective', ctypes.c_uint32), ('permitted', ctypes.c_uint32),
+                    ('inheritable', ctypes.c_uint32)]
+
+    capset = libc.capset
+    capset.argtypes = (ctypes.POINTER(CapHeader), ctypes.POINTER(CapData))
+    capset.restype = ctypes.c_int
+    header = CapHeader(0x20080522, 0)  # Linux capability API v3, current process
+    data = (CapData * 2)()
+    if capset(ctypes.byref(header), data) != 0:
+        raise WorkspaceDenied('rootless-capability-drop-failed')
+    # Defensive seccomp policy: even a guest that tries to create new user or
+    # mount namespaces cannot use privilege-related syscalls. The filter is
+    # irreversible under NO_NEW_PRIVS and returns EPERM without side effects.
+    # Architecture mismatch or x86 x32 ABI attempts kill the guest, not fall
+    # through to a weaker ABI policy.
+    import platform
+    import errno
+    architecture = platform.machine().lower()
+    if architecture == 'x86_64':
+        audit_arch = 0xC000003E
+        blocked = [56, 57, 58, 101, 155, 161, 165, 166, 175, 176, 246,
+                   272, 298, 304, 308, 313, 321, 323, 425, 426, 427,
+                   428, 429, 430, 431, 432, 433, 435, 442]
+    elif architecture in ('aarch64', 'arm64'):
+        audit_arch = 0xC00000B7
+        blocked = [39, 40, 41, 51, 97, 104, 105, 106, 117, 220, 241,
+                   265, 268, 273, 280, 282, 425, 426, 427, 428, 429,
+                   430, 431, 432, 433, 435, 442]
+    else:
+        raise WorkspaceDenied('rootless-seccomp-unsupported-architecture')
+
+    class SockFilter(ctypes.Structure):
+        _fields_ = [('code', ctypes.c_ushort), ('jt', ctypes.c_ubyte),
+                    ('jf', ctypes.c_ubyte), ('k', ctypes.c_uint32)]
+
+    class SockFprog(ctypes.Structure):
+        _fields_ = [('len', ctypes.c_ushort),
+                    ('filter', ctypes.POINTER(SockFilter))]
+
+    # BPF_LD|BPF_W|BPF_ABS, BPF_JMP|BPF_JEQ|BPF_K, BPF_RET|BPF_K
+    instructions = [
+        (0x20, 0, 0, 4),             # seccomp_data.arch
+        (0x15, 1, 0, audit_arch),    # verify native architecture
+        (0x06, 0, 0, 0x80000000),   # SECCOMP_RET_KILL_PROCESS
+        (0x20, 0, 0, 0),             # seccomp_data.nr
+    ]
+    if architecture == 'x86_64':
+        instructions += [
+            (0x35, 0, 1, 0x40000000), # BPF_JGE, prohibit x32 ABI
+            (0x06, 0, 0, 0x80000000),
+        ]
+    for number in sorted(set(blocked)):
+        instructions.extend([
+            (0x15, 0, 1, number),
+            (0x06, 0, 0, 0x00050000 | errno.EPERM),
+        ])
+    instructions.append((0x06, 0, 0, 0x7FFF0000))  # SECCOMP_RET_ALLOW
+    filters = (SockFilter * len(instructions))(
+        *(SockFilter(*item) for item in instructions))
+    program = SockFprog(len(instructions), filters)
+    if libc.prctl(22, 2, ctypes.byref(program), 0, 0) != 0:  # PR_SET_SECCOMP
+        raise WorkspaceDenied('rootless-seccomp-install-failed')
+    # User-namespace root is deliberately retained for the mapped host UID,
+    # but effective/permitted/ambient capabilities must all be zero in guest.
     os.execve('/bin/probe', ['/bin/probe', *args],
               {'PATH': '/bin', 'HOME': '/tmp', 'LANG': 'C', 'TMPDIR': '/tmp'})
 

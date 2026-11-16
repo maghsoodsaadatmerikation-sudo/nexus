@@ -104,8 +104,10 @@ jobs:
         run: sudo -n python3 scripts/test-tenant-cross-uid.py
 
   rootless-namespace:
-    # Purely disposable, explicitly consented static ELF proof. No sudo,
-    # Docker, HTTP, browser privileges, user creation, secrets or deploys.
+    # Guest rootless execution is strictly unprivileged. On disposable hosted
+    # GitHub VMs only, sudo may temporarily configure an AppArmor sysctl so
+    # a real namespace can be created; this never runs on operator hosts.
+    # No Docker, HTTP, browser privileges, persistent users or deploys.
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -125,5 +127,19 @@ jobs:
           command -v cc
           command -v unshare
           command -v mount
+          # Ubuntu 24.04 GitHub runners may use a global AppArmor policy
+          # prohibiting unprivileged user namespaces. Prepare this ephemeral
+          # runner only; restore the exact prior value when this step exits.
+          previous=""
+          if [[ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            previous="$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns)"
+            if [[ "$previous" == '1' ]]; then
+              sudo sysctl -q -w kernel.apparmor_restrict_unprivileged_userns=0
+              trap 'sudo sysctl -q -w kernel.apparmor_restrict_unprivileged_userns="$previous" || true' EXIT
+            fi
+          fi
+          test "$(id -u)" != 0
+          # Strict preflight: the dedicated gate FAILS if namespaces are denied.
+          unshare --user --map-root-user --mount --net --pid --fork /usr/bin/true
           python -m pip install --disable-pip-version-check 'pytest==8.4.2'
-          PYTHONPATH=nexus-cloud python -m pytest -q nexus-cloud/tests/test_agent_rootless_probe.py
+          NEXUS_ROOTLESS_ACCEPTANCE=required PYTHONPATH=nexus-cloud python -m pytest -q nexus-cloud/tests/test_agent_rootless_probe.py
