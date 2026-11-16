@@ -71,9 +71,12 @@ can verify the new installation without touching your project.
   or the Python interpreter is **outside the security guarantee**.
 - The report's `upgrade_authorized=false` means **no execution or migration
   permission**, even if the file sets match exactly.
-- Old/new bundles with different allowlisted schemas are refused rather
-  than guessed/migrated; no production server, Docker, Android app or browser
-  bridge is created.
+- The exactly enumerated **Phase 22 and Phase 23** installed file
+  inventories can be reviewed side by side with Phase 24, without running
+  legacy code. The report separates `added_paths`, `removed_paths` and
+  `modified_paths`; an unfamiliar inventory is always refused rather than
+  interpreted or migrated.
+- No production server, Docker, Android app or browser bridge is created.
 - This stage is still on Draft PR #244. CI validates the private installation
   and comparison on ephemeral Ubuntu only; it does not certify production
   systems.
