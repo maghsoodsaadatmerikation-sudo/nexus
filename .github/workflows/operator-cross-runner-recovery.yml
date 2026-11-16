@@ -112,6 +112,7 @@ jobs:
           archive="$RUNNER_TEMP/nexus-p29-received/nexus-operator-cross-runner-synthetic-plaintext-only/snapshot.zip"
           test -f "$archive" && test ! -L "$archive"
           chmod 700 "$RUNNER_TEMP/nexus-p29-received"
+          chmod 700 "$RUNNER_TEMP/nexus-p29-received/nexus-operator-cross-runner-synthetic-plaintext-only"
           chmod 600 "$archive"
           test "$(sha256sum "$archive" | awk '{print $1}')" = "$EXPECTED_ARCHIVE_SHA256"
           mkdir -m 700 "$RUNNER_TEMP/nexus-p29-restored"
