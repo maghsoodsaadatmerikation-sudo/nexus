@@ -246,3 +246,108 @@ def test_archive_symlink_is_denied_before_digest_validation(tmp_path):
     alias.symlink_to(archive)
     with pytest.raises(OSError):
         distribution.verify(alias, expected_sha256=report["archive_sha256"])
+
+
+def _copy_allowlisted_source(tmp_path):
+    root = tmp_path / "operator-source"
+    root.mkdir(mode=0o700)
+    for name in distribution.FILES:
+        destination = root / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(SOURCE / name, destination)
+    return root
+
+
+def test_operator_build_rejects_symlinked_source_member(tmp_path):
+    root = _copy_allowlisted_source(tmp_path)
+    name = distribution.FILES[0]
+    member = root / name
+    member.unlink()
+    member.symlink_to(SOURCE / name)
+    output = tmp_path / "symlink-source.zip"
+    with pytest.raises((OSError, distribution.DistributionDenied)):
+        distribution.build(root, output)
+    assert not output.exists()
+
+
+def test_operator_build_rejects_symlinked_source_directory_and_root(tmp_path):
+    root = _copy_allowlisted_source(tmp_path)
+    root_link = tmp_path / "source-link"
+    root_link.symlink_to(root, target_is_directory=True)
+    output = tmp_path / "root-link.zip"
+    with pytest.raises((OSError, distribution.DistributionDenied)):
+        distribution.build(root_link, output)
+    assert not output.exists()
+    directory = root / "docs"
+    original = root / "docs-original"
+    directory.rename(original)
+    directory.symlink_to(original, target_is_directory=True)
+    with pytest.raises((OSError, distribution.DistributionDenied)):
+        distribution.build(root, output)
+    assert not output.exists()
+
+
+def test_operator_build_rejects_source_hardlink(tmp_path):
+    root = _copy_allowlisted_source(tmp_path)
+    member = root / distribution.FILES[0]
+    os.link(member, tmp_path / "same-inode")
+    output = tmp_path / "linked-source.zip"
+    with pytest.raises(distribution.DistributionDenied,
+                       match="source-not-regular-or-too-large"):
+        distribution.build(root, output)
+    assert not output.exists()
+
+
+def test_operator_build_rejects_source_member_swap_during_open(tmp_path, monkeypatch):
+    """A swapped final path cannot redirect source reads outside checkout."""
+    root = _copy_allowlisted_source(tmp_path)
+    name = distribution.FILES[0]
+    target = root / name
+    external = tmp_path / "external-data"
+    external.write_text("do-not-include-in-bundle")
+    raw_open = os.open
+    triggered = False
+
+    def swap_before_open(path, flags, *args, **kwargs):
+        nonlocal triggered
+        if (not triggered and path == target.name
+                and kwargs.get("dir_fd") is not None):
+            triggered = True
+            target.unlink()
+            target.symlink_to(external)
+        return raw_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(distribution.os, "open", swap_before_open)
+    output = tmp_path / "swapped-source.zip"
+    with pytest.raises((OSError, distribution.DistributionDenied)):
+        distribution.build(root, output)
+    assert triggered
+    assert not output.exists()
+
+
+def test_operator_build_rejects_mutation_during_source_read(tmp_path, monkeypatch):
+    root = _copy_allowlisted_source(tmp_path)
+    target = root / distribution.FILES[0]
+    expected_inode = target.stat().st_ino
+    original_read = os.read
+    mutated = False
+
+    def mutate_after_read(fd, count):
+        nonlocal mutated
+        data = original_read(fd, count)
+        if data and not mutated and os.fstat(fd).st_ino == expected_inode:
+            mutated = True
+            with target.open("r+b") as stream:
+                stream.seek(0)
+                stream.write(b"Z")
+                stream.flush()
+                os.fsync(stream.fileno())
+        return data
+
+    monkeypatch.setattr(distribution.os, "read", mutate_after_read)
+    output = tmp_path / "mutated-source.zip"
+    with pytest.raises(distribution.DistributionDenied,
+                       match="source-mutated-during-build"):
+        distribution.build(root, output)
+    assert mutated
+    assert not output.exists()
