@@ -85,7 +85,9 @@ def test_unknown_and_corrupt_other_workspace_journal_fail_closed(tmp_path):
     moved=a.root/'.nexus-agent-alpha.journal-original'
     other.rename(moved)
     other.symlink_to(moved,target_is_directory=True)
-    with pytest.raises(WorkspaceDenied,match='journal-unsafe'):
+    # Both a renamed abandoned journal and its replacement symlink must be
+    # rejected. The census may discover either first in directory order.
+    with pytest.raises(WorkspaceDenied,match='journal-unsafe|unknown-journal'):
         journal_census(a.root)
     with pytest.raises(WorkspaceDenied):claim(b,'blocked-2')
 
