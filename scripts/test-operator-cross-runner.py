@@ -16,6 +16,7 @@ from pathlib import Path
 import shutil
 import stat
 import sys
+import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "nexus-cloud"))
 from agent_workspace import Workspace, WorkspaceDenied
@@ -106,7 +107,7 @@ def _checked_archive_file(path: Path, expected: str) -> None:
 def _must_reject(fn, reason: str):
     try:
         fn()
-    except (WorkspaceDenied, OSError, ValueError):
+    except (WorkspaceDenied, OSError, ValueError, zipfile.BadZipFile):
         return
     raise WorkspaceDenied(reason)
 
