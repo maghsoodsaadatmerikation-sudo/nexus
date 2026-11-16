@@ -1,0 +1,56 @@
+name: NEXUS Operator Trusted Checkpoint Recovery (Synthetic)
+on:
+  pull_request:
+    paths:
+      - 'scripts/nexus-operator-checkpoint.py'
+      - 'scripts/nexus-operator-snapshot-encryption.py'
+      - 'scripts/nexus-operator-snapshot-signature.py'
+      - 'scripts/nexus-operator-snapshot.py'
+      - 'nexus-cloud/tests/test_agent_recovery_checkpoint.py'
+      - 'nexus-cloud/tests/test_agent_encrypted_snapshot.py'
+      - 'nexus-cloud/tests/test_agent_signed_snapshot.py'
+      - 'docs/PHASE32-TRUSTED-RECOVERY-CHECKPOINTS.md'
+      - '.github/workflows/operator-trusted-checkpoint.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checkpoint-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact PR tree without persisted credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Install Python 3.13
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - name: Install bounded test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            'cryptography==46.0.4' 'pytest==8.4.2'
+      - name: Run synthetic signed recovery and exact-head denial checks
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHONPATH: nexus-cloud
+        run: |
+          set -euo pipefail
+          test "$(id -u)" != 0
+          python -m py_compile \
+            scripts/nexus-operator-checkpoint.py \
+            nexus-cloud/tests/test_agent_recovery_checkpoint.py
+          python -m pytest -q \
+            nexus-cloud/tests/test_agent_recovery_checkpoint.py \
+            nexus-cloud/tests/test_agent_encrypted_snapshot.py \
+            nexus-cloud/tests/test_agent_signed_snapshot.py \
+            nexus-cloud/tests/test_agent_cross_runner.py
+          printf '%s\n' '{"synthetic_trusted_head_checked":true,"external_latest_attested":false,"legacy_restore_blocked":false,"production_ready":false}'
