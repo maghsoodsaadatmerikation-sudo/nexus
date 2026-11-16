@@ -329,7 +329,10 @@ def test_operator_review_cli_exports_strict_studio_review(operator):
         "const v=NexusEngineering.inspect(fs.readFileSync(process.argv[2],'utf8'));"
         "if(v.kind!=='review'||v.state!=='not-executed'||v.authority!=='none')process.exit(3);"
         "process.stdout.write(JSON.stringify({kind:v.kind,steps:v.steps.length}));",
-        str(js_core), str(exported)], capture_output=True, text=True, timeout=5)
+        # Cold Node startup on heavily loaded shared CI runners can exceed 5 s.
+        # This is an inert parser check; allow bounded startup without changing
+        # the parser's strict shape, privacy or no-execution assertions.
+        str(js_core), str(exported)], capture_output=True, text=True, timeout=15)
     assert browser_parser.returncode == 0, browser_parser.stderr
     assert json.loads(browser_parser.stdout) == {"kind": "review", "steps": 1}
     # Repeated export cannot replace an earlier review file.
