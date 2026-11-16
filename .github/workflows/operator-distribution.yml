@@ -30,6 +30,9 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+          # Pin artifact bytes to the exact reviewed PR HEAD, not GitHub's
+          # synthetic pull_request merge commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.13'
@@ -88,12 +91,12 @@ jobs:
             --expected-candidate-manifest-sha256 "$manifest_sha" \
             > operator-dist-candidate/upgrade-review.json
           python -c 'import json; r=json.load(open("operator-dist-candidate/upgrade-review.json")); assert r["status"]=="same-file-content" and r["upgrade_authorized"] is False and r["candidate_manifest_anchor_matched"] is True'
-          sha256sum operator-dist-candidate/pilot-a.zip \
-            > operator-dist-candidate/SHA256SUMS
           cp operator-dist-candidate/pilot-a.zip \
             operator-dist-candidate/nexus-operator-pilot.zip
-          sha256sum operator-dist-candidate/nexus-operator-pilot.zip
-          printf 'Source commit: %s\n' "$GITHUB_SHA"
+          (cd operator-dist-candidate && \
+            sha256sum nexus-operator-pilot.zip > SHA256SUMS && \
+            sha256sum -c SHA256SUMS)
+          printf 'Verified source HEAD: %s\n' "$(git rev-parse HEAD)"
       - name: Retain verified operator-only pilot candidate
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
