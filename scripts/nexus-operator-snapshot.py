@@ -119,6 +119,11 @@ def export(root: Path, workspace: str, output: Path) -> dict:
     root = private_root(root)
     if not (root / workspace).is_dir() or (root / workspace).is_symlink():
         deny("workspace-must-exist")
+    # This is an OFFLINE export, never a hot/live snapshot. Even a stale
+    # socket requires explicit separate recovery before trust is asserted.
+    if any((root / n).exists() or (root / n).is_symlink()
+           for n in (".nexus-operator.sock", ".nexus-operator.token")):
+        deny("offline-export-requires-stopped-service")
     ws = Workspace(root, workspace)
     with ws.operation_lock():
         journal = ApprovalJournal(ws)
@@ -244,6 +249,14 @@ def validate(raw: bytes, workspace: str) -> tuple[dict, dict, dict]:
             if path in seen_dirs or path in seen:
                 deny("snapshot-directory-overlap")
             seen_dirs.add(path)
+        # Reject impossible trees *before* writing anything to a fresh root:
+        # an archive cannot put a file at a required directory ancestor, and
+        # every nested path must have its parent present in the manifest.
+        for path in seen | seen_dirs:
+            parts = path.split("/")
+            for i in range(1, len(parts)):
+                if "/".join(parts[:i]) not in seen_dirs:
+                    deny("snapshot-parent-not-directory")
         identity = {"version": 1, "files": sorted(files, key=lambda f: f["path"]),
                     "directories": sorted(directories)}
         if type(meta["workspace_sha256"]) is not str or sha(canonical(identity)) != meta["workspace_sha256"]:
