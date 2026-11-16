@@ -173,19 +173,17 @@ def export(root: Path, workspace: str, output: Path) -> dict:
         parent = private_root(output.parent)
         if output.exists() or output.is_symlink():
             deny("snapshot-destination-exists")
-        fd = os.open(output.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
-                     os.O_NOFOLLOW | os.O_CLOEXEC, 0o600,
-                     dir_fd=os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC))
-        # Keep the parent handle separately below; a fresh O_EXCL file is private.
-        try:
-            with os.fdopen(fd, "wb", closefd=False) as stream:
-                stream.write(data)
-                stream.flush()
-            os.fsync(fd)
-        finally:
-            os.close(fd)
         pfd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
         try:
+            fd = os.open(output.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                         os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=pfd)
+            try:
+                with os.fdopen(fd, "wb", closefd=False) as stream:
+                    stream.write(data)
+                    stream.flush()
+                os.fsync(fd)
+            finally:
+                os.close(fd)
             os.fsync(pfd)
         finally:
             os.close(pfd)
