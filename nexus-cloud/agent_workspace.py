@@ -39,6 +39,10 @@ class WorkspaceDenied(ValueError):
     """An operation fails an explicit NEXUS workspace boundary."""
 
 
+class CleanupUnverifiable(WorkspaceDenied):
+    """An uncertain Docker cleanup fence could not be fsynced."""
+
+
 def safe_parts(path: str) -> tuple[str, ...]:
     if not isinstance(path, str) or len(path) > 512 or not path or "\\" in path or "\x00" in path:
         raise WorkspaceDenied("invalid-path")
@@ -397,6 +401,7 @@ def run_container(
         return RunResult(-1, "", "", 0, "cancelled")
     if shutil.which(docker_executable) is None:
         raise WorkspaceDenied("docker-unavailable")
+    docker_env = {"PATH": os.environ.get("PATH", "")}
     with tempfile.TemporaryDirectory(prefix="nexus-agent-cid-") as temp:
         cidfile = os.path.join(temp, "cid")
         args = [docker_executable, "run", "--rm", "--pull", "never", "--cidfile", cidfile,
@@ -414,7 +419,7 @@ def run_container(
         status = "complete"
         try:
             proc = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE, close_fds=True, env={"PATH": os.environ.get("PATH", "")})
+                                    stderr=subprocess.PIPE, close_fds=True, env=docker_env)
             sel = selectors.DefaultSelector()
             try:
                 for pipe, target in ((proc.stdout, stdout), (proc.stderr, stderr)):
@@ -459,18 +464,56 @@ def run_container(
                 proc.wait(timeout=3)
             code = proc.returncode if status == "complete" else -1
         finally:
+            uncertain = False
             if proc is not None and proc.poll() is None:
-                proc.kill()
-                proc.wait(timeout=3)
-            # The Docker CLI can die while its container survives; explicit cleanup.
-            if os.path.isfile(cidfile):
-                cid = Path(cidfile).read_text().strip()
-                if re.fullmatch(r"[0-9a-f]{64}", cid):
-                    try:
-                        subprocess.run([docker_executable, "rm", "-f", cid], timeout=5,
-                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-                    except (OSError, subprocess.TimeoutExpired):
-                        pass
+                try:
+                    proc.kill()
+                    proc.wait(timeout=3)
+                except (OSError, subprocess.TimeoutExpired):
+                    uncertain = True
+            # The Docker CLI can exit while its daemon-side container survives.
+            cid = None
+            if os.path.lexists(cidfile):
+                try:
+                    content = Path(cidfile).read_bytes()
+                    candidate = content.decode("ascii").strip() if len(content) <= 72 else ""
+                    if re.fullmatch(r"[0-9a-f]{64}", candidate):
+                        cid = candidate
+                    else:
+                        uncertain = True
+                except (OSError, UnicodeError):
+                    uncertain = True
+            if cid is not None:
+                try:
+                    # --rm may already have removed the container. Verify
+                    # absence after removal on the SAME Docker environment.
+                    subprocess.run([docker_executable, "rm", "-f", cid],
+                                   timeout=5, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, check=False,
+                                   env=docker_env)
+                    seen = subprocess.run(
+                        [docker_executable, "ps", "--all", "--no-trunc",
+                         "--filter", "id=" + cid, "--format", "{{.ID}}"],
+                        capture_output=True, timeout=5, check=False,
+                        env=docker_env)
+                    if seen.returncode != 0 or seen.stdout.strip():
+                        uncertain = True
+                except (OSError, subprocess.TimeoutExpired):
+                    uncertain = True
+            elif proc is not None and (status != "complete" or proc.returncode != 0):
+                # A failed CLI without a trustworthy CID cannot prove
+                # that the daemon never created a container.
+                uncertain = True
+            if uncertain:
+                try:
+                    from agent_host_census import record_unverified_docker_cleanup
+                    record_unverified_docker_cleanup(workspace.root)
+                except (OSError, WorkspaceDenied):
+                    # Keep the already consumed journal STARTED if evidence
+                    # cannot be made durable; never certify terminal state.
+                    raise CleanupUnverifiable("docker-cleanup-evidence-not-durable") from None
+                status = "cleanup-unverifiable"
+                code = -1
         return RunResult(code, stdout[:MAX_OUTPUT_BYTES].decode("utf-8", "replace"),
                          stderr[:MAX_OUTPUT_BYTES].decode("utf-8", "replace"),
                          int((time.monotonic() - start) * 1000), status)
