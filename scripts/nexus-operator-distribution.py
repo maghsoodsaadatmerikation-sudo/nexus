@@ -55,6 +55,12 @@ FILES = tuple(sorted((
     "docs/PHASE24-SIDE-BY-SIDE-REVIEW.md",
 )))
 assert len(FILES) == len(set(FILES))
+# Closed, audited inventory of previous local-operator pilot formats.
+# Never trust arbitrary manifest-provided paths or extrapolate future schemas.
+_V23_FILES = tuple(p for p in FILES if p != "docs/PHASE24-SIDE-BY-SIDE-REVIEW.md")
+_V22_FILES = tuple(p for p in _V23_FILES if p not in (
+    "docs/PHASE23-VERIFIED-FIRST-RUN.md", "scripts/nexus-operator-launch.py"))
+_RECOGNIZED_INSTALLED_FILESETS = (FILES, _V23_FILES, _V22_FILES)
 
 
 class DistributionDenied(ValueError):
@@ -261,9 +267,17 @@ def _installed_snapshot(destination: Path) -> tuple[dict, dict[str, dict], str]:
             or obj["platform"] != "linux-nonroot-operator-pilot"
             or obj["minimum_python"] != "3.13"
             or obj["authenticated"] is not False
-            or not isinstance(obj["source_files"], list)
-            or len(obj["source_files"]) != len(FILES)):
+            or not isinstance(obj["source_files"], list)):
         raise DistributionDenied("invalid-installed-manifest")
+    manifest_paths = [
+        entry.get("path") if isinstance(entry, dict) else None
+        for entry in obj["source_files"]
+    ]
+    known_files = next(
+        (known for known in _RECOGNIZED_INSTALLED_FILESETS
+         if manifest_paths == list(known)), None)
+    if known_files is None:
+        raise DistributionDenied("unknown-installed-file-layout")
     current = {}
     for node in destination.rglob("*"):
         rel = node.relative_to(destination).as_posix()
@@ -278,9 +292,9 @@ def _installed_snapshot(destination: Path) -> tuple[dict, dict[str, dict], str]:
             raise DistributionDenied("installed-file-unsafe")
         current[rel] = {"path": rel, "sha256": _sha(node.read_bytes()),
                         "bytes": st.st_size}
-    if set(current) != set(FILES) | {MANIFEST}:
+    if set(current) != set(known_files) | {MANIFEST}:
         raise DistributionDenied("installed-files-changed")
-    if obj["source_files"] != [current[name] for name in FILES]:
+    if obj["source_files"] != [current[name] for name in known_files]:
         raise DistributionDenied("installed-file-digest-mismatch")
     return obj, current, _sha(manifest_bytes)
 
@@ -295,7 +309,8 @@ def installed_verify(destination: Path, *, expected_manifest_sha256: str | None 
     if expected_manifest_sha256 is not None and actual_sha != expected_manifest_sha256:
         raise DistributionDenied("installed-manifest-anchor-mismatch")
     return {"status": "installed-integrity-verified", "schema": SCHEMA,
-            "manifest_sha256": actual_sha, "file_count": len(FILES),
+            "manifest_sha256": actual_sha,
+            "file_count": len(_installed_snapshot(destination)[1]) - 1,
             "manifest_anchor_matched": expected_manifest_sha256 is not None,
             "publisher_authenticated": False, "production_ready": False,
             "authority": "none"}
@@ -324,8 +339,14 @@ def compare_installed(current: Path, candidate: Path, *,
         raise DistributionDenied("previous-manifest-anchor-mismatch")
     if new_sha != expected_candidate_manifest_sha256:
         raise DistributionDenied("candidate-manifest-anchor-mismatch")
-    changed = [name for name in FILES
-               if old_entries[name]["sha256"] != new_entries[name]["sha256"]]
+    old_paths = set(old_entries) - {MANIFEST}
+    new_paths = set(new_entries) - {MANIFEST}
+    added = sorted(new_paths - old_paths)
+    removed = sorted(old_paths - new_paths)
+    modified = sorted(name for name in old_paths & new_paths
+                      if old_entries[name]["sha256"] != new_entries[name]["sha256"])
+    unchanged = len(old_paths & new_paths) - len(modified)
+    changed = sorted(set(added) | set(removed) | set(modified))
     return {
         "status": "review-required" if changed else "same-file-content",
         "schema": "nexus.operator.upgrade-review.v1",
@@ -333,10 +354,18 @@ def compare_installed(current: Path, candidate: Path, *,
         "candidate_manifest_sha256": new_sha,
         "candidate_manifest_anchor_matched": True,
         "previous_manifest_anchor_matched": expected_current_manifest_sha256 is not None,
-        "file_count": len(FILES),
+        "previous_file_count": len(old_paths),
+        "candidate_file_count": len(new_paths),
+        "file_count": len(new_paths),
+        "added_file_count": len(added),
+        "added_paths": added,
+        "removed_file_count": len(removed),
+        "removed_paths": removed,
+        "modified_file_count": len(modified),
+        "modified_paths": modified,
         "changed_file_count": len(changed),
         "changed_paths": changed,
-        "unchanged_file_count": len(FILES) - len(changed),
+        "unchanged_file_count": unchanged,
         "files_changed_by_review": False,
         "data_migrated": False,
         "upgrade_authorized": False,
