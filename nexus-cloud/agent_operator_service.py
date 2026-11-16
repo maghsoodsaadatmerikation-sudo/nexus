@@ -18,24 +18,41 @@ import struct
 import threading
 from pathlib import Path
 
-from agent_chat_handoff import chat_receipt, private_export_dir, read_operator_file
+from agent_chat_handoff import REVIEW_SCHEMA, chat_receipt, private_export_dir, read_operator_file
 from agent_journal import ApprovalJournal
 from agent_workspace import Workspace, WorkspaceDenied, WORKSPACE_ID
 from engineering_agent import HASH, execute_plan, parse_plan
 
 MAX_REQUEST_BYTES = 16_384
 MAX_RESPONSE_BYTES = 16_384
+MAX_ACTIVE_CLIENTS = 12
 SOCKET_NAME = ".nexus-operator.sock"
 TOKEN_NAME = ".nexus-operator.token"
 
 
 def _root(root: str | Path) -> Path:
+    """Reject root aliases through ancestor symlinks before using a pathname.
+
+    This is a filesystem preflight, not hostile same-UID mount isolation.
+    The operator must also protect the containing parent directories.
+    """
     path = Path(root)
-    if not path.is_absolute() or path.is_symlink():
+    if not path.is_absolute() or ".." in path.parts:
         raise WorkspaceDenied("operator-root-not-private")
-    st = path.stat()
-    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
-        raise WorkspaceDenied("operator-root-not-private")
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    fd = os.open("/", flags)
+    try:
+        for part in path.parts[1:]:
+            next_fd = os.open(part, flags, dir_fd=fd)
+            os.close(fd)
+            fd = next_fd
+        st = os.fstat(fd)
+        if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
+            raise WorkspaceDenied("operator-root-not-private")
+    except BaseException:
+        os.close(fd)
+        raise
+    os.close(fd)
     return path
 
 
@@ -84,6 +101,7 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
             raise WorkspaceDenied("operator-service-needs-unprivileged-linux")
         self.root = _root(root)
         self._state_lock = threading.Lock()
+        self._clients = threading.BoundedSemaphore(MAX_ACTIVE_CLIENTS)
         self._running: dict[str, tuple[str, threading.Event]] = {}
         self._token = _token_file(self.root, create=True)
         self._socket = self.root / SOCKET_NAME
@@ -98,6 +116,24 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
             self._socket.unlink(missing_ok=True)
             (self.root / TOKEN_NAME).unlink(missing_ok=True)
             raise
+
+    def process_request(self, request, client_address):
+        # A connected but silent local client must not spawn an unbounded
+        # collection of 5-second handler threads. Refuse excess immediately.
+        if not self._clients.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._clients.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._clients.release()
 
     def server_close(self):
         # Closing a service while work is running would abandon a live Docker
@@ -136,7 +172,7 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
         if not isinstance(name, str) or not WORKSPACE_ID.fullmatch(name) or not isinstance(digest, str) or not HASH.fullmatch(digest):
             return {"status": "denied"}
         has_plan = "plan_path" in value
-        if action == "start":
+        if action in ("review", "start"):
             if not has_plan:
                 return {"status": "denied"}
             plan_path = value["plan_path"]
@@ -147,26 +183,61 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
                 if (not path.is_absolute() or path.name != f"nexus-plan-{digest[:16]}.json"
                         or path.is_symlink()):
                     return {"status": "denied"}
-                ws = Workspace(self.root, name)
-                private_export_dir(path.parent, ws)
                 candidate, observed = parse_plan(read_operator_file(path))
                 if observed != digest or candidate["workspace"] != name or candidate["version"] != 3:
                     return {"status": "denied"}
-                try:
-                    ApprovalJournal(ws).read(digest)
-                except FileNotFoundError:
-                    pass
-                except (OSError, WorkspaceDenied):
-                    return {"status": "unverifiable"}
-                else:
-                    return {"status": "already-consumed"}
+                # Review must not manufacture a workspace merely because an
+                # untrusted request supplied a syntactically valid name.
+                if not (self.root / name).exists():
+                    return {"status": "denied"}
+                ws = Workspace(self.root, name)
+                private_export_dir(path.parent, ws)
+                # The operation lock makes admission consistent with official
+                # workspace tools. The worker always checks the hash again
+                # before claiming the one-use approval: external writers can
+                # still race in an untrusted host-account environment.
+                with ws.operation_lock():
+                    current = ws.manifest()["sha256"]
+                    if current != candidate["expected_workspace_sha256"]:
+                        return {"status": "stale-plan-reapproval-required", "authority": "none"}
+                    try:
+                        ApprovalJournal(ws).read(digest)
+                    except FileNotFoundError:
+                        pass
+                    except (OSError, WorkspaceDenied):
+                        return {"status": "unverifiable"}
+                    else:
+                        return {"status": "already-consumed"}
                 with self._state_lock:
                     if name in self._running:
                         return {"status": "busy"}
+                    if action == "review":
+                        # Deliberately no plan text, filenames, argv, source
+                        # content, network results or capability token.
+                        steps = [{"index": i, "tool": item["tool"],
+                                  "risk": ("executes-container" if item["tool"] == "run" else
+                                           "network-metadata" if item["tool"] == "research" else
+                                           "writes-files" if item["tool"] in ("write", "edit") else
+                                           "exports-archive" if item["tool"] == "package" else
+                                           "read-only")}
+                                 for i, item in enumerate(candidate["steps"])]
+                        review = {"schema": REVIEW_SCHEMA, "authority": "none",
+                                  "plan_sha256": digest, "workspace_sha256": current,
+                                  "workspace": name, "plan_version": 3,
+                                  "steps": steps, "status": "not-executed",
+                                  "review_required": True,
+                                  "note": "Local operator preflight of reviewed v3 plan. Metadata only; no command executed or approved. Inspect the complete private plan before separately supplying the exact digest."}
+                        # Transport status stays outside the strict Studio
+                        # summary; the browser cannot promote it to approval.
+                        return {"status": "review", "summary": review}
                     event = threading.Event()
                     worker = threading.Thread(target=self._run, args=(ws, candidate, digest, event), daemon=False)
                     self._running[name] = (digest, event)
-                    worker.start()
+                    try:
+                        worker.start()
+                    except BaseException:
+                        del self._running[name]
+                        raise
                 return {"status": "submitted-not-verified", "plan_sha256": digest, "authority": "operator-only"}
             except (OSError, WorkspaceDenied, UnicodeError, ValueError):
                 return {"status": "denied"}
