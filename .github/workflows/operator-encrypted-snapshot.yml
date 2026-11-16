@@ -1,0 +1,54 @@
+name: NEXUS Operator Encrypted Snapshot (Synthetic)
+on:
+  pull_request:
+    paths:
+      - 'scripts/nexus-operator-snapshot-encryption.py'
+      - 'scripts/nexus-operator-snapshot-signature.py'
+      - 'scripts/nexus-operator-snapshot.py'
+      - 'scripts/test-operator-cross-runner.py'
+      - 'nexus-cloud/tests/test_agent_encrypted_snapshot.py'
+      - 'nexus-cloud/tests/test_agent_signed_snapshot.py'
+      - 'docs/PHASE31-ENCRYPTED-OFFLINE-SNAPSHOTS.md'
+      - '.github/workflows/operator-encrypted-snapshot.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signed-encrypted-synthetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact PR tree without persisted credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Install Python 3.13
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - name: Install exact tested crypto and pytest versions
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            'cryptography==46.0.4' 'pytest==8.4.2'
+      - name: Verify actual signed AES-256-GCM roundtrip and negative paths
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHONPATH: nexus-cloud
+        run: |
+          set -euo pipefail
+          test "$(id -u)" != 0
+          python -m py_compile \
+            scripts/nexus-operator-snapshot-encryption.py \
+            scripts/nexus-operator-snapshot-signature.py \
+            nexus-cloud/tests/test_agent_encrypted_snapshot.py
+          python -m pytest -q \
+            nexus-cloud/tests/test_agent_encrypted_snapshot.py \
+            nexus-cloud/tests/test_agent_signed_snapshot.py \
+            nexus-cloud/tests/test_agent_cross_runner.py
+          printf '%s\n' '{"synthetic_aead_roundtrip":true,"real_key_custody_verified":false,"latest_backup_replay_prevented":false,"production_ready":false}'
