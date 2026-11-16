@@ -1,0 +1,51 @@
+name: NEXUS Operator Signed Snapshot (Synthetic)
+on:
+  pull_request:
+    paths:
+      - 'scripts/nexus-operator-snapshot-signature.py'
+      - 'scripts/nexus-operator-snapshot.py'
+      - 'scripts/test-operator-cross-runner.py'
+      - 'nexus-cloud/tests/test_agent_signed_snapshot.py'
+      - 'docs/PHASE30-SIGNED-OFFLINE-SNAPSHOTS.md'
+      - '.github/workflows/operator-signed-snapshot.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signature-and-restore:
+    # This is a disposable local synthetic test. No repository write grants,
+    # production secrets, GitHub artifact upload, hosted agent or model action.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact PR test tree without persistent credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Install Python 3.13
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - name: Install pinned test and Ed25519 verification dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            'pytest==8.4.2' 'cryptography==46.0.4'
+      - name: Run actual pinned signing, full recovery, tamper and replay tests
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHONPATH: nexus-cloud
+        run: |
+          set -euo pipefail
+          test "$(id -u)" != "0"
+          python -m py_compile scripts/nexus-operator-snapshot-signature.py \
+            nexus-cloud/tests/test_agent_signed_snapshot.py
+          python -m pytest -q \
+            nexus-cloud/tests/test_agent_signed_snapshot.py \
+            nexus-cloud/tests/test_agent_cross_runner.py
+          printf '%s\n' '{"signed_synthetic_recovery_tested":true,"publisher_independently_attested":false,"backup_encrypted":false,"production_ready":false}'
