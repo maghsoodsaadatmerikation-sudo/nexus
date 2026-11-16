@@ -23,6 +23,10 @@ on:
       - 'docs/PHASE20-DOCKER-CLEANUP-FENCE.md'
       - 'docs/PHASE19-HOST-CENSUS.md'
       - 'nexus-cloud/tests/test_agent_orphan_quarantine.py'
+      - 'nexus-cloud/tests/test_agent_cross_runner.py'
+      - 'scripts/test-operator-cross-runner.py'
+      - 'scripts/nexus-operator-snapshot.py'
+      - 'docs/PHASE29-CROSS-RUNNER-RECOVERY.md'
       - 'docs/PHASE18-JOURNAL-QUARANTINE.md'
       - 'nexus-cloud/agent_chat_handoff.py'
       - 'nexus-cloud/agent_operator_service.py'
@@ -83,6 +87,7 @@ jobs:
             nexus-cloud/tests/test_agent_operator_upgrade_review.py \
             nexus-cloud/tests/test_agent_operator_first_run.py \
             nexus-cloud/tests/test_agent_orphan_quarantine.py \
+            nexus-cloud/tests/test_agent_cross_runner.py \
             nexus-cloud/tests/test_agent_chat_handoff.py \
             nexus-cloud/tests/test_agent_operator_service.py \
             nexus-cloud/tests/test_agent_tenant_boundary.py
