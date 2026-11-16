@@ -348,5 +348,6 @@ if __name__ == '__main__' and len(sys.argv) >= 4 and sys.argv[1] == '__enter__':
         # Stage-only classification; never expose errno, paths or guest output.
         os._exit(140 + min(_bootstrap_stage, 9))
     except BaseException:
-        # All unrelated bootstrap exceptions are indistinguishable by design.
-        os._exit(120)
+        # Unknown exceptions only expose which deterministic bootstrap stage
+        # failed. Exception text, guest output and paths remain private.
+        os._exit(150 + min(_bootstrap_stage, 9))
