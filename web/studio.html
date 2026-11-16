@@ -1479,7 +1479,7 @@ Object.assign(FA,{
  engineeringInput:'پیشنهاد یا گزارش محلی عامل (JSON)',engineeringImport:'بارگذاری فایل محلی JSON یا TXT',engineeringInspect:'بازبینی ایمن',engineeringDownload:'دریافت پیشنهاد برای اپراتور',engineeringChat:'افزودن خلاصهٔ بررسی‌شده به گفت‌وگوی بعدی',engineeringConsent:'این محتوای دقیق را بررسی کرده‌ام و این اقدام را انتخاب می‌کنم؛ اجرای فرمان نیازمند تأیید مجزای اپراتور است.',engineeringNoExecution:'فقط بازبینی — اجرای Shell یا Docker، نوشتن در GitHub و اجرای شبکه‌ای از این پنل ممکن نیست.',engineeringReady:'دادهٔ محلی نامعتبر از نظر اعتماد، اما ساختار آن بررسی شد؛ راستی‌آزمایی مستقل نیست.',engineeringInvalid:'فایل مهندسی نامعتبر یا بزرگ است؛ هیچ اقدامی انجام نشد.',engineeringReset:'پاک‌کردن پیش‌نویس',engineeringPrivate:'پیشنهاد خصوصی: فقط پس از بررسی دریافت کن. کد کامل یا اسرار به صورت خودکار به گفتگو افزوده نمی‌شوند.'
 });
 let revision=0,approved=null;
-const active=()=>($('projects')?.value||'')+'|'+($('branch')?.value||'');
+const active=()=>($('projects')?.value||'')+'|'+(typeof threadId==='string'?threadId:'')+'|'+($('branch')?.value||'');
 function refresh(){
  const okay=approved&&approved.raw===$('engineering-text').value&&approved.scope===active()&&$('engineering-consent').checked;
  $('engineering-download').disabled=!okay||approved?.view.kind!=='proposal';
@@ -1520,8 +1520,9 @@ $('engineering-chat').onclick=()=>{
  const staged=window.NexusStudioUI?.stageChatContext('Engineering '+v.kind+' · unverified',E.report(v));
  if(staged){invalidate()}else $('engineering-status').textContent=t('engineeringInvalid');
 };
+$('history').addEventListener('click',clear);
 for(const id of ['projects','branch'])$(id).addEventListener('change',clear);
-for(const id of ['new-project','new-thread','delete-project','archive-thread','delete-thread','lock','unlock','restore','erase','restore-file']){
+for(const id of ['new-project','new-thread','delete-project','archive-thread','delete-thread','undo-removal','lock','unlock','restore','erase','restore-file']){
  const node=$(id);if(node){node.addEventListener('click',clear);node.addEventListener('change',clear)}
 }
 window.NexusEngineeringUI=Object.freeze({clear,inspect});

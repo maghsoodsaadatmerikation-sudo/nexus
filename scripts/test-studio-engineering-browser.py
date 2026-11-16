@@ -47,6 +47,12 @@ window.addEventListener('load',async()=>{
   assert($('engineering-report').textContent.includes('complete'),'receipt-visible');
   $('engineering-consent').checked=true;$('engineering-consent').dispatchEvent(new Event('change'));
   $('engineering-chat').click();assert($('chat-attachment-tray').textContent.includes('Engineering receipt'),'receipt-review-staged');
+  $('new-thread').click();fill('engineering-text',review());$('engineering-inspect').click();
+  $('engineering-consent').checked=true;$('engineering-consent').dispatchEvent(new Event('change'));
+  assert(!$('engineering-chat').disabled,'review-staged-to-active-thread-only');
+  const oldThreadButton=[...$('history').querySelectorAll('button')].find(b=>!b.classList.contains('active'));
+  assert(!!oldThreadButton,'another-thread-is-selectable');oldThreadButton.click();
+  assert($('engineering-text').value===''&&$('engineering-report').textContent===''&&$('engineering-chat').disabled,'history-switch-erases-review-and-consent');
   let releaseRead;const originalBuffer=File.prototype.arrayBuffer;
   File.prototype.arrayBuffer=()=>new Promise(resolve=>releaseRead=resolve);
   const dt=new DataTransfer();dt.items.add(new File([review()],'review.json'));
