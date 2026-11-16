@@ -36,6 +36,8 @@ def main(argv=None) -> int:
                     help='Read-only, no host attestation')
     ap.add_argument('--approve-disposable', action='store_true',
                     help='Explicit permission for a fixed synthetic disposable smoke only')
+    ap.add_argument('--expected-manifest-sha256',
+                    help='Out-of-band SHA-256 anchor for the installed manifest (not a signature)')
     args = ap.parse_args(argv)
     if args.action == 'doctor':
         if args.root or args.workspace or args.inspect_docker or args.approve_disposable:
@@ -58,7 +60,8 @@ def main(argv=None) -> int:
             return _fail('distribution-verifier-unavailable')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        verification = module.installed_verify(installation)
+        verification = module.installed_verify(
+            installation, expected_manifest_sha256=args.expected_manifest_sha256)
     except (OSError, ValueError, ImportError, RecursionError, RuntimeError):
         return _fail('installed-integrity-unverifiable')
     if verification.get('status') != 'installed-integrity-verified':
@@ -68,6 +71,8 @@ def main(argv=None) -> int:
                           'installed_files_verified': verification['file_count'],
                           'python_compatible': True, 'operator_unprivileged': True,
                           'publisher_authenticated': False,
+                          'manifest_anchor_matched': verification['manifest_anchor_matched'],
+                          'manifest_sha256': verification['manifest_sha256'],
                           'production_ready': False, 'authority': 'none',
                           'execution_performed': False}, sort_keys=True))
         return 0
@@ -106,6 +111,8 @@ def main(argv=None) -> int:
     print(json.dumps({'schema': SCHEMA, 'status': ('disposable-smoke-passed' if
                      args.action == 'smoke' else 'preflight-clear-not-attested'),
                       'result': response, 'authority': 'none',
+                      'manifest_anchor_matched': verification['manifest_anchor_matched'],
+                      'manifest_sha256': verification['manifest_sha256'],
                       'production_ready': False, 'host_attested': False}, sort_keys=True))
     return 0
 
