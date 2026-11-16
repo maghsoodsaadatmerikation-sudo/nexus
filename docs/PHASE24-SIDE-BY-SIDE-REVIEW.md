@@ -80,3 +80,28 @@ can verify the new installation without touching your project.
 - This stage is still on Draft PR #244. CI validates the private installation
   and comparison on ephemeral Ubuntu only; it does not certify production
   systems.
+
+
+## Phase 25 — one-snapshot ZIP verification and install (regression fix)
+
+Before Phase 25, the ZIP pathname could be opened once to hash the archive
+and then opened again to validate or extract members. If a file at that path
+was replaced between operations, the hash-validated bytes might not be the
+bytes actually inspected or installed.
+
+The distribution verifier now obtains one bounded regular-file snapshot using
+a no-follow file descriptor, verifies the external archive SHA-256 and every
+manifest/member from **that same in-memory snapshot**, and installs only from
+those verified bytes. The installer no longer reopens the ZIP pathname after
+validation. This is a check/use race fix, not broader host isolation.
+
+Regression tests exercise a replaced ZIP pathname immediately after a
+snapshot is taken, replacement after full hash and manifest verification,
+and rejection of a symlinked input ZIP. Existing deterministic bundle,
+no-clobber installation and read-only comparison tests still apply.
+
+**Boundaries:** This does not authenticate a publisher, prevent a hostile
+same-UID process from modifying installed code, make source-tree reads atomic,
+or certify a production deployment. Install remains explicit, nonroot,
+Linux/Python 3.13+, with an independent whole-archive digest and a new
+private destination. PR #244 stays Draft until exact-head CI passes.
