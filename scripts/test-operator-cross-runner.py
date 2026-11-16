@@ -118,6 +118,12 @@ def receive(scratch: Path, archive: Path, expected_sha: str,
             or not snapshot.SHA.fullmatch(expected_sha)):
         raise WorkspaceDenied("cross-runner-expected-sha-required")
     _checked_archive_file(archive, expected_sha)
+    # Validate independently supplied workspace SHA and full internal ZIP
+    # manifest BEFORE creating the destination root or restoring any file.
+    archive_raw = snapshot.checked_archive(archive, expected_sha)
+    metadata, _, _ = snapshot.validate(archive_raw, WORKSPACE)
+    if metadata["workspace_sha256"] != expected_workspace_sha:
+        raise WorkspaceDenied("cross-runner-workspace-pin-mismatch")
     restored_root = _new_private(scratch, "restored")
 
     # Negative 1: a wrong digest fails before creating the workspace.
