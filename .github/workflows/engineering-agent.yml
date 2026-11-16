@@ -7,6 +7,12 @@ on:
       - 'nexus-cloud/agent_journal.py'
       - 'nexus-cloud/agent_chat_handoff.py'
       - 'nexus-cloud/agent_operator_service.py'
+      - 'nexus-cloud/agent_tenant_boundary.py'
+      - 'nexus-cloud/tests/test_agent_tenant_boundary.py'
+      - 'scripts/nexus-tenant-host-audit.py'
+      - 'scripts/nexus-tenant-service.py'
+      - 'scripts/test-tenant-cross-uid.py'
+      - 'docs/PHASE12-TENANT-ISOLATION.md'
       - 'nexus-cloud/tests/test_agent_operator_service.py'
       - 'scripts/nexus-operator-service.py'
       - 'nexus-cloud/tests/test_agent_chat_handoff.py'
@@ -47,7 +53,8 @@ jobs:
             nexus-cloud/tests/test_agent_lifecycle.py \
             nexus-cloud/tests/test_agent_journal.py \
             nexus-cloud/tests/test_agent_chat_handoff.py \
-            nexus-cloud/tests/test_agent_operator_service.py
+            nexus-cloud/tests/test_agent_operator_service.py \
+            nexus-cloud/tests/test_agent_tenant_boundary.py
 
   docker-runtime:
     # No repository write permissions/secrets. Only on disposable Ubuntu runners.
@@ -74,3 +81,19 @@ jobs:
           echo "NEXUS_TEST_IMAGE_DIGEST=$IMAGE" >> "$GITHUB_ENV"
       - name: Run a real isolated Docker container and exercise termination
         run: PYTHONPATH=nexus-cloud python scripts/test-engineering-docker-runtime.py
+
+
+  tenant-os-boundary:
+    # Root exists solely inside the ephemeral CI runner to spawn two isolated
+    # unprivileged UIDs; it cannot publish artifacts, open public servers or
+    # access operator-owned projects. No host users are permanently created.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Exercise actual cross-UID Linux filesystem and Unix-socket denial
+        run: sudo -n python3 scripts/test-tenant-cross-uid.py

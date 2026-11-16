@@ -96,7 +96,10 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
     allow_reuse_address = False
     request_queue_size = 8
 
-    def __init__(self, root: str | Path):
+    def __init__(self, root: str | Path, *, allow_container: bool = True):
+        if type(allow_container) is not bool:
+            raise WorkspaceDenied("invalid-container-policy")
+        self._allow_container = allow_container
         if os.name != "posix" or not hasattr(socket, "SO_PEERCRED") or os.getuid() == 0:
             raise WorkspaceDenied("operator-service-needs-unprivileged-linux")
         self.root = _root(root)
@@ -185,6 +188,12 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
                     return {"status": "denied"}
                 candidate, observed = parse_plan(read_operator_file(path, require_private=True))
                 if observed != digest or candidate["workspace"] != name or candidate["version"] != 3:
+                    return {"status": "denied"}
+                # Tenant processes may not inherit a rootful shared Docker
+                # daemon. Strict mode refuses run steps *before* admission.
+                if action == "start" and not self._allow_container and any(
+                    item["tool"] == "run" for item in candidate["steps"]
+                ):
                     return {"status": "denied"}
                 # Review must not manufacture a workspace merely because an
                 # untrusted request supplied a syntactically valid name.
