@@ -320,6 +320,20 @@ def run_probe(root: str | Path, workspace: str, executable: str | Path,
 if __name__ == '__main__' and len(sys.argv) >= 4 and sys.argv[1] == '__enter__':
     try:
         _enter(sys.argv[2], sys.argv[3], sys.argv[4:])
+    except WorkspaceDenied as exc:
+        # Stable *stage* codes only; never print a private path, mount output,
+        # argv, process details or an untrusted guest message into CI logs.
+        stage_codes = {
+            'rootless-mount-failed': 121,
+            'rootless-root-not-readonly': 122,
+            'rootless-workspace-not-readonly': 123,
+            'rootless-nnp-failed': 124,
+            'rootless-securebits-unavailable': 125,
+            'rootless-capability-drop-failed': 126,
+            'rootless-seccomp-unsupported-architecture': 127,
+            'rootless-seccomp-install-failed': 128,
+        }
+        os._exit(stage_codes.get(exc.args[0] if exc.args else '', 120))
     except BaseException:
-        # Do not write private file content or exception messages to stderr.
+        # All unrelated bootstrap exceptions are indistinguishable by design.
         os._exit(120)
