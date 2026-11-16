@@ -305,12 +305,12 @@ def installed_verify(destination: Path, *, expected_manifest_sha256: str | None 
             not isinstance(expected_manifest_sha256, str)
             or not SHA.fullmatch(expected_manifest_sha256)):
         raise DistributionDenied("invalid-expected-manifest-sha")
-    _, _, actual_sha = _installed_snapshot(destination)
+    _, verified_files, actual_sha = _installed_snapshot(destination)
     if expected_manifest_sha256 is not None and actual_sha != expected_manifest_sha256:
         raise DistributionDenied("installed-manifest-anchor-mismatch")
     return {"status": "installed-integrity-verified", "schema": SCHEMA,
             "manifest_sha256": actual_sha,
-            "file_count": len(_installed_snapshot(destination)[1]) - 1,
+            "file_count": len(verified_files) - 1,
             "manifest_anchor_matched": expected_manifest_sha256 is not None,
             "publisher_authenticated": False, "production_ready": False,
             "authority": "none"}
