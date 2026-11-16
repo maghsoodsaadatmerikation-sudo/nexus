@@ -400,7 +400,8 @@ def run_container(
     with tempfile.TemporaryDirectory(prefix="nexus-agent-cid-") as temp:
         cidfile = os.path.join(temp, "cid")
         args = [docker_executable, "run", "--rm", "--pull", "never", "--cidfile", cidfile,
-                "--network", "none", "--ipc", "none", "--read-only", "--cap-drop", "ALL",
+                "--label", "nexus.operator.managed=1",
+                 "--network", "none", "--ipc", "none", "--read-only", "--cap-drop", "ALL",
                 "--security-opt", "no-new-privileges", "--pids-limit", "64",
                 "--memory", "256m", "--cpus", "1", "--ulimit", "nofile=128:128",
                 "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=64m",

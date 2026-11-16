@@ -23,6 +23,7 @@ from pathlib import Path
 
 from agent_chat_handoff import REVIEW_SCHEMA, chat_receipt, private_export_dir, read_operator_file
 from agent_journal import ApprovalJournal
+from agent_host_census import journal_census
 from agent_rootless_job import parse_job, summarize_job
 from agent_rootless_probe import private_executable, run_probe
 from agent_workspace import Workspace, WorkspaceDenied, WORKSPACE_ID
@@ -339,6 +340,8 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
                     if action == "probe-start":
                         if ApprovalJournal(ws).audit()["status"] != "clear":
                             return {"status": "workspace-quarantined", "authority": "none"}
+                        if journal_census(self.root)["status"] != "clear":
+                            return {"status": "host-quarantined", "authority": "none"}
                     with self._state_lock:
                         if name in self._running:
                             return {"status": "busy"}
@@ -468,6 +471,8 @@ class OperatorServer(socketserver.ThreadingUnixStreamServer):
                     if action == "start":
                         if ApprovalJournal(ws).audit()["status"] != "clear":
                             return {"status": "workspace-quarantined", "authority": "none"}
+                        if journal_census(self.root)["status"] != "clear":
+                            return {"status": "host-quarantined", "authority": "none"}
                 with self._state_lock:
                     if name in self._running:
                         return {"status": "busy"}

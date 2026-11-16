@@ -5,6 +5,9 @@ on:
       - 'nexus-cloud/agent_workspace.py'
       - 'nexus-cloud/engineering_agent.py'
       - 'nexus-cloud/agent_journal.py'
+      - 'nexus-cloud/agent_host_census.py'
+      - 'nexus-cloud/tests/test_agent_host_census.py'
+      - 'docs/PHASE19-HOST-CENSUS.md'
       - 'nexus-cloud/tests/test_agent_orphan_quarantine.py'
       - 'docs/PHASE18-JOURNAL-QUARANTINE.md'
       - 'nexus-cloud/agent_chat_handoff.py'
@@ -59,6 +62,7 @@ jobs:
             nexus-cloud/tests/test_agent_tools_upgrade.py \
             nexus-cloud/tests/test_agent_lifecycle.py \
             nexus-cloud/tests/test_agent_journal.py \
+            nexus-cloud/tests/test_agent_host_census.py \
             nexus-cloud/tests/test_agent_orphan_quarantine.py \
             nexus-cloud/tests/test_agent_chat_handoff.py \
             nexus-cloud/tests/test_agent_operator_service.py \

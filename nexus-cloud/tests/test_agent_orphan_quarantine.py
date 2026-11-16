@@ -158,10 +158,12 @@ def test_audit_is_read_only_and_does_not_create_nonexistent_workspace(ws):
     assert ok.returncode==0 and json.loads(ok.stdout)['status']=='clear'
 
 
-def test_other_workspace_not_implicitly_given_hostwide_attestation(ws):
+def test_other_workspace_is_quarantined_without_claiming_host_attestation(ws):
     old=claim(ws,'orphan')
     second=Workspace(ws.root,'beta')
-    assert execute_read(second,'1'*32).status=='complete'
+    with pytest.raises(WorkspaceDenied,match='host-quarantined'):
+        execute_read(second,'1'*32)
+    assert not (second.path/'never.txt').exists()
     assert ApprovalJournal(ws).audit()['status']=='blocked-unfinished'
     assert ApprovalJournal(second).audit()['status']=='clear'
     assert old in ApprovalJournal(ws).audit()['unfinished_digests']

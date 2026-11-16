@@ -9,22 +9,39 @@ from agent_operator_service import OperatorServer, client, recover_stale_service
 from agent_workspace import Workspace, WorkspaceDenied
 from agent_chat_handoff import private_export_dir, shareable_json, write_export
 from agent_journal import ApprovalJournal
+from agent_host_census import admission_lock, journal_census, docker_inventory
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("action", choices=("serve", "review", "start", "stop", "status", "recover-stale", "audit-journal"))
+    ap.add_argument("action", choices=("serve", "review", "start", "stop", "status", "recover-stale", "audit-journal", "audit-host"))
     ap.add_argument("--root", required=True, help="Absolute operator-owned 0700 workspace root")
     ap.add_argument("--acknowledge-possible-orphans", action="store_true",
                     help="Explicitly accept that transport recovery does NOT verify or terminate orphaned jobs")
     ap.add_argument("--enable-rootless-probe", action="store_true",
                     help="Explicit single-owner server opt-in for rootless proof jobs, never tenant mode")
+    ap.add_argument("--inspect-docker", action="store_true",
+                    help="Read-only labelled Docker inventory; absence is never orphan attestation")
     ap.add_argument("--workspace", help="Workspace name for start/stop/status")
     ap.add_argument("--digest", help="Exact canonical SHA-256 of a separately reviewed v3 plan")
     ap.add_argument("--plan", help="Private 0600 v3 plan from operator's export folder")
     ap.add_argument("--out", help="Private 0700 folder to export a sanitized review or receipt for Studio")
     a = ap.parse_args()
     try:
+        if a.action == "audit-host":
+            if (a.workspace or a.digest or a.plan or a.out or
+                    a.enable_rootless_probe or a.acknowledge_possible_orphans):
+                raise WorkspaceDenied("audit-host-arguments")
+            with admission_lock(a.root):
+                report = journal_census(a.root)
+            if a.inspect_docker:
+                report["docker_inventory"] = docker_inventory()
+            print(json.dumps(report, sort_keys=True))
+            return 0 if (report["status"] == "clear" and
+                         (not a.inspect_docker or report["docker_inventory"]["status"] ==
+                          "no-labelled-containers-observed")) else 2
+        if a.inspect_docker:
+            raise WorkspaceDenied("inspect-docker-audit-only")
         if a.action == "audit-journal":
             if (not a.workspace or a.digest or a.plan or a.out or
                     a.enable_rootless_probe or a.acknowledge_possible_orphans):
@@ -84,7 +101,7 @@ def main():
         if a.out:
             raise WorkspaceDenied("cannot-export-unverified-status")
         print(json.dumps(result, sort_keys=True))
-        return 0 if result.get("status") not in ("denied", "unverifiable", "not-found", "busy", "already-consumed", "stale-plan-reapproval-required", "workspace-quarantined") else 2
+        return 0 if result.get("status") not in ("denied", "unverifiable", "not-found", "busy", "already-consumed", "stale-plan-reapproval-required", "workspace-quarantined", "host-quarantined") else 2
     except (OSError, ValueError, WorkspaceDenied) as exc:
         print(json.dumps({"status": "denied", "reason": type(exc).__name__}), file=sys.stderr)
         return 2

@@ -15,6 +15,7 @@ import stat
 from datetime import datetime, timezone
 
 from agent_workspace import Workspace, WorkspaceDenied
+from agent_host_census import admission_lock, journal_census
 
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _MAX_RECORD = 8192
@@ -158,34 +159,57 @@ class ApprovalJournal:
                   "execution_nonce": execution_nonce,
                   "workspace_sha256_before": workspace_before, "started_utc": _utc()}
         data = _record_bytes(record)
-        dirfd = self._directory(create=True)
-        try:
-            # Limit persistent claims; never silently prune approval evidence.
-            if len(os.listdir(dirfd)) >= _MAX_RECORDS:
-                raise WorkspaceDenied("journal-capacity-reached")
-            # Preserve legacy exact-digest replay semantics even if its old
-            # record became corrupt; O_EXCL below remains the final guard.
-            if name in os.listdir(dirfd):
-                raise WorkspaceDenied("approval-already-consumed")
-            state = self.audit()
-            if state["status"] != "clear":
+        with admission_lock(self.workspace.root):
+            # A STARTED claim elsewhere in this operator root quarantines
+            # EVERY workspace. The global lock serializes competing claims.
+            # Preserve exact-digest replay classification even under a wider
+            # host quarantine. Never read a journal through an unchecked path.
+            try:
+                existing_fd = self._directory()
+            except FileNotFoundError:
+                existing_fd = None
+            if existing_fd is not None:
+                try:
+                    if name in os.listdir(existing_fd):
+                        raise WorkspaceDenied("approval-already-consumed")
+                finally:
+                    os.close(existing_fd)
+            # Prefer the original workspace-scoped quarantine classification;
+            # other workspaces still impose the stronger root-wide barrier.
+            local = self.audit()
+            if local["status"] != "clear":
                 raise WorkspaceDenied("workspace-quarantined-unfinished-approval")
+            census = journal_census(self.workspace.root)
+            if census["status"] != "clear":
+                raise WorkspaceDenied("host-quarantined-unfinished-approval")
+            dirfd = self._directory(create=True)
             try:
-                fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
-                             os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=dirfd)
-            except FileExistsError as exc:
-                raise WorkspaceDenied("approval-already-consumed") from exc
-            try:
-                _regular(fd)
-                with os.fdopen(fd, "wb", closefd=False) as stream:
-                    stream.write(data)
-                    stream.flush()
-                os.fsync(fd)
+                # Limit persistent claims; never silently prune approval evidence.
+                if len(os.listdir(dirfd)) >= _MAX_RECORDS:
+                    raise WorkspaceDenied("journal-capacity-reached")
+                # Preserve legacy exact-digest replay semantics even if its old
+                # record became corrupt; O_EXCL below remains the final guard.
+                if name in os.listdir(dirfd):
+                    raise WorkspaceDenied("approval-already-consumed")
+                state = self.audit()
+                if state["status"] != "clear":
+                    raise WorkspaceDenied("workspace-quarantined-unfinished-approval")
+                try:
+                    fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                                 os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=dirfd)
+                except FileExistsError as exc:
+                    raise WorkspaceDenied("approval-already-consumed") from exc
+                try:
+                    _regular(fd)
+                    with os.fdopen(fd, "wb", closefd=False) as stream:
+                        stream.write(data)
+                        stream.flush()
+                    os.fsync(fd)
+                finally:
+                    os.close(fd)
+                os.fsync(dirfd)
             finally:
-                os.close(fd)
-            os.fsync(dirfd)
-        finally:
-            os.close(dirfd)
+                os.close(dirfd)
         return record
 
     def finish(self, digest: str, *, status: str, workspace_after: str | None,
