@@ -22,9 +22,13 @@ import tempfile
 import time
 
 
+class PilotDenied(RuntimeError):
+    """Only static, developer-authored denial codes may appear in CI logs."""
+
+
 def check(condition: bool, label: str) -> None:
     if not condition:
-        raise RuntimeError(label)
+        raise PilotDenied(label)
 
 
 def _verified_install(installed: Path, manifest_sha: str) -> None:
@@ -243,7 +247,10 @@ def main() -> int:
         result = acceptance(args.installed, args.expected_manifest_sha256)
     except (OSError, RuntimeError, ValueError, TimeoutError) as exc:
         # Do not expose tokens, private source paths, plan content or stack traces.
-        print(json.dumps({"status": "denied", "reason": type(exc).__name__,
+        # PilotDenied carries only a hard-coded sentinel, never file paths,
+        # plan text, tokens or exception message content from a subprocess.
+        reason = str(exc) if type(exc) is PilotDenied else type(exc).__name__
+        print(json.dumps({"status": "denied", "reason": reason,
                           "production_ready": False, "authority": "none"},
                          sort_keys=True), file=sys.stderr)
         return 2
