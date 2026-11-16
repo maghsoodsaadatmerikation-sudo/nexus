@@ -9,6 +9,7 @@ on:
       - 'docs/PHASE23-VERIFIED-FIRST-RUN.md'
       - 'docs/PHASE24-SIDE-BY-SIDE-REVIEW.md'
       - 'scripts/nexus-operator-*.py'
+      - 'scripts/test-operator-restart-pilot.py'
       - 'scripts/nexus-chat-engineering.py'
       - 'scripts/nexus-engineering-plan.py'
       - 'scripts/nexus-agent-workspace.py'
@@ -97,6 +98,22 @@ jobs:
             sha256sum nexus-operator-pilot.zip > SHA256SUMS && \
             sha256sum -c SHA256SUMS)
           printf 'Verified source HEAD: %s\n' "$(git rev-parse HEAD)"
+      - name: Crash and restart real installed operator subprocesses (disposable only)
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          test "$(id -u)" != 0
+          manifest_sha="$(python -c 'import json;print(json.load(open("operator-dist-candidate/build.json"))["manifest_sha256"])')"
+          python -I -B scripts/test-operator-restart-pilot.py \
+            --installed "$PWD/operator-dist-candidate/installed" \
+            --expected-manifest-sha256 "$manifest_sha" \
+            --approve-disposable
+          # The synthetic restart test must not mutate any installed bytes.
+          python -I -B operator-dist-candidate/installed/scripts/nexus-operator-distribution.py \
+            verify-installed --destination "$PWD/operator-dist-candidate/installed" \
+            --expected-manifest-sha256 "$manifest_sha"
       - name: Retain verified operator-only pilot candidate
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
