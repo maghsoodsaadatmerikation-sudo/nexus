@@ -145,7 +145,7 @@ replace_once("const navTrace={responses:[],failures:[],frames:[]};",
              "const workerProof={exact_target:false,online_probe:false,offline_probe:false,document_from_worker:false};",
              "worker-proof-evidence")
 
-attach_anchor=""" await js("window.__nexusBeforeOfflineReload=true;true");"""
+attach_anchor=""" checks.push('installed-cache-sha256-is-exact-reviewed-html');"""
 attach_code=""" // Require the exact same-origin installed service worker TARGET, not
  // merely the page's navigator.onLine or ServiceWorker.controller flag.
  stage='worker-target-online-proof';
@@ -171,7 +171,7 @@ attach_code=""" // Require the exact same-origin installed service worker TARGET
  assert(onlineProbe.result?.value===true&&!onlineProbe.exceptionDetails,
    'worker-origin-baseline-not-online');
  workerProof.online_probe=true;
- await js("window.__nexusBeforeOfflineReload=true;true");"""
+ checks.push('installed-cache-sha256-is-exact-reviewed-html');"""
 replace_once(attach_anchor,attach_code,"public-worker-attach")
 
 offline_anchor=""" await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
