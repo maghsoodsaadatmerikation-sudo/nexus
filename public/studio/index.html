@@ -1674,8 +1674,14 @@ config.addEventListener('click',()=>{
 select.addEventListener('change',refresh);
 $('message').addEventListener('input',refresh);
 $('message').addEventListener('keydown',event=>{
- if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&!event.isComposing){
-  event.preventDefault();run(); // In model mode only opens the consent review.
+ if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&!event.isComposing&&
+    document.documentElement.classList.contains('studio-focus-mode')){
+  event.preventDefault();
+  // Studio's older window-level shortcut would otherwise also dispatch a
+  // local guide when no model was configured. Stop this duplicate event ONLY
+  // in focused mode; full-view shortcuts retain their previous behavior.
+  event.stopPropagation();
+  run(); // In model mode only opens the consent review.
  }
 });
 $('language').addEventListener('change',()=>queueMicrotask(refresh));
