@@ -12,6 +12,48 @@ Studio's existing reproducible packaging embeds both modules directly into
 `web/studio.html` and the independently pinned static offline PWA
 `public/studio/index.html`.
 
+## Phase 2A — expressive DSP and measured audio feedback
+
+NEXUS now includes a second **purely programmatic, sample-free** sound model
+(`web/studio-music-audio.js`). Choose **Expressive eastern timbres** or
+**Classic v1** in Music Lab while preserving the exact same note score and
+melodic seed. Switching between renderers invalidates the *rendered WAV only*;
+it does not replace a successful motif. Both WAVs can be downloaded separately
+for artist-controlled A/B listening.
+
+The expressive model individually approximates **santur** mallet attacks,
+slightly detuned inharmonic strings and changing upper-partial decay;
+**oud** pluck positions and decaying strings; **ney** sparse pipe harmonics,
+breath noise and integrated vibrato; **kamancheh/cello** bow attacks, friction
+and controlled vibrato; **daf** falling head resonances and skin/rim noise;
+and piano/electric-guitar articulations. This is deliberate voice-specific
+DSP, not sampled acoustic instruments, physical instrument simulation at
+scientific calibration, or proven Persian/Arabic maqam performance.
+
+After the local WAV is actually rendered, the UI now shows a **measured PCM
+report**: exact 16-bit digital peak, RMS, crest factor, near-silence fraction,
+number of clipped frames, stereo correlation and section-by-section RMS.
+These are signal measurements only. Warnings about a weak level contrast
+between opening and climax are heuristics, not proof of poor composition.
+No secret upload, generated-audio analysis API, vocal processing or automated
+publication occurs.
+
+**Extended form:** 96 bars is available (at 72 BPM, about 5m20s).
+Long 44.1-kHz combinations may exceed the explicit 128 MiB estimate for
+two float buffers plus PCM and will be rejected *before allocation*;
+the UI recommends 22.05 kHz or fewer bars. The full browser still uses
+in-memory buffers, so this is **not** a streaming mixer or guaranteed mobile
+support. Battery/CPU and additional browser memory copies can exceed that
+estimate. An authentic streaming/multi-stem pipeline remains a separate gate.
+
+The default expressive profile and Classic profile share the same note timing,
+MIDI and deterministic score. Test coverage includes original waveform
+determinism, distinct per-instrument timbre signatures, two PCM synthesis
+profiles, WAV header corruption, memory refusal, invalid score rejection,
+network-free use and real Chromium export. Real human listening and independent
+regional musician review have **not** happened, so acoustic authenticity and
+artistic quality remain unverified.
+
 ## What runs today
 
 Open NEXUS Studio and select **Music Lab / موسیقی** from the tools list,
@@ -43,7 +85,7 @@ airy/blown, bowed and distorted spectra.
 the WAV can be previewed and downloaded, without an upload or API request.
 Rendering is cancellable, yields between small chunks on the UI thread,
 uses normalized headroom and a gentle audio tail. MIDI and WAV are generated
-from the **same event score**, with explicit 32-, 48- and 64-bar selections.
+from the **same event score**, with explicit 32-, 48-, 64- and 96-bar selections.
 This is original generated data, not a derivative of a protected song.
 
 ## Lessons carried into the architecture

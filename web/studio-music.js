@@ -45,7 +45,7 @@ function validate(value={}){
  if(Object.keys(v).some(k=>!Object.hasOwn(DEFAULT,k)))fail('unknown-option');
  if(typeof v.title!=='string'||!v.title.trim()||v.title.length>90||/[\x00-\x1f]/.test(v.title))fail('invalid-title');
  if(!Object.hasOwn(MODES,v.mode)||!Object.hasOwn(KEYS,v.key)||!Object.hasOwn(STORIES,v.story))fail('invalid-mode-key-story');
- if(!integer(v.bpm,72,140)||![32,48,64].includes(v.bars))fail('invalid-tempo-length');
+ if(!integer(v.bpm,72,140)||![32,48,64,96].includes(v.bars))fail('invalid-tempo-length');
  if(!['santur','oud','ney','kamancheh','electric_guitar'].includes(v.lead)||!['santur','oud','ney','kamancheh','electric_guitar'].includes(v.solo))fail('invalid-lead-solo');
  if(!integer(v.seed,1,2147483646)||!integer(v.motifSeed,1,2147483646))fail('invalid-seed');
  for(const key of ['santurSolo','guitarSolo','daf'])if(typeof v[key]!=='boolean')fail('invalid-arrangement-boolean');
@@ -250,10 +250,22 @@ function synthWave(note,phase,t,seconds){
  return value*envelope*decay;
 }
 function delayTick(){return new Promise(resolve=>setTimeout(resolve,0))}
-async function renderWav(score,{sampleRate=22050,onProgress=()=>{},shouldAbort=()=>false}={}){
+async function renderWav(score,{sampleRate=22050,sound='expressive',onProgress=()=>{},shouldAbort=()=>false}={}){
  if(score?.schema!=='nexus.music.score.v1'||!SAMPLE_RATES.includes(sampleRate))fail('invalid-render-request');
- if(score.durationSeconds>250)fail('duration-over-budget');
+ if(score.durationSeconds>350)fail('duration-over-budget');
+ if(!['expressive','classic'].includes(sound))fail('unknown-sound-profile');
+ if(sound==='expressive'&&!root.NexusMusicAudio)fail('missing-expressive-audio-engine');
+ if(!Array.isArray(score.notes)||score.notes.length>5000)fail('invalid-render-note-list');
+ for(const n of score.notes){if(!Object.hasOwn(INSTRUMENTS,n.instrument)||
+  !Number.isFinite(n.start)||!Number.isFinite(n.duration)||
+  !Number.isFinite(n.pitch)||!Number.isFinite(n.pan)||
+  !Number.isFinite(n.velocity)||n.start<0||n.duration<=0||n.pitch<20||n.pitch>115||
+  n.velocity<1||n.velocity>127||Math.abs(n.pan)>1||
+  n.start+n.duration>score.durationSeconds+.002)fail('invalid-render-note');}
  const frames=Math.ceil((score.durationSeconds+.8)*sampleRate);
+ // Two float32 buffers plus PCM WAV; reject expensive combinations before
+ // allocating or running DSP. Long, low-rate exports remain available.
+ if(frames*12>128*1024*1024)fail('mobile-render-memory-budget');
  const left=new Float32Array(frames),right=new Float32Array(frames);
  const notes=score.notes;
  for(let n=0;n<notes.length;n++){
@@ -267,7 +279,9 @@ async function renderWav(score,{sampleRate=22050,onProgress=()=>{},shouldAbort=(
   let phase=0;
   for(let i=0;i<total;i++){
    const t=i/sampleRate;
-   const v=synthWave(note,phase,t,note.duration);
+   const v=sound==='expressive'
+    ?root.NexusMusicAudio.sample(note,phase,t,note.duration,freq,i,sampleRate)
+    :synthWave(note,phase,t,note.duration);
    const index=start+i;
    left[index]+=v*lg;right[index]+=v*rg;
    phase+=increment;if(phase>TAU*5000)phase%=TAU;
@@ -303,5 +317,7 @@ async function renderWav(score,{sampleRate=22050,onProgress=()=>{},shouldAbort=(
  onProgress(1);
  return new Uint8Array(buf);
 }
-root.NexusMusic=Object.freeze({MODES,INSTRUMENTS,DEFAULT,validate,compose,review,midi,renderWav,source_tree:'none'});
+root.NexusMusic=Object.freeze({MODES,INSTRUMENTS,DEFAULT,validate,compose,review,midi,renderWav,
+ analyzeWav:(...args)=>{if(!root.NexusMusicAudio)fail('missing-expressive-audio-engine');return root.NexusMusicAudio.analyzeWav(...args)},
+ sounds:Object.freeze(['expressive','classic']),source_tree:'none'});
 })(typeof globalThis!=='undefined'?globalThis:this);

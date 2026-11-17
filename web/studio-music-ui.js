@@ -9,7 +9,8 @@ en:{ready:'Compose a score first.',built:'Original instrumental score ready. No 
  error:'Music Lab could not complete the request.',noAudio:'No rendered WAV yet.',
  browser:'Audio preview may require a browser with WAV support.',
  variation:'Variation prepared. Review and compose again.',keep:'Retained your current motif seed.',
- self:'The quality checklist measures structure, not whether the music sounds authentic or emotionally successful.'},
+ self:'Structure and measured PCM checks are objective, not proof of acoustic realism or aesthetic quality.',
+ resource:'This sample-rate and song-length combination exceeds the offline phone memory budget. Try 22.05 kHz or fewer bars.'},
 fa:{ready:'ابتدا قطعه را آهنگ‌سازی کن.',built:'پارتیتور بی‌کلام ساخته شد؛ هیچ اتصالی به اینترنت انجام نشد.',
  rendering:'در حال ساخت فایل WAV استریو در همین دستگاه',
  cancelled:'ساخت موسیقی لغو شد.',exported:'خروجی روی دستگاه ذخیره شد؛ فایلی ارسال نشد.',
@@ -17,7 +18,8 @@ fa:{ready:'ابتدا قطعه را آهنگ‌سازی کن.',built:'پارتی
  browser:'ممکن است پیش‌شنیدن WAV در این مرورگر پشتیبانی نشود.',
  variation:'نسخهٔ متفاوت آماده شد؛ تنظیمات را بررسی و دوباره آهنگ‌سازی کن.',
  keep:'موتیف نسخهٔ پیشین محفوظ ماند.',
- self:'خودنقدی فقط ساختار را می‌سنجد، نه اصالت صدای ساز یا کیفیت احساسی موسیقی.'}
+ self:'خودنقدی ساختار و سطح سیگنال را می‌سنجد؛ نه اصالت ساز یا زیبایی موسیقی.',
+ resource:'این ترکیب طول قطعه و کیفیت صدا از بودجهٔ حافظهٔ گوشی فراتر می‌رود. کیفیت ۲۲ کیلوهرتز یا میزان کمتر را انتخاب کن.'}
 };
 const fa=()=>document.documentElement.lang==='fa',txt=k=>labels[fa()?'fa':'en'][k];
 let score=null,wav=null,revision=0,working=false,objectUrl=null;
@@ -44,9 +46,14 @@ function invalidate(){
  revision++;working=false;score=null;resetAudio();$('music-report').textContent='';out(txt('ready'));
 }
 for(const node of $('music-card').querySelectorAll('select,input')){
- if(['music-quality','music-problem','music-lock-motif'].includes(node.id))continue;
+ if(['music-quality','music-sound','music-problem','music-lock-motif'].includes(node.id))continue;
  node.addEventListener('change',invalidate);
 }
+function outputSettingsChanged(){
+ revision++;working=false;resetAudio();summary();out(txt('ready'));
+}
+$('music-quality').addEventListener('change',outputSettingsChanged);
+$('music-sound').addEventListener('change',outputSettingsChanged);
 function cleanFilename(){return ($('music-title').value.replace(/[^A-Za-z0-9 _-]/g,'').trim()||'nexus-composition').slice(0,56).replace(/\s+/g,'-')}
 function download(data,name,type){
  const blob=new Blob([data],{type});
@@ -114,16 +121,32 @@ $('music-render').addEventListener('click',async()=>{
  const start=++revision,active=score;working=true;resetAudio();buttons();
  try{
   const sr=Number($('music-quality').value);
-  const data=await Music.renderWav(active,{sampleRate:sr,
+  const data=await Music.renderWav(active,{sampleRate:sr,sound:$('music-sound').value,
    shouldAbort:()=>start!==revision,
    onProgress:p=>{if(start===revision){$('music-progress').value=Math.round(p*100);out(txt('rendering')+': '+Math.round(100*p)+'%')}}
   });
   if(start!==revision)return;
   wav=data;
+  const audio=Music.analyzeWav(data,active);
+  const a=[
+    fa()?'--- تحلیل واقعی سیگنال WAV ---':'--- Measured WAV diagnostics ---',
+    'Sound profile: '+$('music-sound').value,
+    'Peak dBFS: '+audio.measured_peak_dbfs,
+    'RMS dBFS: '+audio.measured_rms_dbfs,
+    'Crest dB: '+audio.measured_crest_db,
+    'Near-silent fraction: '+audio.near_silent_fraction,
+    'Clipped PCM frames: '+audio.clipped_frame_count,
+    'Stereo correlation: '+audio.stereo_correlation,
+    ...audio.section_rms_dbfs.map(x=>x.name+': '+x.rms_dbfs+' dBFS'),
+    'WAV warnings: '+(audio.warnings.join(', ')||'none'),
+    'No listening evaluation, acoustic fidelity, or mastering certification.'
+  ];
+  $('music-report').textContent+='\n'+a.join('\n');
   objectUrl=URL.createObjectURL(new Blob([wav],{type:'audio/wav'}));
   $('music-preview').src=objectUrl;
   out((fa()?'WAV استریو آماده شد.':'Stereo WAV ready.')+' '+txt('browser'));
- }catch(e){if(start===revision)out(e?.message==='render-cancelled'?txt('cancelled'):txt('error'))}
+ }catch(e){if(start===revision)out(e?.message==='render-cancelled'?txt('cancelled'):
+    e?.message==='mobile-render-memory-budget'?txt('resource'):txt('error'))}
  finally{if(start===revision){working=false;buttons()}}
 });
 $('music-cancel').addEventListener('click',()=>{
