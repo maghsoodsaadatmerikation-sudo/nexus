@@ -1,0 +1,87 @@
+name: NEXUS Orchestra & Vocal Lab — Original Offline Acceptance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/orchestra-lab.yml'
+      - 'web/studio-orchestra.js'
+      - 'web/studio-orchestra-ui.js'
+      - 'web/studio-shell.html'
+      - 'web/studio-focus-ui.js'
+      - 'web/studio.html'
+      - 'public/studio/index.html'
+      - 'public/studio/service-worker.js'
+      - 'scripts/build-studio.py'
+      - 'scripts/test-studio-orchestra.mjs'
+      - 'scripts/test-studio-orchestra-browser.py'
+      - 'docs/NEXUS-ORCHESTRA-VOCAL-LAB.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/orchestra-lab.yml'
+      - 'web/studio-orchestra.js'
+      - 'web/studio-orchestra-ui.js'
+      - 'web/studio-shell.html'
+      - 'web/studio-focus-ui.js'
+      - 'web/studio.html'
+      - 'public/studio/index.html'
+      - 'public/studio/service-worker.js'
+      - 'scripts/build-studio.py'
+      - 'scripts/test-studio-orchestra.mjs'
+      - 'scripts/test-studio-orchestra-browser.py'
+      - 'docs/NEXUS-ORCHESTRA-VOCAL-LAB.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  strict-local-orchestra:
+    name: exact notation and intact vocal acceptance (synthetic only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Checkout reviewed head without write credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Compile-check and exercise strict prompt and score contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check web/studio-orchestra.js
+          node --check web/studio-orchestra-ui.js
+          node scripts/test-studio-orchestra.mjs
+      - name: Exact deterministic Studio and integrity-pinned offline package
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build-studio.py --check
+          python3 scripts/build-studio-static.py --check
+      - name: Diagnose immutable public Studio byte mismatch when acceptance fails
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import importlib.util, hashlib
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location("builder",Path("scripts/build-studio-static.py"))
+          mod=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          expected=mod.artifacts()["index.html"]
+          current=Path("public/studio/index.html").read_bytes()
+          common=min(len(expected),len(current))
+          offset=next((i for i in range(common) if expected[i]!=current[i]),common)
+          print("expected_bytes",len(expected),"stored_bytes",len(current))
+          print("expected_sha256",hashlib.sha256(expected).hexdigest())
+          print("stored_sha256",hashlib.sha256(current).hexdigest())
+          print("first_byte_mismatch",offset)
+          print("expected_slice",repr(expected[max(0,offset-30):offset+80]))
+          print("stored_slice",repr(current[max(0,offset-30):offset+80]))
+          PY
+      - name: Real offline narrow Chromium file import/export and notation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/test-studio-orchestra-browser.py

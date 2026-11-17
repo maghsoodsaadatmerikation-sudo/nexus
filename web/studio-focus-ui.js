@@ -8,6 +8,7 @@ const targets=[
 ];
 const tools=[
   ['music-card','Music Lab','موسیقی'],
+  ['orchestra-card','Orchestra & vocal','ارکستر و آواز'],
   ['data-card','Data analysis','تحلیل داده'],
   ['research-card','Research','پژوهش'],
   ['code-card','Code','کدنویسی'],
