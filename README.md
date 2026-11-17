@@ -315,6 +315,15 @@ write quarantine, liveness/readiness and bounded storage-failure defenses. They
 require their own exact-commit verification; the historical v2.5.0 Seal does not
 cover them. See [single-host completion and operator entrypoint](docs/SINGLE-HOST-COMPLETION.md).
 
+**Latest read-only Stage D deployment review (2026-11-17):** the Railway
+source reported for the live service, GitHub `main`, and the historical
+v1.7 reconciliation target are three different commits. Railway also reports
+an unapplied `/readyz` health-check patch and a mounted `/data` volume.
+Neither deployment-success metadata nor a volume mount proves readiness or
+recovery. The [dated source-drift evidence and fail-closed preflight](docs/STAGE-D-PROVIDER-DRIFT-2026-11-17.md)
+records those blockers without accessing user data or granting release
+authority.
+
 ## Run the gateway locally
 
 ```sh
