@@ -2029,9 +2029,10 @@ function resetAudio(){
  wav=null;$('music-progress').value=0;buttons()
 }
 function invalidate(){
- revision++;score=null;resetAudio();$('music-report').textContent='';out(txt('ready'));
+ revision++;working=false;score=null;resetAudio();$('music-report').textContent='';out(txt('ready'));
 }
 for(const node of $('music-card').querySelectorAll('select,input')){
+ if(['music-quality','music-problem','music-lock-motif'].includes(node.id))continue;
  node.addEventListener('change',invalidate);
 }
 function cleanFilename(){return ($('music-title').value.replace(/[^A-Za-z0-9 _-]/g,'').trim()||'nexus-composition').slice(0,56).replace(/\s+/g,'-')}
