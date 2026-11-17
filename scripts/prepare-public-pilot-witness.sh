@@ -37,7 +37,21 @@ text=text.replace(before,after)
 # refused. Keep the exact demo click and assertion; catch only to report
 # safe technical flags (never page text).
 demo_before="""const offline=await js("(()=>{document.getElementById('load-demo').click();return {question:document.getElementById('question-view').textContent,claims:document.getElementById('claims').querySelectorAll('.entry').length,options:document.getElementById('alternatives').querySelectorAll('.entry').length,decision:document.getElementById('decision-view').textContent,net:navigator.onLine}})()");"""
-demo_after="""const offline=await js("(()=>{try{document.getElementById('load-demo').click();return {question:document.getElementById('question-view').textContent,claims:document.getElementById('claims').querySelectorAll('.entry').length,options:document.getElementById('alternatives').querySelectorAll('.entry').length,decision:document.getElementById('decision-view').textContent,net:navigator.onLine,client_error:'none',language:document.documentElement.lang}}catch(error){return {question:'',claims:0,options:0,decision:'',net:navigator.onLine,client_error:error?.name||'unknown',language:document.documentElement.lang,ready:document.readyState,has_demo:!!document.getElementById('load-demo'),has_question:!!document.getElementById('question-view'),has_claims:!!document.getElementById('claims'),has_options:!!document.getElementById('alternatives'),has_decision:!!document.getElementById('decision-view'),has_installer:!!document.getElementById('offline-install'),has_reviewed_schema:document.documentElement.outerHTML.includes('nexus.offline-pilot.v1'),worker_controls:!!navigator.serviceWorker?.controller}}})()");"""
+demo_after="""// A single CDP readyState observation can come from a document that
+// immediately navigates again. Demand two observations from the same
+// actual offline-controlled public document before the one synthetic click.
+// Never count a browser error document, missing SW controller, or partial DOM.
+const stableReadiness=()=>retryJs("(()=>{const ready=document.readyState==='complete' && !!document.getElementById('load-demo') && !!document.getElementById('question-view') && !!document.getElementById('claims') && !!document.getElementById('alternatives') && !!document.getElementById('decision-view') && navigator.onLine===false && navigator.serviceWorker?.controller?.scriptURL===location.origin+'/service-worker.js' && document.documentElement.outerHTML.includes('nexus.offline-pilot.v1');return ready?{epoch:performance.timeOrigin,href:location.href}:null})()");
+let offlineDocumentEpoch=null;
+await poll(async()=>{
+  const first=await stableReadiness();
+  if(!first || first.href!==ORIGIN){offlineDocumentEpoch=null;return false;}
+  if(first.epoch!==offlineDocumentEpoch){offlineDocumentEpoch=first.epoch;return false;}
+  await delay(300);
+  const second=await stableReadiness();
+  return !!second && second.href===ORIGIN && second.epoch===offlineDocumentEpoch;
+},20000,'offline-cached-app-did-not-reach-stable-ready-state');
+const offline=await js("(()=>{try{document.getElementById('load-demo').click();return {question:document.getElementById('question-view').textContent,claims:document.getElementById('claims').querySelectorAll('.entry').length,options:document.getElementById('alternatives').querySelectorAll('.entry').length,decision:document.getElementById('decision-view').textContent,net:navigator.onLine,client_error:'none',language:document.documentElement.lang}}catch(error){return {question:'',claims:0,options:0,decision:'',net:navigator.onLine,client_error:error?.name||'unknown',language:document.documentElement.lang,ready:document.readyState,has_demo:!!document.getElementById('load-demo'),has_question:!!document.getElementById('question-view'),has_claims:!!document.getElementById('claims'),has_options:!!document.getElementById('alternatives'),has_decision:!!document.getElementById('decision-view'),has_installer:!!document.getElementById('offline-install'),has_reviewed_schema:document.documentElement.outerHTML.includes('nexus.offline-pilot.v1'),worker_controls:!!navigator.serviceWorker?.controller}}})()");"""
 if text.count(demo_before)!=1 or demo_after in text:
     raise SystemExit("BLOCKED: pinned demo click contract changed")
 text=text.replace(demo_before,demo_after)
