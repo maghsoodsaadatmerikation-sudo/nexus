@@ -87,7 +87,8 @@ def assessment(data, *, project_id, service_id, volume_id, expected_commit,
 
     require(fresh(data.get("captured_at_utc"), now), "snapshot_not_fresh")
     require(inventory.get("project", {}).get("id") == project_id, "inventory_project_mismatch")
-    require(inventory.get("staged") is None, "environment_has_pending_changes")
+    require("staged" in inventory and inventory["staged"] is None,
+            "environment_has_pending_or_unknown_changes")
     env = inventory.get("environment")
     env = env if isinstance(env, dict) else {}
     environment_id = env.get("id")
@@ -98,7 +99,8 @@ def assessment(data, *, project_id, service_id, volume_id, expected_commit,
             "cross_environment_evidence_mismatch")
     require(service.get("service", {}).get("id") == service_id, "service_identity_mismatch")
     require(service.get("service", {}).get("state") == "live", "service_not_unchanged_live")
-    require(service.get("staged") is None and not service.get("stagedChanges"), "service_has_pending_changes")
+    require("staged" in service and service["staged"] is None
+            and service.get("stagedChanges") == [], "service_has_pending_or_unknown_changes")
 
     config = service.get("config") if isinstance(service.get("config"), dict) else {}
     source = config.get("source") if isinstance(config.get("source"), dict) else {}
@@ -165,11 +167,11 @@ def assessment(data, *, project_id, service_id, volume_id, expected_commit,
         require(isinstance(check, dict) and check.get("method") == "GET"
                 and check.get("http_status") == status and not check.get("error"),
                 "public_get_boundary_failed:" + path)
-    require(public.get("public_checks") == "SATISFIED" and not public.get("blockers"),
+    require(public.get("public_checks") == "SATISFIED" and public.get("blockers") == [],
             "public_observer_not_satisfied")
     require(public.get("promotion_ready") is False and public.get("production_mutation") is False,
             "public_observer_claims_unearned_authority")
-    require(not health.get("pendingWork"), "provider_has_pending_work")
+    require(health.get("pendingWork") == [], "provider_has_pending_or_unknown_work")
 
     return {
         "schema": OUT_SCHEMA,
