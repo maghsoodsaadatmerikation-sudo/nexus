@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'scripts/build-studio-phone-local.py'
+      - 'scripts/studio-phone-fieldcheck.html'
       - 'scripts/test-studio-phone-local.py'
       - 'scripts/test-studio-static-browser.mjs'
       - 'scripts/build-studio-static.py'
@@ -14,6 +15,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/build-studio-phone-local.py'
+      - 'scripts/studio-phone-fieldcheck.html'
       - 'scripts/test-studio-phone-local.py'
       - 'scripts/test-studio-static-browser.mjs'
       - 'scripts/build-studio-static.py'
@@ -63,6 +65,7 @@ jobs:
           mkdir -m 0700 "$RUNNER_TEMP/nexus-studio-phone-test"
           python3 -m zipfile -e "$BUNDLE" "$RUNNER_TEMP/nexus-studio-phone-test"
           test -f "$RUNNER_TEMP/nexus-studio-phone-test/nexus-studio-phone-local/index.html"
+          test -f "$RUNNER_TEMP/nexus-studio-phone-test/nexus-studio-phone-local/device-check.html"
           sha256sum "$BUNDLE" | tee "$BUNDLE.sha256"
       - name: Exercise actual extracted phone ZIP in real Chromium with offline encrypted reopening
         shell: bash
