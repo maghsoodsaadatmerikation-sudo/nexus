@@ -258,6 +258,13 @@ function xmlEsc(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;',
 function musicXML(score){
  if(score?.schema!=='nexus.music.orchestra-score.v1')fail('invalid-orchestra-score');
  const name=xmlEsc('NEXUS original orchestral score');
+ const majorFifths=[0,-5,2,-3,4,-1,6,1,-4,3,-2,5];
+ const tonic=((score.spec.rootMidi%12)+12)%12;
+ const fifths=majorFifths[(tonic+(score.spec.mode==='minor'?3:0))%12];
+ const clef=part=>part==='drumkit'?'<clef><sign>percussion</sign></clef>':
+  part==='viola'?'<clef><sign>C</sign><line>3</line></clef>':
+  ['cello','double_bass','trombone','choir_low'].includes(part)?'<clef><sign>F</sign><line>4</line></clef>':
+  '<clef><sign>G</sign><line>2</line></clef>';
  const steps=['C','C','D','D','E','F','F','G','G','A','A','B'];
  const alterations=[0,1,0,1,0,0,1,0,1,0,1,0];
  const noteType={120:'16th',240:'eighth',360:'eighth',480:'quarter',
@@ -288,7 +295,7 @@ function musicXML(score){
    let cursor=bar*BAR;
    const events=rows.filter(n=>Math.floor(n.startTick/BAR)===bar);
    measures.push('<measure number="'+(bar+1)+'">');
-   if(bar===0)measures.push('<attributes><divisions>480</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>'+ (part==='drumkit'?'percussion':'G') +'</sign>'+ (part==='drumkit'?'':'<line>2</line>') +'</clef></attributes><direction placement="above"><direction-type><words>Original synthetic arrangement</words></direction-type><sound tempo="'+score.bpm+'"/></direction>');
+   if(bar===0)measures.push('<attributes><divisions>480</divisions><key><fifths>'+fifths+'</fifths><mode>'+score.spec.mode+'</mode></key><time><beats>4</beats><beat-type>4</beat-type></time>'+clef(part)+'</attributes><direction placement="above"><direction-type><words>Original synthetic arrangement</words></direction-type><sound tempo="'+score.bpm+'"/></direction>');
    for(const n of events){
     if(n.startTick<cursor)fail('overlapping-notation-part');
     let rest=n.startTick-cursor;
