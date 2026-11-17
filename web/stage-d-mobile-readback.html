@@ -361,7 +361,7 @@
         throw new Error('selftest_unexpected_report');
       selfCheckResult.dataset.state = 'pass';
       selfCheckResult.textContent =
-        'BROWSER SELF-CHECK PASS — SHA-256, synthetic matching, tamper rejection and release-authority rejection worked on this browser.\\n\\n' +
+        'BROWSER SELF-CHECK PASS — SHA-256, synthetic matching, tamper rejection and release-authority rejection worked on this browser.\n\n' +
         'NOT TESTED: Android file selection, downloaded real ciphertext, GitHub anchor authenticity, private key, isolated restore, independent storage or production readiness.';
     } catch (_) {
       selfCheckResult.dataset.state = 'blocked';
