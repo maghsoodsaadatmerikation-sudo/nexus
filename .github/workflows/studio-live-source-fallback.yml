@@ -1,0 +1,87 @@
+name: NEXUS Studio Previous-Live Public Source Fallback
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/studio-live-source-fallback.py'
+      - 'scripts/test-studio-live-source-fallback.py'
+      - '.github/workflows/studio-live-source-fallback.yml'
+      - 'docs/STUDIO-LIVE-ROLLBACK-FALLBACK.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-current-live-public-source-fallback:
+    name: fallback-nine-live-source-hashes-no-deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact reviewed candidate code without saved credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          path: review
+          persist-credentials: false
+      - name: Checkout immutable currently-live Render source snapshot
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: 560badfa977f6ed1e1298388ee1ce3650ebc9daa
+          path: previous-live
+          persist-credentials: false
+      - name: Reject ambient provider credentials and unexpected old Git commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${NEXUS_MODEL_API_KEY:-}"
+          test "$(git -C previous-live rev-parse HEAD)" = "560badfa977f6ed1e1298388ee1ce3650ebc9daa"
+          test "$(git -C review rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Verify synthetic negative cases, archive reproducibility and exact old SHA
+        working-directory: review
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/studio-live-source-fallback.py scripts/test-studio-live-source-fallback.py
+          python3 scripts/test-studio-live-source-fallback.py
+      - name: Compare currently-live fixed public HTTPS origin to historical commit
+        working-directory: review
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/studio-live-source-fallback.py --build \
+            --old-root "$GITHUB_WORKSPACE/previous-live" \
+            --zip "$RUNNER_TEMP/nexus-studio-previous-live-source.zip" \
+            --report "$RUNNER_TEMP/nexus-studio-previous-live-witness.json"
+          python3 scripts/studio-live-source-fallback.py --verify \
+            --zip "$RUNNER_TEMP/nexus-studio-previous-live-source.zip" \
+            --report "$RUNNER_TEMP/nexus-studio-previous-live-witness.json"
+          sha256sum "$RUNNER_TEMP/nexus-studio-previous-live-source.zip" \
+            > "$RUNNER_TEMP/nexus-studio-previous-live-source.zip.sha256"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          report=json.loads((Path(os.environ['RUNNER_TEMP'])/'nexus-studio-previous-live-witness.json').read_text())
+          assert report['origin_matches_pinned_live_source'] is True
+          assert len(report['observed_paths'])==9
+          assert all(x['status']=='MATCH' for x in report['observed_paths'])
+          assert report['production_deploy_executed'] is False
+          assert report['actual_rollback_executed'] is False
+          assert report['rollback_render_build_artifact_confirmed'] is False
+          print('LIVE STATIC SOURCE BACKUP IS MATCHED, NO RENDER DEPLOYMENT OR ROLLBACK PERFORMED')
+          PY
+      - name: Store source fallback ZIP and independent SHA plus public origin evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-studio-previous-live-source-fallback
+          path: |
+            ${{ runner.temp }}/nexus-studio-previous-live-source.zip
+            ${{ runner.temp }}/nexus-studio-previous-live-source.zip.sha256
+            ${{ runner.temp }}/nexus-studio-previous-live-witness.json
+          if-no-files-found: error
+          retention-days: 30
