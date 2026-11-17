@@ -12,6 +12,65 @@ mkdir -m 700 "$target"
 # a newer test contract with an older deployed app and produce a false red.
 # Candidate checks remain in their separate PR/offline CI workflows.
 git archive "$baseline" web public scripts | tar -x -C "$target"
+# Use exactly the deployed revision for ALL application bytes. On public HTTPS,
+# the cached HTML body can exist before its inline DOM handlers finish parsing.
+# The historical Chromium witness only checked existence of the install button,
+# which races the DOMContentLoaded listener and could report a false offline
+# failure. Pin the historical witness's Git blob and change exactly its
+# navigation-readiness predicate; no published asset/source/consent contract
+# can be modified by this correction.
+expected_witness_blob=b259a38f8005dabef3afbcc6b97e77cdd563594c
+actual_witness_blob="$(git hash-object "$target/scripts/test-pwa-offline-browser.mjs")"
+test "$actual_witness_blob" = "$expected_witness_blob"
+python3 - "$target/scripts/test-pwa-offline-browser.mjs" <<'PY'
+from pathlib import Path
+import hashlib, json, sys
+path=Path(sys.argv[1])
+text=path.read_text()
+before="""await poll(()=>retryJs("document.getElementById('offline-install') && navigator.onLine===false"),15000,'offline-navigation-not-served');"""
+after="""await poll(()=>retryJs("document.readyState==='complete' && document.getElementById('offline-install') && navigator.onLine===false"),15000,'offline-navigation-not-served');"""
+if text.count(before)!=1 or after in text:
+    raise SystemExit("BLOCKED: pinned real-browser witness predicate changed")
+text=text.replace(before,after)
+# JS Runtime.evaluate previously threw for the demo, obscuring whether
+# the installed public page failed to initialize or a real user action was
+# refused. Keep the exact demo click and assertion; catch only to report
+# safe technical flags (never page text).
+demo_before="""const offline=await js("(()=>{document.getElementById('load-demo').click();return {question:document.getElementById('question-view').textContent,claims:document.getElementById('claims').querySelectorAll('.entry').length,options:document.getElementById('alternatives').querySelectorAll('.entry').length,decision:document.getElementById('decision-view').textContent,net:navigator.onLine}})()");"""
+demo_after="""const offline=await js("(()=>{try{document.getElementById('load-demo').click();return {question:document.getElementById('question-view').textContent,claims:document.getElementById('claims').querySelectorAll('.entry').length,options:document.getElementById('alternatives').querySelectorAll('.entry').length,decision:document.getElementById('decision-view').textContent,net:navigator.onLine,client_error:'none',language:document.documentElement.lang}}catch(error){return {question:'',claims:0,options:0,decision:'',net:navigator.onLine,client_error:error?.name||'unknown',language:document.documentElement.lang,ready:document.readyState,has_demo:!!document.getElementById('load-demo'),has_question:!!document.getElementById('question-view'),has_claims:!!document.getElementById('claims'),has_options:!!document.getElementById('alternatives'),has_decision:!!document.getElementById('decision-view'),has_installer:!!document.getElementById('offline-install'),has_reviewed_schema:document.documentElement.outerHTML.includes('nexus.offline-pilot.v1'),worker_controls:!!navigator.serviceWorker?.controller}}})()");"""
+if text.count(demo_before)!=1 or demo_after in text:
+    raise SystemExit("BLOCKED: pinned demo click contract changed")
+text=text.replace(demo_before,demo_after)
+# Sanitized diagnostics on failure. Never print user content, synthetic page
+# text, network tokens or private file content, even on a public CI runner.
+before_assert=""" assert(offline.question.includes('ساختگی')&&offline.claims===2&&offline.options===2&&
+ offline.decision.includes('هیچ تصمیم انسانی')&&offline.net===false,
+ 'offline-content-unavailable-or-created-a-judgment');"""
+after_assert=""" const offlineContract={fictional_question:offline.question.includes('ساختگی'),
+   two_claims:offline.claims===2,two_options:offline.options===2,
+   no_human_judgment:offline.decision.includes('هیچ تصمیم انسانی'),
+   browser_offline:offline.net===false,
+   client_error:offline.client_error, language:offline.language,
+   dom_ready:offline.ready,has_demo:offline.has_demo,has_question:offline.has_question,
+   has_claims:offline.has_claims,has_options:offline.has_options,
+   has_decision:offline.has_decision,has_installer:offline.has_installer,
+   has_reviewed_schema:offline.has_reviewed_schema,worker_controls:offline.worker_controls};
+ if(Object.values(offlineContract).some((value,i)=>i<5&&!value)||offline.client_error!=='none')
+   process.stderr.write(JSON.stringify({event:'pilot12-public-offline-diagnostic',
+     ...offlineContract})+'\\n');
+ assert(offlineContract.fictional_question&&offlineContract.two_claims&&offlineContract.two_options&&
+   offlineContract.no_human_judgment&&offlineContract.browser_offline&&offline.client_error==='none',
+ 'offline-content-unavailable-or-created-a-judgment');"""
+if text.count(before_assert)!=1 or after_assert in text:
+    raise SystemExit("BLOCKED: historical offline acceptance shape changed")
+text=text.replace(before_assert,after_assert)
+path.write_text(text)
+print(json.dumps({'witness_source':'pinned-deployed-baseline',
+  'witness_patch':'wait-for-document-complete-and-boolean-only-failure-diagnostic',
+  'witness_sha256':hashlib.sha256(text.encode()).hexdigest(),
+  'published_application_bytes_modified':False,
+  'acceptance_checks_relaxed':False, 'authority':'none'},sort_keys=True), file=sys.stderr)
+PY
 python3 - "$baseline" "$target" <<'PY'
 import hashlib,json,sys
 from pathlib import Path

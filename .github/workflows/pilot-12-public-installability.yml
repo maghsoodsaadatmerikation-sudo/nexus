@@ -88,10 +88,17 @@ jobs:
           export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
           test -n "$NEXUS_PWA_CHROME"
           node --check scripts/test-pwa-offline-browser.mjs
+          # Two fully independent fresh Chromium profiles on the actual
+          # HTTPS origin; never pass based only on localhost/cached CI reports.
           node scripts/test-pwa-offline-browser.mjs > pilot-12-public-offline.json
+          node scripts/test-pwa-offline-browser.mjs > pilot-12-public-offline-second.json
           python3 - <<'PY'
           import json
           r=json.load(open('pilot-12-public-offline.json'))
+          second=json.load(open('pilot-12-public-offline-second.json'))
+          assert second['status']=='PASS' and second['checks']==r['checks']
+          assert second['source_sha256']==r['source_sha256']
+          assert second['origin']==r['origin'] and second['actual_offline_navigation'] is True
           assert r['status']=='PASS' and len(r['checks'])==8
           assert r['origin']=='public-render-pilot'
           assert r['actual_offline_navigation'] is True
@@ -110,5 +117,6 @@ jobs:
           path: |
             ${{ runner.temp }}/nexus-live-pilot/pilot-12-public-assets.json
             ${{ runner.temp }}/nexus-live-pilot/pilot-12-public-offline.json
+            ${{ runner.temp }}/nexus-live-pilot/pilot-12-public-offline-second.json
           if-no-files-found: ignore
           retention-days: 14

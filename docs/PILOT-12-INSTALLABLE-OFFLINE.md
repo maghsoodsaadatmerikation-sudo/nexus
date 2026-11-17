@@ -120,3 +120,31 @@ must each PASS before public installability can be claimed.
 The previous independently verified static Pilot 11 deployment was
 `dep-dbqooirrjlhs73a1cvdg` at source
 `ed13887699b49a8494a3178e426ad9192e14d57e`.
+
+
+## Phase 44 — Public HTTPS offline recheck after readiness-race audit
+
+Issue [#260](https://github.com/maghsoodsaadatmerikation-sudo/nexus/issues/260)
+documents a public-origin Chromium failure at the **synthetic click/decision
+assertion**, **after** exact public asset identity and service-worker navigation
+were observed. Its cause was not proven from the previous aggregate failure
+label. A plausible explanation is that the original pinned witness only waited
+for an HTML button to **exist** after offline reload, allowing a click before
+the page finished parsing its inline script and registering event handlers.
+
+The independent public witness retains **all public application assets from
+the exact immutable baseline** `35be3d4b0da0d0f21e04a4a8a61f45e316a0058e`.
+The prep step verifies the historical Chromium witness's exact Git blob
+`b259a38f8005dabef3afbcc6b97e77cdd563594c` and edits only a single
+DOM-ready poll predicate plus one **failure-only boolean** diagnostic for:
+fictional question, two claims, two alternatives, no human judgment, and browser
+offline state. Its existing assertion remains mandatory; it does **not** inject
+a synthetic PASS, change the public PWA, ignore network errors, make provider
+mutations, or silently substitute unpublished candidate HTML/JS.
+
+This improves the ability to distinguish **test synchronization** from a
+genuine **public offline product defect**. A real green CI result is evidence
+only for the tested public-origin case. If it still fails, retain Issue #260
+open, inspect the five boolean flags and investigate genuine worker/controller
+or localized DOM behavior rather than relaxing checks. The original Railway
+Volume, Render deployment settings, user data and owner keys stay unchanged.
