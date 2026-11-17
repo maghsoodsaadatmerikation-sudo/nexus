@@ -53,6 +53,20 @@ source before advertising it as deployed. The separate
 [local Android/Termux ZIP](docs/STUDIO-PHONE-LOCAL.md) can be built from the
 reviewed exact `main` source without Railway or Render.
 
+## NEXUS Music Lab — fully local original music (no Suno)
+
+NEXUS Studio now includes a **native procedural music composition and sound
+synthesis lab**, independent of Suno or any external music API. From an
+eastern-influenced mode, tempo, narrative arc and featured instrumental solo,
+it generates a repeatable original multi-track score, true type-1 **MIDI**
+with half-semitone pitch-bend channels, and locally synthesized stereo **WAV**
+with in-browser playback and download. The default motif is locked across
+variations, and structural self-critique checks the arc and instrumental
+roles. All playback is synthetic; there are no acoustic sample recordings or
+human singing synthesis in this stage. No hosting/production deployment is
+implied by source changes. [Music Lab features, current limits and staged
+audio-quality roadmap](docs/NEXUS-MUSIC-LAB.md).
+
 ## Run Studio locally (Linux, one command)
 
 With Python 3.13 and `uv` installed, run from a complete checkout:
