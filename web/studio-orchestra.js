@@ -20,6 +20,7 @@ const GM=Object.freeze({
  harp:{name:'Harp',gm:46,family:'pluck',pan:.3},
  pipe_organ:{name:'Pipe organ',gm:19,family:'organ',pan:0},
  acoustic_guitar:{name:'Acoustic guitar',gm:24,family:'pluck',pan:.25},
+ drumkit:{name:'Electronic drum kit',gm:0,family:'drum',pan:0},
  synth_pad:{name:'Synthetic pad',gm:89,family:'pad',pan:.3},
  lead_voice:{name:'Generic synthetic vowel (not human)',gm:53,family:'vowel',pan:0},
  choir_high:{name:'Synthetic choir high vowel',gm:52,family:'vowel',pan:-.28},
@@ -205,7 +206,8 @@ function compose(spec,seed=61234){
     const d=melodic[i%melodic.length],length=Math.min(d,BAR-pos);
     const gap=bar===0&&pos===0||((bar+1)%8===0&&pos>=1440);
     if(!gap){
-     const contour=(bar%4===3&&i%3===0?4:[0,2,4,3,2,1,0][(i+bar)%7]);
+     const contour=(bar%4===3&&i%3===0?4:[0,2,4,3,2,1,0][(i+bar)%7])+
+       (bar%4===2&&i%3===1&&r()<.4?1:0);
      let offset=spec.register==='soprano'?12:spec.register==='alto'?7:
                   spec.register==='tenor'?0:-5;
      const pitches=spec.style==='rap'?degree(0,0)+offset+(i%2):
@@ -226,6 +228,11 @@ function compose(spec,seed=61234){
     }
    }
   }
+  if(spec.drum){for(let beat=0;beat<8;beat++){
+    const instrument=beat%2===1?42:beat%4===0?36:38;
+    emit('drumkit',bar,beat*240,240,instrument,60+energy*20,
+      instrument===36?'kick':instrument===38?'snare':'hat');
+   }}
   if(spec.fx!=='none'&&bar===Math.max(0,sections[1].start-1))
    emit('generic_fx',bar,960,960,72,64,'generic-'+spec.fx);
   if(spec.animal!=='none'&&(bar===0||bar===b-2)){
@@ -253,15 +260,15 @@ function musicXML(score){
   const pc=((Math.floor(n.pitch)%12)+12)%12,m=Math.floor(n.pitch);
   const altered=alterations[pc]+(n.pitch-m);
   const step=steps[pc],oct=Math.floor(m/12)-1,d=n.lengthTicks;
-  const pitchTag='<pitch><step>'+step+'</step>'+(altered?'<alter>'+altered+'</alter>':'')+
+  const pitchTag=n.part==='drumkit'?'<unpitched><display-step>F</display-step><display-octave>4</display-octave></unpitched>':
+    '<pitch><step>'+step+'</step>'+(altered?'<alter>'+altered+'</alter>':'')+
     '<octave>'+oct+'</octave></pitch>';
-  const base='<duration>'+d+'</duration><type>'+noteType[d]+'</type>';
+  const base='<duration>'+d+'</duration><type>'+noteType[d]+'</type>'+([360,720,1440].includes(d)?'<dot/>':'');
   const isVoc=/^(?:lead_voice|choir_)/.test(n.part);
   const lyric=isVoc?'<lyric><syllabic>single</syllabic><text>'+xmlEsc(n.vowel)+'</text></lyric>':'';
   return '<note>'+pitchTag+base+lyric+'</note>';
  }
  const metadata=['<?xml version="1.0" encoding="utf-8"?>',
- '<!DOCTYPE score-partwise  PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">',
  '<score-partwise version="4.0"><work><work-title>'+name+'</work-title></work>',
  '<movement-title>'+name+'</movement-title><identification><creator type="composer">NEXUS deterministic local engine</creator></identification>',
  '<defaults><scaling><millimeters>7</millimeters><tenths>40</tenths></scaling></defaults>',
@@ -275,7 +282,7 @@ function musicXML(score){
    let cursor=bar*BAR;
    const events=rows.filter(n=>Math.floor(n.startTick/BAR)===bar);
    measures.push('<measure number="'+(bar+1)+'">');
-   if(bar===0)measures.push('<attributes><divisions>480</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes><direction placement="above"><direction-type><words>Original synthetic arrangement</words></direction-type><sound tempo="'+score.bpm+'"/></direction>');
+   if(bar===0)measures.push('<attributes><divisions>480</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>'+ (part==='drumkit'?'percussion':'G') +'</sign>'+ (part==='drumkit'?'':'<line>2</line>') +'</clef></attributes><direction placement="above"><direction-type><words>Original synthetic arrangement</words></direction-type><sound tempo="'+score.bpm+'"/></direction>');
    for(const n of events){
     if(n.startTick<cursor)fail('overlapping-notation-part');
     let rest=n.startTick-cursor;
@@ -309,8 +316,8 @@ function midi(score){
  tracks.push(encode([{tick:0,order:0,msg:[0xff,0x51,3,(tempo>>>16)&255,(tempo>>>8)&255,tempo&255]},
   {tick:0,order:1,msg:[0xff,0x58,4,4,2,24,8]}]));
  for(let i=0;i<score.parts.length;i++){
-  const name=score.parts[i],channel=channels[i],part=GM[name];
-  const data=[{tick:0,order:0,msg:[0xc0|channel,part.gm]}];
+  const name=score.parts[i],channel=name==='drumkit'?9:channels[i],part=GM[name];
+  const data=name==='drumkit'?[]:[{tick:0,order:0,msg:[0xc0|channel,part.gm]}];
   for(const n of score.notes.filter(x=>x.part===name)){
    if(!Number.isInteger(n.pitch))fail('unsupported-microtone-midi-channel');
    data.push({tick:n.startTick,order:2,msg:[0x90|channel,n.pitch,n.velocity]});
@@ -333,6 +340,11 @@ function voiceSample(note,phase,t,seconds,freq,index,rate,spec){
  const env=clamp(t/attack,0,1)*clamp((seconds-t)/release,0,1);
  if(env<=0)return 0;
  const noise=hashNoise(index,id);
+ if(inst.family==='drum'){
+  const body=note.pitch===36?Math.sin(TAU*(72*t+18*(1-Math.exp(-15*t))/15))*Math.exp(-t*22):0;
+  const hit=noise*Math.exp(-t*(note.pitch===42?75:42));
+  return (body*.76+hit*(note.pitch===36?.16:.38))*env;
+ }
  if(inst.family==='animal'){
   const which=note.role.slice(7);
   const sweep=which==='bird'?1300+340*Math.sin(2*Math.PI*9*t):
