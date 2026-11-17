@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none'">
+<title>NEXUS | Offline ciphertext readback</title>
+<style>
+  :root { color-scheme: light; font-family: system-ui, -apple-system, sans-serif; background: #f7f8fb; color: #162336; }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; max-width: 760px; padding: clamp(14px, 3vw, 30px); }
+  header { padding: 24px 0 10px; border-bottom: 1px solid #d3dbe6; }
+  .eyebrow { color: #415b76; font-size: .77rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; }
+  h1 { margin: 8px 0; font-size: clamp(1.55rem, 5vw, 2.25rem); line-height: 1.15; }
+  h2 { margin: 0 0 12px; font-size: 1.08rem; }
+  p { line-height: 1.5; }
+  .muted { color: #53667a; font-size: .92rem; }
+  section { margin-top: 20px; border: 1px solid #c9d5e1; background: #fff; padding: 20px; border-radius: 14px; }
+  .alert { border-left: 4px solid #bd5c23; padding-left: 12px; }
+  label { display: block; margin: 12px 0 4px; font-weight: 600; }
+  input, textarea { width: 100%; min-height: 42px; padding: 10px 12px; font: inherit; border: 1px solid #91a5ba; background: #fff; color: #152338; border-radius: 7px; }
+  input[type=file] { font-size: .85rem; }
+  textarea { resize: vertical; min-height: 105px; }
+  .two { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+  .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+  button { font: inherit; border-radius: 9px; min-height: 44px; padding: 10px 16px; border: 1px solid #174f82; cursor: pointer; }
+  #verify { background: #174f82; color: white; font-weight: 700; flex: 1 1 180px; }
+  #reset { background: white; color: #174f82; }
+  button:disabled { opacity: .55; cursor: wait; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid #dfa941; outline-offset: 2px; }
+  #result { white-space: pre-wrap; word-break: break-word; padding: 14px; margin-top: 10px; background: #f1f5f9; border-radius: 8px; border: 1px solid #c7d2df; min-height: 72px; font-size: .91rem; }
+  #result[data-state=pass] { border-color: #378764; }
+  #result[data-state=blocked] { border-color: #b75b48; }
+  footer { padding: 18px 4px; font-size: .85rem; color: #516174; }
+  @media (max-width: 540px) { .two { grid-template-columns: 1fr; } section { padding: 15px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">NEXUS / Stage D / Offline</div>
+  <h1>Encrypted backup readback</h1>
+  <p>Verify downloaded encrypted files against an independently obtained GitHub run-log digest, using only this device.</p>
+</header>
+<section class="alert" aria-label="Scope limitations">
+  <strong>Byte verification is not recovery.</strong>
+  <p class="muted">No network requests, uploads, private keys or decryption. Even a matching result does <strong>not</strong> prove separate storage, Railway origin, complete backup, key custody, an isolated restore or deployment authorization.</p>
+</section>
+<form id="readback-form" novalidate>
+<section aria-labelledby="step-one">
+  <h2 id="step-one">1. Independent GitHub run-log anchor</h2>
+  <p class="muted">From the successful manual <code>NEXUS Stage D — Manual Encrypted Volume Capture</code> run, copy the exact line starting <code>NEXUS_ENCRYPTED_ESCROW_ANCHOR_V1</code>. Independently confirm run ID, attempt and SHA in GitHub. Never paste tokens or private keys.</p>
+  <label for="anchor">Exact original anchor line</label>
+  <textarea id="anchor" required autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="NEXUS_ENCRYPTED_ESCROW_ANCHOR_V1 {...}"></textarea>
+  <div class="two">
+    <div><label for="run-id">GitHub run ID</label><input id="run-id" required inputmode="numeric" autocomplete="off" placeholder="Run ID from GitHub"></div>
+    <div><label for="attempt">Run attempt</label><input id="attempt" required inputmode="numeric" autocomplete="off" placeholder="1"></div>
+  </div>
+  <label for="commit">Exact workflow commit SHA (40 lowercase hex)</label>
+  <input id="commit" required autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="40-character commit SHA">
+</section>
+<section aria-labelledby="step-two">
+  <h2 id="step-two">2. Select the encrypted files</h2>
+  <p class="muted">Both copies must contain the ciphertext <code>.cms</code> and its JSON receipt. Choosing them twice cannot establish that they were stored on independent devices.</p>
+  <div class="two">
+    <div><h3>Copy A</h3>
+      <label for="cipher-a">Encrypted .cms file</label><input id="cipher-a" type="file" required accept=".cms,application/octet-stream">
+      <label for="receipt-a">Receipt .json</label><input id="receipt-a" type="file" required accept=".json,application/json">
+    </div>
+    <div><h3>Copy B</h3>
+      <label for="cipher-b">Encrypted .cms file</label><input id="cipher-b" type="file" required accept=".cms,application/octet-stream">
+      <label for="receipt-b">Receipt .json</label><input id="receipt-b" type="file" required accept=".json,application/json">
+    </div>
+  </div>
+  <div class="actions"><button id="verify" type="submit">Verify local bytes</button><button id="reset" type="reset">Clear selections</button></div>
+  <p class="muted">The browser hashes one selected file at a time. If WebCrypto is unavailable in the local browser, this tool blocks instead of sending files elsewhere.</p>
+</section>
+</form>
+<section aria-labelledby="result-title"><h2 id="result-title">Result</h2><div id="result" role="status" aria-live="polite">Not verified. Select the two pairs and the original run-log anchor.</div></section>
+<footer>Local integrity only · A_out ≤ A_in · No release authority · Never upload user data or a recovery key to this page or a GitHub issue.</footer>
+<script id="nexus-readback-core">
+(function () {
+  'use strict';
+  const PREFIX = 'NEXUS_ENCRYPTED_ESCROW_ANCHOR_V1 ';
+  const REPO = 'maghsoodsaadatmerikation-sudo/nexus';
+  const WORKFLOW_REF = REPO + '/.github/workflows/stage-d-encrypted-volume-capture.yml@refs/heads/main';
+  const CERT = 'b27cc7a84e333fce78f790dce20335258b11e724bac1a91b3b7c886ac3812091';
+  const VOLUME = 'cc47a350-6c7e-4487-89d9-c4b390f94884';
+  const MAX_CIPHER = 65 * 1024 * 1024;
+  const MAX_JSON = 32768;
+  const MAX_ANCHOR = 4096;
+  const HEX40 = /^[0-9a-f]{40}$/;
+  const HEX64 = /^[0-9a-f]{64}$/;
+  const INT = /^[1-9][0-9]{0,18}$/;
+  const ANCHOR_KEYS = [
+    'schema','status','repository','workflow_ref','ref','event','run_id',
+    'run_attempt','commit_sha','original_volume_id','ciphertext_sha256',
+    'ciphertext_bytes','receipt_sha256','recipient_cert_sha256','provider_origin',
+    'release_authorized','authority'
+  ];
+  const RECEIPT_KEYS = [
+    'schema','status','content_claim','independent_live_restore','railway_origin',
+    'release_authorized','seal','authority','recipient_cert_sha256',
+    'ciphertext_sha256','ciphertext_bytes'
+  ];
+  function block(reason) { throw new Error(reason); }
+  function requireThat(ok, reason) { if (!ok) block(reason); }
+  function strictFlatJSON(source, maxLength) {
+    requireThat(typeof source === 'string' && source.length <= maxLength && source.length > 0, 'metadata_size_invalid');
+    let i = 0;
+    function skip() { while (i < source.length && /[ \t\r\n]/.test(source[i])) i++; }
+    function readQuoted() {
+      requireThat(source[i] === '"', 'metadata_invalid');
+      const start = i++;
+      while (i < source.length) {
+        const c = source[i++];
+        if (c === '\\') { i++; continue; }
+        if (c === '"') {
+          try { return JSON.parse(source.slice(start, i)); }
+          catch (_) { block('metadata_invalid'); }
+        }
+      }
+      block('metadata_invalid');
+    }
+    skip(); requireThat(source[i++] === '{', 'metadata_not_flat_object');
+    const obj = Object.create(null);
+    const seen = new Set();
+    skip();
+    requireThat(source[i] !== '}', 'metadata_empty');
+    let closed = false;
+    while (i < source.length) {
+      skip(); const key = readQuoted();
+      requireThat(!seen.has(key) && seen.size < 24, 'metadata_duplicate_or_oversized');
+      seen.add(key);
+      skip(); requireThat(source[i++] === ':', 'metadata_invalid');
+      skip();
+      let value;
+      if (source[i] === '"') value = readQuoted();
+      else {
+        const start = i;
+        while (i < source.length && source[i] !== ',' && source[i] !== '}') {
+          requireThat(source[i] !== '{' && source[i] !== '[' && source[i] !== '"', 'metadata_not_flat_object');
+          i++;
+        }
+        try { value = JSON.parse(source.slice(start, i).trim()); }
+        catch (_) { block('metadata_invalid'); }
+        requireThat(value === null || typeof value === 'boolean' || typeof value === 'number', 'metadata_not_flat_object');
+      }
+      obj[key] = value;
+      skip();
+      if (source[i] === '}') { i++; closed = true; break; }
+      requireThat(source[i++] === ',', 'metadata_invalid');
+      skip(); requireThat(source[i] !== '}', 'metadata_invalid');
+    }
+    skip(); requireThat(closed && i === source.length, 'metadata_invalid');
+    return obj;
+  }
+  function exactKeys(obj, keys) {
+    const got = Object.keys(obj);
+    requireThat(got.length === keys.length && keys.every(k => Object.hasOwn(obj, k)), 'metadata_fields_invalid');
+  }
+  function positiveIntString(value) { return typeof value === 'string' && INT.test(value) && BigInt(value) <= 9007199254740991n; }
+  function parseAnchor(line, expected) {
+    requireThat(typeof line === 'string' && line.length <= MAX_ANCHOR + PREFIX.length + 1, 'anchor_invalid');
+    requireThat(line.startsWith(PREFIX) && !/[\r\n]/.test(line.replace(/\r?\n$/, '')), 'anchor_invalid');
+    const obj = strictFlatJSON(line.slice(PREFIX.length).trim(), MAX_ANCHOR);
+    exactKeys(obj, ANCHOR_KEYS);
+    requireThat(positiveIntString(expected.runId) && positiveIntString(expected.attempt) && HEX40.test(expected.commit), 'expected_github_identity_invalid');
+    requireThat(obj.schema === 'nexus.stage-d-encrypted-log-anchor.v1' &&
+      obj.status === 'CIPHERTEXT_LOCAL_DIGEST_BEFORE_UPLOAD' &&
+      obj.repository === REPO && obj.workflow_ref === WORKFLOW_REF &&
+      obj.ref === 'refs/heads/main' && obj.event === 'workflow_dispatch' &&
+      obj.original_volume_id === VOLUME && obj.recipient_cert_sha256 === CERT &&
+      obj.provider_origin === 'not_independently_attested' &&
+      obj.release_authorized === false && obj.authority === 'none', 'anchor_claim_invalid');
+    requireThat(Number.isSafeInteger(obj.run_id) && Number.isSafeInteger(obj.run_attempt) &&
+      obj.run_id === Number(expected.runId) && obj.run_attempt === Number(expected.attempt) &&
+      obj.commit_sha === expected.commit, 'github_run_identity_mismatch');
+    requireThat(typeof obj.ciphertext_sha256 === 'string' && HEX64.test(obj.ciphertext_sha256) &&
+      typeof obj.receipt_sha256 === 'string' && HEX64.test(obj.receipt_sha256) &&
+      Number.isSafeInteger(obj.ciphertext_bytes) && obj.ciphertext_bytes > 256 &&
+      obj.ciphertext_bytes <= MAX_CIPHER, 'anchor_digest_or_size_invalid');
+    return obj;
+  }
+  function verifyReceipt(rawText, ref) {
+    const obj = strictFlatJSON(rawText, MAX_JSON);
+    exactKeys(obj, RECEIPT_KEYS);
+    requireThat(obj.schema === 'nexus.stage-d-encrypted-escrow.v1' &&
+      obj.status === 'ENCRYPTED_PRIVATE_COPY_NOT_ATOMICALLY_VERIFIED' &&
+      obj.content_claim === 'local_structural_intake_only' &&
+      obj.independent_live_restore === 'not_evaluated' &&
+      obj.railway_origin === 'not_independently_attested' &&
+      obj.release_authorized === false && obj.seal === false &&
+      obj.authority === 'none' && obj.recipient_cert_sha256 === CERT &&
+      obj.ciphertext_sha256 === ref.ciphertext_sha256 &&
+      obj.ciphertext_bytes === ref.ciphertext_bytes, 'receipt_claim_or_digest_invalid');
+  }
+  async function hashFile(file, max) {
+    requireThat(file && Number.isSafeInteger(file.size) && file.size > 0 && file.size <= max &&
+      typeof file.arrayBuffer === 'function', 'file_missing_or_oversized');
+    requireThat(window.crypto && window.crypto.subtle && typeof window.crypto.subtle.digest === 'function', 'webcrypto_unavailable');
+    const raw = await file.arrayBuffer();
+    requireThat(raw.byteLength === file.size, 'file_changed_during_read');
+    const hashed = await window.crypto.subtle.digest('SHA-256', raw);
+    const hex = Array.from(new Uint8Array(hashed), b => b.toString(16).padStart(2, '0')).join('');
+    return {hex, raw};
+  }
+  async function verifyPair(cipher, receipt, ref) {
+    requireThat(cipher && receipt && cipher.size === ref.ciphertext_bytes, 'ciphertext_size_mismatch');
+    const a = await hashFile(cipher, MAX_CIPHER);
+    requireThat(a.hex === ref.ciphertext_sha256, 'ciphertext_hash_mismatch');
+    const b = await hashFile(receipt, MAX_JSON);
+    requireThat(b.hex === ref.receipt_sha256, 'receipt_hash_mismatch');
+    let text;
+    try { text = new TextDecoder('utf-8', {fatal: true}).decode(b.raw); }
+    catch (_) { block('receipt_invalid_utf8'); }
+    verifyReceipt(text, ref);
+    return true;
+  }
+  async function verifyCopies(line, identity, pairs) {
+    const ref = parseAnchor(line, identity);
+    requireThat(Array.isArray(pairs) && pairs.length === 2, 'two_copies_required');
+    requireThat(pairs[0] && pairs[1] && pairs[0].cipher !== pairs[1].cipher &&
+      pairs[0].receipt !== pairs[1].receipt, 'two_selections_required');
+    await verifyPair(pairs[0].cipher, pairs[0].receipt, ref);
+    await verifyPair(pairs[1].cipher, pairs[1].receipt, ref);
+    return Object.freeze({
+      schema: 'nexus.stage-d-mobile-ciphertext-readback.v1',
+      status: 'TWO_SELECTED_FILE_PAIRS_MATCH_ANCHOR_BYTES_ONLY',
+      run_id: ref.run_id,
+      run_attempt: ref.run_attempt,
+      commit_sha: ref.commit_sha,
+      ciphertext_sha256: ref.ciphertext_sha256,
+      pairs_verified: 2,
+      original_github_run_authenticated: false,
+      independent_storage: 'NOT_VERIFIED_BY_BROWSER',
+      railway_origin: 'NOT_VERIFIED',
+      private_key_possession: 'NOT_VERIFIED',
+      ciphertext_decrypted: false,
+      isolated_restore: 'NOT_PERFORMED',
+      complete_production_backup: false,
+      deployment_authorized: false,
+      data_uploaded: false,
+      authority: 'none'
+    });
+  }
+  window.NexusReadback = Object.freeze({parseAnchor, verifyReceipt, verifyPair, verifyCopies});
+})();
+</script>
+<script id="nexus-readback-ui">
+(function () {
+  'use strict';
+  const form = document.getElementById('readback-form');
+  const result = document.getElementById('result');
+  const verify = document.getElementById('verify');
+  const buttonReset = document.getElementById('reset');
+  let running = false;
+  function file(id) { return document.getElementById(id).files[0]; }
+  form.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    if (running) return;
+    running = true; verify.disabled = true; buttonReset.disabled = true;
+    result.dataset.state = 'busy';
+    result.textContent = 'Calculating local SHA-256. No files are transmitted…';
+    try {
+      const report = await window.NexusReadback.verifyCopies(
+        document.getElementById('anchor').value,
+        {runId: document.getElementById('run-id').value,
+         attempt: document.getElementById('attempt').value,
+         commit: document.getElementById('commit').value},
+        [{cipher: file('cipher-a'), receipt: file('receipt-a')},
+         {cipher: file('cipher-b'), receipt: file('receipt-b')}]
+      );
+      result.dataset.state = 'pass';
+      result.textContent = 'MATCH — two selected ciphertext/receipt pairs match the supplied run-log anchor by SHA-256.\n\n' +
+        'Source: GitHub run ' + report.run_id + ' / attempt ' + report.run_attempt + '\n' +
+        'Ciphertext SHA-256: ' + report.ciphertext_sha256 + '\n\n' +
+        'NOT PROVEN: actual origin of the pasted anchor, independent storage, complete Railway backup, private-key possession, decryption, isolated restore or production readiness. No release authorized.';
+    } catch (_) {
+      result.dataset.state = 'blocked';
+      result.textContent = 'BLOCKED — exact local integrity checks did not pass. Recheck GitHub run ID, attempt, commit, the original log line and each selected file. No backup or release claim is made.';
+    } finally { running = false; verify.disabled = false; buttonReset.disabled = false; }
+  });
+  form.addEventListener('reset', function () {
+    if (running) return;
+    result.dataset.state = 'idle';
+    result.textContent = 'Not verified. Select the two pairs and the original run-log anchor.';
+  });
+})();
+</script>
+</body>
+</html>
