@@ -14,8 +14,8 @@ from unittest.mock import patch
 
 SCRIPT = Path(__file__).with_name("verify-offhost-volume-export.py")
 VOLUME = "cc47a350-6c7e-4487-89d9-c4b390f94884"
-DEPLOY = "db2fd959-918e-49d5-b077-1ac74fac9a82"
-COMMIT = "3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959"
+DEPLOY = "32cdcb2b-c03c-4a6f-b028-27a9977717ce"
+COMMIT = "9abbc067aad3ebbb0956432cf6682d2ea70e2824"
 
 
 class IntakeTests(unittest.TestCase):

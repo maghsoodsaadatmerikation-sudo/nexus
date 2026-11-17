@@ -20,8 +20,8 @@ spec = importlib.util.spec_from_file_location("nexus_escrow_tests", ROOT / "stag
 escrow = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(escrow)
 VOLUME = "cc47a350-6c7e-4487-89d9-c4b390f94884"
-DEPLOY = "db2fd959-918e-49d5-b077-1ac74fac9a82"
-RUNTIME = "3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959"
+DEPLOY = "32cdcb2b-c03c-4a6f-b028-27a9977717ce"
+RUNTIME = "9abbc067aad3ebbb0956432cf6682d2ea70e2824"
 
 
 class EncryptedEscrowTests(unittest.TestCase):

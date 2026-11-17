@@ -8,6 +8,8 @@ on:
       - 'scripts/capture-railway-volume-readonly.py'
       - 'scripts/test-capture-railway-volume-readonly.py'
       - 'scripts/test-stage-d-credential-choice.py'
+      - 'scripts/test-stage-d-live-capture-pin.py'
+      - 'docs/STAGE-D-LIVE-CAPTURE-TARGET.md'
       - 'docs/STAGE-D-RAILWAY-AUTH-SCOPE.md'
       - 'scripts/private_subprocess_env.py'
       - 'scripts/test-private-subprocess-env.py'
@@ -79,6 +81,7 @@ jobs:
           test -z "${RAILWAY_API_TOKEN:-}"
           python3 scripts/test-capture-railway-volume-readonly.py
           python3 scripts/test-stage-d-credential-choice.py
+          python3 scripts/test-stage-d-live-capture-pin.py
 
   real-cli-parser-conformance:
     name: real-railway-cli-readonly-grammar
