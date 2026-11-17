@@ -16,7 +16,14 @@ Workflow gate:
 
 1. Manually choose **Actions > NEXUS Stage D — Manual Encrypted Volume Capture >
    Run workflow**, branch `main`. Enter the **exact** original Volume UUID
-   `cc47a350-6c7e-4487-89d9-c4b390f94884`. It is never auto-run on
+   `cc47a350-6c7e-4487-89d9-c4b390f94884`, and (only after
+   independently checking the current authenticated Railway deployment)
+   `confirm_deployment=32cdcb2b-c03c-4a6f-b028-27a9977717ce` and
+   `confirm_runtime=9abbc067aad3ebbb0956432cf6682d2ea70e2824`.
+   These were the live provider-reported targets on 2026-11-17; **if
+   the provider deployment has changed, do not guess or reuse them**.
+   See [Phase 38 source reconciliation](STAGE-D-LIVE-CAPTURE-TARGET.md).
+   It is never auto-run on
    `push`, `pull_request`, schedules or deployments.
 2. Before starting, the user must privately configure a Railway credential in
    GitHub repository **Settings > Secrets and variables > Actions > New
