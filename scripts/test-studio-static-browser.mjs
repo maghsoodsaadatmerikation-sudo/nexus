@@ -131,7 +131,8 @@ try{
  await js("document.getElementById('studio-focus-toggle').click();true");
  assert(await js("!NexusStudioFocus.isFocused()&&document.querySelectorAll('section.card[hidden]').length===0&&document.getElementById('studio-focus-nav').hidden"),'full-view-not-restored');
  await js("document.getElementById('studio-focus-toggle').click();document.getElementById('message').focus();true");
- const keyboard=await js("({focused:NexusStudioFocus.isFocused(),typing:document.documentElement.classList.contains('studio-focus-typing'),active:document.activeElement.id,dock:getComputedStyle(document.getElementById('studio-focus-nav')).display,htmlFocused:document.documentElement.matches(':has(textarea:focus)')})");
+ await poll(()=>retryJs("NexusStudioFocus.isFocused()&&getComputedStyle(document.getElementById('studio-focus-nav')).display==='none'"),2200,'mobile-keyboard-dock-focus-timing');
+ const keyboard=await js("({focused:NexusStudioFocus.isFocused(),typing:document.documentElement.classList.contains('studio-focus-typing'),active:document.activeElement.id,dock:getComputedStyle(document.getElementById('studio-focus-nav')).display})");
  assert(keyboard.focused&&keyboard.dock==='none','mobile-keyboard-should-not-be-obscured-'+JSON.stringify(keyboard));
  await js("document.getElementById('message').blur();true");
  checks.push('reversible-focus-keeps-content-and-keyboard-clear');
