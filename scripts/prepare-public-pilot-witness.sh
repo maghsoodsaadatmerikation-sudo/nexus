@@ -229,6 +229,20 @@ replace_exact(" if(stage==='real-network-offline')\n   process.stderr.write(JSON
 replace_exact(" if(stage==='real-network-offline')\n   process.stderr.write(JSON.stringify({event:'pilot12-public-cdp-navigation',",
     " if(['online-bootstrap','real-network-offline'].includes(stage))\n   process.stderr.write(JSON.stringify({event:'pilot12-proxy-diagnostic',...proxy.stats(),authority:'none'})+'\\n');\n if(stage==='real-network-offline')\n   process.stderr.write(JSON.stringify({event:'pilot12-public-cdp-navigation',",
     "proxy-failure-counter")
+
+# Report only booleans and enumerated worker lifecycle states if opt-in
+# bootstrap fails, never the page text, source document, or request URLs.
+replace_exact(" if(['online-bootstrap','real-network-offline'].includes(stage))\n   process.stderr.write(JSON.stringify({event:'pilot12-proxy-diagnostic',...proxy.stats(),authority:'none'})+'\\n');",
+    """ if(stage==='online-bootstrap'){
+   let onlineBoot=null;
+   try{onlineBoot=await retryJs("(async()=>{const r=await navigator.serviceWorker?.getRegistration('/');const names=await caches.keys();return {document_ready:document.readyState==='complete',install_button:!!document.getElementById('offline-install'),installation_ready:document.getElementById('offline-install-state')?.textContent?.includes('آماده است')===true,registration:!!r,active:r?.active?.state==='activated',waiting:!!r?.waiting,installing:!!r?.installing,controlled:!!navigator.serviceWorker?.controller,expected_worker:r?.active?.scriptURL===location.origin+'/service-worker.js',shell_cache:names.some(n=>n.startsWith('nexus-app-shell-v12-'))}})()")}catch{}
+   process.stderr.write(JSON.stringify({event:'pilot12-online-worker-bootstrap',
+     state:onlineBoot,contains_page_content:false,authority:'none'})+'\\n');
+ }
+ if(['online-bootstrap','real-network-offline'].includes(stage))
+   process.stderr.write(JSON.stringify({event:'pilot12-proxy-diagnostic',...proxy.stats(),authority:'none'})+'\\n');""",
+    "online-worker-bootstrap-diagnostic")
+
 replace_exact(" await rm(profile,{recursive:true,force:true});",
     " await proxy.close();\n await rm(profile,{recursive:true,force:true});",
     "close-disposable-proxy")
