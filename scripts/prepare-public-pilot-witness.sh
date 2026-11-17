@@ -180,6 +180,9 @@ replace_exact("   actual_offline_navigation:true,real_android_hardware:false,",
      proxy.stats().active===0&&proxy.stats().allowed>0,
    isolated_to_reviewed_public_origin:true,real_android_hardware:false,""",
     "proxy-disconnection-report")
+replace_exact("}catch(error){\n process.stderr.write(JSON.stringify({event:'pwa-browser-fail-closed',stage,",
+    "}catch(error){\n if(stage==='real-network-offline')\n   process.stderr.write(JSON.stringify({event:'pilot12-proxy-diagnostic',...proxy.stats(),authority:'none'})+'\\n');\n process.stderr.write(JSON.stringify({event:'pwa-browser-fail-closed',stage,",
+    "proxy-failure-counter")
 replace_exact(" await rm(profile,{recursive:true,force:true});",
     " await proxy.close();\n await rm(profile,{recursive:true,force:true});",
     "close-disposable-proxy")
