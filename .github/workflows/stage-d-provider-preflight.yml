@@ -1,0 +1,64 @@
+name: NEXUS Stage D — Provider Metadata Drift Triage
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/stage-d-provider-preflight.yml'
+      - 'scripts/stage_d_provider_preflight.py'
+      - 'scripts/test_stage_d_provider_preflight.py'
+      - 'evidence/stage-d-provider-metadata-2026-11-17.json'
+      - 'docs/STAGE-D-PROVIDER-DRIFT-2026-11-17.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/stage-d-provider-preflight.yml'
+      - 'scripts/stage_d_provider_preflight.py'
+      - 'scripts/test_stage_d_provider_preflight.py'
+      - 'evidence/stage-d-provider-metadata-2026-11-17.json'
+      - 'docs/STAGE-D-PROVIDER-DRIFT-2026-11-17.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  provider-only-hold-triage:
+    name: detect source and staged config drift without granting release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact metadata and tests
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Reject forged operational or restore readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/stage_d_provider_preflight.py scripts/test_stage_d_provider_preflight.py
+          python3 scripts/test_stage_d_provider_preflight.py
+      - name: Confirm a dated provider-only HOLD without network calls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/stage_d_provider_preflight.py evidence/stage-d-provider-metadata-2026-11-17.json > "$RUNNER_TEMP/stage-d-provider-review.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          report=json.loads((Path(os.environ['RUNNER_TEMP'])/'stage-d-provider-review.json').read_text())
+          assert report['status']=='HOLD_INDEPENDENT_RUNTIME_AND_RECOVERY_EVIDENCE'
+          assert all(report['source_conflicts'].values())
+          assert report['staged_config_present']
+          assert report['staged_healthcheck_change']
+          assert report['provider_metadata_only']
+          assert report['reported_volume_mounted']
+          assert not report['live_http_identity_independently_verified']
+          assert not report['recovery_independently_verified']
+          assert not report['release_authorized']
+          assert not report['seal_granted']
+          assert not report['paid_mutation_authorized']
+          assert not report['production_mutation']
+          assert report['authority']=='none'
+          print('PASS: metadata drift diagnosis remains release HOLD; no provider action')
+          PY
