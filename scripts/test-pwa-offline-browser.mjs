@@ -68,6 +68,8 @@ async function retryJs(expression){
 const checks=[];
 // CDP document-only status records, never request bodies or user data.
 const observedDocuments=[];
+const documentFailures=[];
+const frameTransitions=[];
 try{
  const port=await poll(async()=>{
   try{const s=await readFile(path.join(profile,'DevToolsActivePort'),'utf8');
@@ -95,6 +97,15 @@ try{
     const d=msg.params.response||{};
     observedDocuments.push({public_root:d.url===ORIGIN,
       status:Number(d.status)||0,from_worker:d.fromServiceWorker===true});
+  }
+  if(msg.method==='Network.loadingFailed'&&msg.params?.type==='Document'){
+    const label=String(msg.params.errorText||'');
+    documentFailures.push({at_stage:stage,network_disconnected:label.includes('ERR_INTERNET_DISCONNECTED'),
+      aborted:label.includes('ERR_ABORTED'),other:!label.includes('ERR_INTERNET_DISCONNECTED')&&!label.includes('ERR_ABORTED')});
+  }
+  if(msg.method==='Page.frameNavigated'){
+    const url=String(msg.params?.frame?.url||'');
+    frameTransitions.push({at_stage:stage,known_origin:url===ORIGIN,browser_error:url.startsWith('chrome-error:')});
   }
   if(!p)return;pending.delete(msg.id);
   msg.error?p.reject(Error('cdp-failure')):p.resolve(msg.result);
@@ -184,6 +195,14 @@ try{
  process.stdout.write(JSON.stringify(report)+'\n');
  }
 }catch(error){
+ if(stage==='real-network-offline-corrupt-cache'){
+   let safeDom=null;
+   try{safeDom=await retryJs("(()=>({state:document.readyState,offline:navigator.onLine===false,has_app:!!document.getElementById('load-demo'),has_fallback:document.body?.textContent?.includes('NEXUS offline app shell is unavailable.')===true,worker_controls:!!navigator.serviceWorker?.controller,at_root:location.href==='https://nexus-pilot12-disposable.example/'||location.href==='http://127.0.0.1:8765/'}))()")}catch{}
+   process.stderr.write(JSON.stringify({event:'pilot12-corrupt-cache-diagnostic',
+     documents:observedDocuments.slice(-8),failures:documentFailures.slice(-8),
+     frames:frameTransitions.slice(-8),dom:safeDom,
+     page_content_logged:false,request_urls_logged:false,authority:'none'})+'\n');
+ }
  process.stderr.write(JSON.stringify({event:'pwa-browser-fail-closed',stage,
   reason:String(error?.message||'unknown').replace(/[^A-Za-z0-9-]/g,'').slice(0,90),
   production_verified:false,authority:'none'})+'\n');
