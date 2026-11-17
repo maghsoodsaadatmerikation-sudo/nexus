@@ -5,6 +5,7 @@ on:
     paths:
       - 'web/stage-d-mobile-readback.html'
       - 'scripts/test-stage-d-mobile-readback.mjs'
+      - 'scripts/test-stage-d-mobile-readback-browser.mjs'
       - 'docs/STAGE-D-MOBILE-READBACK.md'
       - '.github/workflows/stage-d-mobile-readback.yml'
   workflow_dispatch:
@@ -28,4 +29,13 @@ jobs:
       - name: Verify Node.js is available
         run: node --version
       - name: Run offline synthetic SHA-256 and no-network tests
-        run: node --test scripts/test-stage-d-mobile-readback.mjs
+        run: |
+          node --test scripts/test-stage-d-mobile-readback.mjs
+          node --check scripts/test-stage-d-mobile-readback-browser.mjs
+      - name: Exercise real Chromium on loopback with synthetic file inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_READBACK_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          test -n "$NEXUS_READBACK_CHROME"
+          node scripts/test-stage-d-mobile-readback-browser.mjs
