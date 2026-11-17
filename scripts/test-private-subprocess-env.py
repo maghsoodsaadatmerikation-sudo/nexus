@@ -40,6 +40,16 @@ class ScopedChildEnvironmentTests(unittest.TestCase):
         self.assertEqual(set(download_env) - set(help_env), set(RAILWAY_CREDENTIAL_KEYS))
         self.assertEqual(set(validator_env), set(help_env))
 
+    def test_termux_openssl_path_requires_explicit_offline_opt_in(self):
+        baseline = child_env(railway_download=False)
+        opted = child_env(railway_download=False, allow_termux_openssl=True)
+        auth = child_env(railway_download=True)
+        termux = "/data/data/com.termux/files/usr/bin"
+        self.assertNotIn(termux, baseline["PATH"])
+        self.assertNotIn(termux, auth["PATH"])
+        self.assertEqual(opted["PATH"], baseline["PATH"] + ":" + termux)
+        self.assertFalse("RAILWAY_TOKEN" in opted or "RAILWAY_API_TOKEN" in opted)
+
     def test_absent_railway_credentials_are_never_invented(self):
         with patch.dict(os.environ, {}, clear=True):
             allowed = child_env(railway_download=True)
