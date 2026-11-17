@@ -28,6 +28,18 @@
 .studio-focus-typing #studio-focus-nav{display:none}
 html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focus-nav{display:none}
 @media(max-width:780px){.studio-focus-mode main{padding:12px}.studio-focus-mode #messages{max-height:none}}
+
+/* Phase 43: one truthful primary chat action in focused view; archive stays explicit. */
+#studio-compose{display:none}
+.studio-focus-mode #studio-compose{display:block;border:1px solid #c9dbcf;border-radius:12px;background:#f6faf7;padding:14px;margin:10px 0 16px;max-width:100%}
+.studio-focus-mode #studio-compose-heading{display:block;margin-bottom:8px}
+.studio-compose-row{display:flex;gap:9px;align-items:end;flex-wrap:wrap}
+.studio-compose-row label{flex:1 1 190px;min-width:0}
+.studio-compose-row select{display:block;width:100%;min-height:48px}
+.studio-compose-row button{flex:1 1 125px;min-height:48px;margin:0}
+#studio-compose-privacy,#studio-compose-storage{margin:7px 0 0}
+.studio-focus-mode #guide,.studio-focus-mode #prepare,.studio-focus-mode #regenerate{display:none}
+@media(max-width:480px){.studio-compose-row label{flex:1 1 100%}.studio-compose-row button{flex:1 1 125px}}
 </style></head><body><main>
 <div class="row"><div><h1>NEXUS <span>Studio</span></h1><p class="help" data-t="subtitle">Your conversations, sources and drafts — under your control.</p></div><select id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option></select></div>
 <details><summary data-t="languagePacks">Interface language packs</summary><p class="help" data-t="languageHelp">Up to eight complete translation packs can be kept in this tab. They contain labels only, not your projects.</p><button id="language-template" class="secondary" data-t="languageTemplate">Download English label template</button><input id="language-file" type="file" accept="application/json" aria-label="Import interface language pack"></details>
@@ -70,4 +82,4 @@ html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focu
 <section class="card" id="canvas-card"><h2 data-t="canvas">Versioned writing canvas</h2><select id="documents" aria-label="Document"></select><input id="document-title" maxlength="120" data-placeholder="documentTitle" aria-label="Document title"><button id="new-document" data-t="newDocument">New document</button><textarea id="editor" maxlength="100000" dir="auto"></textarea><div class="row"><button id="save-version" data-t="saveVersion">Save new version</button><button id="export-document" data-t="exportDocument">Export Markdown</button><button id="delete-document" data-t="deleteDocument">Delete document</button></div><select id="versions" aria-label="Saved document version"></select><button id="load-version" class="secondary" data-t="loadVersion">Load version into editor</button><pre id="version-diff"></pre><p class="help" data-t="canvasHelp">Every saved version remains available, up to 30 per document. Text and code are edited as inert text and never executed.</p></section>
 </div></div><p class="help" data-t="boundary">NEXUS assists judgment. It cannot make a human decision or take external actions from a conversation.</p>
 </main><script>/*STUDIO_TABLE*/</script><script>/*STUDIO_ASTRONOMY_VENDOR*/</script><script>/*STUDIO_ASTROLOGY*/</script><script>/*STUDIO_SKY*/</script><script>/*STUDIO_CORE*/</script><script>/*STUDIO_LAB*/</script><script>/*STUDIO_TASKS*/</script><script>/*STUDIO_LOCALES*/
-/*STUDIO_APP*/</script><script>/*STUDIO_LAB_UI*/</script><script>/*STUDIO_TASKS_UI*/</script><script>/*STUDIO_ASTROLOGY_UI*/</script><script>/*STUDIO_SKY_UI*/</script><script>/*STUDIO_QUALITY_UI*/</script><script>/*STUDIO_FOCUS_UI*/</script></body></html>
+/*STUDIO_APP*/</script><script>/*STUDIO_LAB_UI*/</script><script>/*STUDIO_TASKS_UI*/</script><script>/*STUDIO_ASTROLOGY_UI*/</script><script>/*STUDIO_SKY_UI*/</script><script>/*STUDIO_QUALITY_UI*/</script><script>/*STUDIO_FOCUS_UI*/</script><script>/*STUDIO_COMPOSER_UI*/</script></body></html>
