@@ -17,6 +17,12 @@ and public-origin offline browser witness; their reports are uploaded by
 [NEXUS Public Studio Witness](https://github.com/maghsoodsaadatmerikation-sudo/nexus/actions/workflows/studio-static-public.yml).
 The existing `nexus-offline-pilot` service is not redeployed by this stage.
 
+For later source promotion, use the [Phase 46 static release preflight and rollback
+contract](STUDIO-STATIC-PROMOTION.md). It produces a separate exact-source public-only
+ZIP, an external SHA-256 manifest, synthetic Chromium evidence and a **read-only**
+report comparing the existing public Render origin. It never deploys automatically;
+public source drift is **not** a successful rollout.
+
 ## Use on a phone
 
 The reviewed Phase 42 interface defaults to a **chat-first focus view** on narrow
