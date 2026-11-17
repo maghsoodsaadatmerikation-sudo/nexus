@@ -79,7 +79,7 @@ jobs:
           assert r['authority']=='none' and not r['production_mutation']
           print('PASS: exact app HTML/manifest/worker bytes and identical decoded PNG icon pixels')
           PY
-      - name: Test real PUBLIC HTTPS PWA install and network outage in Chromium
+      - name: Test actual Service Worker target offline isolation and cached navigation in real public Chromium
         working-directory: ${{ runner.temp }}/nexus-live-pilot
         shell: bash
         run: |
@@ -101,7 +101,10 @@ jobs:
           assert len(reports)==4
           first=reports[0]
           for r in reports:
-              assert r['status']=='PASS' and len(r['checks'])==8
+              assert r['status']=='PASS' and len(r['checks'])==9
+              assert 'worker-target-network-baseline-then-offline-rejection' in r['checks']
+              assert r['worker_target_network_isolated'] is True
+              assert r['worker_online_baseline'] is True
               assert r['checks']==first['checks']
               assert r['source_sha256']==first['source_sha256']
               assert r['origin']=='public-render-pilot'
@@ -111,7 +114,7 @@ jobs:
               assert r['authenticated_rust_tested'] is False
               assert r['volume_recovery_verified'] is False
               assert r['production_mutation'] is False and r['authority']=='none'
-          print('PASS: four independent fresh-profile Chromium offline public-origin witnesses')
+          print('PASS: four fresh public Chromium profiles proved worker-target online baseline, offline network rejection and SW-served cached navigation')
           PY
       - name: Upload sanitized public-only receipts
         if: always()
