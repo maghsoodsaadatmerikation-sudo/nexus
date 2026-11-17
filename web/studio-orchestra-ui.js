@@ -18,6 +18,7 @@ function buttons(){
  $('orchestra-score').disabled=rendering||!score;
  $('orchestra-wav').disabled=rendering||!wav;
  $('orchestra-cancel').disabled=!rendering;
+ $('orchestra-dry-file').disabled=rendering;
  $('orchestra-dry-download').disabled=!dryBytes;
  $('orchestra-together').disabled=!wav||!dryBytes||rendering;
 }
@@ -127,6 +128,7 @@ $('orchestra-dry-clear').addEventListener('click',()=>{
                   'وکال اصلی از حافظهٔ این برگه آزاد شد.');
 });
 $('orchestra-dry-file').addEventListener('change',async()=>{
+ if(rendering)return;
  const file=$('orchestra-dry-file').files[0];clearDry();
  if(!file)return;
  const id=++ticket;
