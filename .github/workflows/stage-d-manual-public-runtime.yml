@@ -1,0 +1,100 @@
+name: NEXUS Stage D — Explicit One-GET Public Runtime Witness
+
+on:
+  workflow_dispatch:
+    inputs:
+      reported_railway_source_sha:
+        description: '40 lowercase hex SHA independently read from current Railway deployment metadata; NOT a release authorization'
+        required: true
+        type: string
+      probe_consent:
+        description: 'EXACT phrase below; a public GET may wake a sleeping service and incur provider usage'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  bounded-manual-runtime-observation:
+    name: one explicitly authorized GET; source metadata comparison only
+    # Never trigger automatically, and never run from unreviewed branches.
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require typed owner-aware consent BEFORE HTTP observation
+        shell: bash
+        env:
+          PROBE_CONSENT: ${{ inputs.probe_consent }}
+          DECLARED_SHA: ${{ inputs.reported_railway_source_sha }}
+        run: |
+          set -euo pipefail
+          test "$PROBE_CONSENT" = 'I_ACCEPT_ONE_PUBLIC_HTTPS_GET_MAY_WAKE_SERVICE'
+          [[ "$DECLARED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          echo 'Exact consent and source SHA syntax accepted; no release permission granted'
+
+      - name: Checkout reviewed observer from exact main SHA
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: observer
+
+      - name: Checkout declared historical deployed source as DATA ONLY
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ inputs.reported_railway_source_sha }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: candidate
+
+      - name: Exactly one bounded public GET; no redirects or credentials
+        shell: bash
+        env:
+          DECLARED_SHA: ${{ inputs.reported_railway_source_sha }}
+        run: |
+          set -euo pipefail
+          URL='https://nexus-stage-d-production.up.railway.app/v1/runtime-identity'
+          RESPONSE="$RUNNER_TEMP/stage-d-public-response.json"
+          REPORT="$RUNNER_TEMP/stage-d-runtime-witness.json"
+          echo 'One public GET was explicitly requested; provider usage is not guaranteed free'
+          # This call may wake an idle paid service; there is NO schedule or PR trigger.
+          # Do not follow Location headers, send auth, retry or print raw body.
+          curl_exit=0
+          status="$(curl --silent --show-error --max-time 12 --connect-timeout 6 \
+            --max-filesize 4096 --max-redirs 0 --proto '=https' \
+            --request GET --output "$RESPONSE" --write-out '%{http_code}' \
+            --header 'Accept: application/json' \
+            --user-agent 'NEXUS-explicit-readonly-runtime-witness/1' \
+            "$URL" 2>/dev/null)" || curl_exit=$?
+          test -f "$RESPONSE" || : > "$RESPONSE"
+          [[ "$status" =~ ^[0-9]{3}$ ]] || status=000
+          trap 'rm -f "$RESPONSE"' EXIT
+          SNAPSHOT_SHA="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("observer/evidence/stage-d-provider-metadata-2026-11-17.json")
+          print(json.loads(p.read_text())["railway_live_source"])
+          PY
+          )"
+          # Only observer code executes. Historical candidate files are HASHED,
+          # not sourced or run.
+          python3 observer/scripts/stage_d_manual_runtime_witness.py \
+            --candidate-root candidate \
+            --response-file "$RESPONSE" --http-status "$status" \
+            --curl-exit "$curl_exit" \
+            --deployed-source-sha "$DECLARED_SHA" \
+            --main-sha "$GITHUB_SHA" --snapshot-source-sha "$SNAPSHOT_SHA" \
+            --report "$REPORT"
+
+      - name: Upload sanitized comparison only, never public response body
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: stage-d-explicit-readonly-runtime-comparison
+          path: ${{ runner.temp }}/stage-d-runtime-witness.json
+          if-no-files-found: ignore
+          retention-days: 7
