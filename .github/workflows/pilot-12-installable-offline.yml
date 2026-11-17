@@ -119,6 +119,9 @@ jobs:
                   time.sleep(.1)
           PY
           node scripts/test-pwa-offline-browser.mjs > pilot-12-offline-witness.json
+          # Separate disposable real-Chromium profile: intentionally tamper
+          # actual CacheStorage bytes, go offline, require worker-origin 503.
+          NEXUS_PWA_TAMPER=true node scripts/test-pwa-offline-browser.mjs > pilot-12-real-corrupt-cache.json
           python3 - <<'PY'
           import json
           r=json.load(open('pilot-12-offline-witness.json'))
@@ -133,6 +136,21 @@ jobs:
           assert r['production_mutation'] is False and r['authority']=='none'
           print('PASS: real Chromium opt-in install, true offline reload, data isolation and uninstall')
           PY
+          python3 - <<'PY'
+          import json
+          r=json.load(open('pilot-12-real-corrupt-cache.json'))
+          assert r['schema']=='nexus.pilot-12.chrome-corrupt-cache.v1'
+          assert r['status']=='PASS' and len(r['checks'])==6
+          assert 'actual-chromium-cache-storage-tampered-with-no-user-data' in r['checks']
+          assert 'real-chromium-offline-navigation-refuses-corrupt-cache-as-503' in r['checks']
+          assert r['real_chromium'] is True and r['public_https_tested'] is False
+          assert r['real_android_hardware'] is False
+          assert r['cache_corruption_in_disposable_profile'] is True
+          assert r['attempted_runtime_execution_on_bad_shell'] is False
+          assert r['production_mutation'] is False and r['private_data_submitted'] is False
+          assert r['authority']=='none'
+          print('PASS: tampered actual Chromium CacheStorage serves worker-origin 503 offline')
+          PY
       - name: Upload sanitized offline install acceptance witness
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
@@ -141,5 +159,6 @@ jobs:
           path: |
             pilot-12-offline-witness.json
             pilot-12-worker-negative.json
+            pilot-12-real-corrupt-cache.json
           if-no-files-found: ignore
           retention-days: 14
