@@ -97,6 +97,12 @@ Independent public asset-byte checks and live-origin real Chromium offline
 acceptance must PASS separately; provider LIVE alone does not prove them.
 [Installation and security contract](docs/PILOT-12-INSTALLABLE-OFFLINE.md).
 
+**Android field acceptance is still pending.** A no-PC, no-account, offline-only
+[Android observation form and instructions](docs/PILOT-12-ANDROID-HARDWARE-WITNESS.md)
+can record a human's phone test without collecting personal data. Its generated
+JSON is explicitly a **self-report**, never independent hardware proof or a
+release authorization. [Open the phone form](web/pilot12-android-field-witness.html).
+
 ## Readable local decision report (Pilot 13)
 
 The public static app adds a Persian read-only report of recorded questions,
