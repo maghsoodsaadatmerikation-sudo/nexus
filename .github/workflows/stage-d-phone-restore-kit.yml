@@ -1,0 +1,89 @@
+name: NEXUS Stage D Offline Owner Quarantined Recovery Kit
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/build-stage-d-phone-restore-kit.py'
+      - 'scripts/test-stage-d-phone-restore-kit.py'
+      - 'scripts/restore-stage-d-encrypted-escrow.py'
+      - 'scripts/data-snapshot.py'
+      - 'scripts/private_subprocess_env.py'
+      - 'scripts/capture-railway-volume-readonly.py'
+      - 'scripts/stage-d-encrypted-escrow.py'
+      - 'scripts/test-private-subprocess-env.py'
+      - 'docs/keys/stage-d-recovery-public-cert.pem'
+      - 'docs/STAGE-D-PHONE-RESTORE.md'
+      - '.github/workflows/stage-d-phone-restore-kit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/build-stage-d-phone-restore-kit.py'
+      - 'scripts/test-stage-d-phone-restore-kit.py'
+      - 'scripts/restore-stage-d-encrypted-escrow.py'
+      - 'scripts/data-snapshot.py'
+      - 'scripts/private_subprocess_env.py'
+      - 'scripts/capture-railway-volume-readonly.py'
+      - 'scripts/stage-d-encrypted-escrow.py'
+      - 'scripts/test-private-subprocess-env.py'
+      - 'docs/keys/stage-d-recovery-public-cert.pem'
+      - 'docs/STAGE-D-PHONE-RESTORE.md'
+      - '.github/workflows/stage-d-phone-restore-kit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-recovery-kit:
+    name: stage-d-offline-owner-recovery-kit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact candidate without persistent credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Enforce no provisioned Railway secrets or real production files
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+      - name: Test credential-scope boundaries and real synthetic AES-GCM restore
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/build-stage-d-phone-restore-kit.py scripts/test-stage-d-phone-restore-kit.py scripts/restore-stage-d-encrypted-escrow.py scripts/private_subprocess_env.py
+          python3 scripts/test-private-subprocess-env.py
+          python3 scripts/test-stage-d-offline-recovery.py
+          python3 scripts/test-stage-d-phone-restore-kit.py
+      - name: Publish reproducible offline-only ZIP and independent hash file
+        shell: bash
+        run: |
+          set -euo pipefail
+          export OUT="$RUNNER_TEMP/nexus-stage-d-owner-offline-restore.zip"
+          python3 scripts/build-stage-d-phone-restore-kit.py --output "$OUT" --source-commit "$GITHUB_SHA"
+          python3 scripts/build-stage-d-phone-restore-kit.py --verify-zip "$OUT" --source-commit "$GITHUB_SHA"
+          sha256sum "$OUT" > "$OUT.sha256"
+          python3 - <<'PY'
+          import os,zipfile
+          p=os.environ["OUT"]
+          with zipfile.ZipFile(p) as z:
+              names=z.namelist()
+              assert len(names)==9, "exact allowlisted package contents only"
+              assert all("private-key.pem" not in n and ".cms" not in n and "capture-receipt.json" not in n for n in names)
+              shim=z.read("nexus-stage-d-offline-recovery/scripts/capture-railway-volume-readonly.py")
+              assert b"subprocess" not in shim and b"RAILWAY_TOKEN" not in shim
+          PY
+      - name: Retain public-only recovery kit; no private files
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-stage-d-owner-offline-restore
+          path: |
+            ${{ runner.temp }}/nexus-stage-d-owner-offline-restore.zip
+            ${{ runner.temp }}/nexus-stage-d-owner-offline-restore.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
