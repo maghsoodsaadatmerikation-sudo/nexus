@@ -88,7 +88,14 @@ def assessment(data, *, project_id, service_id, volume_id, expected_commit,
     require(fresh(data.get("captured_at_utc"), now), "snapshot_not_fresh")
     require(inventory.get("project", {}).get("id") == project_id, "inventory_project_mismatch")
     require(inventory.get("staged") is None, "environment_has_pending_changes")
-    require(inventory.get("environment", {}).get("name") == "production", "not_production_environment")
+    env = inventory.get("environment")
+    env = env if isinstance(env, dict) else {}
+    environment_id = env.get("id")
+    require(env.get("name") == "production", "not_production_environment")
+    require(isinstance(environment_id, str) and bool(environment_id), "environment_identity_missing")
+    require(service.get("environment", {}).get("id") == environment_id
+            and health.get("environment", {}).get("id") == environment_id,
+            "cross_environment_evidence_mismatch")
     require(service.get("service", {}).get("id") == service_id, "service_identity_mismatch")
     require(service.get("service", {}).get("state") == "live", "service_not_unchanged_live")
     require(service.get("staged") is None and not service.get("stagedChanges"), "service_has_pending_changes")
@@ -140,6 +147,8 @@ def assessment(data, *, project_id, service_id, volume_id, expected_commit,
         record = found[0]
         require(record.get("serviceId") == service_id and record.get("status") == "SUCCESS",
                 "deployment_not_success")
+        require(record.get("environmentId") == environment_id,
+                "deployment_environment_mismatch")
         meta = record.get("meta") if isinstance(record.get("meta"), dict) else {}
         require(meta.get("commitHash") == expected_commit, "deployed_commit_differs_from_candidate")
 
