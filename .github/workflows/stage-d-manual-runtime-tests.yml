@@ -1,0 +1,56 @@
+name: NEXUS Stage D — Manual Runtime Witness Safety Tests
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/stage-d-manual-runtime-tests.yml'
+      - '.github/workflows/stage-d-manual-public-runtime.yml'
+      - 'scripts/stage_d_manual_runtime_witness.py'
+      - 'scripts/test_stage_d_manual_runtime_witness.py'
+      - 'docs/STAGE-D-MANUAL-RUNTIME-WITNESS.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/stage-d-manual-runtime-tests.yml'
+      - '.github/workflows/stage-d-manual-public-runtime.yml'
+      - 'scripts/stage_d_manual_runtime_witness.py'
+      - 'scripts/test_stage_d_manual_runtime_witness.py'
+      - 'docs/STAGE-D-MANUAL-RUNTIME-WITNESS.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-only-public-identity-gate:
+    name: reject forged public runtime identity without waking Railway
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact reviewed candidate without credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Test manual protocol and source digest consistency offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/stage_d_manual_runtime_witness.py scripts/test_stage_d_manual_runtime_witness.py
+          python3 scripts/test_stage_d_manual_runtime_witness.py
+          echo 'PASS: synthetic-only runtime identity contract; no public GET performed'
+      - name: Confirm manual-only dispatch and non-authorizing status
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          y=Path('.github/workflows/stage-d-manual-public-runtime.yml').read_text()
+          p=Path('scripts/stage_d_manual_runtime_witness.py').read_text()
+          assert "workflow_dispatch:" in y
+          assert "I_ACCEPT_ONE_PUBLIC_HTTPS_GET_MAY_WAKE_SERVICE" in y
+          assert "github.ref == 'refs/heads/main'" in y
+          assert not any('\n  '+t+':' in y for t in ('push','schedule','pull_request','workflow_run'))
+          assert "production_release_authorized" in p and '"seal_granted": False' in p
+          assert "HTTP_METADATA_MATCH_ONLY" in p and "private_storage_or_restore_verified" in p
+          print('PASS: gated read-only probe requires operator consent; no release authority')
+          PY
