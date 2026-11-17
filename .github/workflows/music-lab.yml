@@ -12,6 +12,7 @@ on:
       - 'public/studio/index.html'
       - 'public/studio/service-worker.js'
       - 'scripts/test-studio-music.mjs'
+      - 'scripts/test-studio-music-browser.py'
       - 'scripts/build-studio.py'
       - 'docs/NEXUS-MUSIC-LAB.md'
   push:
@@ -55,6 +56,11 @@ jobs:
           set -euo pipefail
           python3 scripts/build-studio.py --check
           python3 scripts/build-studio-static.py --check
+      - name: Real narrow Chromium generated music and local WAV playback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/test-studio-music-browser.py
       - name: Real Chromium offline Studio UI regression
         shell: bash
         run: |
