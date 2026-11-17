@@ -67,6 +67,25 @@ human singing synthesis in this stage. No hosting/production deployment is
 implied by source changes. [Music Lab features, current limits and staged
 audio-quality roadmap](docs/NEXUS-MUSIC-LAB.md).
 
+## Orchestra & Vocal Lab — local scoring and synthetic voice
+
+The companion **Orchestra / آواز** panel in NEXUS Studio now accepts a
+limited, *inspectable* English/Persian music-command grammar, then generates
+multi-part original **MusicXML 4.0, MIDI and stereo WAV** for Western
+orchestral instruments, electronic opera/pop/rap/hypnotic/chant vowel
+phrases, a 3-part electronic choir, original generic effects and
+animal-inspired electronic cues. Unrecognized or contradictory prompt
+terms block generation rather than being guessed. It does not sing
+intelligible words or sound like a real human opera or rap artist.
+
+A private, opt-in original **PCM16 WAV vocal** can be auditioned and
+downloaded *byte-for-byte unchanged*: no pitch or formant modifications,
+cloud uploads or automatic project storage. Playing it beside a synthesized
+backing is approximate dual playback, not a mixed export. Actual real
+singers, lifelike orchestra/animal recordings, professional vocal synthesis
+and mastering remain future engineering work.
+[Native capabilities, accepted prompt examples, clear limitations and privacy](docs/NEXUS-ORCHESTRA-VOCAL-LAB.md).
+
 ## Run Studio locally (Linux, one command)
 
 With Python 3.13 and `uv` installed, run from a complete checkout:
