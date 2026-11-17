@@ -1469,7 +1469,7 @@ function layout(){
  for(const button of toolsGrid.querySelectorAll('button')){
   button.setAttribute('aria-current',focused&&!toolsOpen&&button.dataset.panel===selected?'page':'false');
  }
- refreshLabels();refreshOnboarding();
+ refreshLabels();refreshOnboarding();syncTyping();requestAnimationFrame(syncTyping);
 }
 function moveTo(element){
  if(!focused)return;
@@ -1530,13 +1530,13 @@ document.addEventListener('nexus-studio-open-chat',()=>openPanel('conversation-c
 document.addEventListener('keydown',event=>{
  if(event.key==='Escape'&&focused&&toolsOpen){event.preventDefault();openPanel('conversation-card')}
 });
-document.addEventListener('focusin',event=>{
- const el=event.target;
- if(el?.matches?.('input:not([type="checkbox"]):not([type="radio"]),textarea,select'))document.documentElement.classList.add('studio-focus-typing');
-});
-document.addEventListener('focusout',()=>queueMicrotask(()=>{
- if(!document.activeElement?.matches?.('input:not([type="checkbox"]):not([type="radio"]),textarea,select'))document.documentElement.classList.remove('studio-focus-typing');
-}));
+const textControls='input:not([type="checkbox"]):not([type="radio"]),textarea,select';
+function syncTyping(){
+ const active=document.activeElement;
+ document.documentElement.classList.toggle('studio-focus-typing',Boolean(active?.matches?.(textControls)));
+}
+document.addEventListener('focusin',syncTyping);
+document.addEventListener('focusout',()=>queueMicrotask(syncTyping));
 window.NexusStudioFocus={openPanel,openTools,setFocus,isFocused:()=>focused,active:()=>toolsOpen?'tools':selected};
 layout();
 })();
