@@ -191,9 +191,17 @@ offline_code=""" const offlineParams={offline:true,latency:0,downloadThroughput:
 replace_once(offline_anchor,offline_code,"both-cdp-targets-offline")
 
 doc_anchor=""" checks.push('real-chrome-network-offline-reload-served-cached-app');"""
-doc_code=""" assert(navTrace.responses.some(r=>r.stage==='real-network-offline'&&
-     r.app_origin&&r.from_service_worker&&r.status===200&&r.html),
-   'offline-navigation-not-served-by-isolated-worker');
+doc_code=""" // Chromium can omit Network.responseReceived for a SW CacheStorage
+ // navigation while still exposing Resource Timing's workerStart. Require
+ // the browser's *real navigation* workerStart and an exact controller;
+ // if a CDP Document event exists, it must be an approved worker HTML 200.
+ const navigation=await retryJs("(()=>{const n=performance.getEntriesByType('navigation')[0];return {worker_started:Number(n?.workerStart)>0,controlled:navigator.serviceWorker?.controller?.scriptURL===location.origin+'/service-worker.js',status:Number(n?.responseStatus)||0}})()");
+ assert(navigation?.worker_started===true&&navigation?.controlled===true,
+   'offline-navigation-worker-timing-not-confirmed');
+ const offlineDocuments=navTrace.responses.filter(r=>
+   r.stage==='real-network-offline'&&r.app_origin);
+ assert(offlineDocuments.every(r=>r.from_service_worker&&r.status===200&&r.html),
+   'offline-navigation-cdp-document-contradicts-worker-timing');
  workerProof.document_from_worker=true;
  checks.push('real-chrome-network-offline-reload-served-cached-app');
  checks.push('worker-target-network-baseline-then-offline-rejection');"""
