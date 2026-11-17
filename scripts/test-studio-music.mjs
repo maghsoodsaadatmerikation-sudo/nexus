@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import '../web/studio-music-audio.js';
 import '../web/studio-music.js';
 const M=globalThis.NexusMusic;
 let checks=0;
