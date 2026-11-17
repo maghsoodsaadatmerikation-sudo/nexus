@@ -67,6 +67,29 @@ async function retryJs(expression){
 }
 const checks=[];
 // CDP document-only status records, never request bodies or user data.
+// A page-target CDP offline flag does not necessarily stop the Service
+// Worker process from fetching the origin. In the disposable localhost CI
+// fixture, terminate the independent test HTTP server before navigation and
+// confirm a separate Node fetch cannot reach it. No production host access.
+const hardCut=process.env.NEXUS_PWA_HARD_CUT==='true';
+async function cutLocalTestOrigin(){
+ if(PUBLIC_MODE||process.env.GITHUB_ACTIONS!=='true'||
+    ORIGIN!=='http://127.0.0.1:8765/'||
+    !/^[1-9][0-9]*$/.test(process.env.NEXUS_PWA_SERVER_PID||''))
+   throw Error('hard-cut-requires-ephemeral-local-ci-http-server');
+ const pid=Number(process.env.NEXUS_PWA_SERVER_PID);
+ assert(pid!==process.pid&&pid!==child.pid&&Number.isSafeInteger(pid),
+   'unsafe-server-process-id');
+ process.kill(pid,'SIGTERM');
+ await poll(async()=>{
+   try{
+     await fetch(ORIGIN,{signal:AbortSignal.timeout(550)});
+     return false;
+   }catch(error){
+     return error instanceof TypeError;
+   }
+ },8000,'test-origin-still-network-accessible');
+}
 const observedDocuments=[];
 const documentFailures=[];
 const frameTransitions=[];
@@ -142,6 +165,7 @@ try{
      'chromium-tampered-cache-mutation-not-persisted');
    checks.push('actual-chromium-cache-storage-tampered-with-no-user-data');
    stage='real-network-offline-corrupt-cache';
+   if(hardCut)await cutLocalTestOrigin();
    await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,
      downloadThroughput:0,uploadThroughput:0});
    await rpc('Page.reload',{ignoreCache:true});
@@ -158,12 +182,13 @@ try{
    process.stdout.write(JSON.stringify({schema:'nexus.pilot-12.chrome-corrupt-cache.v1',
      status:'PASS',checks,source_sha256:sourceDigest,
      real_chromium:true,public_https_tested:false,real_android_hardware:false,
-     cache_corruption_in_disposable_profile:true,
+     cache_corruption_in_disposable_profile:true,test_origin_unreachable:hardCut,
      attempted_runtime_execution_on_bad_shell:false,production_mutation:false,
      private_data_submitted:false,authority:'none'})+'\n');
  } else {
  await js("window.__nexusBeforeOfflineReload=true;true");
  stage='real-network-offline';
+ if(hardCut)await cutLocalTestOrigin();
  await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
  await rpc('Page.reload',{ignoreCache:true});
  await poll(()=>retryJs("!window.__nexusBeforeOfflineReload&&document.readyState==='complete'&&document.getElementById('offline-install')&&navigator.onLine===false"),15000,'offline-navigation-not-served');
@@ -189,7 +214,7 @@ try{
    checks,source_sha256:sourceDigest,source_bytes:sourceHtml.length,
    origin:PUBLIC_MODE?'public-render-pilot':'local-loopback-test-only',
    browser:'headless-chromium',
-   actual_offline_navigation:true,real_android_hardware:false,
+   actual_offline_navigation:true,test_origin_unreachable:hardCut,real_android_hardware:false,
    private_data_submitted:false,authenticated_rust_tested:false,
    volume_recovery_verified:false,production_mutation:false,authority:'none'};
  process.stdout.write(JSON.stringify(report)+'\n');
