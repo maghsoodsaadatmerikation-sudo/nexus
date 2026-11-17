@@ -1,0 +1,59 @@
+name: NEXUS Pilot 12 — Android Self-Report Safety Contract
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pilot-12-android-evidence-kit.yml'
+      - 'scripts/pilot12_android_receipt.py'
+      - 'scripts/test_pilot12_android_receipt.py'
+      - 'web/pilot12-android-field-witness.html'
+      - 'docs/PILOT-12-ANDROID-HARDWARE-WITNESS.md'
+      - 'web/offline-pilot.html'
+      - 'public/service-worker.js'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pilot-12-android-evidence-kit.yml'
+      - 'scripts/pilot12_android_receipt.py'
+      - 'scripts/test_pilot12_android_receipt.py'
+      - 'web/pilot12-android-field-witness.html'
+      - 'docs/PILOT-12-ANDROID-HARDWARE-WITNESS.md'
+      - 'web/offline-pilot.html'
+      - 'public/service-worker.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bounded-device-evidence-schema:
+    name: reject forged device/release claims and unsafe report fields
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout reviewed source without stored credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Verify pure offline evidence implementation and browser form
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/pilot12_android_receipt.py scripts/test_pilot12_android_receipt.py
+          python3 scripts/test_pilot12_android_receipt.py
+          echo 'PASS: no-content Android self-report schema; hardware remains unverified'
+      - name: Explicit non-acceptance boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('scripts/pilot12_android_receipt.py').read_text()
+          form=Path('web/pilot12-android-field-witness.html').read_text()
+          assert '"PENDING_INDEPENDENT_REVIEW"' in source
+          assert '"real_android_hardware_independently_verified": False' in source
+          assert "independent_hardware_verified:false" in form
+          assert "production_release_authorized:false" in form
+          assert "connect-src 'none'" in form
+          print('PASS: CI checks the report validator, NOT a real Android device or public release')
+          PY
