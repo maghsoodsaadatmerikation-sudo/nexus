@@ -133,6 +133,26 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertEqual([x["name"] for x in result["assets"] if x["status"] == "UNREACHABLE"],
                          ["service-worker.js"])
 
+    def test_forged_external_observation_manifest_blocks_before_public_fetch(self):
+        original = self.build()
+        attempts = []
+        def trap(name):
+            attempts.append(name)
+            return b"UNTRUSTED_NETWORK"
+        forged = json.loads(json.dumps(original))
+        forged["assets"]["index.html"]["sha256"] = "a" * 64
+        with self.assertRaises(ValueError):
+            gate.observe_public(forged, trap)
+        forged = json.loads(json.dumps(original))
+        forged["origin_to_compare"] = "https://unreviewed.invalid/"
+        with self.assertRaises(ValueError):
+            gate.observe_public(forged, trap)
+        forged = json.loads(json.dumps(original))
+        forged["production_promotion_authorized"] = True
+        with self.assertRaises(ValueError):
+            gate.observe_public(forged, trap)
+        self.assertEqual(attempts, [], "never query public network with forged manifest")
+
     def test_public_live_fetch_is_fixed_origin_allowlist(self):
         with self.assertRaises(ValueError):
             gate.live_fetch("../secrets")
