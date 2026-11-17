@@ -28,6 +28,7 @@ function stageChatContext(label,material){
  }
  chatAttachments.push({id:S.uid(),name:label,text:material});
  stop();renderChatAttachments();status('chatAttachmentAdded');
+ document.dispatchEvent(new CustomEvent('nexus-studio-open-chat'));
  $('conversation-card').scrollIntoView({block:'start',behavior:'smooth'});
  return true;
 }

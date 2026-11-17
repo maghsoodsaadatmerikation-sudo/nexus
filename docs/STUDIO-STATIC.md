@@ -19,6 +19,17 @@ The existing `nexus-offline-pilot` service is not redeployed by this stage.
 
 ## Use on a phone
 
+The reviewed Phase 42 interface defaults to a **chat-first focus view** on narrow
+screens: bottom tabs for **Chat / Projects / Tools / Save**, a complete tool
+chooser, and an explicit way to restore the original all-sections layout. The
+empty conversation has first-project guidance; source/tool handoffs bring the
+chat back into view. Desktop retains the familiar full layout.
+[Chat-first accessibility and security contract](STUDIO-CHAT-FIRST-UX.md).
+This describes reviewed source, **not a claim that Render has already deployed
+Phase 42**; AutoDeploy remains disabled until a separately authorized source
+promotion and independent public browser/asset witness.
+
+
 Open the Studio address in a supported browser. Create a project and a new
 conversation. The local reflection guide works without a model provider.
 The page explicitly says that it hosts no model; checking the default model
