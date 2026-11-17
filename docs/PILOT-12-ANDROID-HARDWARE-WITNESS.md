@@ -14,6 +14,7 @@ new hosting, network analytics or private workspace files.
 - [Open/download the one-file phone form](../web/pilot12-android-field-witness.html).
 - [Strict offline JSON receipt validator](../scripts/pilot12_android_receipt.py).
 - [Negative and baseline checks](../scripts/test_pilot12_android_receipt.py).
+- [Synthetic Chromium form-interaction test](../scripts/test-pilot12-android-form-browser.mjs) — exercises local file UI only; **not a phone**.
 
 The source hash shown on the form is a **pinned public CI reference**, not a
 digest independently measured on the phone. The form runs in its own document;
@@ -81,6 +82,7 @@ Run negative tests with:
 
 ```bash
 python3 scripts/test_pilot12_android_receipt.py
+NEXUS_ANDROID_FORM_CHROME=/path/to/chromium node scripts/test-pilot12-android-form-browser.mjs
 ```
 
 A **true independent hardware gate** still needs evidence collected or
