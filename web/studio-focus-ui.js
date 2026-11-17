@@ -7,6 +7,7 @@ const targets=[
   ['vault-card','save','Save','ذخیره']
 ];
 const tools=[
+  ['music-card','Music Lab','موسیقی'],
   ['data-card','Data analysis','تحلیل داده'],
   ['research-card','Research','پژوهش'],
   ['code-card','Code','کدنویسی'],
