@@ -32,6 +32,15 @@ after="""await poll(()=>retryJs("document.readyState==='complete' && document.ge
 if text.count(before)!=1 or after in text:
     raise SystemExit("BLOCKED: pinned real-browser witness predicate changed")
 text=text.replace(before,after)
+# JS Runtime.evaluate previously threw for the demo, obscuring whether
+# the installed public page failed to initialize or a real user action was
+# refused. Keep the exact demo click and assertion; catch only to report
+# safe technical flags (never page text).
+demo_before="""const offline=await js("(()=>{document.getElementById('load-demo').click();return {question:document.getElementById('question-view').textContent,claims:document.getElementById('claims').querySelectorAll('.entry').length,options:document.getElementById('alternatives').querySelectorAll('.entry').length,decision:document.getElementById('decision-view').textContent,net:navigator.onLine}})()");"""
+demo_after="""const offline=await js("(()=>{try{document.getElementById('load-demo').click();return {question:document.getElementById('question-view').textContent,claims:document.getElementById('claims').querySelectorAll('.entry').length,options:document.getElementById('alternatives').querySelectorAll('.entry').length,decision:document.getElementById('decision-view').textContent,net:navigator.onLine,client_error:'none',language:document.documentElement.lang}}catch(error){return {question:'',claims:0,options:0,decision:'',net:navigator.onLine,client_error:error?.name||'unknown',language:document.documentElement.lang}}})()");"""
+if text.count(demo_before)!=1 or demo_after in text:
+    raise SystemExit("BLOCKED: pinned demo click contract changed")
+text=text.replace(demo_before,demo_after)
 # Sanitized diagnostics on failure. Never print user content, synthetic page
 # text, network tokens or private file content, even on a public CI runner.
 before_assert=""" assert(offline.question.includes('ساختگی')&&offline.claims===2&&offline.options===2&&
@@ -40,11 +49,13 @@ before_assert=""" assert(offline.question.includes('ساختگی')&&offline.clai
 after_assert=""" const offlineContract={fictional_question:offline.question.includes('ساختگی'),
    two_claims:offline.claims===2,two_options:offline.options===2,
    no_human_judgment:offline.decision.includes('هیچ تصمیم انسانی'),
-   browser_offline:offline.net===false};
- if(Object.values(offlineContract).some(value=>!value))
+   browser_offline:offline.net===false,
+   client_error:offline.client_error, language:offline.language};
+ if(Object.values(offlineContract).some((value,i)=>i<5&&!value)||offline.client_error!=='none')
    process.stderr.write(JSON.stringify({event:'pilot12-public-offline-diagnostic',
      ...offlineContract})+'\\n');
- assert(Object.values(offlineContract).every(Boolean),
+ assert(offlineContract.fictional_question&&offlineContract.two_claims&&offlineContract.two_options&&
+   offlineContract.no_human_judgment&&offlineContract.browser_offline&&offline.client_error==='none',
  'offline-content-unavailable-or-created-a-judgment');"""
 if text.count(before_assert)!=1 or after_assert in text:
     raise SystemExit("BLOCKED: historical offline acceptance shape changed")
@@ -54,7 +65,7 @@ print(json.dumps({'witness_source':'pinned-deployed-baseline',
   'witness_patch':'wait-for-document-complete-and-boolean-only-failure-diagnostic',
   'witness_sha256':hashlib.sha256(text.encode()).hexdigest(),
   'published_application_bytes_modified':False,
-  'acceptance_checks_relaxed':False, 'authority':'none'},sort_keys=True))
+  'acceptance_checks_relaxed':False, 'authority':'none'},sort_keys=True), file=sys.stderr)
 PY
 python3 - "$baseline" "$target" <<'PY'
 import hashlib,json,sys
