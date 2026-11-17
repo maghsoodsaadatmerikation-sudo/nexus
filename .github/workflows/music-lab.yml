@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/music-lab.yml'
       - 'web/studio-music.js'
+      - 'web/studio-music-audio.js'
       - 'web/studio-music-ui.js'
       - 'web/studio-shell.html'
       - 'web/studio-focus-ui.js'
@@ -12,6 +13,7 @@ on:
       - 'public/studio/index.html'
       - 'public/studio/service-worker.js'
       - 'scripts/test-studio-music.mjs'
+      - 'scripts/test-studio-music-audio.mjs'
       - 'scripts/test-studio-music-browser.py'
       - 'scripts/build-studio.py'
       - 'docs/NEXUS-MUSIC-LAB.md'
@@ -20,6 +22,7 @@ on:
     paths:
       - '.github/workflows/music-lab.yml'
       - 'web/studio-music.js'
+      - 'web/studio-music-audio.js'
       - 'web/studio-music-ui.js'
       - 'web/studio-shell.html'
       - 'web/studio-focus-ui.js'
@@ -27,6 +30,7 @@ on:
       - 'public/studio/index.html'
       - 'public/studio/service-worker.js'
       - 'scripts/test-studio-music.mjs'
+      - 'scripts/test-studio-music-audio.mjs'
       - 'scripts/build-studio.py'
       - 'docs/NEXUS-MUSIC-LAB.md'
   workflow_dispatch:
@@ -47,9 +51,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          node --check web/studio-music-audio.js
           node --check web/studio-music.js
           node --check web/studio-music-ui.js
           node scripts/test-studio-music.mjs
+          node scripts/test-studio-music-audio.mjs
       - name: Deterministic Studio builds including the installed offline PWA
         shell: bash
         run: |
