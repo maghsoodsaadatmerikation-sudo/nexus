@@ -237,7 +237,7 @@ replace_exact(" if(['online-bootstrap','real-network-offline'].includes(stage))\
    let onlineBoot=null;
    try{onlineBoot=await retryJs("(async()=>{const r=await navigator.serviceWorker?.getRegistration('/');const names=await caches.keys();return {document_ready:document.readyState==='complete',install_button:!!document.getElementById('offline-install'),button_disabled:document.getElementById('offline-install')?.disabled===true,sw_api:'serviceWorker' in navigator,cache_api:'caches' in window,secure:isSecureContext,expected_origin:location.origin===new URL('https://nexus-offline-pilot.onrender.com').origin,installation_ready:document.getElementById('offline-install-state')?.textContent?.includes('آماده است')===true,registration:!!r,active:r?.active?.state==='activated',waiting:!!r?.waiting,installing:!!r?.installing,controlled:!!navigator.serviceWorker?.controller,expected_worker:r?.active?.scriptURL===location.origin+'/service-worker.js',shell_cache:names.some(n=>n.startsWith('nexus-app-shell-v12-'))}})()")}catch{}
    process.stderr.write(JSON.stringify({event:'pilot12-online-worker-bootstrap',
-     state:onlineBoot,contains_page_content:false,authority:'none'})+'\\n');
+     state:onlineBoot,worker_events:navTrace.workers.slice(-8),worker_error_count:navTrace.worker_errors.length,contains_page_content:false,authority:'none'})+'\\n');
  }
  if(['online-bootstrap','real-network-offline'].includes(stage))
    process.stderr.write(JSON.stringify({event:'pilot12-proxy-diagnostic',...proxy.stats(),authority:'none'})+'\\n');""",
