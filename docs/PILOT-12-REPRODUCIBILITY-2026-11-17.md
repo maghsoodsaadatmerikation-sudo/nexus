@@ -23,7 +23,9 @@ The historical public application / manifest / worker bytes stay sourced from th
 1. The real offline document reports `readyState === complete`, its expected UI nodes are present, and the reviewed schema marker is in the DOM.
 2. Browser is actually offline, and `navigator.serviceWorker.controller.scriptURL` matches the current origin's exact worker.
 3. The full document URL matches the public origin, and two observations 300 ms apart share the same document `performance.timeOrigin`. A changing document, error page, absent controller or slow boot cannot pass.
-4. The existing two separate fresh Chromium profiles, exact public asset byte checks, and unmodified negative assertions remain required.
+4. The workflow now requires **four** independently created Chromium profiles against real public HTTPS, all preserving the eight original assertions and exactly observed immutable assets. Any single failure aborts the gate; it cannot be retried away to manufacture green.
+
+On a public-offline failure, the pinned browser witness also emits a capped, content-free CDP trace: whether a navigated frame matched the exact known origin, whether Chromium visited a browser-error page, whether the Document response was HTTP 200 HTML served by a Service Worker, and whether a Document load was aborted/disconnected. It never prints full URLs, page text, request headers, tokens, workspace content or private files. This is diagnostic evidence, not an alternate PASS route.
 
 This change **cannot repair a service worker or CDN failure**. It prevents a misleading success based on a transient ready-state and makes a persistent failure fail closed, closer to its cause. It does not alter deployed HTML, cache data, Render settings, keys, user content, or Railway storage.
 
@@ -31,5 +33,5 @@ This change **cannot repair a service worker or CDN failure**. It prevents a mis
 
 - GitHub PR tests must verify the pinned baseline, script syntax and candidate tests.
 - Repeat the real-public observer across fresh Chromium profiles and separate runs. Any intermittent failure keeps Issue #260 open.
-- If failure persists, instrument only public-safe CDP navigation/worker lifecycle signals and identify the response status and controlling worker; never loosen the production assertions to force green.
+- If failure persists, inspect the bounded CDP navigation response/failure trace, compare all fresh profiles, and distinguish Chrome network emulation from a genuine worker navigation failure; never loosen the published application or the production assertions to force green.
 - Any eventual deployment correction requires reviewed source, explicit Render promotion and independent re-observation. No provider write is authorized by this PR.
