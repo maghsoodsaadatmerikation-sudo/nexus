@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; connect-src 'self'; img-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<title>NEXUS Studio · Phone Readiness</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,-apple-system,sans-serif;color:#19392f;background:#f3f7f4}
+*{box-sizing:border-box}body{max-width:760px;margin:auto;padding:20px 16px 70px;line-height:1.5}
+header{padding:12px 0 20px}h1{font-size:1.65rem;margin:0 0 8px}h2{font-size:1.15rem;margin:18px 0 8px}
+p{margin:8px 0 14px}.sub{color:#465d54}.card{border:1px solid #c7d8cc;background:#fff;border-radius:14px;padding:16px;margin:12px 0}
+button,a.action{display:inline-flex;justify-content:center;align-items:center;min-height:48px;border-radius:10px;padding:10px 14px;margin:4px 6px 4px 0;font:inherit;font-weight:650;border:1px solid #22644b;background:#22644b;color:#fff;text-decoration:none;cursor:pointer}
+button.secondary,a.action.secondary{background:#fff;color:#16543a}button:disabled{opacity:.5;cursor:default}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #ad742d;outline-offset:2px}
+.item{border-top:1px solid #e1e8e3;padding:10px 0;display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.status{font-weight:700;white-space:nowrap}.ok{color:#15603f}.wait{color:#8b5c11}.bad{color:#9a3030}
+small{color:#51685e}.hide{display:none}label{display:block;margin:12px 0}
+input[type=checkbox]{width:22px;height:22px;vertical-align:middle;margin-inline-end:8px}
+[dir=rtl] body{text-align:right}
+@media(max-width:450px){button,a.action{width:100%;margin:5px 0}.item{display:block}.status{display:inline-block;margin-top:4px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<header>
+<h1 id="heading">NEXUS Studio · Phone Readiness</h1>
+<p id="intro" class="sub">Verify this phone's browser and exact public app files without opening chats, collecting personal data, or connecting to any model provider.</p>
+<button class="secondary" id="language" type="button" aria-label="Switch language">فارسی / English</button>
+<a class="action secondary" href="./" id="home">Open Studio</a>
+</header>
+<section class="card">
+<h2 id="how-title">1. Check this phone</h2>
+<p id="how">Run this page while the private Termux server is running. This checks the current browser and downloaded app shell; it does not write into your encrypted workspace.</p>
+<button id="run" type="button">Run private checks</button>
+<p id="result" role="status" aria-live="polite">Not checked</p>
+<div id="checks" aria-label="Test results"></div>
+</section>
+<section class="card">
+<h2 id="manual-title">2. Optional manual observations</h2>
+<p id="manual">These checkboxes are owner-reported observations, NOT independently verified hardware proof. Do not test using valuable unsaved projects.</p>
+<label><input type="checkbox" id="manual-offline"><span id="manual-offline-label">I stopped the Termux HTTP server, disconnected internet, then reopened Studio from an installed app entry and actually saw the interface.</span></label>
+<label><input type="checkbox" id="manual-vault"><span id="manual-vault-label">I created an entirely synthetic project, explicitly saved it encrypted, reloaded and reopened it with my passphrase.</span></label>
+</section>
+<section class="card">
+<h2 id="report-title">3. Export sanitized result</h2>
+<p id="report-help">The JSON contains only check outcomes, a reviewed public-code hash, and your optional manual checkmarks. It never includes messages, passphrases, files, browser fingerprint, phone model, IP or exact URL. Nothing is uploaded.</p>
+<button id="download" type="button" disabled>Save JSON locally</button>
+<button id="copy" class="secondary" type="button" disabled>Copy JSON</button>
+<p id="export-state" role="status" aria-live="polite"></p>
+</section>
+<footer><small id="footer">A successful browser readiness check does NOT prove a live generative model, private backup recovery, Android compatibility across devices, or Render/Railway production readiness. Keep your own encrypted backup.</small></footer>
+<script>
+(()=>{'use strict';
+const EXPECTED_INDEX='__APP_SHA256__';
+const EXPECTED_WORKER='__SW_SHA256__';
+const SCHEMA='nexus.studio.owner-phone-field.v1';
+const $=id=>document.getElementById(id);
+let last=null,lang='en',busy=false;
+const messages={
+ en:{
+  heading:'NEXUS Studio · Phone Readiness',
+  intro:"Verify this phone's browser and exact public app files without opening chats, collecting personal data, or connecting to any model provider.",
+  home:'Open Studio',howTitle:'1. Check this phone',
+  how:'Run this page while the private Termux server is running. This checks the current browser and downloaded app shell; it does not write into your encrypted workspace.',
+  run:'Run private checks',running:'Checking public code and browser features…',notChecked:'Not checked',
+  ready:'App files verified. Offline cache still needs preparation in Studio.',
+  prepared:'Public app and offline cache verified. Real disconnected reopening is not automatically proven.',
+  blocked:'One or more checks blocked. Do not claim the app is ready.',
+  manualTitle:'2. Optional manual observations',
+  manual:'These checkboxes are owner-reported observations, NOT independently verified hardware proof. Do not test using valuable unsaved projects.',
+  offline:'I stopped the Termux HTTP server, disconnected internet, then reopened Studio from an installed app entry and actually saw the interface.',
+  vault:'I created an entirely synthetic project, explicitly saved it encrypted, reloaded and reopened it with my passphrase.',
+  reportTitle:'3. Export sanitized result',
+  reportHelp:'The JSON contains only check outcomes, a reviewed public-code hash, and your optional manual checkmarks. It never includes messages, passphrases, files, browser fingerprint, phone model, IP or exact URL. Nothing is uploaded.',
+  download:'Save JSON locally',copy:'Copy JSON',saved:'Saved to your phone only.',copied:'Copied locally.',copyFail:'Copy unavailable in this browser. Use Save JSON.',
+  footer:'A successful browser readiness check does NOT prove a live generative model, private backup recovery, Android compatibility across devices, or Render/Railway production readiness. Keep your own encrypted backup.',
+  tests:{loopback:'Local-only browser origin',secure:'Secure browser context',crypto:'SHA-256 browser crypto',server:'Exact reviewed HTML served',workerCode:'Exact reviewed service worker served',sw:'Service worker API available',controller:'Offline service worker installed and controlling page',cache:'App shell present in verified code-only cache'},
+  status:{PASS:'PASS',BLOCKED:'BLOCKED',NOT_PREPARED:'NOT PREPARED'}
+ },
+ fa:{
+  heading:'نکسوس استودیو · بررسی آمادگی گوشی',
+  intro:'بدون بازکردن گفتگوها، جمع‌آوری اطلاعات شخصی یا اتصال به مدل هوش مصنوعی، مرورگر و فایل‌های عمومی برنامه را بررسی کن.',
+  home:'بازکردن نکسوس',howTitle:'۱. بررسی این گوشی',
+  how:'وقتی سرور خصوصی Termux فعال است این صفحه را بررسی کن. هیچ تغییری در آرشیو رمزگذاری‌شده ایجاد نمی‌شود.',
+  run:'اجرای بررسی خصوصی',running:'بررسی فایل‌های عمومی و مرورگر…',notChecked:'هنوز بررسی نشده',
+  ready:'فایل‌های برنامه تأیید شدند؛ آماده‌سازی کش آفلاین هنوز لازم است.',
+  prepared:'فایل‌ها و کش آفلاین بررسی شدند؛ بازگشایی در قطع کامل ارتباط هنوز به‌صورت خودکار ثابت نشده است.',
+  blocked:'یک یا چند بررسی موفق نبود؛ آمادگی برنامه را تأییدشده تلقی نکن.',
+  manualTitle:'۲. مشاهده‌های اختیاری',
+  manual:'این گزینه‌ها فقط گزارش شخصی مالک هستند، نه تأیید مستقل سخت‌افزار. از پروژه‌های مهم و ذخیره‌نشده استفاده نکن.',
+  offline:'سرور HTTP در Termux را متوقف کردم، اینترنت را قطع کردم و برنامه را از ورودی نصب‌شده باز کردم و رابط را واقعاً دیدم.',
+  vault:'یک پروژه کاملاً ساختگی ساختم، آن را صریحاً رمزگذاری و ذخیره کردم و بعد از بارگذاری مجدد با گذرواژه بازش کردم.',
+  reportTitle:'۳. خروجیِ بدون اطلاعات شخصی',
+  reportHelp:'گزارش فقط نتیجه بررسی‌ها، هش کد عمومی و تیک‌های اختیاری را دارد؛ پیام، رمز، فایل، مشخصات گوشی، IP یا نشانی دقیق در آن نیست. چیزی ارسال نمی‌شود.',
+  download:'ذخیره JSON روی گوشی',copy:'کپی JSON',saved:'فقط در گوشی ذخیره شد.',copied:'در حافظه موقت گوشی کپی شد.',copyFail:'کپی در این مرورگر ممکن نبود؛ JSON را ذخیره کن.',
+  footer:'موفقیت این بررسی به معنی فعال‌بودن مدل مولد، بازیابی نسخه پشتیبان خصوصی، سازگاری همه گوشی‌ها یا آماده‌بودن سرویس‌های Render/Railway نیست. نسخه پشتیبان رمزگذاری‌شده خود را نگه دار.',
+  tests:{loopback:'مبدأ محلی مرورگر',secure:'زمینه امن مرورگر',crypto:'رمزنگاری SHA-256 مرورگر',server:'نسخه دقیق HTML عمومی',workerCode:'نسخه دقیق سرویس‌ورکر',sw:'امکان سرویس‌ورکر در مرورگر',controller:'نصب و کنترل سرویس‌ورکر آفلاین',cache:'کش تأییدشده و فقط شامل کد عمومی'},
+  status:{PASS:'موفق',BLOCKED:'ناموفق',NOT_PREPARED:'آماده‌نشده'}
+ }};
+function text(){
+ const t=messages[lang];
+ document.documentElement.lang=lang;
+ document.documentElement.dir=lang==='fa'?'rtl':'ltr';
+ for(const [id,key] of Object.entries({heading:'heading',intro:'intro',home:'home','how-title':'howTitle',how:'how',run:'run','manual-title':'manualTitle',manual:'manual','manual-offline-label':'offline','manual-vault-label':'vault','report-title':'reportTitle','report-help':'reportHelp',download:'download',copy:'copy',footer:'footer'}))$(id).textContent=t[key];
+ if(!busy)$('result').textContent=last?messages[lang][last.status.toLowerCase()]||t[last.message_key]:t.notChecked;
+ if(last)render(last);
+}
+$('language').addEventListener('click',()=>{lang=lang==='en'?'fa':'en';text()});
+const digest=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
+function report(){
+ if(!last)return null;
+ return {
+   schema:SCHEMA,source_sha256:EXPECTED_INDEX,
+   scope:'local_browser_self_check',personal_data_collected:false,
+   telemetry_sent:false,app_content_uploaded:false,
+   actual_android_hardware_independently_verified:false,
+   real_model_generation_verified:false,production_readiness_verified:false,
+   real_disconnected_reload_automatically_verified:false,
+   checks:last.checks,
+   result:last.status,
+   owner_reported:{
+    disconnected_reopen:$('manual-offline').checked,
+    synthetic_encrypted_archive_reopen:$('manual-vault').checked
+   },
+   authority:'none'
+ };
+}
+function render(current){
+ const list=$('checks');list.replaceChildren();
+ for(const item of current.checks){
+  const row=document.createElement('div');row.className='item';
+  const label=document.createElement('span');label.textContent=messages[lang].tests[item.key];
+  const state=document.createElement('span');state.className='status '+(item.state==='PASS'?'ok':item.state==='NOT_PREPARED'?'wait':'bad');
+  state.textContent=messages[lang].status[item.state];row.append(label,state);list.append(row);
+ }
+ $('result').textContent=messages[lang][current.message_key];
+}
+async function doRun(){
+ if(busy)return;
+ busy=true;$('run').disabled=true;$('download').disabled=true;$('copy').disabled=true;
+ $('checks').replaceChildren();$('result').textContent=messages[lang].running;
+ const checks=[];const add=(key,state)=>checks.push({key,state});
+ const base=new URL('./',location.href);
+ add('loopback',location.protocol==='http:'&&location.hostname==='127.0.0.1'?'PASS':'BLOCKED');
+ add('secure',window.isSecureContext?'PASS':'BLOCKED');
+ add('crypto',globalThis.crypto?.subtle?'PASS':'BLOCKED');
+ add('sw','serviceWorker' in navigator?'PASS':'BLOCKED');
+ let appOk=false,workerOk=false;
+ try{
+  if(!crypto?.subtle)throw Error('unavailable');
+  const get=async name=>{
+   const response=await fetch(new URL(name,base),{cache:'no-store',credentials:'omit',redirect:'error'});
+   if(!response.ok||response.redirected||new URL(response.url).origin!==base.origin)throw Error('untrusted-response');
+   return response;
+  };
+  const app=await get('index.html'),indexType=(app.headers.get('content-type')||'').split(';')[0].trim();
+  if(indexType==='text/html')appOk=(await digest(await app.arrayBuffer()))===EXPECTED_INDEX;
+  const sw=await get('service-worker.js'),swType=(sw.headers.get('content-type')||'').split(';')[0].trim();
+  if(['text/javascript','application/javascript'].includes(swType))
+   workerOk=(await digest(await sw.arrayBuffer()))===EXPECTED_WORKER;
+ }catch{}
+ add('server',appOk?'PASS':'BLOCKED');
+ add('workerCode',workerOk?'PASS':'BLOCKED');
+ let controller='NOT_PREPARED',cacheState='NOT_PREPARED';
+ if('serviceWorker' in navigator){
+  try{
+   const reg=await navigator.serviceWorker.getRegistration(base.href);
+   if(reg?.active?.scriptURL===new URL('service-worker.js',base).href&&navigator.serviceWorker.controller===reg.active)
+    controller='PASS';
+  }catch{controller='BLOCKED'}
+ }
+ add('controller',controller);
+ if('caches' in window && crypto?.subtle){
+  try{
+   const names=(await caches.keys()).filter(n=>n.startsWith('nexus-studio-shell-v1-'));
+   if(names.length>0){
+    cacheState='BLOCKED';
+    if(names.length===1){
+     const cache=await caches.open(names[0]);
+     const keys=await cache.keys(),entry=await cache.match(base.href);
+     if(entry?.ok && keys.length===5 &&
+       keys.every(k=>k.url.startsWith(base.href)) &&
+       (await digest(await entry.arrayBuffer()))===EXPECTED_INDEX)
+       cacheState='PASS';
+    }
+   }
+  }catch{cacheState='BLOCKED'}
+ }
+ add('cache',cacheState);
+ const blockers=checks.some(x=>x.state==='BLOCKED');
+ last={checks,status:blockers?'BLOCKED':checks.some(x=>x.state==='NOT_PREPARED')?'NOT_PREPARED':'PASS',
+   message_key:blockers?'blocked':checks.some(x=>x.state==='NOT_PREPARED')?'ready':'prepared'};
+ render(last);
+ busy=false;$('run').disabled=false;$('download').disabled=false;$('copy').disabled=false;
+}
+$('run').addEventListener('click',()=>{void doRun()});
+$('download').addEventListener('click',()=>{
+ const payload=report();if(!payload)return;
+ const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)+'\n'],{type:'application/json'}));
+ const anchor=document.createElement('a');anchor.href=url;anchor.download='nexus-phone-readiness.json';
+ document.body.append(anchor);anchor.click();anchor.remove();
+ // Revocation does not affect local downloaded file and does not upload data.
+ setTimeout(()=>URL.revokeObjectURL(url),2500);
+ $('export-state').textContent=messages[lang].saved;
+});
+$('copy').addEventListener('click',async()=>{
+ try{const value=report();if(!value)throw Error('not-ready');await navigator.clipboard.writeText(JSON.stringify(value,null,2));$('export-state').textContent=messages[lang].copied}
+ catch{$('export-state').textContent=messages[lang].copyFail}
+});
+window.NexusPhoneCheck={run:doRun,report,sourceSHA256:EXPECTED_INDEX};
+text();
+})();
+</script>
+</body>
+</html>

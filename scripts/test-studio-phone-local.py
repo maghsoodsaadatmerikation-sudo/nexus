@@ -47,13 +47,19 @@ class StudioLocalTests(unittest.TestCase):
         self.assertTrue(kit.verify(self.zip, exact_commit=COMMIT))
         with zipfile.ZipFile(self.zip) as archive:
             names = archive.namelist()
-            self.assertEqual(len(names), 16)
+            self.assertEqual(len(names), 17)
             self.assertEqual(
                 set(names),
-                {kit.BUNDLE + "/" + n for n in kit.SOURCE_NAMES + (
+                {kit.BUNDLE + "/" + n for n in kit.SOURCE_NAMES + (kit.CHECK_NAME,
                     "run-local.py", "README.txt", "source-manifest.json")})
             receipt = json.loads(archive.read(kit.BUNDLE + "/source-manifest.json"))
             self.assertEqual(receipt["source_commit"], COMMIT)
+            self.assertEqual(len(receipt["assets"]), 14)
+            check = archive.read(kit.BUNDLE + "/" + kit.CHECK_NAME)
+            self.assertIn(receipt["assets"]["index.html"]["sha256"].encode(), check)
+            self.assertIn(receipt["assets"]["service-worker.js"]["sha256"].encode(), check)
+            self.assertNotIn(b"__APP_SHA256__", check)
+            self.assertIn(b"personal_data_collected:false", check)
             self.assertTrue(receipt["loopback_only"])
             self.assertFalse(receipt["private_user_data_included"])
             self.assertFalse(receipt["model_weights_included"])
@@ -85,7 +91,7 @@ class StudioLocalTests(unittest.TestCase):
         altered = self.root / "altered.zip"
         with zipfile.ZipFile(altered, "w") as archive:
             for name, data in entries.items():
-                if name.endswith("/index.html"):
+                if name.endswith("/device-check.html"):
                     data += b"<script>UNREVIEWED</script>"
                 archive.writestr(name, data)
         with self.assertRaises(ValueError):
@@ -138,7 +144,7 @@ class StudioLocalTests(unittest.TestCase):
         port, proc = self.run_server(folder)
         for name in ("/", "/index.html", "/manifest.json", "/service-worker.js",
                      "/device/device-ui.js", "/device/model-manifest.json",
-                     "/icons/nexus-192.png"):
+                     "/icons/nexus-192.png", "/device-check.html"):
             with self.subTest(name=name):
                 url = f"http://127.0.0.1:{port}{name}"
                 with urllib.request.urlopen(url, timeout=3) as response:
