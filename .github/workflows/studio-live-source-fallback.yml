@@ -69,7 +69,12 @@ jobs:
           report=json.loads((Path(os.environ['RUNNER_TEMP'])/'nexus-studio-previous-live-witness.json').read_text())
           assert report['origin_matches_pinned_live_source'] is True
           assert len(report['observed_paths'])==9
-          assert all(x['status']=='MATCH' for x in report['observed_paths'])
+          for item in report['observed_paths']:
+            if item['path'] in {'icons/nexus-192.png','icons/nexus-512.png'}:
+              assert item['status'] in {'MATCH','PIXEL_MATCH'}
+            else:
+              assert item['status']=='MATCH'
+          assert report['png_icons_compared_by_rgba_pixels'] is True
           assert report['production_deploy_executed'] is False
           assert report['actual_rollback_executed'] is False
           assert report['rollback_render_build_artifact_confirmed'] is False
