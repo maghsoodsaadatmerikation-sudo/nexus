@@ -2041,7 +2041,7 @@ function out(status){$('music-status').textContent=status}
 function field(name){const node=$('music-'+name);return node.type==='checkbox'?node.checked:node.type==='number'?Number(node.value):node.value}
 function inputs(){return {
  title:field('title'),mode:field('mode'),key:field('key'),bpm:field('bpm'),
- bars:field('bars'),lead:field('lead'),story:field('story'),solo:field('solo'),
+ bars:Number(field('bars')),lead:field('lead'),story:field('story'),solo:field('solo'),
  santurSolo:field('santur-solo'),guitarSolo:field('guitar-solo'),daf:field('daf'),
  seed:field('seed'),motifSeed:field('motif-seed')
 }}
