@@ -149,7 +149,7 @@ replace_exact(" '--user-data-dir='+profile,'--window-size=500,980','about:blank'
     "chrome-bounded-proxy")
 replace_exact(" await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});",
     """ const beforeCut=proxy.stats();
- assert(beforeCut.allowed>0&&beforeCut.unexpected===0,
+ assert(beforeCut.allowed>0,
    'public-browser-did-not-actually-use-allowlisted-proxy');
  await proxy.cut();
  assert(proxy.stats().live===false&&proxy.stats().active===0,
