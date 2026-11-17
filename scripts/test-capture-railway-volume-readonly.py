@@ -94,7 +94,8 @@ class CaptureTests(unittest.TestCase):
         self.root = self.base / "private-capture"
 
     def run_capture(self, execute=False, token=True, mode=None, path=None,
-                    token_scope="project", both=False):
+                    token_scope="project", both=False, deployment=None, runtime=None,
+                    confirmed=True):
         env = os.environ.copy()
         env.pop("RAILWAY_TOKEN", None)
         env.pop("RAILWAY_API_TOKEN", None)
@@ -119,7 +120,11 @@ class CaptureTests(unittest.TestCase):
                     "UNRELATED_PRIVATE_SECRET": "synthetic-other-private"})
         cmd = [sys.executable, str(SCRIPT),
                "--private-root", str(path or self.root), "--railway-bin", str(self.bin)]
-        if execute: cmd.append("--execute")
+        if execute:
+            cmd.append("--execute")
+            if confirmed:
+                cmd += ["--confirm-deployment", deployment or "32cdcb2b-c03c-4a6f-b028-27a9977717ce",
+                        "--confirm-runtime", runtime or "9abbc067aad3ebbb0956432cf6682d2ea70e2824"]
         return subprocess.run(cmd, capture_output=True, text=True,
                               env=env, timeout=30)
 
@@ -134,6 +139,19 @@ class CaptureTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(self.root.exists())
         self.assertNotIn("synthetic-token", result.stderr)
+
+    def test_missing_source_or_deployment_confirmation_blocks_before_copy(self):
+        for kwargs in ({"confirmed": False},
+                       {"deployment": "db2fd959-918e-49d5-b077-1ac74fac9a82"},
+                       {"runtime": "3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959"},
+                       {"deployment": "00000000-0000-0000-0000-000000000000"},
+                       {"runtime": "0" * 40}):
+            with self.subTest(kwargs=kwargs):
+                response = self.run_capture(execute=True, **kwargs)
+                self.assertNotEqual(response.returncode, 0)
+                self.assertFalse(self.root.exists(),
+                                 "stale or missing Railway metadata must block before writing")
+                self.assertIn("reconfirmed", response.stderr)
 
     def test_workspace_token_only_can_execute_exact_readonly_fake_cli(self):
         result = self.run_capture(execute=True, token_scope="workspace")
@@ -159,6 +177,8 @@ class CaptureTests(unittest.TestCase):
         receipt=json.loads((self.root/"isolated-intake"/"capture-receipt.json").read_text())
         intake=json.loads((self.root/"isolated-intake"/"intake-report.json").read_text())
         self.assertEqual(receipt["status"],"PRIVATE_CLI_COPY_AND_STRUCTURAL_REHEARSAL_PASS")
+        self.assertEqual(intake["deployment_id"],"32cdcb2b-c03c-4a6f-b028-27a9977717ce")
+        self.assertEqual(intake["runtime_commit"],"9abbc067aad3ebbb0956432cf6682d2ea70e2824")
         self.assertFalse(receipt["production_mutation"])
         self.assertFalse(receipt["seal"])
         self.assertEqual(receipt["authority"],"none")
@@ -181,7 +201,9 @@ class CaptureTests(unittest.TestCase):
         capture = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(capture)
         arguments = argparse.Namespace(private_root=self.root, railway_bin=self.bin,
-                                      rust_validator_bin=None, execute=True)
+                                      rust_validator_bin=None, execute=True,
+                                      confirm_deployment="32cdcb2b-c03c-4a6f-b028-27a9977717ce",
+                                      confirm_runtime="9abbc067aad3ebbb0956432cf6682d2ea70e2824")
         original_run = subprocess.run
         observed = []
         sensitive = {"RAILWAY_TOKEN", "RAILWAY_API_TOKEN", "GITHUB_TOKEN",
@@ -222,7 +244,9 @@ class CaptureTests(unittest.TestCase):
         capture = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(capture)
         arguments = argparse.Namespace(private_root=self.root, railway_bin=self.bin,
-                                      rust_validator_bin=None, execute=True)
+                                      rust_validator_bin=None, execute=True,
+                                      confirm_deployment="32cdcb2b-c03c-4a6f-b028-27a9977717ce",
+                                      confirm_runtime="9abbc067aad3ebbb0956432cf6682d2ea70e2824")
         original_run = subprocess.run
         mutated = []
 
