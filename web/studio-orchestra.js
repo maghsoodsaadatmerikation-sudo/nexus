@@ -97,6 +97,8 @@ function parsePrompt(value){
  }
  const choir=/(?:\bchoir\b|گروه\s*کر|کُر)/iu.test(sanitized);
  if(choir){sanitized=sanitized.replace(/(?:\bchoir\b|گروه\s*کر|کُر)/iu,' ');recognized.push('choir')}
+ const noVocal=/(?:\b(?:no|without)\s+(?:vocals?|voice|singers?)\b|\binstrumental\b|بدون\s+(?:وکال|آواز))/iu.test(sanitized);
+ if(noVocal){sanitized=sanitized.replace(/(?:\b(?:no|without)\s+(?:vocals?|voice|singers?)\b|\binstrumental\b|بدون\s+(?:وکال|آواز))/iu,' ');recognized.push('no-human-or-synthetic-vocal')}
  const voice=/(?:\b(?:vocal|vocals|singer|voice|singing)\b|آواز|خوانندگی|وکال)/iu.test(sanitized);
  if(voice){sanitized=sanitized.replace(/(?:\b(?:vocal|vocals|singer|voice|singing)\b|آواز|خوانندگی|وکال)/iu,' ');recognized.push('generic-vowel')}
  const forbidDrums=/(?:\b(?:no|without)\s+(?:drums?|percussion)\b|بدون\s+(?:درام|ریتم|پرکاشن))/iu.test(sanitized);
@@ -113,12 +115,13 @@ function parsePrompt(value){
   .filter(Boolean).filter(w=>!STOP.test(w)))].slice(0,12);
  const warnings=[];
  if(style.length>1)warnings.push('ambiguous-vocal-styles');
+ if(noVocal&&(voice||choir))warnings.push('conflicting-vocal-instructions');
  if(tone.length>1)warnings.push('multiple-vocal-timbres-use-one');
  if(register.length>1)warnings.push('multiple-registers-use-one');
  if(instruments.length>7)warnings.push('more-than-seven-instruments');
  if(drums&&forbidDrums)warnings.push('conflicting-drum-instructions');
  if(unknown.length)warnings.push('unparsed-terms-require-review');
- const expectedParts=instruments.length+(voice||style.length>0?1:0)+(choir?3:0)+
+ const expectedParts=instruments.length+((voice||style.length>0)&&!noVocal?1:0)+(choir?3:0)+
    (animals.length?1:0)+(effects.length?1:0)+(drums&&!forbidDrums?1:0);
  if(expectedParts>PART_LIMIT)warnings.push('part-count-over-local-budget');
  const tempoNumber=tempo?Number(tempo[1]||tempo[2]||tempo[3]):94;
@@ -138,7 +141,7 @@ function parsePrompt(value){
  return Object.freeze({
   schema:'nexus.music.prompt-plan.v1',prompt:value,
   spec:{style:selectedStyle,tone:tone[0]||'warm',register:register[0]||'soprano',
-   instruments:selectedInstruments,choir,voice:voice||style.length>0,
+   instruments:selectedInstruments,choir,voice:(voice||style.length>0)&&!noVocal,
    animal:animals[0]||'none',fx:effects[0]||'none',
    drum:drums&&!forbidDrums,bpm:int(tempoNumber,60,160)?tempoNumber:94,
    bars:barsMatch?Number(barsMatch[1]||barsMatch[2]):8,rootMidi,mode},
@@ -337,7 +340,7 @@ function midi(score){
 function hashNoise(i,id){let n=Math.imul((i+11)|0,1597334677)^Math.imul((id+3)|0,3812015801);n=Math.imul(n^(n>>>16),2246822519);return ((n^(n>>>13))>>>0)/2147483648-1;}
 function voiceSample(note,phase,t,seconds,freq,index,rate,spec){
  const id=note.id,inst=GM[note.part],vowel=note.vowel||'Ah';
- const attack=inst.family==='bow'?.08:inst.family==='vowel'?.05:inst.family==='wind'?.05:
+ const attack=inst.family==='bow'?.08:inst.family==='vowel'?(spec.style==='rap'?.012:spec.style==='opera'?.08:.045):inst.family==='wind'?.05:
   inst.family==='pad'?.16:inst.family==='organ'?.035:.008;
  const release=inst.family==='bow'?.13:inst.family==='vowel'?.09:.11;
  const env=clamp(t/attack,0,1)*clamp((seconds-t)/release,0,1);
@@ -363,7 +366,7 @@ function voiceSample(note,phase,t,seconds,freq,index,rate,spec){
           Math.sin(phase*.5)*Math.exp(-t*3))*.3*env;
  }
  const vowels={Ah:[810,1210],Ee:[420,2050],Oo:[460,900]},formants=vowels[vowel]||vowels.Ah;
- const bend=inst.family==='bow'||inst.family==='vowel'?freq*.002/5.3*
+ const bend=inst.family==='bow'||inst.family==='vowel'?freq*(spec.style==='rap'?.0003:spec.style==='opera'?.0038:.002)/5.3*
   Math.sin(TAU*5.3*t)*clamp((t-.1)/.12,0,1):0;
  const p=phase+bend;
  let sum=0,weight=0;
@@ -377,19 +380,22 @@ function voiceSample(note,phase,t,seconds,freq,index,rate,spec){
    const frequency=h*freq;
    const resonance=.26+1.6*Math.exp(-Math.pow((frequency-formants[0])/230,2))
       +1.2*Math.exp(-Math.pow((frequency-formants[1])/320,2));
-   c*=resonance;
+   const brightness={airy:.95,warm:.82,dark:.56,bright:1.35,soft:.7,powerful:1.3}[spec.tone]||1;
+   c*=resonance*(h===1?1:brightness);
   }
   if(inst.family==='pad')c*=.42;
   sum+=Math.sin(p*h)*c;weight+=Math.abs(c);
  }
  if(weight)sum/=weight;
  const breath=inst.family==='vowel'&&spec.tone==='airy'?noise*.05:0;
+ const tremolo=inst.family==='vowel'&&spec.style==='hypnotic'?.87+.13*Math.sin(TAU*1.6*t):1;
  const instability=inst.family==='reed'?noise*.011:0;
  const percussive=inst.family==='pluck'||inst.family==='keys'?
   Math.exp(-t*60)*noise*.025:0;
  const velocity=note.velocity/127;
  const decay=inst.family==='pluck'||inst.family==='keys'?Math.exp(-t*.7):1;
- return (sum*.82+breath+instability+percussive)*env*velocity*decay;
+ const presence=inst.family==='vowel'?({airy:.87,warm:.96,dark:.9,bright:1,soft:.73,powerful:1.18}[spec.tone]||1):1;
+ return (sum*.82+breath+instability+percussive)*env*velocity*decay*presence*tremolo;
 }
 async function render(score,{sampleRate=22050,onProgress=()=>{},shouldAbort=()=>false}={}){
  if(score?.schema!=='nexus.music.orchestra-score.v1'||![22050,44100].includes(sampleRate))fail('invalid-render-input');
