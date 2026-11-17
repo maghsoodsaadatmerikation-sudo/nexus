@@ -44,7 +44,9 @@ jobs:
           python3 scripts/test-studio-public-acceptance.py
           python3 - <<'PY'
           import importlib.util
+          import sys
           from pathlib import Path
+          sys.path.insert(0,str(Path.cwd()/'scripts'))
           root=Path.cwd()
           p=root/'scripts/verify-studio-public.py'
           spec=importlib.util.spec_from_file_location('nexus_public_studio',p)
