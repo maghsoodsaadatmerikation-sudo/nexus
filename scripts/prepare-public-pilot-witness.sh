@@ -163,7 +163,12 @@ replace_exact(" '--user-data-dir='+profile,'--window-size=500,980','about:blank'
     " '--proxy-server=http://127.0.0.1:'+proxy.port,\n '--user-data-dir='+profile,'--window-size=500,980','about:blank'",
     "chrome-bounded-proxy")
 replace_exact(" await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});",
-    """ const beforeCut=proxy.stats();
+    """ const lifecycleBeforeCut=await js("(async()=>{const r=await navigator.serviceWorker.getRegistration('/');return {scope:r?.scope===location.origin+'/',active:r?.active?.state==='activated',controller:navigator.serviceWorker?.controller?.scriptURL===location.origin+'/service-worker.js',waiting:!!r?.waiting,installing:!!r?.installing}})()");
+ assert(lifecycleBeforeCut.scope&&lifecycleBeforeCut.active&&
+   lifecycleBeforeCut.controller&&!lifecycleBeforeCut.waiting&&
+   !lifecycleBeforeCut.installing,
+   'public-worker-lifecycle-not-active-before-proxy-cut');
+ const beforeCut=proxy.stats();
  assert(beforeCut.allowed>0,
    'public-browser-did-not-actually-use-allowlisted-proxy');
  await proxy.cut();
@@ -173,6 +178,14 @@ replace_exact(" await rpc('Network.emulateNetworkConditions',{offline:true,laten
  // Actual browser HTTPS egress is blocked by the physical CONNECT proxy cut.
  // navigator.onLine may still be true; this is NOT the acceptance condition.""",
     "force-network-cut-before-reload")
+# A forced hard reload may bypass the Service Worker (shift-reload semantics)
+# and turn a good offline cache into a misleading Chrome error page. Exercise
+# the same ordinary reload a returning user performs, while retaining the
+# independent proxy egress cut and all worker-delivery assertions.
+replace_exact(" await rpc('Page.reload',{ignoreCache:true});",
+    " await rpc('Page.reload',{ignoreCache:false});",
+    "normal-user-reload-does-not-bypass-service-worker")
+
 replace_exact(" checks.push('real-chrome-network-offline-reload-served-cached-app');",
     """ const navProof=await retryJs("(()=>{const n=performance.getEntriesByType('navigation')[0];return {worker_started:Number(n?.workerStart)>0,controller:navigator.serviceWorker?.controller?.scriptURL===location.origin+'/service-worker.js'}})()");
  assert(navProof?.worker_started===true&&navProof.controller===true,
@@ -191,6 +204,24 @@ replace_exact("   actual_offline_navigation:true,real_android_hardware:false,",
      proxy.stats().active===0&&proxy.stats().allowed>0,
    isolated_to_reviewed_public_origin:true,real_android_hardware:false,""",
     "proxy-disconnection-report")
+replace_exact("   origin:PUBLIC_MODE?'public-render-pilot':'local-loopback-test-only',",
+    "   origin:PUBLIC_MODE?'public-render-pilot':'local-loopback-test-only',\n   worker_online_baseline:before.controller===true&&actual===sourceDigest,",
+    "report-evidence-bound-online-worker-state")
+
+# If public navigation still fails, report only safe worker lifecycle and
+# navigation booleans. Never log the public document body, URL list, or tokens.
+replace_exact(" if(stage==='real-network-offline')\n   process.stderr.write(JSON.stringify({event:'pilot12-public-cdp-navigation',",
+    """ if(stage==='real-network-offline'){
+   let lifecycleAfterCut=null;
+   try{lifecycleAfterCut=await retryJs("(()=>({browser_error:location.protocol==='chrome-error:',controller:!!navigator.serviceWorker?.controller,worker_start:Number(performance.getEntriesByType('navigation')[0]?.workerStart)>0,dom_complete:document.readyState==='complete',has_reviewed_app:!!document.getElementById('offline-install')}))()")}catch{}
+   process.stderr.write(JSON.stringify({event:'pilot12-worker-lifecycle-sanitized',
+     baseline:lifecycleBeforeCut||null,after:lifecycleAfterCut,
+     page_content_logged:false,authority:'none'})+'\\n');
+ }
+ if(stage==='real-network-offline')
+   process.stderr.write(JSON.stringify({event:'pilot12-public-cdp-navigation',""",
+    "sanitized-worker-lifecycle-after-disconnect")
+
 replace_exact(" if(stage==='real-network-offline')\n   process.stderr.write(JSON.stringify({event:'pilot12-public-cdp-navigation',",
     " if(['online-bootstrap','real-network-offline'].includes(stage))\n   process.stderr.write(JSON.stringify({event:'pilot12-proxy-diagnostic',...proxy.stats(),authority:'none'})+'\\n');\n if(stage==='real-network-offline')\n   process.stderr.write(JSON.stringify({event:'pilot12-public-cdp-navigation',",
     "proxy-failure-counter")
