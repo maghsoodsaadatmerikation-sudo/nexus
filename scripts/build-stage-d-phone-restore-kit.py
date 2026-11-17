@@ -14,6 +14,9 @@ ROOT = Path(__file__).resolve().parent.parent
 BUNDLE = "nexus-stage-d-offline-recovery"
 CERT = "docs/keys/stage-d-recovery-public-cert.pem"
 CERT_SHA = "b27cc7a84e333fce78f790dce20335258b11e724bac1a91b3b7c886ac3812091"
+PROJECT = "2ac7887b-d67a-48be-8a7b-bd54092893ae"
+ENVIRONMENT = "56c4bc45-0e62-4aa9-832f-884bb1aa620c"
+SERVICE = "0032fc74-2c52-475d-b9df-9dca59237d93"
 VOLUME = "cc47a350-6c7e-4487-89d9-c4b390f94884"
 DEPLOYMENT = "32cdcb2b-c03c-4a6f-b028-27a9977717ce"
 RUNTIME = "9abbc067aad3ebbb0956432cf6682d2ea70e2824"
@@ -89,7 +92,8 @@ def package_files(commit):
         raise ValueError("exact source commit required")
     capture = reviewed_source("scripts/capture-railway-volume-readonly.py").decode()
     escrow = reviewed_source("scripts/stage-d-encrypted-escrow.py").decode()
-    for k, v in (("VOLUME", VOLUME), ("DEPLOYMENT", DEPLOYMENT), ("RUNTIME", RUNTIME)):
+    for k, v in (("PROJECT", PROJECT), ("ENVIRONMENT", ENVIRONMENT), ("SERVICE", SERVICE),
+                 ("VOLUME", VOLUME), ("DEPLOYMENT", DEPLOYMENT), ("RUNTIME", RUNTIME)):
         exact_constant(capture, k, v)
     exact_constant(escrow, "CERT_SHA256", CERT_SHA)
     if escrow.splitlines().count(
@@ -105,6 +109,7 @@ def package_files(commit):
     # copied into the owner recovery ZIP.
     files["scripts/capture-railway-volume-readonly.py"] = (
         '# Original provider identifiers only; no CLI or provider network code.\n'
+        + f'PROJECT = "{PROJECT}"\nENVIRONMENT = "{ENVIRONMENT}"\nSERVICE = "{SERVICE}"\n'
         + f'VOLUME = "{VOLUME}"\nDEPLOYMENT = "{DEPLOYMENT}"\nRUNTIME = "{RUNTIME}"\n'
     ).encode()
     files["scripts/stage-d-encrypted-escrow.py"] = (
@@ -120,6 +125,8 @@ def package_files(commit):
     manifest = {
         "schema": SCHEMA, "source_commit": commit,
         "pinned_recipient_cert_sha256": CERT_SHA,
+        "pinned_project": PROJECT, "pinned_environment": ENVIRONMENT,
+        "pinned_service": SERVICE,
         "pinned_original_volume": VOLUME,
         "pinned_deployment": DEPLOYMENT,
         "pinned_runtime": RUNTIME,
