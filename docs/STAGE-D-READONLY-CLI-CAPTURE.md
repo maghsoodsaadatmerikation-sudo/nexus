@@ -19,21 +19,17 @@ A directory download is NOT a consistent point-in-time snapshot when
 writers remain active; source identity and consistency need independent
 evidence.
 
-## Exact original host target — verified through connected Railway read
+## Exact original host target — provider read-only inventory rechecked 2026-11-17
 
 - Project `2ac7887b-d67a-48be-8a7b-bd54092893ae`
 - Production environment `56c4bc45-0e62-4aa9-832f-884bb1aa620c`
 - Service `0032fc74-2c52-475d-b9df-9dca59237d93`
 - Original volume `cc47a350-6c7e-4487-89d9-c4b390f94884`, mount `/data`
-- Last known deployment `db2fd959-918e-49d5-b077-1ac74fac9a82`
-- Last known pinned source `3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959`
+- **Current provider-reported deployment `32cdcb2b-c03c-4a6f-b028-27a9977717ce`** (SLEEPING at last read)
+- **Current provider-reported source `9abbc067aad3ebbb0956432cf6682d2ea70e2824`** (NOT the newer GitHub main)
+- Historical deployment `db2fd959-918e-49d5-b077-1ac74fac9a82` is REMOVED; historical commit `3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959` is no longer the deployed source
 
-All identifiers are hardcoded in
-`scripts/capture-railway-volume-readonly.py` to prevent accidental
-selection of a lookalike production service. Reconfirm all of them
-independently before a *real* attempt: the code does not have privileged
-provider identity attestation. If the original volume or deployed revision
-has changed, stop and review it, rather than updating a UUID by guess.
+The capture constants were reconciled in Phase 38. **Execution now requires separate `--confirm-deployment` and `--confirm-runtime` values equal to the exact currently pinned target**, in addition to its existing operator-authenticated Railway credential and fresh private path. The original main branch/Volume and other target IDs are unchanged. Read the current provider dashboard immediately before manual execution; if the actual deployment has changed, stop and review the pinned code before downloading. The inputs are human confirmations, **not authenticated provider attestation or atomic source evidence**. See [Stage D current capture target](STAGE-D-LIVE-CAPTURE-TARGET.md).
 
 ## Pilot 07: real Railway CLI parser (not a fake provider)
 
@@ -148,7 +144,9 @@ Actual read-only capture (not yet authorized or executed here):
 
 python3 scripts/capture-railway-volume-readonly.py \
   --private-root /home/operator/private/nexus-stage-d-capture \
-  --railway-bin /usr/local/bin/railway --execute
+  --railway-bin /usr/local/bin/railway --execute \
+  --confirm-deployment 32cdcb2b-c03c-4a6f-b028-27a9977717ce \
+  --confirm-runtime 9abbc067aad3ebbb0956432cf6682d2ea70e2824
 ```
 
 The explicit `--execute` mode requires `RAILWAY_TOKEN` or
