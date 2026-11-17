@@ -106,6 +106,8 @@ try{
  await poll(()=>retryJs("document.readyState==='complete'&&Boolean(window.NexusStudioUI)&&Boolean(document.getElementById('studio-offline'))"),15000,'studio-not-rendered');
  assert(await js("document.documentElement.scrollWidth<=innerWidth+2"),'mobile-overflow');checks.push('responsive-studio-renders');
  assert(await js("NexusStudioFocus.isFocused()&&NexusStudioFocus.active()==='conversation-card'&&!document.getElementById('conversation-card').hidden&&document.getElementById('projects-card').hidden&&!document.getElementById('studio-focus-onboarding').hidden&&document.getElementById('studio-focus-nav').getAttribute('aria-label')==='Primary Studio navigation'"),'mobile-default-chat-not-focused');checks.push('chat-first-first-project-guidance');
+ assert(await js("Boolean(window.NexusStudioCompose)&&NexusStudioCompose.mode()==='guide'&&document.getElementById('studio-compose-send').disabled&&document.getElementById('studio-compose-privacy').textContent.includes('not generative AI')&&document.getElementById('studio-compose-storage').textContent.includes('No encrypted archive')"),'initial-honest-composer');
+ checks.push('composer-local-mode-honesty-before-project');
  await js("document.querySelector('#studio-focus-onboarding button').click();true");
  assert(await js("NexusStudioFocus.active()==='projects-card'&&!document.getElementById('projects-card').hidden&&document.activeElement.id==='project-title'"),'onboarding-not-routing-to-project');
  checks.push('guided-first-project-creation');
@@ -117,6 +119,12 @@ try{
  assert(await js("!document.getElementById('studio-focus-onboarding').hidden&&document.getElementById('studio-focus-onboarding').textContent.includes('Step 2')"),'new-thread-guidance-missing');
  await js("document.getElementById('studio-focus-onboarding').querySelector('button').click();true");
  assert(await js("NexusStudioFocus.active()==='conversation-card'&&document.activeElement.id==='message'&&document.getElementById('studio-focus-onboarding').hidden"),'new-thread-focus-route');
+ await js("const m=document.getElementById('message');m.value='SYNTHETIC UNSENT MODEL CONTEXT';m.dispatchEvent(new Event('input'));document.getElementById('studio-compose-mode').value='model';document.getElementById('studio-compose-mode').dispatchEvent(new Event('change'));document.getElementById('studio-compose-send').click();true");
+ assert(await js("document.getElementById('request-review').hidden&&!document.getElementById('consent').checked&&document.getElementById('message').value==='SYNTHETIC UNSENT MODEL CONTEXT'&&NexusStudioUI.snapshot().projects[0].threads[0].nodes.length===0&&performance.getEntriesByType('resource').every(r=>!r.name.includes('/studio-api/respond'))"),'no-model-quick-action-must-not-send');
+ await js("const m=document.getElementById('message');m.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true}));true");
+ assert(await js("document.getElementById('request-review').hidden&&NexusStudioUI.snapshot().projects[0].threads[0].nodes.length===0"),'ctrl-enter-must-not-bypass-consent');
+ await js("const m=document.getElementById('message');m.value='';m.dispatchEvent(new Event('input'));document.getElementById('studio-compose-mode').value='guide';document.getElementById('studio-compose-mode').dispatchEvent(new Event('change'));true");
+ checks.push('model-review-not-send-even-on-ctrl-enter');
  await js("document.querySelector('#studio-focus-nav button[data-panel=tools]').click();true");
  assert(await js("NexusStudioFocus.active()==='tools'&&!document.getElementById('studio-focus-tools').hidden&&document.getElementById('conversation-card').hidden"),'tool-chooser-not-focused');
  await js("document.querySelector('#studio-focus-tools button[data-panel=data-card]').click();true");
@@ -125,7 +133,8 @@ try{
  assert(await js("NexusStudioFocus.active()==='conversation-card'&&document.getElementById('chat-attachment-tray').textContent.includes('SYNTHETIC ANALYSIS')"),'handoff-should-return-to-chat');
  await js("document.getElementById('clear-chat-files').click();document.querySelector('#studio-focus-nav button[data-panel=vault-card]').click();true");
  assert(await js("NexusStudioFocus.active()==='vault-card'&&!document.getElementById('vault-card').hidden"),'save-tab-not-accessible');
- await js("document.querySelector('#studio-focus-nav button[data-panel=conversation-card]').click();document.getElementById('message').value='SYNTHETIC PRIVATE QUESTION';document.getElementById('guide').click();true");
+ await js("document.querySelector('#studio-focus-nav button[data-panel=conversation-card]').click();const m=document.getElementById('message');m.value='SYNTHETIC PRIVATE QUESTION';m.dispatchEvent(new Event('input'));document.getElementById('studio-compose-send').click();true");
+ assert(await js("document.getElementById('request-review').hidden&&!document.getElementById('consent').checked"),'local-guide-must-not-stage-or-send-provider-content');
  checks.push('focused-tools-save-and-reviewed-handoff');
  assert(await js("NexusStudioUI.snapshot().projects[0].threads[0].nodes.length===2"),'guide-failed');checks.push('local-guide-works-without-provider');
  await js("document.getElementById('studio-focus-toggle').click();true");
@@ -136,9 +145,15 @@ try{
  assert(keyboard.focused&&keyboard.dock==='none','mobile-keyboard-should-not-be-obscured-'+JSON.stringify(keyboard));
  await js("document.getElementById('message').blur();true");
  checks.push('reversible-focus-keeps-content-and-keyboard-clear');
+ await js("document.getElementById('studio-compose-save').click();true");
+ assert(await js("NexusStudioFocus.active()==='vault-card'&&document.getElementById('passphrase')===document.activeElement&&document.getElementById('save').disabled"),'save-shortcut-did-not-route-to-locked-vault');
  await js("document.getElementById('passphrase').value='synthetic secret phrase 123';document.getElementById('repeat-passphrase').value='synthetic secret phrase 123';document.getElementById('create-vault').click();true");
  await poll(()=>retryJs("!document.getElementById('save').disabled"),12000,'archive-create');
- await js("document.getElementById('save').click();true");await poll(()=>retryJs("document.getElementById('status').textContent.includes('session saved')"),12000,'archive-save');
+ await js("document.querySelector('#studio-focus-nav button[data-panel=conversation-card]').click();document.getElementById('studio-compose-save').click();true");await poll(()=>retryJs("document.getElementById('status').textContent.includes('session saved')"),12000,'archive-save');
+ await js("const m=document.getElementById('message');m.value='SYNTHETIC UNSAVED DRAFT';m.dispatchEvent(new Event('input'));true");
+ assert(await js("document.getElementById('studio-compose-save').disabled&&document.getElementById('studio-compose-storage').textContent.includes('not fully saved')"),'draft-save-blocked-no-false-success');
+ await js("const m=document.getElementById('message');m.value='';m.dispatchEvent(new Event('input'));true");
+ checks.push('archive-quick-save-delegates-encryption-and-blocks-drafts');
  assert(await js("new NexusStudio.IndexedStore().read().then(raw=>!!raw&&!raw.includes('SYNTHETIC PRIVATE QUESTION'))"),'plaintext-history');checks.push('encrypted-browser-save');
  stage='opt-in-offline';await js("document.getElementById('studio-offline').click();true");
  await poll(()=>retryJs("document.getElementById('studio-offline-state').textContent.includes('code is ready')"),25000,'offline-prepare');
@@ -152,7 +167,7 @@ try{
  await js("document.getElementById('passphrase').value='synthetic secret phrase 123';document.getElementById('unlock').click();true");
  await poll(()=>retryJs("NexusStudioUI.snapshot().projects[0]?.title==='SYNTHETIC MOBILE PROJECT'"),12000,'offline-unlock');checks.push('offline-encrypted-reopen');
  await js("document.getElementById('language').value='fa';document.getElementById('language').dispatchEvent(new Event('change'));true");
- assert(await js("document.documentElement.dir==='rtl'&&getComputedStyle(document.querySelector('.studio-en')).display==='none'&&document.querySelector('#studio-focus-nav button[data-panel=conversation-card]').textContent==='گفتگو'"),'persian-static-panel');checks.push('persian-rtl-navigation-and-installation-panel');
+ assert(await js("document.documentElement.dir==='rtl'&&getComputedStyle(document.querySelector('.studio-en')).display==='none'&&document.querySelector('#studio-focus-nav button[data-panel=conversation-card]').textContent==='گفتگو'&&document.getElementById('studio-compose-send').textContent==='استفاده از راهنمای محلی'"),'persian-static-panel');checks.push('persian-rtl-navigation-and-installation-panel');
  stage='remove';await setOffline(false);
  await js("document.getElementById('studio-remove-offline').click();true");await poll(()=>retryJs("document.getElementById('studio-offline-state').textContent.includes('حذف شد')"),12000,'remove-offline');
  assert(await js("(async()=>!(await navigator.serviceWorker.getRegistration(location.href))&&(await caches.keys()).length===0&&NexusStudioUI.snapshot().projects.length===1&&Boolean(await new NexusStudio.IndexedStore().read()))()"),'remove-destroyed-private-state');checks.push('remove-code-retains-open-and-encrypted-work');
