@@ -12,6 +12,50 @@ mkdir -m 700 "$target"
 # a newer test contract with an older deployed app and produce a false red.
 # Candidate checks remain in their separate PR/offline CI workflows.
 git archive "$baseline" web public scripts | tar -x -C "$target"
+# Use exactly the deployed revision for ALL application bytes. On public HTTPS,
+# the cached HTML body can exist before its inline DOM handlers finish parsing.
+# The historical Chromium witness only checked existence of the install button,
+# which races the DOMContentLoaded listener and could report a false offline
+# failure. Pin the historical witness's Git blob and change exactly its
+# navigation-readiness predicate; no published asset/source/consent contract
+# can be modified by this correction.
+expected_witness_blob=b259a38f8005dabef3afbcc6b97e77cdd563594c
+actual_witness_blob="$(git hash-object "$target/scripts/test-pwa-offline-browser.mjs")"
+test "$actual_witness_blob" = "$expected_witness_blob"
+python3 - "$target/scripts/test-pwa-offline-browser.mjs" <<'PY'
+from pathlib import Path
+import hashlib, json, sys
+path=Path(sys.argv[1])
+text=path.read_text()
+before="""await poll(()=>retryJs("document.getElementById('offline-install') && navigator.onLine===false"),15000,'offline-navigation-not-served');"""
+after="""await poll(()=>retryJs("document.readyState==='complete' && document.getElementById('offline-install') && navigator.onLine===false"),15000,'offline-navigation-not-served');"""
+if text.count(before)!=1 or after in text:
+    raise SystemExit("BLOCKED: pinned real-browser witness predicate changed")
+text=text.replace(before,after)
+# Sanitized diagnostics on failure. Never print user content, synthetic page
+# text, network tokens or private file content, even on a public CI runner.
+before_assert=""" assert(offline.question.includes('ساختگی')&&offline.claims===2&&offline.options===2&&
+ offline.decision.includes('هیچ تصمیم انسانی')&&offline.net===false,
+ 'offline-content-unavailable-or-created-a-judgment');"""
+after_assert=""" const offlineContract={fictional_question:offline.question.includes('ساختگی'),
+   two_claims:offline.claims===2,two_options:offline.options===2,
+   no_human_judgment:offline.decision.includes('هیچ تصمیم انسانی'),
+   browser_offline:offline.net===false};
+ if(Object.values(offlineContract).some(value=>!value))
+   process.stderr.write(JSON.stringify({event:'pilot12-public-offline-diagnostic',
+     ...offlineContract})+'\\n');
+ assert(Object.values(offlineContract).every(Boolean),
+ 'offline-content-unavailable-or-created-a-judgment');"""
+if text.count(before_assert)!=1 or after_assert in text:
+    raise SystemExit("BLOCKED: historical offline acceptance shape changed")
+text=text.replace(before_assert,after_assert)
+path.write_text(text)
+print(json.dumps({'witness_source':'pinned-deployed-baseline',
+  'witness_patch':'wait-for-document-complete-and-boolean-only-failure-diagnostic',
+  'witness_sha256':hashlib.sha256(text.encode()).hexdigest(),
+  'published_application_bytes_modified':False,
+  'acceptance_checks_relaxed':False, 'authority':'none'},sort_keys=True))
+PY
 python3 - "$baseline" "$target" <<'PY'
 import hashlib,json,sys
 from pathlib import Path
