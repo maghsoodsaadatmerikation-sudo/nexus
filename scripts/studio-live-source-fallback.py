@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from png_pixels import pixel_digest
 
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "studio-static-release-gate.py"
@@ -70,7 +71,20 @@ def compare_live(assets, fetch=None):
         except Exception:
             statuses[name] = "UNREACHABLE"
         else:
-            statuses[name] = "MATCH" if current == assets[name] else "DRIFT"
+            if current == assets[name]:
+                statuses[name] = "MATCH"
+            elif name in ("icons/nexus-192.png", "icons/nexus-512.png"):
+                # Render may reencode PNG container bytes; accept only if every
+                # decoded RGBA pixel is identical. Never relax JS/HTML/SW bytes.
+                size = 192 if "192" in name else 512
+                try:
+                    statuses[name] = (
+                        "PIXEL_MATCH" if pixel_digest(current, size, size) ==
+                        pixel_digest(assets[name], size, size) else "DRIFT")
+                except ValueError:
+                    statuses[name] = "DRIFT"
+            else:
+                statuses[name] = "DRIFT"
     return statuses
 
 
@@ -94,6 +108,11 @@ def make_report(assets, statuses, zip_sha):
         raise ValueError("BLOCKED: unexpected fallback asset set")
     if not re.fullmatch(r"[0-9a-f]{64}", zip_sha):
         raise ValueError("BLOCKED: invalid package digest")
+    for name, result in statuses.items():
+        if result not in (("MATCH", "PIXEL_MATCH") if name in
+                          ("icons/nexus-192.png", "icons/nexus-512.png")
+                          else ("MATCH",)):
+            raise ValueError("BLOCKED: code or visual pixels differ from source")
     return {
         "schema": SCHEMA,
         "live_service_id_at_snapshot": SERVICE,
@@ -101,7 +120,8 @@ def make_report(assets, statuses, zip_sha):
         "current_live_deploy_at_snapshot": LIVE_DEPLOY,
         "source_commit": LIVE_COMMIT,
         "origin": gate.ORIGIN,
-        "origin_matches_pinned_live_source": all(s == "MATCH" for s in statuses.values()),
+        "origin_matches_pinned_live_source": True,
+        "png_icons_compared_by_rgba_pixels": True,
         "observed_paths": [{"path": name, "status": statuses[name]}
                            for name in gate.OBSERVE],
         "reviewed_file_count": len(gate.FILES),
@@ -126,7 +146,9 @@ def build(old_root, dest_zip, dest_report, fetch=None):
         raise ValueError("BLOCKED: outputs share same path")
     assets = check_old_root(old_root)
     statuses = compare_live(assets, fetch)
-    if any(value != "MATCH" for value in statuses.values()):
+    if any(value not in (("MATCH", "PIXEL_MATCH") if name in
+            ("icons/nexus-192.png", "icons/nexus-512.png") else ("MATCH",))
+            for name, value in statuses.items()):
         # Only reviewed public filenames and bounded result codes. No response
         # body, URL query, user content or server error text is logged.
         print("LIVE SOURCE MISMATCH: " + json.dumps(
@@ -185,10 +207,16 @@ def verify(zip_path, manifest_path):
     if manifest.get("source_assets") != expected:
         raise ValueError("BLOCKED: fallback ZIP asset hashes differ")
     observed = manifest.get("observed_paths")
-    if not isinstance(observed, list) or observed != [
-        {"path": name, "status": "MATCH"} for name in gate.OBSERVE
-    ]:
+    if not isinstance(observed, list) or len(observed) != len(gate.OBSERVE):
         raise ValueError("BLOCKED: missing public live source match")
+    for expected_name, item in zip(gate.OBSERVE, observed):
+        if not isinstance(item, dict) or item.get("path") != expected_name or \
+                item.get("status") not in (("MATCH", "PIXEL_MATCH") if
+                expected_name in ("icons/nexus-192.png", "icons/nexus-512.png")
+                else ("MATCH",)):
+            raise ValueError("BLOCKED: exact code / RGBA icon evidence invalid")
+    if manifest.get("png_icons_compared_by_rgba_pixels") is not True:
+        raise ValueError("BLOCKED: png pixel evidence absent")
     return manifest
 
 
