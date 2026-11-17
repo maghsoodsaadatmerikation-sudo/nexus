@@ -69,7 +69,7 @@ ok(()=>assert.equal(new DataView(wav.buffer).getUint16(34,true),16));
 ok(()=>assert(wav.length>100_000));
 ok(()=>assert(wav.some((byte,i)=>i>44&&byte!==0)));
 ok(()=>assert.equal(progress.at(-1),1));
-ok(()=>assert.deepEqual(await M.renderWav(short),wav));
+const wavAgain=await M.renderWav(short);ok(()=>assert.deepEqual(wavAgain,wav));
 await assert.rejects(M.renderWav(short,{sampleRate:22050,shouldAbort:()=>true}));checks++;
 await assert.rejects(M.renderWav(short,{sampleRate:12345}));checks++;
 const code=await readFile(new URL('../web/studio-music.js',import.meta.url),'utf8');
