@@ -30,7 +30,10 @@
   button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid #dfa941; outline-offset: 2px; }
   #result { white-space: pre-wrap; word-break: break-word; padding: 14px; margin-top: 10px; background: #f1f5f9; border-radius: 8px; border: 1px solid #c7d2df; min-height: 72px; font-size: .91rem; }
   #result[data-state=pass] { border-color: #378764; }
-  #result[data-state=blocked] { border-color: #b75b48; }
+  #result[data-state=blocked], #self-check-result[data-state=blocked] { border-color: #b75b48; }
+  #self-check-result { white-space: pre-wrap; word-break: break-word; border: 1px solid #c7d2df; border-radius: 8px; background: #f1f5f9; padding: 12px; margin-top: 12px; font-size: .91rem; }
+  #self-check-result[data-state=pass] { border-color: #378764; }
+  #self-check { background: #e4eff0; color: #174f82; }
   footer { padding: 18px 4px; font-size: .85rem; color: #516174; }
   @media (max-width: 540px) { .two { grid-template-columns: 1fr; } section { padding: 15px; } }
 </style>
@@ -44,6 +47,12 @@
 <section class="alert" aria-label="Scope limitations">
   <strong>Byte verification is not recovery.</strong>
   <p class="muted">No network requests, uploads, private keys or decryption. Even a matching result does <strong>not</strong> prove separate storage, Railway origin, complete backup, key custody, an isolated restore or deployment authorization.</p>
+</section>
+<section aria-labelledby="device-check-title" id="device-check">
+  <h2 id="device-check-title">0. Check this device first</h2>
+  <p class="muted">Run a synthetic, offline SHA-256 and rejection test on this browser. No files, passwords or recovery keys are needed. PASS does not verify Android file-picker support, a real backup, or independent custody.</p>
+  <button type="button" id="self-check">Run on-device safety check</button>
+  <div id="self-check-result" role="status" aria-live="polite" data-state="idle">Not checked on this device.</div>
 </section>
 <form id="readback-form" novalidate>
 <section aria-labelledby="step-one">
@@ -243,7 +252,89 @@
       authority: 'none'
     });
   }
-  window.NexusReadback = Object.freeze({parseAnchor, verifyReceipt, verifyPair, verifyCopies});
+  async function selfTestBrowser() {
+    // Synthetic-only on-device cryptography and fail-closed verifier check.
+    // Never requires or accesses a selected file, storage, token or network.
+    requireThat(window.crypto && window.crypto.subtle, 'webcrypto_unavailable');
+    const encoder = new TextEncoder();
+    const digest = async bytes => Array.from(
+      new Uint8Array(await window.crypto.subtle.digest('SHA-256', bytes)),
+      byte => byte.toString(16).padStart(2, '0')).join('');
+    requireThat(await digest(encoder.encode('abc')) ===
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+      'sha256_known_answer_failed');
+    const payload = encoder.encode('NEXUS_SYNTHETIC_NOT_CMS_NO_REAL_BACKUP_'.repeat(20));
+    const cipherDigest = await digest(payload);
+    const receipt = {
+      schema: 'nexus.stage-d-encrypted-escrow.v1',
+      status: 'ENCRYPTED_PRIVATE_COPY_NOT_ATOMICALLY_VERIFIED',
+      content_claim: 'local_structural_intake_only',
+      independent_live_restore: 'not_evaluated', railway_origin: 'not_independently_attested',
+      release_authorized: false, seal: false, authority: 'none',
+      recipient_cert_sha256: CERT, ciphertext_sha256: cipherDigest,
+      ciphertext_bytes: payload.length
+    };
+    const receiptBytes = encoder.encode(JSON.stringify(receipt));
+    const identity = {runId: '43000000021', attempt: '1', commit: 'a'.repeat(40)};
+    const anchor = {
+      schema: 'nexus.stage-d-encrypted-log-anchor.v1',
+      status: 'CIPHERTEXT_LOCAL_DIGEST_BEFORE_UPLOAD',
+      repository: REPO, workflow_ref: WORKFLOW_REF,
+      ref: 'refs/heads/main', event: 'workflow_dispatch',
+      run_id: Number(identity.runId), run_attempt: 1, commit_sha: identity.commit,
+      original_volume_id: VOLUME, ciphertext_sha256: cipherDigest,
+      ciphertext_bytes: payload.length, receipt_sha256: await digest(receiptBytes),
+      recipient_cert_sha256: CERT, provider_origin: 'not_independently_attested',
+      release_authorized: false, authority: 'none'
+    };
+    const line = PREFIX + JSON.stringify(anchor);
+    // Distinct synthetic file handles are intentional: physical storage
+    // independence cannot be inferred from these handles.
+    const syntheticFile = bytes => ({
+      size: bytes.byteLength,
+      async arrayBuffer() { return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength); }
+    });
+    const pairs = [
+      {cipher: syntheticFile(payload), receipt: syntheticFile(receiptBytes)},
+      {cipher: syntheticFile(new Uint8Array(payload)),
+       receipt: syntheticFile(new Uint8Array(receiptBytes))}
+    ];
+    const valid = await verifyCopies(line, identity, pairs);
+    requireThat(valid.status === 'TWO_SELECTED_FILE_PAIRS_MATCH_ANCHOR_BYTES_ONLY' &&
+      valid.deployment_authorized === false &&
+      valid.complete_production_backup === false &&
+      valid.original_github_run_authenticated === false &&
+      valid.data_uploaded === false, 'synthetic_nonclaim_failed');
+    const corrupted = new Uint8Array(payload);
+    corrupted[3] ^= 1;
+    let tamperedRejected = false;
+    try {
+      await verifyCopies(line, identity, [
+        pairs[0], {cipher: syntheticFile(corrupted), receipt: syntheticFile(receiptBytes)}
+      ]);
+    } catch (_) { tamperedRejected = true; }
+    requireThat(tamperedRejected, 'tamper_should_fail_closed');
+    let escalationRejected = false;
+    try {
+      await verifyCopies(PREFIX + JSON.stringify({...anchor, release_authorized: true}),
+        identity, pairs);
+    } catch (_) { escalationRejected = true; }
+    requireThat(escalationRejected, 'release_forgery_should_fail_closed');
+    return Object.freeze({
+      schema: 'nexus.stage-d-mobile-device-selftest.v1',
+      status: 'SYNTHETIC_BROWSER_SELFTEST_PASS',
+      checks: 4,
+      synthetic_only: true,
+      file_picker_tested: false,
+      real_ciphertext_tested: false,
+      real_backup_decrypted: false,
+      independent_custody_proven: false,
+      deployment_authorized: false,
+      network_required: false,
+      authority: 'none'
+    });
+  }
+  window.NexusReadback = Object.freeze({parseAnchor, verifyReceipt, verifyPair, verifyCopies, selfTestBrowser});
 })();
 </script>
 <script id="nexus-readback-ui">
@@ -254,6 +345,34 @@
   const verify = document.getElementById('verify');
   const buttonReset = document.getElementById('reset');
   let running = false;
+  const selfCheck = document.getElementById('self-check');
+  const selfCheckResult = document.getElementById('self-check-result');
+  let selfCheckRunning = false;
+  selfCheck.addEventListener('click', async function () {
+    if (selfCheckRunning) return;
+    selfCheckRunning = true;
+    selfCheck.disabled = true;
+    selfCheckResult.dataset.state = 'busy';
+    selfCheckResult.textContent = 'Running synthetic browser-only checks…';
+    try {
+      const report = await window.NexusReadback.selfTestBrowser();
+      if (report.status !== 'SYNTHETIC_BROWSER_SELFTEST_PASS' ||
+          report.deployment_authorized !== false || report.checks !== 4)
+        throw new Error('selftest_unexpected_report');
+      selfCheckResult.dataset.state = 'pass';
+      selfCheckResult.textContent =
+        'BROWSER SELF-CHECK PASS — SHA-256, synthetic matching, tamper rejection and release-authority rejection worked on this browser.\\n\\n' +
+        'NOT TESTED: Android file selection, downloaded real ciphertext, GitHub anchor authenticity, private key, isolated restore, independent storage or production readiness.';
+    } catch (_) {
+      selfCheckResult.dataset.state = 'blocked';
+      selfCheckResult.textContent =
+        'BROWSER SELF-CHECK BLOCKED — this browser did not complete all local synthetic checks. Do not rely on it for a real backup.';
+    } finally {
+      selfCheckRunning = false;
+      selfCheck.disabled = false;
+    }
+  });
+
   function file(id) { return document.getElementById(id).files[0]; }
   form.addEventListener('submit', async function (event) {
     event.preventDefault();
