@@ -121,8 +121,15 @@ class SourceFallbackTests(unittest.TestCase):
         good={name:"MATCH" for name in fallback.gate.OBSERVE}
         report = fallback.make_report(self.assets, good, "a"*64)
         self.assertTrue(report["origin_matches_pinned_live_source"])
-        report = fallback.make_report(self.assets, {**good, "index.html":"DRIFT"}, "a"*64)
-        self.assertFalse(report["origin_matches_pinned_live_source"])
+        with self.assertRaises(ValueError):
+            fallback.make_report(self.assets, {**good, "index.html":"DRIFT"}, "a"*64)
+        icons={**good, "icons/nexus-192.png": "PIXEL_MATCH",
+               "icons/nexus-512.png": "PIXEL_MATCH"}
+        report=fallback.make_report(self.assets, icons, "a"*64)
+        self.assertTrue(report["origin_matches_pinned_live_source"])
+        self.assertTrue(report["png_icons_compared_by_rgba_pixels"])
+        with self.assertRaises(ValueError):
+            fallback.make_report(self.assets, {**good, "service-worker.js": "PIXEL_MATCH"}, "a"*64)
         with self.assertRaises(ValueError):
             fallback.make_report(self.assets, {"index.html":"MATCH"}, "a"*64)
         with self.assertRaises(ValueError):
