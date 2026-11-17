@@ -138,6 +138,10 @@ def replace_exact(old,new,label):
         raise SystemExit('BLOCKED: pinned proxy witness anchor: '+label)
     text=text.replace(old,new)
 
+replace_exact("const checks=[];",
+    "const checks=[];\\nlet lifecycleBeforeCut=null;",
+    "diagnostic-lifecycle-variable-in-catch-scope")
+
 # The page onLine flag is NOT evidence of a whole-browser outage. The actual
 # Chrome CONNECT egress cut below provides independent network disconnection.
 replace_exact("document.readyState==='complete' && document.getElementById('offline-install') && navigator.onLine===false",
@@ -163,7 +167,7 @@ replace_exact(" '--user-data-dir='+profile,'--window-size=500,980','about:blank'
     " '--proxy-server=http://127.0.0.1:'+proxy.port,\n '--user-data-dir='+profile,'--window-size=500,980','about:blank'",
     "chrome-bounded-proxy")
 replace_exact(" await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});",
-    """ const lifecycleBeforeCut=await js("(async()=>{const r=await navigator.serviceWorker.getRegistration('/');return {scope:r?.scope===location.origin+'/',active:r?.active?.state==='activated',controller:navigator.serviceWorker?.controller?.scriptURL===location.origin+'/service-worker.js',waiting:!!r?.waiting,installing:!!r?.installing}})()");
+    """ lifecycleBeforeCut=await js("(async()=>{const r=await navigator.serviceWorker.getRegistration('/');return {scope:r?.scope===location.origin+'/',active:r?.active?.state==='activated',controller:navigator.serviceWorker?.controller?.scriptURL===location.origin+'/service-worker.js',waiting:!!r?.waiting,installing:!!r?.installing}})()");
  assert(lifecycleBeforeCut.scope&&lifecycleBeforeCut.active&&
    lifecycleBeforeCut.controller&&!lifecycleBeforeCut.waiting&&
    !lifecycleBeforeCut.installing,
