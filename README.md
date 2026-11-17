@@ -37,6 +37,16 @@ from supplied facts on the device, without an API key. The initial download is
 about 167 MB; accuracy and context capacity are limited. [Device model setup](docs/DEVICE-MODEL.md).
 [Mobile setup, deployment identity and public verification](docs/STUDIO-STATIC.md).
 
+**New mobile usability:** the latest source offers an opt-out, chat-first focus view with
+four bottom navigation choices (Chat / Projects / Tools / Save), first-project
+onboarding, bilingual/RTL labels and one-tap return from a reviewed tool result
+to chat. [Precise behavior, accessibility and privacy limitations](docs/STUDIO-CHAT-FIRST-UX.md).
+Because static Render AutoDeploy is off, this GitHub change alone **does not mean**
+the hosted link already runs the new layout; update and verify the published
+source before advertising it as deployed. The separate
+[local Android/Termux ZIP](docs/STUDIO-PHONE-LOCAL.md) can be built from the
+reviewed exact `main` source without Railway or Render.
+
 ## Run Studio locally (Linux, one command)
 
 With Python 3.13 and `uv` installed, run from a complete checkout:
