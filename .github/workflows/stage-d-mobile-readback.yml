@@ -1,0 +1,31 @@
+name: NEXUS Offline Mobile Ciphertext Readback
+
+on:
+  pull_request:
+    paths:
+      - 'web/stage-d-mobile-readback.html'
+      - 'scripts/test-stage-d-mobile-readback.mjs'
+      - 'docs/STAGE-D-MOBILE-READBACK.md'
+      - '.github/workflows/stage-d-mobile-readback.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-browser-core-contract:
+    name: stage-d-mobile-readback-contract
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact candidate without persisted credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify Node.js is available
+        run: node --version
+      - name: Run offline synthetic SHA-256 and no-network tests
+        run: node --test scripts/test-stage-d-mobile-readback.mjs
