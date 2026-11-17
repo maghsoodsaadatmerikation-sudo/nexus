@@ -324,6 +324,14 @@ recovery. The [dated source-drift evidence and fail-closed preflight](docs/STAGE
 records those blockers without accessing user data or granting release
 authority.
 
+**Optional Stage D runtime identity observation:** a
+[manual, single-GET public witness](docs/STAGE-D-MANUAL-RUNTIME-WITNESS.md)
+can compare the exact provider-declared source-tree digest to public
+non-authoritative build metadata. This is disabled by default because even
+a read-only GET can wake a sleeping Railway service and incur usage.
+It requires explicit operator consent and cannot authorize release or
+replace an independent private-volume restore.
+
 ## Run the gateway locally
 
 ```sh
