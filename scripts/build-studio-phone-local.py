@@ -165,7 +165,7 @@ def main():
             if split.query or split.fragment or "%" in name or name not in assets:
                 self.send_error(404, "Public asset not found")
                 return
-            mime = MIME.get(Path(name).suffix)
+            mime = MIME.get(Path("/index.html" if name == "/" else name).suffix)
             if mime is None:
                 self.send_error(404, "Public asset unavailable")
                 return
