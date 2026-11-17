@@ -76,7 +76,7 @@ class CutoverTests(unittest.TestCase):
     def test_staged_patch_blocks_even_without_destructive_changes(self):
         data = fixture()
         data["inventory"]["staged"] = {"status": "STAGED", "changeCount": 2}
-        self.assertIn("environment_has_pending_changes", assess(data)["blockers"])
+        self.assertIn("environment_has_pending_or_unknown_changes", assess(data)["blockers"])
 
     def test_omitted_pending_state_is_not_treated_as_clean(self):
         for section, key in (("inventory", "staged"), ("service", "staged"),
