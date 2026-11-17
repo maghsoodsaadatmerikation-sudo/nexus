@@ -111,18 +111,18 @@ html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focu
 <p class="help music-en">Compose real MIDI notes and synthesize a local stereo WAV with no account, model or network. Santur, oud, ney, kamancheh and daf are <b>synthetic approximations</b>, not recordings. This tool does not synthesize singing or clone a real voice.</p><p class="help music-fa" lang="fa" dir="rtl">ملودی و سازبندی به‌صورت برنامه‌نویسی‌شده ساخته می‌شوند؛ خروجی استریوی WAV و MIDI بدون اتصال به سرور. صدای سنتور، عود، نی، کمانچه و دف تقریبی و الکترونیکی است، نه ضبط ساز واقعی. آواز انسان ساخته یا شبیه‌سازی نمی‌شود.</p>
 <div class="row"><div><label for="music-title"><span class="music-en">Composition title</span><span class="music-fa">نام قطعه</span></label><input id="music-title" value="Untitled journey" maxlength="90" autocomplete="off"></div><div><label for="music-story"><span class="music-en">Narrative arc</span><span class="music-fa">قوس روایت</span></label><select id="music-story"><option value="longing">Longing → resolution</option><option value="exile">Exile → acceptance</option><option value="radiance">Radiance → dance → calm</option><option value="prayer">Prayer → stillness</option></select></div></div>
 <div class="row"><div><label for="music-mode"><span class="music-en">Eastern-influenced tonal mode</span><span class="music-fa">مد موسیقایی با الهام شرقی</span></label><select id="music-mode"><option value="shur">Shur — stylized, microtonal</option><option value="hijaz">Hijaz — stylized</option><option value="bayati">Bayati — stylized, microtonal</option><option value="nahawand">Nahawand</option><option value="kurd">Kurd — stylized</option></select></div><div><label for="music-key"><span class="music-en">Tonal center</span><span class="music-fa">نت پایه</span></label><select id="music-key"><option>C</option><option>C#</option><option selected>D</option><option>D#</option><option>E</option><option>F</option><option>F#</option><option>G</option><option>G#</option><option>A</option><option>A#</option><option>B</option></select></div></div>
-<div class="row"><div><label for="music-bpm"><span class="music-en">Tempo (72–140 BPM)</span><span class="music-fa">سرعت موسیقی (۷۲ تا ۱۴۰)</span></label><input id="music-bpm" type="number" min="72" max="140" step="1" value="96"></div><div><label for="music-bars"><span class="music-en">Length — bars</span><span class="music-fa">طول قطعه (میزان)</span></label><select id="music-bars"><option value="32">32 — sketch</option><option value="48">48 — medium</option><option value="64" selected>64 — narrative</option></select></div></div>
+<div class="row"><div><label for="music-bpm"><span class="music-en">Tempo (72–140 BPM)</span><span class="music-fa">سرعت موسیقی (۷۲ تا ۱۴۰)</span></label><input id="music-bpm" type="number" min="72" max="140" step="1" value="96"></div><div><label for="music-bars"><span class="music-en">Length — bars</span><span class="music-fa">طول قطعه (میزان)</span></label><select id="music-bars"><option value="32">32 — sketch</option><option value="48">48 — medium</option><option value="64" selected>64 — narrative</option><option value="96">96 — extended (higher CPU)</option></select></div></div>
 <div class="row"><div><label for="music-lead"><span class="music-en">Signature lead</span><span class="music-fa">ساز ملودی اصلی</span></label><select id="music-lead"><option value="kamancheh">Kamancheh</option><option value="santur">Santur</option><option value="oud">Oud</option><option value="ney">Ney</option><option value="electric_guitar">Electric guitar</option></select></div><div><label for="music-solo"><span class="music-en">Central featured solo</span><span class="music-fa">ساز سولوی اصلی</span></label><select id="music-solo"><option value="electric_guitar">Electric guitar</option><option value="santur">Santur</option><option value="kamancheh">Kamancheh</option><option value="oud">Oud</option><option value="ney">Ney</option></select></div></div>
 <div class="row"><label class="inline"><input id="music-santur-solo" type="checkbox" checked><span class="music-en">Santur closing echo</span><span class="music-fa">پاسخ نهایی سنتور</span></label><label class="inline"><input id="music-guitar-solo" type="checkbox" checked><span class="music-en">Electric-guitar anticipation</span><span class="music-fa">پیش‌درآمد گیتار الکتریک</span></label><label class="inline"><input id="music-daf" type="checkbox" checked><span class="music-en">Daf percussion</span><span class="music-fa">ریتم دف</span></label></div>
 <details><summary><span class="music-en">Reproducibility & motif locks</span><span class="music-fa">بذر تولید و حفظ موتیف موفق</span></summary><div class="row"><div><label for="music-seed">Arrangement seed</label><input id="music-seed" type="number" min="1" max="2147483646" step="1" value="271828"></div><div><label for="music-motif-seed">Motif seed</label><input id="music-motif-seed" type="number" min="1" max="2147483646" step="1" value="31415"></div></div><label class="inline"><input id="music-lock-motif" type="checkbox" checked><span class="music-en">Preserve the melodic motif when refining</span><span class="music-fa">هنگام اصلاح، موتیف ملودیک حفظ شود</span></label></details>
 <div class="row"><button id="music-build" type="button"><span class="music-en">1. Compose original score</span><span class="music-fa">۱. آهنگ‌سازی مستقل</span></button><button id="music-variation" class="secondary" type="button"><span class="music-en">New variation</span><span class="music-fa">نسخهٔ متفاوت</span></button><button id="music-midi" class="secondary" type="button" disabled>Download MIDI</button><button id="music-score" class="secondary" type="button" disabled>Download score JSON</button></div>
 <label for="music-problem"><span class="music-en">What needs improvement? Change one parameter while protecting prior gains.</span><span class="music-fa">کدام ضعف را اصلاح کنیم؟ با حفظ دستاوردهای قبلی.</span></label><select id="music-problem"><option value="flat">Flat dynamics → stronger arc</option><option value="weak-hook">Weak hook → revise motif if unlocked</option><option value="weak-santur">Santur hidden → feature santur</option><option value="weak-guitar">Guitar solo hidden → feature guitar</option><option value="too-short">Too short → longer form</option><option value="hard-ending">Harsh ending → softer closure</option></select><button id="music-refine" class="secondary" type="button"><span class="music-en">Self-critique: apply one targeted correction</span><span class="music-fa">خودنقدی: اعمال یک اصلاح مشخص</span></button>
 <pre id="music-report" role="log" aria-live="polite"></pre>
-<div class="row"><button id="music-render" type="button" disabled><span class="music-en">2. Synthesize WAV (offline)</span><span class="music-fa">۲. ساخت صدای WAV آفلاین</span></button><select id="music-quality" aria-label="WAV sample rate"><option value="22050">Draft · 22.05 kHz</option><option value="44100">Higher rate · 44.1 kHz</option></select><button id="music-cancel" type="button" class="secondary" disabled><span class="music-en">Stop rendering</span><span class="music-fa">توقف ساخت</span></button></div>
+<div class="row"><button id="music-render" type="button" disabled><span class="music-en">2. Synthesize WAV (offline)</span><span class="music-fa">۲. ساخت صدای WAV آفلاین</span></button><select id="music-sound" aria-label="Instrument synthesis profile"><option value="expressive">Expressive eastern timbres · بیانگر</option><option value="classic">Classic v1 (A/B comparison) · نسخهٔ قدیمی</option></select><select id="music-quality" aria-label="WAV sample rate"><option value="22050">Draft · 22.05 kHz</option><option value="44100">Higher rate · 44.1 kHz</option></select><button id="music-cancel" type="button" class="secondary" disabled><span class="music-en">Stop rendering</span><span class="music-fa">توقف ساخت</span></button></div>
 <progress id="music-progress" value="0" max="100" style="width:100%;min-height:18px"></progress><p id="music-status" class="help" aria-live="polite" role="status"></p>
 <audio id="music-preview" controls preload="none" style="display:block;width:100%;margin:8px 0" aria-label="NEXUS original synthesized audio"></audio>
 <button id="music-wav" type="button" disabled><span class="music-en">Download my original WAV</span><span class="music-fa">دریافت فایل صوتی WAV</span></button>
-<p class="help music-en">Structure checks are objective only. Listen to the WAV and report subjective problems using the selector; generating a variation does not overwrite earlier downloaded files. Browser tab memory is temporary. All music is rendered by deterministic code, never Suno.</p><p class="help music-fa" lang="fa" dir="rtl">ارزیابی ساختار جایگزین گوش‌دادن نیست. برای اصلاح صدادهی، فایل را گوش کن و ایراد مشخص را انتخاب کن. فایل‌های قبلی دانلودشده حذف نمی‌شوند؛ داده‌های برگه موقتی‌اند. هیچ استفاده‌ای از سونو نمی‌شود.</p>
+<p class="help music-en">Structural and actual PCM diagnostics are objective only; this does not prove acoustic realism. Compare Expressive and Classic using the same score and seed. Listen to the WAV and report subjective problems using the selector; generating a variation does not overwrite earlier downloaded files. Browser tab memory is temporary. All music is rendered by deterministic code, never Suno.</p><p class="help music-fa" lang="fa" dir="rtl">ارزیابی ساختار و سیگنال WAV جایگزین گوش‌دادن نیست. با یک پارتیتور مشترک، صدای Expressive و Classic را مقایسه کن. برای اصلاح صدادهی، فایل را گوش کن و ایراد مشخص را انتخاب کن. فایل‌های قبلی دانلودشده حذف نمی‌شوند؛ داده‌های برگه موقتی‌اند. هیچ استفاده‌ای از سونو نمی‌شود.</p>
 </section>
 <section class="card" id="canvas-card"><h2 data-t="canvas">Versioned writing canvas</h2><select id="documents" aria-label="Document"></select><input id="document-title" maxlength="120" data-placeholder="documentTitle" aria-label="Document title"><button id="new-document" data-t="newDocument">New document</button><textarea id="editor" maxlength="100000" dir="auto"></textarea><div class="row"><button id="save-version" data-t="saveVersion">Save new version</button><button id="export-document" data-t="exportDocument">Export Markdown</button><button id="delete-document" data-t="deleteDocument">Delete document</button></div><select id="versions" aria-label="Saved document version"></select><button id="load-version" class="secondary" data-t="loadVersion">Load version into editor</button><pre id="version-diff"></pre><p class="help" data-t="canvasHelp">Every saved version remains available, up to 30 per document. Text and code are edited as inert text and never executed.</p></section>
 </div></div><p class="help" data-t="boundary">NEXUS assists judgment. It cannot make a human decision or take external actions from a conversation.</p>
@@ -1707,6 +1707,171 @@ document.addEventListener('nexus-studio-state',refresh);
 window.NexusStudioCompose={refresh,mode:()=>select.value};
 refresh();
 })();
+</script><script>/* NEXUS Music Lab — expressive, purely procedural and original DSP v2.
+ * No sample assets, vendor endpoints, user audio, recording, or network access.
+ * Approximate timbre modeling only; NOT acoustic instrument authentication.
+ */
+(function(root){'use strict';
+const TAU=2*Math.PI,MAX_WAV_BYTES=160*1024*1024;
+const clamp=(x,lo,hi)=>Math.max(lo,Math.min(hi,x));
+const sine=(p)=>Math.sin(p);
+function fail(code){throw Error(code)}
+function noise(index,id,salt=0){
+ let z=(Math.imul((index|0)+1,0x45d9f3b)^Math.imul((id|0)+1,0x119de1f3)^salt)|0;
+ z=Math.imul(z^(z>>>16),0x7feb352d);
+ z=Math.imul(z^(z>>>15),0x846ca68b);
+ return ((z^(z>>>16))>>>0)/2147483648-1;
+}
+function env(t,d,a,r){
+ if(t<0||t>=d)return 0;
+ return Math.min(1,t/Math.max(a,.001),Math.max(0,(d-t)/Math.max(r,.001)));
+}
+function partial(phase,n,frequency,rate){
+ return n*frequency<rate*.45?sine(phase*n):0;
+}
+function sample(note,phase,t,duration,frequency,index,rate){
+ const inst=note.instrument, id=note.id|0, attackNoise=noise(index,id);
+ if(inst==='daf'){
+  // Drum head's bending low membrane + hand/rim noises; never actual recorded daf.
+  const code=note.pitch|0,low=code===36, rim=code===42;
+  const f=low?68:rim?230:145;
+  const sweep=(low?27:rim?34:15);
+  const membrane=sine(TAU*(f*t+sweep*(1-Math.exp(-14*t))/14))
+       *Math.exp(-t*(low?12:rim?34:22));
+  const skin=attackNoise*Math.exp(-t*(low?34:rim?68:48));
+  return (rim?.25*membrane+.64*skin:low?.94*membrane+.18*skin:.45*membrane+.48*skin)
+    *env(t,duration,.001,.03);
+ }
+ const attack=inst==='kamancheh'?.088:inst==='cello'?.082:
+              inst==='ney'?.063:inst==='electric_guitar'?.010:.0028;
+ const release=inst==='kamancheh'?.14:inst==='cello'?.13:
+               inst==='ney'?.12:.075;
+ const e=env(t,duration,attack,release);
+ if(e<=0)return 0;
+ const vibratoDepth=inst==='kamancheh'?.0037:inst==='cello'?.002:
+                    inst==='ney'?.003:0;
+ // Integral of a bounded instantaneous frequency modulation. Unlike
+ // "phase * (1+sin(t))", vibrato depth stays stable for long held notes.
+ const vibrato=frequency*vibratoDepth/5.1*
+      (sine(TAU*5.1*t)-0)*clamp((t-.15)/.27,0,1);
+ const p=phase+vibrato;
+ if(inst==='santur'){
+  // Inharmonic stiff strings with paired detuning; mallet becomes darker
+  // as the upper partials decay. No fake "sampled santur" claim.
+  const decay=Math.exp(-t*(1.45+.00033*frequency));
+  const body=partial(p,1,frequency,rate)*.79
+      +partial(p*1.0024,1,frequency,rate)*.17
+      +partial(p,2.006,frequency,rate)*.51*Math.exp(-t*1.4)
+      +partial(p,3.018,frequency,rate)*.28*Math.exp(-t*2.5)
+      +partial(p,4.034,frequency,rate)*.14*Math.exp(-t*4.2);
+  const strike=attackNoise*.09*Math.exp(-t*78);
+  return (body*.59*decay+strike)*e;
+ }
+ if(inst==='oud'){
+  // Plucked string harmonic nulls from picking position, plus short
+  // plectrum transient. Faster high-harmonic damping than main resonance.
+  let body=0;
+  for(let h=1;h<=5;h++){
+   const coeff=Math.abs(sine(Math.PI*h*.19))/Math.pow(h,.88);
+   body+=coeff*partial(p,h,frequency,rate)*Math.exp(-t*(.52+.32*h));
+  }
+  return (body*.64+attackNoise*.045*Math.exp(-t*110))*e;
+ }
+ if(inst==='ney'){
+  // Sparse pipe spectrum, late breath shimmer and slow vibrato.
+  const breath=(.019+.017*Math.sin(TAU*2.3*t))*attackNoise;
+  const pipe=partial(p,1,frequency,rate)*.86+
+       partial(p,2,frequency,rate)*.095+
+       partial(p,3,frequency,rate)*.032;
+  return (pipe+breath)*e*.8;
+ }
+ if(inst==='kamancheh'||inst==='cello'){
+  // Bow onset, harmonic sustain, controlled slow vibrato with small
+  // simulated bow friction (not an acoustic bow recording).
+  let bow=0;
+  const weights=inst==='kamancheh'?[.74,.43,.30,.17,.09]:
+             [.85,.36,.22,.1,.04];
+  for(let h=1;h<=weights.length;h++)
+   bow+=weights[h-1]*partial(p,h,frequency,rate);
+  const grain=attackNoise*(inst==='kamancheh'?.016:.009);
+  return Math.tanh((bow+grain)*.96)*e*.70;
+ }
+ if(inst==='electric_guitar'){
+  let x=0;
+  for(let h=1;h<=5;h++)
+   x+=partial(p,h,frequency,rate)*(1/h)*Math.exp(-t*(.045+.08*h));
+  return Math.tanh(x*1.38)*e*.78;
+ }
+ if(inst==='piano'){
+  const body=partial(p,1,frequency,rate)*.87+
+       partial(p,2.001,frequency,rate)*.30*Math.exp(-t*.6)+
+       partial(p,3.009,frequency,rate)*.11*Math.exp(-t*1.2);
+  return body*Math.exp(-t*.4)*e*.72;
+ }
+ fail('unknown-instrument-audio-model');
+}
+function analyzeWav(bytes,score=null){
+ if(!(bytes instanceof Uint8Array)||bytes.byteLength<48||
+    bytes.byteLength>MAX_WAV_BYTES)fail('invalid-wav-data');
+ const dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+ const text=(start,s)=>[...s].every((c,i)=>dv.getUint8(start+i)===c.charCodeAt(0));
+ if(!text(0,'RIFF')||!text(8,'WAVE')||!text(12,'fmt ')||
+    !text(36,'data')||dv.getUint32(4,true)+8!==bytes.byteLength||
+    dv.getUint32(16,true)!==16||dv.getUint16(20,true)!==1||
+    dv.getUint16(22,true)!==2||dv.getUint16(34,true)!==16||
+    dv.getUint32(40,true)+44!==bytes.byteLength)fail('invalid-wav-header');
+ const rate=dv.getUint32(24,true),frames=dv.getUint32(40,true)/4;
+ if(![22050,44100].includes(rate)||!Number.isInteger(frames)||
+    dv.getUint32(28,true)!==rate*4)fail('invalid-wav-sample-format');
+ const regions=score?.sections&&Array.isArray(score.sections)&&
+       Number.isFinite(score?.options?.bpm)?score.sections:[];
+ const rmsSum=new Float64Array(regions.length),rmsCount=new Uint32Array(regions.length);
+ const threshold=327,clipValue=32765;
+ let peak=0,sum=0,l2=0,r2=0,lr=0,silent=0,clipped=0,which=0;
+ for(let i=0;i<frames;i++){
+  const l=dv.getInt16(44+i*4,true),r=dv.getInt16(46+i*4,true);
+  const power=(l*l+r*r)/2;
+  peak=Math.max(peak,Math.abs(l),Math.abs(r));sum+=power;
+  l2+=l*l;r2+=r*r;lr+=l*r;
+  if(Math.max(Math.abs(l),Math.abs(r))<=threshold)silent++;
+  if(Math.abs(l)>=clipValue||Math.abs(r)>=clipValue)clipped++;
+  if(regions.length){
+   const bar=i*score.options.bpm/(rate*60*4);
+   while(which<regions.length-1&&bar>=regions[which].end)which++;
+   rmsSum[which]+=power;rmsCount[which]++;
+  }
+ }
+ const db=value=>value>0?+(20*Math.log10(value/32768)).toFixed(2):null;
+ const rms=frames?Math.sqrt(sum/frames):0;
+ const sectionRms=regions.map((section,i)=>({
+  name:section.name,
+  rms_dbfs:db(Math.sqrt(rmsSum[i]/Math.max(1,rmsCount[i]))),
+  reviewed_against_real_audio:true
+ }));
+ const warnings=[];
+ if(!peak||!rms)warnings.push('silent-audio');
+ if(clipped>0)warnings.push('pcm-clipping');
+ if(db(rms)!==null&&db(rms)<-36)warnings.push('very-low-rms');
+ if(frames&&silent/frames>.5)warnings.push('more-than-half-near-silence');
+ const start=sectionRms[0]?.rms_dbfs,peakSection=sectionRms.find(x=>x.name==='Summit')?.rms_dbfs;
+ if(start!==null&&start!==undefined&&peakSection!==null&&peakSection!==undefined&&
+    peakSection-start<2)warnings.push('summit-level-not-distinct-from-intro');
+ return Object.freeze({
+  schema:'nexus.music.audio-diagnostics.v1',
+  objective_only:true,subjective_listening_performed:false,
+  acoustic_authenticity_verified:false,mastering_certified:false,
+  sample_rate:rate,frames,
+  measured_peak_dbfs:db(peak),measured_rms_dbfs:db(rms),
+  measured_crest_db:peak&&rms?+(20*Math.log10(peak/rms)).toFixed(2):null,
+  near_silent_fraction:+(silent/frames).toFixed(5),
+  clipped_frame_count:clipped,
+  stereo_correlation:l2&&r2?+(lr/Math.sqrt(l2*r2)).toFixed(5):null,
+  section_rms_dbfs:sectionRms,warnings
+ });
+}
+root.NexusMusicAudio=Object.freeze({sample,analyzeWav,profile:'expressive-procedural-v2',
+ acoustic_recordings:false,external_api:false});
+})(typeof globalThis!=='undefined'?globalThis:this);
 </script><script>/* NEXUS Music Lab v1: original deterministic composition and DSP.
  * Entirely local; no AI model, Suno, sampling, network, or recorded instruments.
  * Modes are artistically stylized approximations; not a claim of canonical intonation.
@@ -1754,7 +1919,7 @@ function validate(value={}){
  if(Object.keys(v).some(k=>!Object.hasOwn(DEFAULT,k)))fail('unknown-option');
  if(typeof v.title!=='string'||!v.title.trim()||v.title.length>90||/[\x00-\x1f]/.test(v.title))fail('invalid-title');
  if(!Object.hasOwn(MODES,v.mode)||!Object.hasOwn(KEYS,v.key)||!Object.hasOwn(STORIES,v.story))fail('invalid-mode-key-story');
- if(!integer(v.bpm,72,140)||![32,48,64].includes(v.bars))fail('invalid-tempo-length');
+ if(!integer(v.bpm,72,140)||![32,48,64,96].includes(v.bars))fail('invalid-tempo-length');
  if(!['santur','oud','ney','kamancheh','electric_guitar'].includes(v.lead)||!['santur','oud','ney','kamancheh','electric_guitar'].includes(v.solo))fail('invalid-lead-solo');
  if(!integer(v.seed,1,2147483646)||!integer(v.motifSeed,1,2147483646))fail('invalid-seed');
  for(const key of ['santurSolo','guitarSolo','daf'])if(typeof v[key]!=='boolean')fail('invalid-arrangement-boolean');
@@ -1959,10 +2124,22 @@ function synthWave(note,phase,t,seconds){
  return value*envelope*decay;
 }
 function delayTick(){return new Promise(resolve=>setTimeout(resolve,0))}
-async function renderWav(score,{sampleRate=22050,onProgress=()=>{},shouldAbort=()=>false}={}){
+async function renderWav(score,{sampleRate=22050,sound='expressive',onProgress=()=>{},shouldAbort=()=>false}={}){
  if(score?.schema!=='nexus.music.score.v1'||!SAMPLE_RATES.includes(sampleRate))fail('invalid-render-request');
- if(score.durationSeconds>250)fail('duration-over-budget');
+ if(score.durationSeconds>350)fail('duration-over-budget');
+ if(!['expressive','classic'].includes(sound))fail('unknown-sound-profile');
+ if(sound==='expressive'&&!root.NexusMusicAudio)fail('missing-expressive-audio-engine');
+ if(!Array.isArray(score.notes)||score.notes.length>5000)fail('invalid-render-note-list');
+ for(const n of score.notes){if(!Object.hasOwn(INSTRUMENTS,n.instrument)||
+  !Number.isFinite(n.start)||!Number.isFinite(n.duration)||
+  !Number.isFinite(n.pitch)||!Number.isFinite(n.pan)||
+  !Number.isFinite(n.velocity)||n.start<0||n.duration<=0||n.pitch<20||n.pitch>115||
+  n.velocity<1||n.velocity>127||Math.abs(n.pan)>1||
+  n.start+n.duration>score.durationSeconds+.002)fail('invalid-render-note');}
  const frames=Math.ceil((score.durationSeconds+.8)*sampleRate);
+ // Two float32 buffers plus PCM WAV; reject expensive combinations before
+ // allocating or running DSP. Long, low-rate exports remain available.
+ if(frames*12>128*1024*1024)fail('mobile-render-memory-budget');
  const left=new Float32Array(frames),right=new Float32Array(frames);
  const notes=score.notes;
  for(let n=0;n<notes.length;n++){
@@ -1976,7 +2153,9 @@ async function renderWav(score,{sampleRate=22050,onProgress=()=>{},shouldAbort=(
   let phase=0;
   for(let i=0;i<total;i++){
    const t=i/sampleRate;
-   const v=synthWave(note,phase,t,note.duration);
+   const v=sound==='expressive'
+    ?root.NexusMusicAudio.sample(note,phase,t,note.duration,freq,i,sampleRate)
+    :synthWave(note,phase,t,note.duration);
    const index=start+i;
    left[index]+=v*lg;right[index]+=v*rg;
    phase+=increment;if(phase>TAU*5000)phase%=TAU;
@@ -2012,7 +2191,9 @@ async function renderWav(score,{sampleRate=22050,onProgress=()=>{},shouldAbort=(
  onProgress(1);
  return new Uint8Array(buf);
 }
-root.NexusMusic=Object.freeze({MODES,INSTRUMENTS,DEFAULT,validate,compose,review,midi,renderWav,source_tree:'none'});
+root.NexusMusic=Object.freeze({MODES,INSTRUMENTS,DEFAULT,validate,compose,review,midi,renderWav,
+ analyzeWav:(...args)=>{if(!root.NexusMusicAudio)fail('missing-expressive-audio-engine');return root.NexusMusicAudio.analyzeWav(...args)},
+ sounds:Object.freeze(['expressive','classic']),source_tree:'none'});
 })(typeof globalThis!=='undefined'?globalThis:this);
 </script><script>/* NEXUS Music Lab: offline mobile-first user-controlled composition tools. */
 (()=>{'use strict';
@@ -2025,7 +2206,8 @@ en:{ready:'Compose a score first.',built:'Original instrumental score ready. No 
  error:'Music Lab could not complete the request.',noAudio:'No rendered WAV yet.',
  browser:'Audio preview may require a browser with WAV support.',
  variation:'Variation prepared. Review and compose again.',keep:'Retained your current motif seed.',
- self:'The quality checklist measures structure, not whether the music sounds authentic or emotionally successful.'},
+ self:'Structure and measured PCM checks are objective, not proof of acoustic realism or aesthetic quality.',
+ resource:'This sample-rate and song-length combination exceeds the offline phone memory budget. Try 22.05 kHz or fewer bars.'},
 fa:{ready:'ابتدا قطعه را آهنگ‌سازی کن.',built:'پارتیتور بی‌کلام ساخته شد؛ هیچ اتصالی به اینترنت انجام نشد.',
  rendering:'در حال ساخت فایل WAV استریو در همین دستگاه',
  cancelled:'ساخت موسیقی لغو شد.',exported:'خروجی روی دستگاه ذخیره شد؛ فایلی ارسال نشد.',
@@ -2033,7 +2215,8 @@ fa:{ready:'ابتدا قطعه را آهنگ‌سازی کن.',built:'پارتی
  browser:'ممکن است پیش‌شنیدن WAV در این مرورگر پشتیبانی نشود.',
  variation:'نسخهٔ متفاوت آماده شد؛ تنظیمات را بررسی و دوباره آهنگ‌سازی کن.',
  keep:'موتیف نسخهٔ پیشین محفوظ ماند.',
- self:'خودنقدی فقط ساختار را می‌سنجد، نه اصالت صدای ساز یا کیفیت احساسی موسیقی.'}
+ self:'خودنقدی ساختار و سطح سیگنال را می‌سنجد؛ نه اصالت ساز یا زیبایی موسیقی.',
+ resource:'این ترکیب طول قطعه و کیفیت صدا از بودجهٔ حافظهٔ گوشی فراتر می‌رود. کیفیت ۲۲ کیلوهرتز یا میزان کمتر را انتخاب کن.'}
 };
 const fa=()=>document.documentElement.lang==='fa',txt=k=>labels[fa()?'fa':'en'][k];
 let score=null,wav=null,revision=0,working=false,objectUrl=null;
@@ -2060,9 +2243,14 @@ function invalidate(){
  revision++;working=false;score=null;resetAudio();$('music-report').textContent='';out(txt('ready'));
 }
 for(const node of $('music-card').querySelectorAll('select,input')){
- if(['music-quality','music-problem','music-lock-motif'].includes(node.id))continue;
+ if(['music-quality','music-sound','music-problem','music-lock-motif'].includes(node.id))continue;
  node.addEventListener('change',invalidate);
 }
+function outputSettingsChanged(){
+ revision++;working=false;resetAudio();summary();out(txt('ready'));
+}
+$('music-quality').addEventListener('change',outputSettingsChanged);
+$('music-sound').addEventListener('change',outputSettingsChanged);
 function cleanFilename(){return ($('music-title').value.replace(/[^A-Za-z0-9 _-]/g,'').trim()||'nexus-composition').slice(0,56).replace(/\s+/g,'-')}
 function download(data,name,type){
  const blob=new Blob([data],{type});
@@ -2130,16 +2318,32 @@ $('music-render').addEventListener('click',async()=>{
  const start=++revision,active=score;working=true;resetAudio();buttons();
  try{
   const sr=Number($('music-quality').value);
-  const data=await Music.renderWav(active,{sampleRate:sr,
+  const data=await Music.renderWav(active,{sampleRate:sr,sound:$('music-sound').value,
    shouldAbort:()=>start!==revision,
    onProgress:p=>{if(start===revision){$('music-progress').value=Math.round(p*100);out(txt('rendering')+': '+Math.round(100*p)+'%')}}
   });
   if(start!==revision)return;
   wav=data;
+  const audio=Music.analyzeWav(data,active);
+  const a=[
+    fa()?'--- تحلیل واقعی سیگنال WAV ---':'--- Measured WAV diagnostics ---',
+    'Sound profile: '+$('music-sound').value,
+    'Peak dBFS: '+audio.measured_peak_dbfs,
+    'RMS dBFS: '+audio.measured_rms_dbfs,
+    'Crest dB: '+audio.measured_crest_db,
+    'Near-silent fraction: '+audio.near_silent_fraction,
+    'Clipped PCM frames: '+audio.clipped_frame_count,
+    'Stereo correlation: '+audio.stereo_correlation,
+    ...audio.section_rms_dbfs.map(x=>x.name+': '+x.rms_dbfs+' dBFS'),
+    'WAV warnings: '+(audio.warnings.join(', ')||'none'),
+    'No listening evaluation, acoustic fidelity, or mastering certification.'
+  ];
+  $('music-report').textContent+='\n'+a.join('\n');
   objectUrl=URL.createObjectURL(new Blob([wav],{type:'audio/wav'}));
   $('music-preview').src=objectUrl;
   out((fa()?'WAV استریو آماده شد.':'Stereo WAV ready.')+' '+txt('browser'));
- }catch(e){if(start===revision)out(e?.message==='render-cancelled'?txt('cancelled'):txt('error'))}
+ }catch(e){if(start===revision)out(e?.message==='render-cancelled'?txt('cancelled'):
+    e?.message==='mobile-render-memory-budget'?txt('resource'):txt('error'))}
  finally{if(start===revision){working=false;buttons()}}
 });
 $('music-cancel').addEventListener('click',()=>{
