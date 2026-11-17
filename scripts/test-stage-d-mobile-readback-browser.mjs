@@ -38,6 +38,14 @@ function syntheticBrowserScenario() {
         recipient_cert_sha256:cert,provider_origin:'not_independently_attested',
         release_authorized:false,authority:'none'};
       const node=id=>document.getElementById(id);
+      // Real Chromium must run the synthetic device self-check without
+      // any user-selected backup, before exercising the file-upload controls.
+      check(node('self-check') && node('self-check-result'),'missing_ondevice_control');
+      check(node('self-check-result').dataset.state==='idle','unexpected_automatic_selfcheck');
+      node('self-check').click();
+      for(let i=0;i<150 && node('self-check-result').dataset.state==='busy';i++)await sleep(20);
+      check(node('self-check-result').dataset.state==='pass','selfcheck_not_passed');
+      check(node('self-check-result').textContent.includes('NOT TESTED'),'missing_selfcheck_nonclaims');
       node('anchor').value='NEXUS_ENCRYPTED_ESCROW_ANCHOR_V1 '+JSON.stringify(anchor)+'\n';
       node('run-id').value=String(anchor.run_id);
       node('attempt').value='1';node('commit').value=anchor.commit_sha;
