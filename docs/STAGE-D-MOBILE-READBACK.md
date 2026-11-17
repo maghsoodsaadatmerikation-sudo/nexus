@@ -6,6 +6,19 @@
 
 Phase 35's trusted two-filesystem POSIX verifier correctly refuses two directories on a single filesystem. A phone-only owner may not have two independent POSIX mounts or a terminal. This new page gives the owner **a local browser-level byte comparison**, but does not replace or weaken the Phase 35 custodian separation or the Phase 35 requirement for independent offsite custody. The browser cannot prove that selected files were ever copied to separate physical devices.
 
+## On-device browser self-check (Phase 37)
+
+Before choosing any actual private ciphertext, press **Run on-device safety check** in the standalone HTML. This action uses only in-memory **synthetic, invalid-CMS** bytes and a synthetic GitHub anchor; it performs all checks in the current browser:
+
+1. Verify WebCrypto `SHA-256` against a known-answer test vector.
+2. Run the same two-pair byte/readback contract on disposable synthetic file-like objects.
+3. Confirm a one-byte ciphertext mutation is rejected.
+4. Confirm an attempt to forge `release_authorized=true` is rejected.
+
+The result is either `BROWSER SELF-CHECK PASS` or `BROWSER SELF-CHECK BLOCKED`. PASS proves only local browser compatibility for this synthetic JavaScript flow **at the time of the tap**; it is not real backup validation, proof of the Android system file picker, independent retention, CMS decryption, private recovery-key possession, authentic GitHub provenance, or production readiness. The page does not silently start the self-check and does not store the result. A failed check must not be bypassed by sending encrypted backups to a third-party hashing website.
+
+Real headless Chromium CI runs the self-check on the page in narrow/wide layouts **before** synthetic file selection. Node synthetic negative tests also reject a browser with no WebCrypto or an incorrect SHA-256 implementation. These are not physical Android device tests.
+
 ## Run on Android or desktop
 
 1. Download the **single exact source file** `web/stage-d-mobile-readback.html` from a reviewed commit and save it privately on your device. Open it as a local HTML document in a modern browser that supports file selection and WebCrypto. Some Android file handlers disable scripts or local WebCrypto; if `webcrypto_unavailable`, stop — **do not upload the encrypted backup to an online hash website**. The app requires no login and should be usable offline once opened. Do not enter API keys, passwords or decryption keys.
