@@ -19,8 +19,8 @@ PROJECT = "2ac7887b-d67a-48be-8a7b-bd54092893ae"
 ENVIRONMENT = "56c4bc45-0e62-4aa9-832f-884bb1aa620c"
 SERVICE = "0032fc74-2c52-475d-b9df-9dca59237d93"
 VOLUME = "cc47a350-6c7e-4487-89d9-c4b390f94884"
-DEPLOYMENT = "db2fd959-918e-49d5-b077-1ac74fac9a82"
-RUNTIME = "3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959"
+DEPLOYMENT = "32cdcb2b-c03c-4a6f-b028-27a9977717ce"
+RUNTIME = "9abbc067aad3ebbb0956432cf6682d2ea70e2824"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INTAKE = Path(__file__).with_name("verify-offhost-volume-export.py")
 MAX_COPY_FILES = 20_000
@@ -217,6 +217,16 @@ def execute(args):
         print("Does NOT prove capture consistency, provider identity or real restore.")
         return 0
 
+    # Independently read the actual current Railway deployment and commit
+    # immediately before manual use. The old db2fd959 deployment was
+    # REMOVED; silently continuing to stamp that historical ID on new
+    # downloaded workspace data would mislabel a private recovery artifact.
+    # These arguments are human-provided observations, NOT provider
+    # attestations. Reject missing or drifted answers before running even
+    # CLI --help, creating the output directory or transferring any bytes.
+    require(getattr(args, "confirm_deployment", None) == DEPLOYMENT and
+            getattr(args, "confirm_runtime", None) == RUNTIME,
+            "current Railway deployment and source must be reconfirmed")
     # Railway's CLI accepts project OR account/workspace token, never both.
     # Reject ambiguity before any CLI invocation or private directory writes.
     project_auth = bool(os.environ.get("RAILWAY_TOKEN"))
@@ -308,6 +318,10 @@ def main():
     parser.add_argument("--railway-bin", type=Path, default=Path("/usr/local/bin/railway"))
     parser.add_argument("--rust-validator-bin", type=Path,
                         help="optional operator-built Rust durable-audit executable for copied data")
+    parser.add_argument("--confirm-deployment",
+                        help="freshly observed exact Railway deployment UUID; manual binding only")
+    parser.add_argument("--confirm-runtime",
+                        help="freshly observed exact deployed Git source commit; manual binding only")
     parser.add_argument("--execute", action="store_true", help="Operator opts in to CLI download")
     args = parser.parse_args()
     try:
