@@ -223,8 +223,25 @@ def live_fetch(name):
 
 def observe_public(manifest, fetch=live_fetch):
     if manifest.get("schema") != SCHEMA or manifest.get("authority") != "none" or \
-            manifest.get("readiness") != "REVIEW_CANDIDATE_ONLY":
+            manifest.get("readiness") != "REVIEW_CANDIDATE_ONLY" or \
+            manifest.get("origin_to_compare") != ORIGIN or \
+            manifest.get("production_promotion_authorized") is not False or \
+            manifest.get("render_deploy_performed") is not False or \
+            manifest.get("contains_private_data") is not False or \
+            manifest.get("contains_provider_secrets") is not False or \
+            not isinstance(manifest.get("source_commit"), str) or \
+            not re.fullmatch(r"[0-9a-f]{40}", manifest["source_commit"]):
         raise ValueError("untrusted release comparison source")
+    # A user-supplied external JSON must never redefine the expected public
+    # source identity. The observer independently derives the exact reviewed
+    # bytes again and fails closed if the manifest is forged or stale.
+    reviewed = source_assets()
+    evidence = {
+        name: {"bytes": len(data), "sha256": sha(data)}
+        for name, data in sorted(reviewed.items())
+    }
+    if manifest.get("assets") != evidence or manifest.get("content_count") != len(FILES):
+        raise ValueError("unreviewed manifest cannot establish public source identity")
     records = []
     for name in OBSERVE:
         expected = manifest["assets"][name]
