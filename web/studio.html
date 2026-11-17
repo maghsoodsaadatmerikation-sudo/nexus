@@ -1433,12 +1433,14 @@ const labels=[
 for(const [id,en,fa] of labels){
  const button=document.createElement('button');button.type='button';button.className='studio-focus-tab';
  button.dataset.panel=id;button.dataset.en=en;button.dataset.fa=fa;
+ button.setAttribute('aria-controls',id==='tools'?'studio-focus-tools':id);
  button.addEventListener('click',()=>id==='tools'?openTools():openPanel(id));
  nav.append(button);
 }
 for(const [id,en,fa] of tools){
  const button=document.createElement('button');button.type='button';
  button.dataset.panel=id;button.dataset.en=en;button.dataset.fa=fa;
+ button.setAttribute('aria-controls',id);
  button.addEventListener('click',()=>openPanel(id));toolsGrid.append(button);
 }
 let selected='conversation-card',focused=media.matches,manual=false,toolsOpen=false;
@@ -1475,7 +1477,9 @@ function moveTo(element){
 function openPanel(id){
  if(!sections.includes(id))return false;
  if(!focused){const element=$(id);element.scrollIntoView({block:'start',behavior:'instant'});return true}
- selected=id;toolsOpen=false;layout();moveTo($(id));return true;
+ selected=id;toolsOpen=false;layout();moveTo($(id));
+ const heading=$(id).querySelector('h2');if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true})}
+ return true;
 }
 function openTools(){
  if(!focused){existingNav.scrollIntoView({block:'start',behavior:'instant'});return}
