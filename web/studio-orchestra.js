@@ -31,7 +31,7 @@ const GM=Object.freeze({
 });
 const DOMAINS=[
  ['grand_piano',/(?:\b(?:grand\s+)?piano\b|پیانو)/iu],
- ['violin',/(?:\bviolin\b|ویولن|ویولون)/iu],
+ ['violin',/(?:\bviolin\b|ویولن(?!سل)|ویولون)/iu],
  ['viola',/(?:\bviola\b|ویولا)/iu],
  ['cello',/(?:\bcello\b|ویولنسل)/iu],
  ['double_bass',/(?:\b(?:double bass|contrabass)\b|کنترباس)/iu],
@@ -118,6 +118,9 @@ function parsePrompt(value){
  if(instruments.length>7)warnings.push('more-than-seven-instruments');
  if(drums&&forbidDrums)warnings.push('conflicting-drum-instructions');
  if(unknown.length)warnings.push('unparsed-terms-require-review');
+ const expectedParts=instruments.length+(voice||style.length>0?1:0)+(choir?3:0)+
+   (animals.length?1:0)+(effects.length?1:0)+(drums&&!forbidDrums?1:0);
+ if(expectedParts>PART_LIMIT)warnings.push('part-count-over-local-budget');
  const tempoNumber=tempo?Number(tempo[1]||tempo[2]||tempo[3]):94;
  if(!int(tempoNumber,60,160))warnings.push('tempo-out-of-range');
  let rootMidi=60,mode='minor';
@@ -207,7 +210,7 @@ function compose(spec,seed=61234){
     const gap=bar===0&&pos===0||((bar+1)%8===0&&pos>=1440);
     if(!gap){
      const contour=(bar%4===3&&i%3===0?4:[0,2,4,3,2,1,0][(i+bar)%7])+
-       (bar%4===2&&i%3===1&&r()<.4?1:0);
+       (bar%4===2&&i%3===1&&((seed+bar)%2===0||r()<.07)?1:0);
      let offset=spec.register==='soprano'?12:spec.register==='alto'?7:
                   spec.register==='tenor'?0:-5;
      const pitches=spec.style==='rap'?degree(0,0)+offset+(i%2):
