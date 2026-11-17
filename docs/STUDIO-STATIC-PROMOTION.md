@@ -47,6 +47,8 @@ python3 scripts/studio-static-release-gate.py --observe-public \
 
 The ZIP is review/transport material: the live Render static publish directory must contain **only** its reviewed contents (equivalent to repository `public/studio`), not the outer ZIP, manifest or CI evidence JSON. Do not upload the archive or metadata as public website documents, and do not substitute a different service or workspace. The manifest is **not an independent cryptographic signature**: obtain its SHA sidecar through the actual reviewed GitHub Actions run and verify the run's source commit and provenance.
 
+**New Phase 48 fallback:** Before any Render deployment, use the [verified previous-live public-source fallback](STUDIO-LIVE-ROLLBACK-FALLBACK.md) to retain a ZIP of exactly the files corresponding to the current live deploy, with real public HTTPS byte checks. Render supports rollback from the dashboard if the old build artifact remains retained; this has not been proven accessible through the connected Render tools. A source backup is not itself an instant provider rollback.
+
 ## Explicit human-gated public promotion
 
 **No promotion is authorized by this stage.** Before an actual update, the service owner must confirm the precise Render workspace, service ID/domain, source repository and branch/commit, publish directory, environment, build command, expected traffic and a currently working rollback path. Verify that no unrelated Render staged change is accidentally included. Do not proceed merely because a repository PR passed.
