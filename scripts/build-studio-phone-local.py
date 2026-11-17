@@ -36,6 +36,8 @@ SOURCE_NAMES = (
     "device/vendor/ort-wasm-simd-threaded.asyncify.mjs",
 )
 SCHEMA = "nexus.studio-phone-local-kit.v1"
+CHECK_NAME = "device-check.html"
+CHECK_SOURCE = ROOT / "scripts/studio-phone-fieldcheck.html"
 README = """NEXUS Studio / Android offline-capable local edition
 ====================================================
 
@@ -57,6 +59,17 @@ Android Termux, or any trusted Python 3 installation:
 Open in the SAME phone's browser:
   http://127.0.0.1:8765/
 
+Then open the PHONE SELF-CHECK on the same device:
+  http://127.0.0.1:8765/device-check.html
+
+Tap 'Run private checks' for a no-upload browser/PWA/asset witness.
+For an optional real-world note, manually tick the independent tests only
+AFTER actually stopping the Termux server, disconnecting the internet and
+reopening the main app; those checkmarks are OWNER-REPORTED, not verified.
+Use the 'Save JSON locally' action only if you choose to share the
+booleans and reviewed public-code hash. No device ID, IP address,
+passphrase, user conversation or private content is collected or uploaded.
+
 Create a project, talk to the LOCAL deterministic reflection guide, use
 writing/data/code tools, and explicitly save a separately encrypted
 browser archive (keep its passphrase and backup in private custody).
@@ -71,7 +84,10 @@ preparing offline code, service-worker support depends on the browser.
 Do not rely on background service permanence or unsaved drafts.
 
 The local launcher binds strictly to 127.0.0.1, never 0.0.0.0,
-and serves a closed allowlist of the shipped public files. It refuses
+and serves a closed allowlist of the shipped public files.
+The self-check page does not mutate app storage and its report is only
+created on your phone after you choose Run and Save/Copy. Cached shell
+readiness is not a proof that Studio ran while the Termux server was off. It refuses
 POST, URL queries, unknown paths and modified public assets. Browser
 functions that fetch external sources, optional on-device model weights,
 or a separately configured model gateway require their own consent,
@@ -125,7 +141,7 @@ def load_public():
        manifest.get("private_user_data_included") is not False:
         raise ValueError("untrusted package manifest")
     items = manifest.get("assets")
-    if not isinstance(items, dict) or len(items) != 13:
+    if not isinstance(items, dict) or len(items) != 14:
         raise ValueError("unexpected public asset contract")
     assets = {}
     for name, expected in items.items():
@@ -241,10 +257,29 @@ def public_assets():
     return items
 
 
+def phone_check_page(assets):
+    """Reviewed, public-only HTML with exact build-time SHA-256 bindings."""
+    source = CHECK_SOURCE
+    st = source.lstat()
+    if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or source.is_symlink() or not (0 < st.st_size < 30000):
+        raise ValueError("fieldcheck source type or length invalid")
+    template = source.read_text(encoding="utf-8")
+    if template.count("__APP_SHA256__") != 1 or template.count("__SW_SHA256__") != 1:
+        raise ValueError("fieldcheck expected-digest placeholders missing")
+    if "http://" in template or "https://" in template or "localStorage" in template or "indexedDB" in template:
+        raise ValueError("fieldcheck cannot embed external network or private storage")
+    result = template.replace("__APP_SHA256__", sha(assets["index.html"])).replace(
+        "__SW_SHA256__", sha(assets["service-worker.js"]))
+    if "</script>" not in result or "personal_data_collected:false" not in result:
+        raise ValueError("fieldcheck minimal public safety contract missing")
+    return result.encode("utf-8")
+
+
 def contents(commit):
     if not isinstance(commit, str) or not re.fullmatch("[0-9a-f]{40}", commit):
         raise ValueError("exact lowercase Git source commit required")
     assets = public_assets()
+    assets[CHECK_NAME] = phone_check_page(assets)
     manifest = {
         "schema": SCHEMA,
         "source_commit": commit,
@@ -269,7 +304,7 @@ def verify(zip_file, exact_commit=None):
         raise ValueError("ZIP missing or too large")
     with zipfile.ZipFile(zip_file, "r", allowZip64=False) as archive:
         infos = archive.infolist()
-        if len(infos) != len(SOURCE_NAMES) + 3:
+        if len(infos) != len(SOURCE_NAMES) + 4:
             raise ValueError("unexpected ZIP entry count")
         payloads = {}
         for info in infos:
@@ -280,7 +315,7 @@ def verify(zip_file, exact_commit=None):
             if not info.filename.startswith(prefix):
                 raise ValueError("unexpected ZIP entry root")
             name = info.filename[len(prefix):]
-            if name not in SOURCE_NAMES + ("README.txt", "run-local.py", "source-manifest.json") or \
+            if name not in SOURCE_NAMES + (CHECK_NAME, "README.txt", "run-local.py", "source-manifest.json") or \
                name in payloads or ".." in PurePosixPath(name).parts or \
                not stat.S_ISREG(info.external_attr >> 16):
                 raise ValueError("unsafe ZIP entry")
