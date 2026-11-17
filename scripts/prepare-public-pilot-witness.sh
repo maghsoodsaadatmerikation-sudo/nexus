@@ -12,6 +12,10 @@ mkdir -m 700 "$target"
 # a newer test contract with an older deployed app and produce a false red.
 # Candidate checks remain in their separate PR/offline CI workflows.
 git archive "$baseline" web public scripts | tar -x -C "$target"
+# The only candidate addition is a test-only browser egress proxy; it cannot
+# replace any pinned public application/source/worker/browser logic.
+test "$(git hash-object scripts/pilot12-public-egress-proxy.mjs)" = "$(git rev-parse HEAD:scripts/pilot12-public-egress-proxy.mjs)"
+cp scripts/pilot12-public-egress-proxy.mjs "$target/scripts/pilot12-public-egress-proxy.mjs"
 # Use exactly the deployed revision for ALL application bytes. On public HTTPS,
 # the cached HTML body can exist before its inline DOM handlers finish parsing.
 # The historical Chromium witness only checked existence of the install button,
@@ -107,14 +111,6 @@ trace_listener_after="""  const msg=JSON.parse(e.data),p=pending.get(msg.id);
     const u=String(msg.params?.frame?.url||'');
     capped('frames',{stage,app_origin:u===ORIGIN,browser_error:u.startsWith('chrome-error:')});
   }
-  if(msg.method==='Fetch.requestPaused'&&msg.sessionId===workerSessionId){
-    const req=msg.params?.request||{};
-    workerDeniedFetches++;
-    if(req.method!=='GET'||!String(req.url||'').startsWith(ORIGIN))
-      workerRequestError=true;
-    rpc('Fetch.failRequest',{requestId:msg.params.requestId,errorReason:'InternetDisconnected'},
-      10000,workerSessionId).catch(()=>{workerRequestError=true});
-  }
   if(!p)return;pending.delete(msg.id);"""
 if text.count(trace_listener_before)!=1 or trace_listener_after in text:
     raise SystemExit("BLOCKED: historical CDP event handler changed")
@@ -131,120 +127,66 @@ if text.count(trace_catch_before)!=1 or trace_catch_after in text:
 text=text.replace(trace_catch_before,trace_catch_after)
 
 
-# The page-only CDP Network offline flag does not necessarily apply to
-# Service Worker network fetches. Attach to the *exact reviewed worker*
-# target and independently test an online baseline followed by an offline
-# worker-origin fetch rejection before accepting an offline navigation.
-# Keep the pinned archived page and worker unchanged.
-def replace_once(old, new, label):
+# Browser-wide public HTTPS egress isolation: Chrome's CONNECT proxy is
+# allowlisted to the single reviewed public origin. Cut its actual tunnels
+# after opt-in registration so BOTH page and Service Worker lose network.
+# Network.overrideNetworkState only changes page onLine display; evidence
+# relies on physical proxy refusal, not its boolean alone.
+def replace_exact(old,new,label):
     global text
     if text.count(old)!=1 or new in text:
-        raise SystemExit("BLOCKED: pinned worker-proof anchor changed: "+label)
+        raise SystemExit('BLOCKED: pinned proxy witness anchor: '+label)
     text=text.replace(old,new)
 
-replace_once("const pending=new Map();",
-             "const pending=new Map();\nlet workerSessionId=null,workerDeniedFetches=0,workerRequestError=false;",
-             "worker-fetch-state")
-replace_once("const rpc=(method,params={},deadline=10000)=>new Promise(",
-             "const rpc=(method,params={},deadline=10000,sessionId=null)=>new Promise(",
-             "session-aware-rpc-signature")
-replace_once("socket.send(JSON.stringify({id,method,params}));",
-             "socket.send(JSON.stringify({id,method,params,...(sessionId?{sessionId}:{})}));",
-             "session-aware-rpc-transport")
-replace_once("const navTrace={responses:[],failures:[],frames:[]};",
-             "const navTrace={responses:[],failures:[],frames:[]};\n"
-             "const workerProof={exact_target:false,online_probe:false,offline_probe:false,document_from_worker:false};",
-             "worker-proof-evidence")
-
-attach_anchor=""" checks.push('installed-cache-sha256-is-exact-reviewed-html');"""
-attach_code=""" // Require the exact same-origin installed service worker TARGET, not
- // merely the page's navigator.onLine or ServiceWorker.controller flag.
- stage='worker-target-online-proof';
- await rpc('Target.setDiscoverTargets',{discover:true});
- const workerInfo=await poll(async()=>{
-   const list=await rpc('Target.getTargets');
-   const matching=(list.targetInfos||[]).filter(x=>
-     x.type==='service_worker'&&x.url===ORIGIN+'service-worker.js');
-   return matching.length===1?matching[0]:null;
- },16000,'exact-public-service-worker-target-missing');
- const attached=await rpc('Target.attachToTarget',
-   {targetId:workerInfo.targetId,flatten:true});
- assert(typeof attached.sessionId==='string'&&attached.sessionId.length>4,
-   'worker-target-attach-refused');
- workerSessionId=attached.sessionId;
- await rpc('Runtime.enable',{},10000,workerSessionId);
- await rpc('Network.enable',{},10000,workerSessionId);
- await rpc('Network.setCacheDisabled',{cacheDisabled:true},10000,workerSessionId);
- workerProof.exact_target=true;
- const onlineProbe=await rpc('Runtime.evaluate',{
-   expression:"fetch('/',{cache:'no-store',credentials:'omit'}).then(r=>r.status===200,()=>false)",
-   awaitPromise:true,returnByValue:true},15000,workerSessionId);
- assert(onlineProbe.result?.value===true&&!onlineProbe.exceptionDetails,
-   'worker-origin-baseline-not-online');
- workerProof.online_probe=true;
- checks.push('installed-cache-sha256-is-exact-reviewed-html');"""
-replace_once(attach_anchor,attach_code,"public-worker-attach")
-
-offline_anchor=""" await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
- await rpc('Page.reload',{ignoreCache:true});"""
-offline_code=""" // Block worker-origin GET requests at CDP Fetch interception before
- // network I/O. This is NOT a whole-device/network offline condition.
- // Page target override only changes navigator.onLine; direct page fetches
- // could still reach the network, so SW origin must be positively proven.
- const offlineParams={offline:true,latency:0,downloadThroughput:0,uploadThroughput:0};
- await rpc('Fetch.enable',{patterns:[{urlPattern:ORIGIN+'*',requestStage:'Request'}]},
-   10000,workerSessionId);
- await rpc('Network.overrideNetworkState',offlineParams);
- const workerBlocked=await rpc('Runtime.evaluate',{
-   expression:"fetch('/',{cache:'no-store',credentials:'omit'}).then(()=>false,()=>true)",
-   awaitPromise:true,returnByValue:true},15000,workerSessionId);
- assert(workerBlocked.result?.value===true&&!workerBlocked.exceptionDetails&&
-   workerDeniedFetches>0&&!workerRequestError,
-   'worker-request-failure-not-intercepted');
- const blockedBeforeNavigation=workerDeniedFetches;
- workerProof.offline_probe=true;
- await rpc('Page.reload',{ignoreCache:true});"""
-replace_once(offline_anchor,offline_code,"both-cdp-targets-offline")
-
-doc_anchor=""" checks.push('real-chrome-network-offline-reload-served-cached-app');"""
-doc_code=""" // Chromium can omit Network.responseReceived for a SW CacheStorage
- // navigation while still exposing Resource Timing's workerStart. Require
- // the browser's *real navigation* workerStart and an exact controller;
- // if a CDP Document event exists, it must be an approved worker HTML 200.
- const navigation=await retryJs("(()=>{const n=performance.getEntriesByType('navigation')[0];return {worker_started:Number(n?.workerStart)>0,controlled:navigator.serviceWorker?.controller?.scriptURL===location.origin+'/service-worker.js',status:Number(n?.responseStatus)||0}})()");
- assert(navigation?.worker_started===true&&navigation?.controlled===true,
-   'offline-navigation-worker-timing-not-confirmed');
- const offlineDocuments=navTrace.responses.filter(r=>
-   r.stage==='real-network-offline'&&r.app_origin);
- assert(offlineDocuments.every(r=>r.from_service_worker&&r.status===200&&r.html),
-   'offline-navigation-cdp-document-contradicts-worker-timing');
- await poll(async()=>workerDeniedFetches>blockedBeforeNavigation&&!workerRequestError,
-   10000,'worker-navigation-network-fetch-not-intercepted');
- workerProof.document_from_worker=true;
- checks.push('worker-network-blocked-cached-navigation');
- checks.push('worker-target-online-baseline-and-blocked-fetch-probe');"""
-replace_once(doc_anchor,doc_code,"offline-document-worker-origin")
-
-report_anchor="""   actual_offline_navigation:true,real_android_hardware:false,"""
-report_code="""   actual_offline_navigation:false,
-   worker_fetch_interception_verified:workerProof.exact_target&&workerProof.online_probe&&
-     workerProof.offline_probe&&workerProof.document_from_worker&&
-     workerDeniedFetches>=2&&!workerRequestError,
-   whole_browser_network_cut:false,
-   worker_online_baseline:true,real_android_hardware:false,"""
-
-restore_anchor=""" await rpc('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});"""
-restore_code=""" const onlineAgain={offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1};
- await rpc('Network.overrideNetworkState',onlineAgain);
- await rpc('Fetch.disable',{},10000,workerSessionId);"""
-replace_once(restore_anchor,restore_code,"worker-and-page-network-restore")
-
-replace_once(report_anchor,report_code,"worker-proof-report")
-
+replace_exact("import path from 'node:path';",
+    "import path from 'node:path';\nimport {startProbeProxy} from './pilot12-public-egress-proxy.mjs';",
+    "proxy-module-import")
+replace_exact("const profile=await mkdtemp(path.join(tmpdir(),'nexus-pwa-private-'));",
+    "const profile=await mkdtemp(path.join(tmpdir(),'nexus-pwa-private-'));\nconst proxy=await startProbeProxy();",
+    "ephemeral-proxy-launch")
+replace_exact(" '--user-data-dir='+profile,'--window-size=500,980','about:blank'",
+    " '--proxy-server=http://127.0.0.1:'+proxy.port,\n '--user-data-dir='+profile,'--window-size=500,980','about:blank'",
+    "chrome-bounded-proxy")
+replace_exact(" await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});",
+    """ const beforeCut=proxy.stats();
+ assert(beforeCut.allowed>0&&beforeCut.unexpected===0,
+   'public-browser-did-not-actually-use-allowlisted-proxy');
+ await proxy.cut();
+ assert(proxy.stats().live===false&&proxy.stats().active===0,
+   'browser-origin-tunnels-still-open');
+ // Only the synthetic online indicator is overridden. The real egress
+ // restriction is that the browser's external CONNECT proxy is now down.
+ await rpc('Network.overrideNetworkState',{offline:true,latency:0,
+   downloadThroughput:0,uploadThroughput:0});""",
+    "force-network-cut-before-reload")
+replace_exact(" checks.push('real-chrome-network-offline-reload-served-cached-app');",
+    """ const navProof=await retryJs("(()=>{const n=performance.getEntriesByType('navigation')[0];return {worker_started:Number(n?.workerStart)>0,controller:navigator.serviceWorker?.controller?.scriptURL===location.origin+'/service-worker.js'}})()");
+ assert(navProof?.worker_started===true&&navProof.controller===true,
+   'public-offline-navigation-not-proved-worker-delivered');
+ assert(proxy.stats().live===false&&proxy.stats().active===0,
+   'public-egress-regained-unexpectedly');
+ const observed=navTrace.responses.filter(r=>r.stage==='real-network-offline'&&r.app_origin);
+ assert(observed.every(r=>r.from_service_worker&&r.status===200&&r.html),
+   'public-offline-network-observation-not-from-worker');
+ checks.push('real-chrome-network-offline-reload-served-cached-app');
+ checks.push('chrome-proxy-cut-with-worker-served-cache');""",
+    "worker-delivery-after-full-proxy-cut")
+replace_exact(" await rpc('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});",
+    " await rpc('Network.overrideNetworkState',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});",
+    "restore-online-indicator")
+replace_exact("   actual_offline_navigation:true,real_android_hardware:false,",
+    """   actual_offline_navigation:true,
+   chromium_origin_proxy_cut:proxy.stats().live===false&&
+     proxy.stats().active===0&&proxy.stats().allowed>0,
+   isolated_to_reviewed_public_origin:true,real_android_hardware:false,""",
+    "proxy-disconnection-report")
+replace_exact(" await rm(profile,{recursive:true,force:true});",
+    " await proxy.close();\n await rm(profile,{recursive:true,force:true});",
+    "close-disposable-proxy")
 
 path.write_text(text)
 print(json.dumps({'witness_source':'pinned-deployed-baseline',
-  'witness_patch':'pinned-worker-target-online-offline-network-proof',
+  'witness_patch':'pinned-public-browser-proxy-egress-cut-and-worker-navigation',
   'witness_sha256':hashlib.sha256(text.encode()).hexdigest(),
   'published_application_bytes_modified':False,
   'acceptance_checks_relaxed':False, 'authority':'none'},sort_keys=True), file=sys.stderr)
