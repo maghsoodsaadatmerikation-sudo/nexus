@@ -134,7 +134,7 @@ text=text.replace(trace_catch_before,trace_catch_after)
 # relies on physical proxy refusal, not its boolean alone.
 def replace_exact(old,new,label):
     global text
-    if text.count(old)!=1 or new in text:
+    if text.count(old)!=1:
         raise SystemExit('BLOCKED: pinned proxy witness anchor: '+label)
     text=text.replace(old,new)
 
