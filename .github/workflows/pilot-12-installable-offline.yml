@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/pilot-12-installable-offline.yml'
       - 'scripts/test-pwa-offline-browser.mjs'
+      - 'scripts/test-pwa-worker-failclosed.mjs'
       - 'web/offline-pilot.html'
       - 'web/locales/**'
       - 'scripts/build-ui-languages.py'
@@ -17,6 +18,7 @@ on:
     paths:
       - '.github/workflows/pilot-12-installable-offline.yml'
       - 'scripts/test-pwa-offline-browser.mjs'
+      - 'scripts/test-pwa-worker-failclosed.mjs'
       - 'web/offline-pilot.html'
       - 'web/locales/**'
       - 'scripts/build-ui-languages.py'
@@ -75,6 +77,26 @@ jobs:
           cmp web/offline-pilot.html public/index.html
           node --check scripts/test-pwa-offline-browser.mjs
           node --check public/service-worker.js
+      - name: Fail closed on tampered cached HTML, status, MIME and non-navigation requests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/test-pwa-worker-failclosed.mjs
+          node scripts/test-pwa-worker-failclosed.mjs > pilot-12-worker-negative.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('pilot-12-worker-negative.json').read_text())
+          assert r['schema']=='nexus.pilot-12.worker-negative.v1'
+          assert r['status']=='PASS' and len(r['checks'])==9
+          assert 'same-sized-tampered-cached-html-is-rejected-offline' in r['checks']
+          assert 'unreviewed-install-never-creates-app-cache' in r['checks']
+          assert r['disposable_vm_only'] is True
+          assert r['real_chromium'] is False and r['public_https_tested'] is False
+          assert r['production_mutation'] is False and r['private_data_used'] is False
+          assert r['authority']=='none'
+          print('PASS: deterministic malformed-cache negative tests (not a public Chrome witness)')
+          PY
       - name: Test browser opt-in install and actual no-network navigation
         shell: bash
         run: |
@@ -116,6 +138,8 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: nexus-pilot-12-browser-offline-install
-          path: pilot-12-offline-witness.json
+          path: |
+            pilot-12-offline-witness.json
+            pilot-12-worker-negative.json
           if-no-files-found: ignore
           retention-days: 14
