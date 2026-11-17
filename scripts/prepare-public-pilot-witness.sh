@@ -177,9 +177,12 @@ replace_once(attach_anchor,attach_code,"public-worker-attach")
 offline_anchor=""" await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
  await rpc('Page.reload',{ignoreCache:true});"""
 offline_code=""" const offlineParams={offline:true,latency:0,downloadThroughput:0,uploadThroughput:0};
- // Both independent CDP targets are explicitly disconnected. A page-only
- // offline signal does not meet the acceptance contract.
- await rpc('Network.emulateNetworkConditions',offlineParams);
+ // Worker fetches must fail while page navigation still reaches the worker.
+ // CDP page-target Network.emulateNetworkConditions can stop navigation
+ // before dispatching the worker fetch event (chrome-error://).
+ // Override only page onLine state, and independently hard-block worker
+ // network requests with CDP Network.emulateNetworkConditions.
+ await rpc('Network.overrideNetworkState',offlineParams);
  await rpc('Network.emulateNetworkConditions',offlineParams,10000,workerSessionId);
  const workerBlocked=await rpc('Runtime.evaluate',{
    expression:"fetch('/',{cache:'no-store',credentials:'omit'}).then(()=>false,()=>true)",
@@ -212,6 +215,13 @@ report_code="""   actual_offline_navigation:true,
    worker_target_network_isolated:workerProof.exact_target&&workerProof.online_probe&&
      workerProof.offline_probe&&workerProof.document_from_worker,
    worker_online_baseline:true,real_android_hardware:false,"""
+
+restore_anchor=""" await rpc('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});"""
+restore_code=""" const onlineAgain={offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1};
+ await rpc('Network.overrideNetworkState',onlineAgain);
+ await rpc('Network.emulateNetworkConditions',onlineAgain,10000,workerSessionId);"""
+replace_once(restore_anchor,restore_code,"worker-and-page-network-restore")
+
 replace_once(report_anchor,report_code,"worker-proof-report")
 
 
