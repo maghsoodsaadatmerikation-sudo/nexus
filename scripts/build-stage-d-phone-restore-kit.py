@@ -55,7 +55,7 @@ workspace completeness, production restore or release authority.
 Physical Android compatibility has NOT been established in CI.
 Missing Linux renameat2 support must BLOCK, never downgrade safety.
 """
-LAUNCHER = """#!/bin/sh
+LAUNCHER = r"""#!/bin/sh
 set -eu
 umask 077
 if [ "$#" -ne 4 ]; then
