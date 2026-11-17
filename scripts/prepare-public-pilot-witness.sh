@@ -37,7 +37,21 @@ text=text.replace(before,after)
 # refused. Keep the exact demo click and assertion; catch only to report
 # safe technical flags (never page text).
 demo_before="""const offline=await js("(()=>{document.getElementById('load-demo').click();return {question:document.getElementById('question-view').textContent,claims:document.getElementById('claims').querySelectorAll('.entry').length,options:document.getElementById('alternatives').querySelectorAll('.entry').length,decision:document.getElementById('decision-view').textContent,net:navigator.onLine}})()");"""
-demo_after="""const offline=await js("(()=>{try{document.getElementById('load-demo').click();return {question:document.getElementById('question-view').textContent,claims:document.getElementById('claims').querySelectorAll('.entry').length,options:document.getElementById('alternatives').querySelectorAll('.entry').length,decision:document.getElementById('decision-view').textContent,net:navigator.onLine,client_error:'none',language:document.documentElement.lang}}catch(error){return {question:'',claims:0,options:0,decision:'',net:navigator.onLine,client_error:error?.name||'unknown',language:document.documentElement.lang,ready:document.readyState,has_demo:!!document.getElementById('load-demo'),has_question:!!document.getElementById('question-view'),has_claims:!!document.getElementById('claims'),has_options:!!document.getElementById('alternatives'),has_decision:!!document.getElementById('decision-view'),has_installer:!!document.getElementById('offline-install'),has_reviewed_schema:document.documentElement.outerHTML.includes('nexus.offline-pilot.v1'),worker_controls:!!navigator.serviceWorker?.controller}}})()");"""
+demo_after="""// A single CDP readyState observation can come from a document that
+// immediately navigates again. Demand two observations from the same
+// actual offline-controlled public document before the one synthetic click.
+// Never count a browser error document, missing SW controller, or partial DOM.
+const stableReadiness=()=>retryJs("(()=>{const ready=document.readyState==='complete' && !!document.getElementById('load-demo') && !!document.getElementById('question-view') && !!document.getElementById('claims') && !!document.getElementById('alternatives') && !!document.getElementById('decision-view') && navigator.onLine===false && navigator.serviceWorker?.controller?.scriptURL===location.origin+'/service-worker.js' && document.documentElement.outerHTML.includes('nexus.offline-pilot.v1');return ready?{epoch:performance.timeOrigin,href:location.href}:null})()");
+let offlineDocumentEpoch=null;
+await poll(async()=>{
+  const first=await stableReadiness();
+  if(!first || first.href!==ORIGIN){offlineDocumentEpoch=null;return false;}
+  if(first.epoch!==offlineDocumentEpoch){offlineDocumentEpoch=first.epoch;return false;}
+  await delay(300);
+  const second=await stableReadiness();
+  return !!second && second.href===ORIGIN && second.epoch===offlineDocumentEpoch;
+},20000,'offline-cached-app-did-not-reach-stable-ready-state');
+const offline=await js("(()=>{try{document.getElementById('load-demo').click();return {question:document.getElementById('question-view').textContent,claims:document.getElementById('claims').querySelectorAll('.entry').length,options:document.getElementById('alternatives').querySelectorAll('.entry').length,decision:document.getElementById('decision-view').textContent,net:navigator.onLine,client_error:'none',language:document.documentElement.lang}}catch(error){return {question:'',claims:0,options:0,decision:'',net:navigator.onLine,client_error:error?.name||'unknown',language:document.documentElement.lang,ready:document.readyState,has_demo:!!document.getElementById('load-demo'),has_question:!!document.getElementById('question-view'),has_claims:!!document.getElementById('claims'),has_options:!!document.getElementById('alternatives'),has_decision:!!document.getElementById('decision-view'),has_installer:!!document.getElementById('offline-install'),has_reviewed_schema:document.documentElement.outerHTML.includes('nexus.offline-pilot.v1'),worker_controls:!!navigator.serviceWorker?.controller}}})()");"""
 if text.count(demo_before)!=1 or demo_after in text:
     raise SystemExit("BLOCKED: pinned demo click contract changed")
 text=text.replace(demo_before,demo_after)
@@ -64,9 +78,53 @@ after_assert=""" const offlineContract={fictional_question:offline.question.incl
 if text.count(before_assert)!=1 or after_assert in text:
     raise SystemExit("BLOCKED: historical offline acceptance shape changed")
 text=text.replace(before_assert,after_assert)
+
+# Diagnose an intermittent REAL PUBLIC Chrome offline navigation failure using
+# public-safe CDP booleans only; never log request URLs or page/user content.
+# The archived page, Service Worker and original eight assertions stay pinned.
+trace_decl_before="""const checks=[];"""
+trace_decl_after="""const checks=[];
+const navTrace={responses:[],failures:[],frames:[]};
+const capped=(name,record)=>{const entries=navTrace[name];entries.push(record);if(entries.length>8)entries.shift();};"""
+if text.count(trace_decl_before)!=1 or trace_decl_after in text:
+    raise SystemExit("BLOCKED: historical CDP trace declaration changed")
+text=text.replace(trace_decl_before,trace_decl_after)
+trace_listener_before="""  const msg=JSON.parse(e.data),p=pending.get(msg.id);
+  if(!p)return;pending.delete(msg.id);"""
+trace_listener_after="""  const msg=JSON.parse(e.data),p=pending.get(msg.id);
+  if(msg.method==='Network.responseReceived'&&msg.params?.type==='Document'){
+    const r=msg.params.response||{};
+    capped('responses',{stage,app_origin:r.url===ORIGIN,
+      from_service_worker:r.fromServiceWorker===true,status:Number(r.status)||0,
+      html:r.mimeType==='text/html'});
+  }
+  if(msg.method==='Network.loadingFailed'&&msg.params?.type==='Document'){
+    const reason=String(msg.params.errorText||'');
+    capped('failures',{stage,disconnected:reason.includes('ERR_INTERNET_DISCONNECTED'),
+      aborted:reason.includes('ERR_ABORTED'),other:!reason.includes('ERR_INTERNET_DISCONNECTED')&&!reason.includes('ERR_ABORTED')});
+  }
+  if(msg.method==='Page.frameNavigated'){
+    const u=String(msg.params?.frame?.url||'');
+    capped('frames',{stage,app_origin:u===ORIGIN,browser_error:u.startsWith('chrome-error:')});
+  }
+  if(!p)return;pending.delete(msg.id);"""
+if text.count(trace_listener_before)!=1 or trace_listener_after in text:
+    raise SystemExit("BLOCKED: historical CDP event handler changed")
+text=text.replace(trace_listener_before,trace_listener_after)
+trace_catch_before="""}catch(error){
+ process.stderr.write(JSON.stringify({event:'pwa-browser-fail-closed',stage,"""
+trace_catch_after="""}catch(error){
+ if(stage==='real-network-offline')
+   process.stderr.write(JSON.stringify({event:'pilot12-public-cdp-navigation',
+     ...navTrace,contains_page_content:false,authority:'none'})+'\\n');
+ process.stderr.write(JSON.stringify({event:'pwa-browser-fail-closed',stage,"""
+if text.count(trace_catch_before)!=1 or trace_catch_after in text:
+    raise SystemExit("BLOCKED: historical failure handler changed")
+text=text.replace(trace_catch_before,trace_catch_after)
+
 path.write_text(text)
 print(json.dumps({'witness_source':'pinned-deployed-baseline',
-  'witness_patch':'wait-for-document-complete-and-boolean-only-failure-diagnostic',
+  'witness_patch':'stable-offline-document-and-bounded-cdp-failure-trace',
   'witness_sha256':hashlib.sha256(text.encode()).hexdigest(),
   'published_application_bytes_modified':False,
   'acceptance_checks_relaxed':False, 'authority':'none'},sort_keys=True), file=sys.stderr)

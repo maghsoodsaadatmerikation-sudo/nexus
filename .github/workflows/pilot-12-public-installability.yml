@@ -88,26 +88,30 @@ jobs:
           export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
           test -n "$NEXUS_PWA_CHROME"
           node --check scripts/test-pwa-offline-browser.mjs
-          # Two fully independent fresh Chromium profiles on the actual
-          # HTTPS origin; never pass based only on localhost/cached CI reports.
-          node scripts/test-pwa-offline-browser.mjs > pilot-12-public-offline.json
-          node scripts/test-pwa-offline-browser.mjs > pilot-12-public-offline-second.json
+          # Four isolated Chromium profiles exercise the ACTUAL HTTPS origin.
+          # Any failure is conclusive for this gate: do not retry or mask it.
+          for suffix in first second third fourth; do
+            node scripts/test-pwa-offline-browser.mjs > "pilot-12-public-offline-$suffix.json"
+          done
           python3 - <<'PY'
           import json
-          r=json.load(open('pilot-12-public-offline.json'))
-          second=json.load(open('pilot-12-public-offline-second.json'))
-          assert second['status']=='PASS' and second['checks']==r['checks']
-          assert second['source_sha256']==r['source_sha256']
-          assert second['origin']==r['origin'] and second['actual_offline_navigation'] is True
-          assert r['status']=='PASS' and len(r['checks'])==8
-          assert r['origin']=='public-render-pilot'
-          assert r['actual_offline_navigation'] is True
-          assert r['real_android_hardware'] is False
-          assert r['private_data_submitted'] is False
-          assert r['authenticated_rust_tested'] is False
-          assert r['volume_recovery_verified'] is False
-          assert r['production_mutation'] is False and r['authority']=='none'
-          print('PASS: actual public origin PWA reloaded offline in independent real Chromium')
+          from pathlib import Path
+          reports=[json.loads(Path(f'pilot-12-public-offline-{suffix}.json').read_text())
+                   for suffix in ('first','second','third','fourth')]
+          assert len(reports)==4
+          first=reports[0]
+          for r in reports:
+              assert r['status']=='PASS' and len(r['checks'])==8
+              assert r['checks']==first['checks']
+              assert r['source_sha256']==first['source_sha256']
+              assert r['origin']=='public-render-pilot'
+              assert r['actual_offline_navigation'] is True
+              assert r['real_android_hardware'] is False
+              assert r['private_data_submitted'] is False
+              assert r['authenticated_rust_tested'] is False
+              assert r['volume_recovery_verified'] is False
+              assert r['production_mutation'] is False and r['authority']=='none'
+          print('PASS: four independent fresh-profile Chromium offline public-origin witnesses')
           PY
       - name: Upload sanitized public-only receipts
         if: always()
@@ -116,7 +120,9 @@ jobs:
           name: nexus-pilot-12-live-installability
           path: |
             ${{ runner.temp }}/nexus-live-pilot/pilot-12-public-assets.json
-            ${{ runner.temp }}/nexus-live-pilot/pilot-12-public-offline.json
+            ${{ runner.temp }}/nexus-live-pilot/pilot-12-public-offline-first.json
             ${{ runner.temp }}/nexus-live-pilot/pilot-12-public-offline-second.json
+            ${{ runner.temp }}/nexus-live-pilot/pilot-12-public-offline-third.json
+            ${{ runner.temp }}/nexus-live-pilot/pilot-12-public-offline-fourth.json
           if-no-files-found: ignore
           retention-days: 14
