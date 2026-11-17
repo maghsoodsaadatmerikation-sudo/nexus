@@ -1,0 +1,75 @@
+name: NEXUS Stage D Owner Phone Keycheck Kit
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/build-stage-d-phone-key-kit.py'
+      - 'scripts/test-stage-d-phone-key-kit.py'
+      - 'scripts/verify-stage-d-recovery-key.py'
+      - 'docs/keys/stage-d-recovery-public-cert.pem'
+      - 'docs/STAGE-D-PHONE-KEY-CHECK.md'
+      - '.github/workflows/stage-d-phone-key-kit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/build-stage-d-phone-key-kit.py'
+      - 'scripts/test-stage-d-phone-key-kit.py'
+      - 'scripts/verify-stage-d-recovery-key.py'
+      - 'docs/keys/stage-d-recovery-public-cert.pem'
+      - 'docs/STAGE-D-PHONE-KEY-CHECK.md'
+      - '.github/workflows/stage-d-phone-key-kit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-public-only-owner-keycheck:
+    name: stage-d-owner-phone-keycheck-kit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the exact GitHub Actions source without retained credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Assert no production credentials were provided
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+      - name: Test deterministic ZIP and ephemeral synthetic RSA key challenges
+        run: |
+          python3 -m py_compile scripts/build-stage-d-phone-key-kit.py scripts/test-stage-d-phone-key-kit.py
+          python3 scripts/test-stage-d-phone-key-kit.py
+      - name: Package public certificate and existing verifier only
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/nexus-stage-d-owner-phone-keycheck.zip"
+          python3 scripts/build-stage-d-phone-key-kit.py --output "$output" --source-commit "$GITHUB_SHA"
+          python3 scripts/build-stage-d-phone-key-kit.py --verify-zip "$output" --source-commit "$GITHUB_SHA"
+          sha256sum "$output" | tee "$RUNNER_TEMP/nexus-stage-d-owner-phone-keycheck.zip.sha256"
+          python3 - "$output" <<'PY'
+          import sys,zipfile
+          z=zipfile.ZipFile(sys.argv[1])
+          assert len(z.namelist())==5
+          launcher=z.read('nexus-stage-d-owner-keycheck/run-keycheck.sh')
+          assert b'curl ' not in launcher and b'wget ' not in launcher
+          assert b'PRIVATE KEY' not in z.read('nexus-stage-d-owner-keycheck/manifest.json')
+          PY
+      - name: Upload public-only owner-phone kit (no private material)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-stage-d-owner-phone-keycheck
+          path: |
+            ${{ runner.temp }}/nexus-stage-d-owner-phone-keycheck.zip
+            ${{ runner.temp }}/nexus-stage-d-owner-phone-keycheck.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
