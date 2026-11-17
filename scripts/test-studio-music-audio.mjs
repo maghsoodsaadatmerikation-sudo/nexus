@@ -36,7 +36,7 @@ for(const [instrument,pitch] of Object.entries(instrumentPitches)){
  ok(()=>assert.equal(report.subjective_listening_performed,false));
  ok(()=>assert.equal(report.acoustic_authenticity_verified,false));
  ok(()=>assert.equal(report.mastering_certified,false));
- signatures.add(expressive.subarray(100,1200).reduce((sum,b,i)=>(sum+((i+3)*b))>>>0,0));
+ signatures.add(expressive.subarray(10000,16000).reduce((sum,b,i)=>(sum+((i+3)*b))>>>0,0));
 }
 ok(()=>assert(signatures.size>=5));
 const original=M.compose(M.DEFAULT);
