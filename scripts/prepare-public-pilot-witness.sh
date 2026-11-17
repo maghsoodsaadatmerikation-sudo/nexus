@@ -78,9 +78,53 @@ after_assert=""" const offlineContract={fictional_question:offline.question.incl
 if text.count(before_assert)!=1 or after_assert in text:
     raise SystemExit("BLOCKED: historical offline acceptance shape changed")
 text=text.replace(before_assert,after_assert)
+
+# Diagnose an intermittent REAL PUBLIC Chrome offline navigation failure using
+# public-safe CDP booleans only; never log request URLs or page/user content.
+# The archived page, Service Worker and original eight assertions stay pinned.
+trace_decl_before="""const checks=[];"""
+trace_decl_after="""const checks=[];
+const navTrace={responses:[],failures:[],frames:[]};
+const capped=(name,record)=>{const entries=navTrace[name];entries.push(record);if(entries.length>8)entries.shift();};"""
+if text.count(trace_decl_before)!=1 or trace_decl_after in text:
+    raise SystemExit("BLOCKED: historical CDP trace declaration changed")
+text=text.replace(trace_decl_before,trace_decl_after)
+trace_listener_before="""  const msg=JSON.parse(e.data),p=pending.get(msg.id);
+  if(!p)return;pending.delete(msg.id);"""
+trace_listener_after="""  const msg=JSON.parse(e.data),p=pending.get(msg.id);
+  if(msg.method==='Network.responseReceived'&&msg.params?.type==='Document'){
+    const r=msg.params.response||{};
+    capped('responses',{stage,app_origin:r.url===ORIGIN,
+      from_service_worker:r.fromServiceWorker===true,status:Number(r.status)||0,
+      html:r.mimeType==='text/html'});
+  }
+  if(msg.method==='Network.loadingFailed'&&msg.params?.type==='Document'){
+    const reason=String(msg.params.errorText||'');
+    capped('failures',{stage,disconnected:reason.includes('ERR_INTERNET_DISCONNECTED'),
+      aborted:reason.includes('ERR_ABORTED'),other:!reason.includes('ERR_INTERNET_DISCONNECTED')&&!reason.includes('ERR_ABORTED')});
+  }
+  if(msg.method==='Page.frameNavigated'){
+    const u=String(msg.params?.frame?.url||'');
+    capped('frames',{stage,app_origin:u===ORIGIN,browser_error:u.startsWith('chrome-error:')});
+  }
+  if(!p)return;pending.delete(msg.id);"""
+if text.count(trace_listener_before)!=1 or trace_listener_after in text:
+    raise SystemExit("BLOCKED: historical CDP event handler changed")
+text=text.replace(trace_listener_before,trace_listener_after)
+trace_catch_before="""}catch(error){
+ process.stderr.write(JSON.stringify({event:'pwa-browser-fail-closed',stage,"""
+trace_catch_after="""}catch(error){
+ if(stage==='real-network-offline')
+   process.stderr.write(JSON.stringify({event:'pilot12-public-cdp-navigation',
+     ...navTrace,contains_page_content:false,authority:'none'})+'\\n');
+ process.stderr.write(JSON.stringify({event:'pwa-browser-fail-closed',stage,"""
+if text.count(trace_catch_before)!=1 or trace_catch_after in text:
+    raise SystemExit("BLOCKED: historical failure handler changed")
+text=text.replace(trace_catch_before,trace_catch_after)
+
 path.write_text(text)
 print(json.dumps({'witness_source':'pinned-deployed-baseline',
-  'witness_patch':'wait-for-document-complete-and-boolean-only-failure-diagnostic',
+  'witness_patch':'stable-offline-document-and-bounded-cdp-failure-trace',
   'witness_sha256':hashlib.sha256(text.encode()).hexdigest(),
   'published_application_bytes_modified':False,
   'acceptance_checks_relaxed':False, 'authority':'none'},sort_keys=True), file=sys.stderr)
