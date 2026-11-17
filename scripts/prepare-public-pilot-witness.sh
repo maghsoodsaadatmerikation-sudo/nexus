@@ -138,6 +138,21 @@ def replace_exact(old,new,label):
         raise SystemExit('BLOCKED: pinned proxy witness anchor: '+label)
     text=text.replace(old,new)
 
+# The page onLine flag is NOT evidence of a whole-browser outage. The actual
+# Chrome CONNECT egress cut below provides independent network disconnection.
+replace_exact("document.readyState==='complete' && document.getElementById('offline-install') && navigator.onLine===false",
+    "document.readyState==='complete' && document.getElementById('offline-install')",
+    "offline-navigation-no-boolean-shortcut")
+replace_exact("&& navigator.onLine===false && navigator.serviceWorker?.controller?.scriptURL",
+    "&& navigator.serviceWorker?.controller?.scriptURL",
+    "stable-nav-does-not-require-page-network-emulation")
+replace_exact("browser_offline:offline.net===false",
+    "origin_proxy_cut:proxy.stats().live===false&&proxy.stats().active===0",
+    "offline-acceptance-uses-actual-proxy")
+replace_exact("offlineContract.browser_offline",
+    "offlineContract.origin_proxy_cut",
+    "synthetic-demo-contract-uses-actual-proxy")
+
 replace_exact("import path from 'node:path';",
     "import path from 'node:path';\nimport {startProbeProxy} from './pilot12-public-egress-proxy.mjs';",
     "proxy-module-import")
@@ -154,10 +169,9 @@ replace_exact(" await rpc('Network.emulateNetworkConditions',{offline:true,laten
  await proxy.cut();
  assert(proxy.stats().live===false&&proxy.stats().active===0,
    'browser-origin-tunnels-still-open');
- // Only the synthetic online indicator is overridden. The real egress
- // restriction is that the browser's external CONNECT proxy is now down.
- await rpc('Network.overrideNetworkState',{offline:true,latency:0,
-   downloadThroughput:0,uploadThroughput:0});""",
+ // No CDP page-offline setting: it can bypass or abort SW navigation.
+ // Actual browser HTTPS egress is blocked by the physical CONNECT proxy cut.
+ // navigator.onLine may still be true; this is NOT the acceptance condition.""",
     "force-network-cut-before-reload")
 replace_exact(" checks.push('real-chrome-network-offline-reload-served-cached-app');",
     """ const navProof=await retryJs("(()=>{const n=performance.getEntriesByType('navigation')[0];return {worker_started:Number(n?.workerStart)>0,controller:navigator.serviceWorker?.controller?.scriptURL===location.origin+'/service-worker.js'}})()");
@@ -171,9 +185,6 @@ replace_exact(" checks.push('real-chrome-network-offline-reload-served-cached-ap
  checks.push('real-chrome-network-offline-reload-served-cached-app');
  checks.push('chrome-proxy-cut-with-worker-served-cache');""",
     "worker-delivery-after-full-proxy-cut")
-replace_exact(" await rpc('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});",
-    " await rpc('Network.overrideNetworkState',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});",
-    "restore-online-indicator")
 replace_exact("   actual_offline_navigation:true,real_android_hardware:false,",
     """   actual_offline_navigation:true,
    chromium_origin_proxy_cut:proxy.stats().live===false&&
