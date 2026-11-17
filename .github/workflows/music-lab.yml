@@ -1,0 +1,69 @@
+name: NEXUS Music Lab — Native Composition Acceptance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/music-lab.yml'
+      - 'web/studio-music.js'
+      - 'web/studio-music-ui.js'
+      - 'web/studio-shell.html'
+      - 'web/studio-focus-ui.js'
+      - 'web/studio.html'
+      - 'public/studio/index.html'
+      - 'public/studio/service-worker.js'
+      - 'scripts/test-studio-music.mjs'
+      - 'scripts/test-studio-music-browser.py'
+      - 'scripts/build-studio.py'
+      - 'docs/NEXUS-MUSIC-LAB.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/music-lab.yml'
+      - 'web/studio-music.js'
+      - 'web/studio-music-ui.js'
+      - 'web/studio-shell.html'
+      - 'web/studio-focus-ui.js'
+      - 'web/studio.html'
+      - 'public/studio/index.html'
+      - 'public/studio/service-worker.js'
+      - 'scripts/test-studio-music.mjs'
+      - 'scripts/build-studio.py'
+      - 'docs/NEXUS-MUSIC-LAB.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-original-audio:
+    name: compose and synthesize local WAV/MIDI, reject network and stale bundles
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Music synthesis and programming-contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check web/studio-music.js
+          node --check web/studio-music-ui.js
+          node scripts/test-studio-music.mjs
+      - name: Deterministic Studio builds including the installed offline PWA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build-studio.py --check
+          python3 scripts/build-studio-static.py --check
+      - name: Real narrow Chromium generated music and local WAV playback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/test-studio-music-browser.py
+      - name: Real Chromium offline Studio UI regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
+          node scripts/test-studio-static-browser.mjs
