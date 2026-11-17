@@ -5,6 +5,17 @@ Volume files downloaded, no GitHub Actions secret created, and no manual
 capture workflow dispatched.** This is a safer operator-controlled **choice
 of authentication scope**, not an authorization grant or a backup.
 
+## Phase 38 current deployment confirmation
+
+The same manual workflow now also requires `confirm_deployment` and
+`confirm_runtime` to match the exact current deployed revision pinned
+in `scripts/capture-railway-volume-readonly.py`. The prior
+`db2fd959-918e-49d5-b077-1ac74fac9a82` deployment has been removed.
+The current observed values and remaining caveats are documented in
+[Stage D current capture target](STAGE-D-LIVE-CAPTURE-TARGET.md).
+This check precedes selecting any Railway credential and does not grant
+provider authority or establish successful recovery.
+
 ## Why this is necessary
 
 Railway's [CLI login documentation](https://docs.railway.com/cli/login)
