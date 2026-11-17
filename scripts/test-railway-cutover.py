@@ -78,6 +78,15 @@ class CutoverTests(unittest.TestCase):
         data["inventory"]["staged"] = {"status": "STAGED", "changeCount": 2}
         self.assertIn("environment_has_pending_changes", assess(data)["blockers"])
 
+    def test_omitted_pending_state_is_not_treated_as_clean(self):
+        for section, key in (("inventory", "staged"), ("service", "staged"),
+                             ("service", "stagedChanges"), ("health", "pendingWork"),
+                             ("public_observation", "blockers")):
+            with self.subTest(section=section, key=key):
+                data = fixture()
+                data[section].pop(key)
+                self.assertEqual(assess(data)["technical_preflight"], "BLOCKED")
+
     def test_source_pin_and_real_deployed_commit_both_required(self):
         for field in ("source", "deployment"):
             with self.subTest(field=field):
