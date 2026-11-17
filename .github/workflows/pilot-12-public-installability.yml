@@ -79,7 +79,7 @@ jobs:
           assert r['authority']=='none' and not r['production_mutation']
           print('PASS: exact app HTML/manifest/worker bytes and identical decoded PNG icon pixels')
           PY
-      - name: Test actual Service Worker target offline isolation and cached navigation in real public Chromium
+      - name: Test blocked worker-origin network requests with SW-cached navigation in public Chromium
         working-directory: ${{ runner.temp }}/nexus-live-pilot
         shell: bash
         run: |
@@ -102,19 +102,20 @@ jobs:
           first=reports[0]
           for r in reports:
               assert r['status']=='PASS' and len(r['checks'])==9
-              assert 'worker-target-network-baseline-then-offline-rejection' in r['checks']
-              assert r['worker_target_network_isolated'] is True
+              assert 'worker-target-online-baseline-and-blocked-fetch-probe' in r['checks']
+              assert r['worker_fetch_interception_verified'] is True
+              assert r['whole_browser_network_cut'] is False
               assert r['worker_online_baseline'] is True
               assert r['checks']==first['checks']
               assert r['source_sha256']==first['source_sha256']
               assert r['origin']=='public-render-pilot'
-              assert r['actual_offline_navigation'] is True
+              assert r['actual_offline_navigation'] is False
               assert r['real_android_hardware'] is False
               assert r['private_data_submitted'] is False
               assert r['authenticated_rust_tested'] is False
               assert r['volume_recovery_verified'] is False
               assert r['production_mutation'] is False and r['authority']=='none'
-          print('PASS: four fresh public Chromium profiles proved worker-target online baseline, offline network rejection and SW-served cached navigation')
+          print('PASS: four real public Chromium profiles proved worker Fetch-interception failure and SW-cached navigation (not whole-browser offline)')
           PY
       - name: Upload sanitized public-only receipts
         if: always()
