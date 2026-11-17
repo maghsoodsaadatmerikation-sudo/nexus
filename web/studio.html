@@ -28,6 +28,18 @@
 .studio-focus-typing #studio-focus-nav{display:none}
 html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focus-nav{display:none}
 @media(max-width:780px){.studio-focus-mode main{padding:12px}.studio-focus-mode #messages{max-height:none}}
+
+/* Phase 43: one truthful primary chat action in focused view; archive stays explicit. */
+#studio-compose{display:none}
+.studio-focus-mode #studio-compose{display:block;border:1px solid #c9dbcf;border-radius:12px;background:#f6faf7;padding:14px;margin:10px 0 16px;max-width:100%}
+.studio-focus-mode #studio-compose-heading{display:block;margin-bottom:8px}
+.studio-compose-row{display:flex;gap:9px;align-items:end;flex-wrap:wrap}
+.studio-compose-row label{flex:1 1 190px;min-width:0}
+.studio-compose-row select{display:block;width:100%;min-height:48px}
+.studio-compose-row button{flex:1 1 125px;min-height:48px;margin:0}
+#studio-compose-privacy,#studio-compose-storage{margin:7px 0 0}
+.studio-focus-mode #guide,.studio-focus-mode #prepare,.studio-focus-mode #regenerate{display:none}
+@media(max-width:480px){.studio-compose-row label{flex:1 1 100%}.studio-compose-row button{flex:1 1 125px}}
 </style></head><body><main>
 <div class="row"><div><h1>NEXUS <span>Studio</span></h1><p class="help" data-t="subtitle">Your conversations, sources and drafts — under your control.</p></div><select id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option></select></div>
 <details><summary data-t="languagePacks">Interface language packs</summary><p class="help" data-t="languageHelp">Up to eight complete translation packs can be kept in this tab. They contain labels only, not your projects.</p><button id="language-template" class="secondary" data-t="languageTemplate">Download English label template</button><input id="language-file" type="file" accept="application/json" aria-label="Import interface language pack"></details>
@@ -46,7 +58,7 @@ html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focu
 <label class="inline"><input id="attach-document" type="checkbox"><span data-t="chatAttachedDocument">Include latest saved writing document as a temporary excerpt</span></label>
 <button id="clear-chat-files" class="secondary" data-t="chatClearAttachments">Clear attachments</button></details>
 <label class="inline"><input id="use-memory" type="checkbox"><span data-t="useMemory">Include this project's reviewed memory</span></label><label class="inline"><input id="use-sources" type="checkbox"><span data-t="useSources">Include relevant project source excerpts</span></label><div class="row"><button id="guide" data-t="guide">Use local reflection guide</button><button id="prepare" data-t="prepare">Prepare model request</button><button id="regenerate" data-t="regenerate">Prepare another answer</button><button id="stop" data-t="stop">Stop</button></div>
-<details><summary data-t="modelSettings">Optional generative model connection</summary><p class="help" data-t="modelHelp">An operator must configure a model gateway. A ChatGPT subscription is not an API credential. Provider keys stay on the gateway; only its access token is entered here, for this tab.</p><label for="gateway" data-t="gatewayOrigin">Model gateway origin</label><input id="gateway" placeholder="https://your-gateway.example" aria-label="Model gateway URL"><label for="gateway-token" data-t="gatewayAccess">Gateway access token (not the provider API key)</label><input id="gateway-token" type="password" autocomplete="off" aria-label="Studio gateway access token"><button id="check-model" class="secondary" data-t="checkModel">Check configured model</button><pre id="model-status"></pre><label for="model-mode" data-t="modelMode"></label><select id="model-mode"><option value="standard" data-t="modeDefault"></option><option value="thinking" data-t="modeThinking"></option><option value="non-thinking" data-t="modeFast"></option></select><label for="model-budget" data-t="modelBudget"></label><input id="model-budget" type="number" min="1" max="8192" value="2048"></details>
+<details id="studio-model-settings"><summary data-t="modelSettings">Optional generative model connection</summary><p class="help" data-t="modelHelp">An operator must configure a model gateway. A ChatGPT subscription is not an API credential. Provider keys stay on the gateway; only its access token is entered here, for this tab.</p><label for="gateway" data-t="gatewayOrigin">Model gateway origin</label><input id="gateway" placeholder="https://your-gateway.example" aria-label="Model gateway URL"><label for="gateway-token" data-t="gatewayAccess">Gateway access token (not the provider API key)</label><input id="gateway-token" type="password" autocomplete="off" aria-label="Studio gateway access token"><button id="check-model" class="secondary" data-t="checkModel">Check configured model</button><pre id="model-status"></pre><label for="model-mode" data-t="modelMode"></label><select id="model-mode"><option value="standard" data-t="modeDefault"></option><option value="thinking" data-t="modeThinking"></option><option value="non-thinking" data-t="modeFast"></option></select><label for="model-budget" data-t="modelBudget"></label><input id="model-budget" type="number" min="1" max="8192" value="2048"></details>
 <div id="request-review" hidden><h3 data-t="requestReview">Exact context to send</h3><pre id="request-context"></pre><label class="inline"><input id="consent" type="checkbox"><span data-t="consent">Send this exact context to the configured provider once.</span></label><button id="send-model" data-t="send">Send approved request</button></div></section>
 <section class="card" id="profile-card"><h2 data-t="profile">Project assistant & memory</h2><label for="instructions" data-t="instructions">Custom instructions (preferences, not authority)</label><textarea id="instructions" maxlength="2000" dir="auto"></textarea><label for="memories" data-t="memories">Reviewed memory — one item per line, up to 30</label><textarea id="memories" maxlength="15030" dir="auto"></textarea><button id="apply-profile" data-t="applyProfile">Apply project preferences</button><p class="help" data-t="memoryHelp">Nothing is learned automatically. Memory is isolated to this project and sent only when selected. Removing memory does not remove earlier transcript text.</p></section>
 <section class="card" id="sources-card"><h2 data-t="sources">Local source search</h2><p class="help" data-t="sourceHelp">Select UTF-8 TXT, Markdown, CSV, TSV or JSON files together, up to 256 KiB each and 12 per project. A batch is added only if every file is valid. Excerpts are local lexical search results, not verified facts. Files are never executed.</p><input id="source-file" type="file" multiple accept=".txt,.md,.csv,.json,.tsv"><input id="source-query" maxlength="200" data-placeholder="sourceQuery" aria-label="Search project sources"><button id="search-sources" data-t="searchSources">Search sources</button><div id="source-list"></div><pre id="source-results"></pre></section>
@@ -1090,7 +1102,7 @@ function stop(){languageImport++;window.NexusQualityUI?.cancel();window.NexusAst
 function controls(){for(const id of ['new-project','delete-project','new-thread','rename-thread','archive-thread','delete-thread','guide','prepare','regenerate','apply-profile','new-document','save-version','delete-document','projects','branch','documents','create-vault','unlock','save','backup','restore','erase','language-file'])$(id).disabled=busy;
  $('chat-file').disabled=busy||!chat()||chat().archived;
  $('clear-chat-files').disabled=busy||(!chatAttachments.length&&!$('attach-document').checked);
- $('attach-document').disabled=busy||!chat()||chat().archived||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare','regenerate'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(dirty?'unsaved':(vault.unlocked?'saved':'temporary'));window.NexusQualityUI?.refreshStatus()}
+ $('attach-document').disabled=busy||!chat()||chat().archived||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare','regenerate'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(dirty?'unsaved':(vault.unlocked?'saved':'temporary'));window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
 function mutate(fn,{undoable=false}={}){if(busy)return false;const before=data,next=S.copy(data),selection={projectId,threadId,documentId};try{fn(next);data=S.state(next);if(undoable)undoSlot.record(before,data,selection);else undoSlot.clear();dirty=true;stop();render();status('apply');return true}catch{status('failed');return false}}
 function projectIn(v){return v.projects.find(x=>x.id===projectId)}
 function option(value,label){const o=el('option',label);o.value=value;return o}
@@ -1195,7 +1207,7 @@ $('language-file').onchange=async event=>{
 };
 $('language').onchange=()=>{stop();language=$('language').value;applyLanguage()};
 window.addEventListener('beforeunload',e=>{if(dirty||forms()||$('message').value){e.preventDefault();e.returnValue=''}});
-window.NexusStudioUI={snapshot:()=>S.copy(data),stageChatContext,resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}};applyLanguage();
+window.NexusStudioUI={snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}};applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
 </script><script>'use strict';
@@ -1539,5 +1551,114 @@ document.addEventListener('focusin',syncTyping);
 document.addEventListener('focusout',()=>queueMicrotask(syncTyping));
 window.NexusStudioFocus={openPanel,openTools,setFocus,isFocused:()=>focused,active:()=>toolsOpen?'tools':selected};
 layout();
+})();
+</script><script>/* NEXUS Studio: honest chat composer and explicit archive shortcut.
+ * Presentation only. All executions delegate to the existing reviewed actions.
+ */
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const required=['conversation-card','message','guide','prepare','request-review','consent',
+ 'send-model','save','vault-card','language','branch-notice'];
+if(required.some(id=>!$(id))||!window.NexusStudioUI?.uiStatus)return;
+const words=(en,fa)=>document.documentElement.lang==='fa'?fa:en;
+const box=document.createElement('section');box.id='studio-compose';box.className='studio-compose';
+box.setAttribute('aria-label','Conversation actions');
+const heading=document.createElement('strong');heading.id='studio-compose-heading';
+const row=document.createElement('div');row.className='studio-compose-row';
+const selectLabel=document.createElement('label');selectLabel.htmlFor='studio-compose-mode';
+const select=document.createElement('select');select.id='studio-compose-mode';
+for(const [value,en,fa] of [
+ ['guide','Local reflection guide','راهنمای تأمل محلی'],
+ ['model','Review AI model request','بازبینی درخواست مدل هوش مصنوعی']
+]){const o=document.createElement('option');o.value=value;o.dataset.en=en;o.dataset.fa=fa;select.append(o)}
+const send=document.createElement('button');send.type='button';send.id='studio-compose-send';
+const save=document.createElement('button');save.type='button';save.id='studio-compose-save';save.className='secondary';
+const config=document.createElement('button');config.type='button';config.id='studio-compose-config';config.className='secondary';
+const privacy=document.createElement('p');privacy.id='studio-compose-privacy';privacy.className='help';
+privacy.setAttribute('role','note');
+const storage=document.createElement('p');storage.id='studio-compose-storage';storage.className='help';storage.setAttribute('role','status');storage.setAttribute('aria-live','polite');
+selectLabel.append(select);row.append(selectLabel,send,save,config);
+box.append(heading,row,privacy,storage);
+$('branch-notice').after(box);
+let running=false;
+function refresh(){
+ const state=window.NexusStudioUI.uiStatus();
+ if(!state)return;
+ const model=select.value==='model',ready=state.threadReady&&!state.archived&&!state.busy;
+ heading.textContent=words('Reply using','پاسخ با');
+ box.setAttribute('aria-label',words('Conversation actions','گزینه‌های گفتگو'));
+ selectLabel.setAttribute('aria-label',words('Choose how to respond','روش پاسخ را انتخاب کن'));
+ for(const opt of select.options)opt.textContent=words(opt.dataset.en,opt.dataset.fa);
+ send.textContent=model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
+ send.disabled=!ready||!$('message').value.trim();
+ send.setAttribute('aria-label',send.textContent);
+ save.textContent=state.vaultUnlocked?words('Save encrypted session','ذخیرهٔ رمزگذاری‌شدهٔ نشست'):words('Set up private archive','تنظیم آرشیو خصوصی');
+ // Never bypass the existing noForms() gate, including unread chat drafts.
+ const pendingDraft=Boolean($('message').value.trim());
+ save.disabled=state.busy||(state.vaultUnlocked&&(state.unsavedForms||pendingDraft));
+ config.hidden=!model;
+ config.disabled=state.busy;
+ config.textContent=words('Model settings','تنظیمات مدل');
+ privacy.textContent=model?
+  words('No message is sent by this button. Review the exact context and separately approve it. A configured model is required.',
+        'این دکمه هیچ پیامی ارسال نمی‌کند؛ متن دقیق را بازبینی و جداگانه تأیید کن. اتصال مدل لازم است.'):
+  words('Local guide only — not generative AI. It cannot read attached files.',
+        'فقط راهنمای محلی، نه هوش مصنوعی مولد؛ فایل‌های پیوست را نمی‌خواند.');
+ storage.textContent=state.vaultUnlocked?
+  state.dirty||state.unsavedForms||pendingDraft?
+   words('Work is not fully saved. Finish or clear draft fields, then save explicitly.',
+         'همهٔ تغییرات ذخیره نشده‌اند. پیش‌نویس‌ها را تکمیل یا پاک کن و سپس صریحاً ذخیره کن.'):
+   words('Encrypted archive unlocked. Use Save to retain changes; keep a separate encrypted backup.',
+         'آرشیو رمزگذاری‌شده باز است. برای نگهداری تغییرات ذخیره کن و پشتیبان رمزگذاری‌شدهٔ جدا داشته باش.'):
+  words('No encrypted archive is unlocked. This work can be lost if the tab closes.',
+        'آرشیو رمزگذاری‌شده‌ای باز نیست. با بسته‌شدن برگه ممکن است کار از بین برود.');
+}
+function run(){
+ if(running||send.disabled)return;
+ running=true;
+ try{
+  if(select.value==='model'){
+   $('prepare').click(); // Existing model-info, context, consent and safety checks.
+   if(!$('request-review').hidden){
+    const reviewHeading=$('request-review').querySelector('h3');
+    if(reviewHeading){reviewHeading.tabIndex=-1;reviewHeading.focus({preventScroll:true})}
+    $('request-review').scrollIntoView({block:'nearest'});
+   }
+  }else{
+   $('guide').click(); // Existing source/attachment validation; never a network call.
+  }
+ }finally{running=false;refresh()}
+}
+send.addEventListener('click',run);
+save.addEventListener('click',()=>{
+ const state=window.NexusStudioUI.uiStatus();
+ if(!state||state.busy||save.disabled)return;
+ if(!state.vaultUnlocked){window.NexusStudioFocus?.openPanel('vault-card');$('passphrase').focus({preventScroll:true});return}
+ $('save').click(); // Existing noForms() gate, vault encryption and user feedback.
+ refresh();
+});
+config.addEventListener('click',()=>{
+ const settings=$('studio-model-settings');if(!settings)return;
+ settings.open=true;
+ settings.scrollIntoView({block:'nearest'});
+ settings.querySelector('summary')?.focus({preventScroll:true});
+});
+select.addEventListener('change',refresh);
+$('message').addEventListener('input',refresh);
+$('message').addEventListener('keydown',event=>{
+ if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&!event.isComposing&&
+    document.documentElement.classList.contains('studio-focus-mode')){
+  event.preventDefault();
+  // Studio's older window-level shortcut would otherwise also dispatch a
+  // local guide when no model was configured. Stop this duplicate event ONLY
+  // in focused mode; full-view shortcuts retain their previous behavior.
+  event.stopPropagation();
+  run(); // In model mode only opens the consent review.
+ }
+});
+$('language').addEventListener('change',()=>queueMicrotask(refresh));
+document.addEventListener('nexus-studio-state',refresh);
+window.NexusStudioCompose={refresh,mode:()=>select.value};
+refresh();
 })();
 </script></body></html>

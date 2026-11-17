@@ -28,6 +28,18 @@
 .studio-focus-typing #studio-focus-nav{display:none}
 html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focus-nav{display:none}
 @media(max-width:780px){.studio-focus-mode main{padding:12px}.studio-focus-mode #messages{max-height:none}}
+
+/* Phase 43: one truthful primary chat action in focused view; archive stays explicit. */
+#studio-compose{display:none}
+.studio-focus-mode #studio-compose{display:block;border:1px solid #c9dbcf;border-radius:12px;background:#f6faf7;padding:14px;margin:10px 0 16px;max-width:100%}
+.studio-focus-mode #studio-compose-heading{display:block;margin-bottom:8px}
+.studio-compose-row{display:flex;gap:9px;align-items:end;flex-wrap:wrap}
+.studio-compose-row label{flex:1 1 190px;min-width:0}
+.studio-compose-row select{display:block;width:100%;min-height:48px}
+.studio-compose-row button{flex:1 1 125px;min-height:48px;margin:0}
+#studio-compose-privacy,#studio-compose-storage{margin:7px 0 0}
+.studio-focus-mode #guide,.studio-focus-mode #prepare,.studio-focus-mode #regenerate{display:none}
+@media(max-width:480px){.studio-compose-row label{flex:1 1 100%}.studio-compose-row button{flex:1 1 125px}}
 .studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style></head><body><main><section class="card" id="studio-install-card">
 <p class="studio-en">This static edition runs in your browser. The local guide is not a generative model. Saving your work is explicit and encrypted. A real model requires your separately configured gateway.</p>
 <p class="studio-fa" lang="fa" dir="rtl">این نسخه در مرورگر اجرا می‌شود. راهنمای محلی مدل مولد نیست. ذخیرهٔ کار دستی و رمزگذاری‌شده است. پاسخ مدل واقعی به درگاه جداگانهٔ پیکربندی‌شده نیاز دارد.</p>
@@ -53,7 +65,7 @@ html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focu
 <label class="inline"><input id="attach-document" type="checkbox"><span data-t="chatAttachedDocument">Include latest saved writing document as a temporary excerpt</span></label>
 <button id="clear-chat-files" class="secondary" data-t="chatClearAttachments">Clear attachments</button></details>
 <label class="inline"><input id="use-memory" type="checkbox"><span data-t="useMemory">Include this project's reviewed memory</span></label><label class="inline"><input id="use-sources" type="checkbox"><span data-t="useSources">Include relevant project source excerpts</span></label><div class="row"><button id="guide" data-t="guide">Use local reflection guide</button><button id="prepare" data-t="prepare">Prepare model request</button><button id="regenerate" data-t="regenerate">Prepare another answer</button><button id="stop" data-t="stop">Stop</button></div>
-<details><summary data-t="modelSettings">Optional generative model connection</summary><p class="help" data-t="modelHelp">An operator must configure a model gateway. A ChatGPT subscription is not an API credential. Provider keys stay on the gateway; only its access token is entered here, for this tab.</p><label for="model-engine"><span class="studio-en">Model engine</span><span class="studio-fa">موتور مدل</span></label><select id="model-engine"><option value="gateway">Remote gateway / درگاه سرور</option><option value="device">On-device small model / مدل کوچک روی دستگاه</option></select><label for="gateway" data-t="gatewayOrigin">Model gateway origin</label><input id="gateway" placeholder="https://your-gateway.example" aria-label="Model gateway URL"><label for="gateway-token" data-t="gatewayAccess">Gateway access token (not the provider API key)</label><input id="gateway-token" type="password" autocomplete="off" aria-label="Studio gateway access token"><button id="check-model" class="secondary" data-t="checkModel">Check configured model</button><pre id="model-status"></pre><label for="model-mode" data-t="modelMode"></label><select id="model-mode"><option value="standard" data-t="modeDefault"></option><option value="thinking" data-t="modeThinking"></option><option value="non-thinking" data-t="modeFast"></option></select><label for="model-budget" data-t="modelBudget"></label><input id="model-budget" type="number" min="1" max="8192" value="2048"><section class="card" id="device-model-card">
+<details id="studio-model-settings"><summary data-t="modelSettings">Optional generative model connection</summary><p class="help" data-t="modelHelp">An operator must configure a model gateway. A ChatGPT subscription is not an API credential. Provider keys stay on the gateway; only its access token is entered here, for this tab.</p><label for="model-engine"><span class="studio-en">Model engine</span><span class="studio-fa">موتور مدل</span></label><select id="model-engine"><option value="gateway">Remote gateway / درگاه سرور</option><option value="device">On-device small model / مدل کوچک روی دستگاه</option></select><label for="gateway" data-t="gatewayOrigin">Model gateway origin</label><input id="gateway" placeholder="https://your-gateway.example" aria-label="Model gateway URL"><label for="gateway-token" data-t="gatewayAccess">Gateway access token (not the provider API key)</label><input id="gateway-token" type="password" autocomplete="off" aria-label="Studio gateway access token"><button id="check-model" class="secondary" data-t="checkModel">Check configured model</button><pre id="model-status"></pre><label for="model-mode" data-t="modelMode"></label><select id="model-mode"><option value="standard" data-t="modeDefault"></option><option value="thinking" data-t="modeThinking"></option><option value="non-thinking" data-t="modeFast"></option></select><label for="model-budget" data-t="modelBudget"></label><input id="model-budget" type="number" min="1" max="8192" value="2048"><section class="card" id="device-model-card">
 <h2><span class="studio-en">Optional on-device model — experimental</span><span class="studio-fa">مدل اختیاری روی دستگاه — آزمایشی</span></h2>
 <p class="help studio-en">SmolLM2-135M is a small English drafting model, with limited accuracy. Use short facts you provide; independent factual answers are unreliable. Initial download: about 167 MB (160 MiB). No API key. Generation stays on this device. A suitable browser and at least 4 GB device memory are recommended; actual speed varies.</p>
 <p class="help studio-fa" dir="rtl">SmolLM2-135M یک مدل کوچک برای پیش‌نویس انگلیسی با دقت محدود است. برای پیش‌نویس از اطلاعاتی که خودت می‌دهی استفاده کن؛ پاسخ دانشی مستقل قابل‌اتکا نیست. دانلود اولیه حدود ۱۶۷ مگابایت است. کلید API لازم ندارد و تولید متن روی همین دستگاه انجام می‌شود. مرورگر مناسب و دست‌کم ۴ گیگابایت حافظهٔ دستگاه توصیه می‌شود؛ سرعت به دستگاه بستگی دارد.</p>
@@ -1118,7 +1130,7 @@ function stop(){languageImport++;window.NexusQualityUI?.cancel();window.NexusAst
 function controls(){for(const id of ['new-project','delete-project','new-thread','rename-thread','archive-thread','delete-thread','guide','prepare','regenerate','apply-profile','new-document','save-version','delete-document','projects','branch','documents','create-vault','unlock','save','backup','restore','erase','language-file'])$(id).disabled=busy;
  $('chat-file').disabled=busy||!chat()||chat().archived;
  $('clear-chat-files').disabled=busy||(!chatAttachments.length&&!$('attach-document').checked);
- $('attach-document').disabled=busy||!chat()||chat().archived||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare','regenerate'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(dirty?'unsaved':(vault.unlocked?'saved':'temporary'));window.NexusQualityUI?.refreshStatus()}
+ $('attach-document').disabled=busy||!chat()||chat().archived||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare','regenerate'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(dirty?'unsaved':(vault.unlocked?'saved':'temporary'));window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
 function mutate(fn,{undoable=false}={}){if(busy)return false;const before=data,next=S.copy(data),selection={projectId,threadId,documentId};try{fn(next);data=S.state(next);if(undoable)undoSlot.record(before,data,selection);else undoSlot.clear();dirty=true;stop();render();status('apply');return true}catch{status('failed');return false}}
 function projectIn(v){return v.projects.find(x=>x.id===projectId)}
 function option(value,label){const o=el('option',label);o.value=value;return o}
@@ -1223,7 +1235,7 @@ $('language-file').onchange=async event=>{
 };
 $('language').onchange=()=>{stop();language=$('language').value;applyLanguage()};
 window.addEventListener('beforeunload',e=>{if(dirty||forms()||$('message').value){e.preventDefault();e.returnValue=''}});
-window.NexusStudioUI={snapshot:()=>S.copy(data),stageChatContext,resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}};applyLanguage();
+window.NexusStudioUI={snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}};applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
 </script><script>'use strict';
@@ -1567,6 +1579,115 @@ document.addEventListener('focusin',syncTyping);
 document.addEventListener('focusout',()=>queueMicrotask(syncTyping));
 window.NexusStudioFocus={openPanel,openTools,setFocus,isFocused:()=>focused,active:()=>toolsOpen?'tools':selected};
 layout();
+})();
+</script><script>/* NEXUS Studio: honest chat composer and explicit archive shortcut.
+ * Presentation only. All executions delegate to the existing reviewed actions.
+ */
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const required=['conversation-card','message','guide','prepare','request-review','consent',
+ 'send-model','save','vault-card','language','branch-notice'];
+if(required.some(id=>!$(id))||!window.NexusStudioUI?.uiStatus)return;
+const words=(en,fa)=>document.documentElement.lang==='fa'?fa:en;
+const box=document.createElement('section');box.id='studio-compose';box.className='studio-compose';
+box.setAttribute('aria-label','Conversation actions');
+const heading=document.createElement('strong');heading.id='studio-compose-heading';
+const row=document.createElement('div');row.className='studio-compose-row';
+const selectLabel=document.createElement('label');selectLabel.htmlFor='studio-compose-mode';
+const select=document.createElement('select');select.id='studio-compose-mode';
+for(const [value,en,fa] of [
+ ['guide','Local reflection guide','راهنمای تأمل محلی'],
+ ['model','Review AI model request','بازبینی درخواست مدل هوش مصنوعی']
+]){const o=document.createElement('option');o.value=value;o.dataset.en=en;o.dataset.fa=fa;select.append(o)}
+const send=document.createElement('button');send.type='button';send.id='studio-compose-send';
+const save=document.createElement('button');save.type='button';save.id='studio-compose-save';save.className='secondary';
+const config=document.createElement('button');config.type='button';config.id='studio-compose-config';config.className='secondary';
+const privacy=document.createElement('p');privacy.id='studio-compose-privacy';privacy.className='help';
+privacy.setAttribute('role','note');
+const storage=document.createElement('p');storage.id='studio-compose-storage';storage.className='help';storage.setAttribute('role','status');storage.setAttribute('aria-live','polite');
+selectLabel.append(select);row.append(selectLabel,send,save,config);
+box.append(heading,row,privacy,storage);
+$('branch-notice').after(box);
+let running=false;
+function refresh(){
+ const state=window.NexusStudioUI.uiStatus();
+ if(!state)return;
+ const model=select.value==='model',ready=state.threadReady&&!state.archived&&!state.busy;
+ heading.textContent=words('Reply using','پاسخ با');
+ box.setAttribute('aria-label',words('Conversation actions','گزینه‌های گفتگو'));
+ selectLabel.setAttribute('aria-label',words('Choose how to respond','روش پاسخ را انتخاب کن'));
+ for(const opt of select.options)opt.textContent=words(opt.dataset.en,opt.dataset.fa);
+ send.textContent=model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
+ send.disabled=!ready||!$('message').value.trim();
+ send.setAttribute('aria-label',send.textContent);
+ save.textContent=state.vaultUnlocked?words('Save encrypted session','ذخیرهٔ رمزگذاری‌شدهٔ نشست'):words('Set up private archive','تنظیم آرشیو خصوصی');
+ // Never bypass the existing noForms() gate, including unread chat drafts.
+ const pendingDraft=Boolean($('message').value.trim());
+ save.disabled=state.busy||(state.vaultUnlocked&&(state.unsavedForms||pendingDraft));
+ config.hidden=!model;
+ config.disabled=state.busy;
+ config.textContent=words('Model settings','تنظیمات مدل');
+ privacy.textContent=model?
+  words('No message is sent by this button. Review the exact context and separately approve it. A configured model is required.',
+        'این دکمه هیچ پیامی ارسال نمی‌کند؛ متن دقیق را بازبینی و جداگانه تأیید کن. اتصال مدل لازم است.'):
+  words('Local guide only — not generative AI. It cannot read attached files.',
+        'فقط راهنمای محلی، نه هوش مصنوعی مولد؛ فایل‌های پیوست را نمی‌خواند.');
+ storage.textContent=state.vaultUnlocked?
+  state.dirty||state.unsavedForms||pendingDraft?
+   words('Work is not fully saved. Finish or clear draft fields, then save explicitly.',
+         'همهٔ تغییرات ذخیره نشده‌اند. پیش‌نویس‌ها را تکمیل یا پاک کن و سپس صریحاً ذخیره کن.'):
+   words('Encrypted archive unlocked. Use Save to retain changes; keep a separate encrypted backup.',
+         'آرشیو رمزگذاری‌شده باز است. برای نگهداری تغییرات ذخیره کن و پشتیبان رمزگذاری‌شدهٔ جدا داشته باش.'):
+  words('No encrypted archive is unlocked. This work can be lost if the tab closes.',
+        'آرشیو رمزگذاری‌شده‌ای باز نیست. با بسته‌شدن برگه ممکن است کار از بین برود.');
+}
+function run(){
+ if(running||send.disabled)return;
+ running=true;
+ try{
+  if(select.value==='model'){
+   $('prepare').click(); // Existing model-info, context, consent and safety checks.
+   if(!$('request-review').hidden){
+    const reviewHeading=$('request-review').querySelector('h3');
+    if(reviewHeading){reviewHeading.tabIndex=-1;reviewHeading.focus({preventScroll:true})}
+    $('request-review').scrollIntoView({block:'nearest'});
+   }
+  }else{
+   $('guide').click(); // Existing source/attachment validation; never a network call.
+  }
+ }finally{running=false;refresh()}
+}
+send.addEventListener('click',run);
+save.addEventListener('click',()=>{
+ const state=window.NexusStudioUI.uiStatus();
+ if(!state||state.busy||save.disabled)return;
+ if(!state.vaultUnlocked){window.NexusStudioFocus?.openPanel('vault-card');$('passphrase').focus({preventScroll:true});return}
+ $('save').click(); // Existing noForms() gate, vault encryption and user feedback.
+ refresh();
+});
+config.addEventListener('click',()=>{
+ const settings=$('studio-model-settings');if(!settings)return;
+ settings.open=true;
+ settings.scrollIntoView({block:'nearest'});
+ settings.querySelector('summary')?.focus({preventScroll:true});
+});
+select.addEventListener('change',refresh);
+$('message').addEventListener('input',refresh);
+$('message').addEventListener('keydown',event=>{
+ if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&!event.isComposing&&
+    document.documentElement.classList.contains('studio-focus-mode')){
+  event.preventDefault();
+  // Studio's older window-level shortcut would otherwise also dispatch a
+  // local guide when no model was configured. Stop this duplicate event ONLY
+  // in focused mode; full-view shortcuts retain their previous behavior.
+  event.stopPropagation();
+  run(); // In model mode only opens the consent review.
+ }
+});
+$('language').addEventListener('change',()=>queueMicrotask(refresh));
+document.addEventListener('nexus-studio-state',refresh);
+window.NexusStudioCompose={refresh,mode:()=>select.value};
+refresh();
 })();
 </script><script>
 (()=>{'use strict';

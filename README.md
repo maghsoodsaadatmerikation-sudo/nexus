@@ -41,6 +41,12 @@ about 167 MB; accuracy and context capacity are limited. [Device model setup](do
 four bottom navigation choices (Chat / Projects / Tools / Save), first-project
 onboarding, bilingual/RTL labels and one-tap return from a reviewed tool result
 to chat. [Precise behavior, accessibility and privacy limitations](docs/STUDIO-CHAT-FIRST-UX.md).
+
+Phase 43 adds a **one-action mobile chat composer**: choose the explicitly
+non-generative local guide or open a separately approved exact-context model
+request, with visible unsaved-work indicators and an explicit encrypted-save
+shortcut. Nothing is automatically sent to a model or saved to cloud storage.
+[Composer UX and consent safeguards](docs/STUDIO-CLEAR-COMPOSER-UX.md).
 Because static Render AutoDeploy is off, this GitHub change alone **does not mean**
 the hosted link already runs the new layout; update and verify the published
 source before advertising it as deployed. The separate
