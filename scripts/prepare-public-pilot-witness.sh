@@ -122,9 +122,94 @@ if text.count(trace_catch_before)!=1 or trace_catch_after in text:
     raise SystemExit("BLOCKED: historical failure handler changed")
 text=text.replace(trace_catch_before,trace_catch_after)
 
+
+# The page-only CDP Network offline flag does not necessarily apply to
+# Service Worker network fetches. Attach to the *exact reviewed worker*
+# target and independently test an online baseline followed by an offline
+# worker-origin fetch rejection before accepting an offline navigation.
+# Keep the pinned archived page and worker unchanged.
+def replace_once(old, new, label):
+    global text
+    if text.count(old)!=1 or new in text:
+        raise SystemExit("BLOCKED: pinned worker-proof anchor changed: "+label)
+    text=text.replace(old,new)
+
+replace_once("const rpc=(method,params={},deadline=10000)=>new Promise(",
+             "const rpc=(method,params={},deadline=10000,sessionId=null)=>new Promise(",
+             "session-aware-rpc-signature")
+replace_once("socket.send(JSON.stringify({id,method,params}));",
+             "socket.send(JSON.stringify({id,method,params,...(sessionId?{sessionId}:{})}));",
+             "session-aware-rpc-transport")
+replace_once("const navTrace={responses:[],failures:[],frames:[]};",
+             "const navTrace={responses:[],failures:[],frames:[]};\n"
+             "const workerProof={exact_target:false,online_probe:false,offline_probe:false,document_from_worker:false};",
+             "worker-proof-evidence")
+
+attach_anchor=""" await js("window.__nexusBeforeOfflineReload=true;true");"""
+attach_code=""" // Require the exact same-origin installed service worker TARGET, not
+ // merely the page's navigator.onLine or ServiceWorker.controller flag.
+ stage='worker-target-online-proof';
+ await rpc('Target.setDiscoverTargets',{discover:true});
+ const workerInfo=await poll(async()=>{
+   const list=await rpc('Target.getTargets');
+   const matching=(list.targetInfos||[]).filter(x=>
+     x.type==='service_worker'&&x.url===ORIGIN+'service-worker.js');
+   return matching.length===1?matching[0]:null;
+ },16000,'exact-public-service-worker-target-missing');
+ const attached=await rpc('Target.attachToTarget',
+   {targetId:workerInfo.targetId,flatten:true});
+ assert(typeof attached.sessionId==='string'&&attached.sessionId.length>4,
+   'worker-target-attach-refused');
+ const workerSessionId=attached.sessionId;
+ await rpc('Runtime.enable',{},10000,workerSessionId);
+ await rpc('Network.enable',{},10000,workerSessionId);
+ await rpc('Network.setCacheDisabled',{cacheDisabled:true},10000,workerSessionId);
+ workerProof.exact_target=true;
+ const onlineProbe=await rpc('Runtime.evaluate',{
+   expression:"fetch('/',{cache:'no-store',credentials:'omit'}).then(r=>r.status===200,()=>false)",
+   awaitPromise:true,returnByValue:true},15000,workerSessionId);
+ assert(onlineProbe.result?.value===true&&!onlineProbe.exceptionDetails,
+   'worker-origin-baseline-not-online');
+ workerProof.online_probe=true;
+ await js("window.__nexusBeforeOfflineReload=true;true");"""
+replace_once(attach_anchor,attach_code,"public-worker-attach")
+
+offline_anchor=""" await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
+ await rpc('Page.reload',{ignoreCache:true});"""
+offline_code=""" const offlineParams={offline:true,latency:0,downloadThroughput:0,uploadThroughput:0};
+ // Both independent CDP targets are explicitly disconnected. A page-only
+ // offline signal does not meet the acceptance contract.
+ await rpc('Network.emulateNetworkConditions',offlineParams);
+ await rpc('Network.emulateNetworkConditions',offlineParams,10000,workerSessionId);
+ const workerBlocked=await rpc('Runtime.evaluate',{
+   expression:"fetch('/',{cache:'no-store',credentials:'omit'}).then(()=>false,()=>true)",
+   awaitPromise:true,returnByValue:true},15000,workerSessionId);
+ assert(workerBlocked.result?.value===true&&!workerBlocked.exceptionDetails,
+   'worker-origin-network-still-reachable');
+ workerProof.offline_probe=true;
+ await rpc('Page.reload',{ignoreCache:true});"""
+replace_once(offline_anchor,offline_code,"both-cdp-targets-offline")
+
+doc_anchor=""" checks.push('real-chrome-network-offline-reload-served-cached-app');"""
+doc_code=""" assert(navTrace.responses.some(r=>r.stage==='real-network-offline'&&
+     r.app_origin&&r.from_service_worker&&r.status===200&&r.html),
+   'offline-navigation-not-served-by-isolated-worker');
+ workerProof.document_from_worker=true;
+ checks.push('real-chrome-network-offline-reload-served-cached-app');
+ checks.push('worker-target-network-baseline-then-offline-rejection');"""
+replace_once(doc_anchor,doc_code,"offline-document-worker-origin")
+
+report_anchor="""   actual_offline_navigation:true,real_android_hardware:false,"""
+report_code="""   actual_offline_navigation:true,
+   worker_target_network_isolated:workerProof.exact_target&&workerProof.online_probe&&
+     workerProof.offline_probe&&workerProof.document_from_worker,
+   worker_online_baseline:true,real_android_hardware:false,"""
+replace_once(report_anchor,report_code,"worker-proof-report")
+
+
 path.write_text(text)
 print(json.dumps({'witness_source':'pinned-deployed-baseline',
-  'witness_patch':'stable-offline-document-and-bounded-cdp-failure-trace',
+  'witness_patch':'pinned-worker-target-online-offline-network-proof',
   'witness_sha256':hashlib.sha256(text.encode()).hexdigest(),
   'published_application_bytes_modified':False,
   'acceptance_checks_relaxed':False, 'authority':'none'},sort_keys=True), file=sys.stderr)
