@@ -127,6 +127,11 @@ def build(old_root, dest_zip, dest_report, fetch=None):
     assets = check_old_root(old_root)
     statuses = compare_live(assets, fetch)
     if any(value != "MATCH" for value in statuses.values()):
+        # Only reviewed public filenames and bounded result codes. No response
+        # body, URL query, user content or server error text is logged.
+        print("LIVE SOURCE MISMATCH: " + json.dumps(
+            [{"path": name, "status": statuses[name]} for name in gate.OBSERVE
+             if statuses[name] != "MATCH"], sort_keys=True), file=sys.stderr)
         raise ValueError("BLOCKED: live public HTML/worker/assets do not match proposed fallback")
     try:
         archive(assets, dest_zip)
