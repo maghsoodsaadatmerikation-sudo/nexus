@@ -6,6 +6,7 @@ on:
       - '.github/workflows/pilot-12-android-evidence-kit.yml'
       - 'scripts/pilot12_android_receipt.py'
       - 'scripts/test_pilot12_android_receipt.py'
+      - 'scripts/test-pilot12-android-form-browser.mjs'
       - 'web/pilot12-android-field-witness.html'
       - 'docs/PILOT-12-ANDROID-HARDWARE-WITNESS.md'
       - 'web/offline-pilot.html'
@@ -16,6 +17,7 @@ on:
       - '.github/workflows/pilot-12-android-evidence-kit.yml'
       - 'scripts/pilot12_android_receipt.py'
       - 'scripts/test_pilot12_android_receipt.py'
+      - 'scripts/test-pilot12-android-form-browser.mjs'
       - 'web/pilot12-android-field-witness.html'
       - 'docs/PILOT-12-ANDROID-HARDWARE-WITNESS.md'
       - 'web/offline-pilot.html'
@@ -42,6 +44,15 @@ jobs:
           python3 -m py_compile scripts/pilot12_android_receipt.py scripts/test_pilot12_android_receipt.py
           python3 scripts/test_pilot12_android_receipt.py
           echo 'PASS: no-content Android self-report schema; hardware remains unverified'
+      - name: Exercise the local phone form in disposable real Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_ANDROID_FORM_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          test -n "$NEXUS_ANDROID_FORM_CHROME"
+          node --check scripts/test-pilot12-android-form-browser.mjs
+          node scripts/test-pilot12-android-form-browser.mjs
+          echo 'PASS: local HTML form UI only; this is not Android hardware evidence'
       - name: Explicit non-acceptance boundary
         shell: bash
         run: |
