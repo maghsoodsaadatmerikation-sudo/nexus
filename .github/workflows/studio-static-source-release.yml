@@ -1,0 +1,113 @@
+name: NEXUS Studio Static Source Release Candidate
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/studio-static-release-gate.py'
+      - 'scripts/test-studio-static-release-gate.py'
+      - 'public/studio/**'
+      - 'scripts/build-studio-static.py'
+      - '.github/workflows/studio-static-source-release.yml'
+      - 'docs/STUDIO-STATIC-PROMOTION.md'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/studio-static-release-gate.py'
+      - 'scripts/test-studio-static-release-gate.py'
+      - 'public/studio/**'
+      - 'scripts/build-studio-static.py'
+      - '.github/workflows/studio-static-source-release.yml'
+      - 'docs/STUDIO-STATIC-PROMOTION.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-source-release-candidate:
+    name: static-source-only-review-not-a-deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact revision without persistent GitHub credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Require no provider deployment credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+      - name: Verify static production-scope assets and fail-closed candidate tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/studio-static-release-gate.py scripts/test-studio-static-release-gate.py
+          python3 scripts/build-studio-static.py --check
+          python3 scripts/test-studio-static-release-gate.py
+      - name: Package exact public site and verify source-bound SHA manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/studio-static-release-gate.py --build \
+            --zip "$RUNNER_TEMP/nexus-studio-static-site.zip" \
+            --manifest "$RUNNER_TEMP/nexus-studio-release-manifest.json" \
+            --source-commit "$GITHUB_SHA"
+          python3 scripts/studio-static-release-gate.py --verify \
+            --zip "$RUNNER_TEMP/nexus-studio-static-site.zip" \
+            --manifest "$RUNNER_TEMP/nexus-studio-release-manifest.json" \
+            --source-commit "$GITHUB_SHA"
+          sha256sum "$RUNNER_TEMP/nexus-studio-static-site.zip" > "$RUNNER_TEMP/nexus-studio-static-site.zip.sha256"
+      - name: Exercise candidate app on disposable real Chromium with private synthetic state only
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
+          test -n "$NEXUS_PWA_CHROME"
+          node --check scripts/test-studio-static-browser.mjs
+          node scripts/test-studio-static-browser.mjs > "$RUNNER_TEMP/nexus-studio-release-local-browser.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ["RUNNER_TEMP"])/"nexus-studio-release-local-browser.json"
+          result=json.loads(p.read_text())
+          assert result["status"]=="PASS"
+          assert result["authority"]=="none"
+          assert result["actual_offline_navigation"] is True
+          assert result["real_android_hardware"] is False
+          print("STATIC SOURCE CANDIDATE REAL CHROMIUM PASS (not public deployment)")
+          PY
+      - name: Compare fixed public Render origin without deploying or changing it
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/studio-static-release-gate.py --observe-public \
+            --manifest "$RUNNER_TEMP/nexus-studio-release-manifest.json" \
+            --report "$RUNNER_TEMP/nexus-studio-public-before-promotion.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ["RUNNER_TEMP"])/"nexus-studio-public-before-promotion.json").read_text())
+          assert r["authority"]=="none" and r["read_only"] is True
+          assert r["production_promotion_authorized"] is False and r["render_deploy_performed"] is False
+          assert r["status"] in {"SOURCE_MATCH_ONLY","PUBLIC_SOURCE_DRIFT","INCOMPLETE_PUBLIC_OBSERVATION"}
+          print("PUBLIC ORIGIN DRIFT OBSERVED; NO PRODUCTION RELEASE AUTHORITY")
+          PY
+      - name: Retain source-only ZIP, SHA, release dossier and pre-promotion observation
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-studio-static-review-candidate
+          path: |
+            ${{ runner.temp }}/nexus-studio-static-site.zip
+            ${{ runner.temp }}/nexus-studio-static-site.zip.sha256
+            ${{ runner.temp }}/nexus-studio-release-manifest.json
+            ${{ runner.temp }}/nexus-studio-release-local-browser.json
+            ${{ runner.temp }}/nexus-studio-public-before-promotion.json
+          if-no-files-found: error
+          retention-days: 30
