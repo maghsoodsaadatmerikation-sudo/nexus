@@ -6,8 +6,12 @@ import {createHash} from 'node:crypto';
 import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 const PUBLIC_MODE=process.argv.includes('--public');
-const root=new URL('../public/studio/',import.meta.url);
+// CI can inspect the exact extracted public-only phone ZIP, not merely its
+// build sources. The origin remains a fresh local loopback server.
+const packageRoot=process.env.NEXUS_STUDIO_PACKAGE_DIR;
+const root=packageRoot?pathToFileURL(path.resolve(packageRoot)+path.sep):new URL('../public/studio/',import.meta.url);
 const browser=process.env.NEXUS_PWA_CHROME;
 if(!browser||typeof WebSocket==='undefined')throw Error('real-chromium-and-node-required');
 const sha=buf=>createHash('sha256').update(buf).digest('hex');
