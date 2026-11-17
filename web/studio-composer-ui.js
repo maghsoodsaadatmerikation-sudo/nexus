@@ -19,10 +19,11 @@ for(const [value,en,fa] of [
 ]){const o=document.createElement('option');o.value=value;o.dataset.en=en;o.dataset.fa=fa;select.append(o)}
 const send=document.createElement('button');send.type='button';send.id='studio-compose-send';
 const save=document.createElement('button');save.type='button';save.id='studio-compose-save';save.className='secondary';
+const config=document.createElement('button');config.type='button';config.id='studio-compose-config';config.className='secondary';
 const privacy=document.createElement('p');privacy.id='studio-compose-privacy';privacy.className='help';
 privacy.setAttribute('role','note');
 const storage=document.createElement('p');storage.id='studio-compose-storage';storage.className='help';storage.setAttribute('role','status');storage.setAttribute('aria-live','polite');
-selectLabel.append(select);row.append(selectLabel,send,save);
+selectLabel.append(select);row.append(selectLabel,send,save,config);
 box.append(heading,row,privacy,storage);
 $('branch-notice').after(box);
 let running=false;
@@ -41,6 +42,9 @@ function refresh(){
  // Never bypass the existing noForms() gate, including unread chat drafts.
  const pendingDraft=Boolean($('message').value.trim());
  save.disabled=state.busy||(state.vaultUnlocked&&(state.unsavedForms||pendingDraft));
+ config.hidden=!model;
+ config.disabled=state.busy;
+ config.textContent=words('Model settings','تنظیمات مدل');
  privacy.textContent=model?
   words('No message is sent by this button. Review the exact context and separately approve it. A configured model is required.',
         'این دکمه هیچ پیامی ارسال نمی‌کند؛ متن دقیق را بازبینی و جداگانه تأیید کن. اتصال مدل لازم است.'):
@@ -78,6 +82,12 @@ save.addEventListener('click',()=>{
  if(!state.vaultUnlocked){window.NexusStudioFocus?.openPanel('vault-card');$('passphrase').focus({preventScroll:true});return}
  $('save').click(); // Existing noForms() gate, vault encryption and user feedback.
  refresh();
+});
+config.addEventListener('click',()=>{
+ const settings=$('studio-model-settings');if(!settings)return;
+ settings.open=true;
+ settings.scrollIntoView({block:'nearest'});
+ settings.querySelector('summary')?.focus({preventScroll:true});
 });
 select.addEventListener('change',refresh);
 $('message').addEventListener('input',refresh);
