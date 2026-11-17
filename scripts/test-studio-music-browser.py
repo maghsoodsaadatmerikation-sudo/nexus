@@ -72,7 +72,7 @@ def main():
         page.write_text(html)
         result=subprocess.run([
             "node",str(ROOT/"scripts/workspace-browser-runner.mjs"),browser,
-            page.as_uri(),str(root/"witness"),"420,900","110000","30000"
+            page.as_uri(),str(root/"witness"),"420,900","60000","30000"
         ],capture_output=True,text=True,timeout=170)
         if result.returncode:
             raise RuntimeError("browser-runner-failed: "+result.stderr[-500:])
