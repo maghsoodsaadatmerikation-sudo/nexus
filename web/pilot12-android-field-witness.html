@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>NEXUS | Pilot 12 Android field witness</title>
+<style>
+:root{color-scheme:light;font:16px system-ui,Arial,sans-serif;background:#f3f8f7;color:#153844}
+*{box-sizing:border-box}body{margin:0}header{background:#153c49;color:white;padding:24px max(17px,calc((100% - 770px)/2))}
+main{max-width:800px;margin:auto;padding:16px 17px 48px}h1{font-size:1.48rem;margin:0 0 8px}h2{font-size:1.12rem;margin:0 0 10px}
+p,li{line-height:1.65}small,.muted{color:#50717a}.sub{color:#daf3ec}section{background:white;border:1px solid #d1e4e2;padding:17px;margin:15px 0;border-radius:14px}
+label{display:block;font-weight:600;line-height:1.55;margin:12px 0 7px}select,button,textarea{font:inherit}select{width:100%;background:white;color:#193a45;border:1px solid #96b8b8;border-radius:8px;min-height:45px;padding:9px}
+button{background:#0e686a;color:white;border:0;border-radius:9px;padding:12px 15px;min-height:44px;margin:5px 7px 5px 0;font-weight:600}button.secondary{background:#e0efec;color:#134c52;border:1px solid #a3c8c2}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #56b5ac;outline-offset:2px}
+.row{padding:12px 0;border-top:1px solid #e2eeec}.row:first-child{border-top:none}.rtl{direction:rtl;text-align:right;font-size:.92rem;color:#3b646b;margin:5px 0}
+.check{display:flex;gap:11px;align-items:flex-start;margin:10px 0}.check input{width:21px;height:21px;flex-shrink:0;margin:3px 0}
+textarea{width:100%;height:220px;border:1px solid #a7c2c1;border-radius:10px;padding:11px;background:#f9fdfd;color:#1c4146;overflow:auto;font:12px ui-monospace,monospace}
+code{word-break:break-all}.callout{border-left:4px solid #0a7170;padding-left:12px}.warning{border-left:4px solid #aa623d;padding-left:12px}
+a{color:#065f67}#status{font-weight:700;line-height:1.5}.step{font-size:.85rem;color:#617c80}
+</style>
+</head>
+<body>
+<header>
+<h1>NEXUS — Android offline field witness</h1>
+<p class="sub">An optional, local-only observation form for the <b>legacy Pilot 12 PWA</b>. No account, tracking, network requests or production changes.</p>
+<p class="rtl" style="color:#daf3ec">فرم ثبت آزمایش آفلاین نکسوس روی گوشی واقعی؛ اطلاعات شما ارسال یا ذخیرهٔ خودکار نمی‌شود.</p>
+</header>
+<main>
+<section>
+<h2>Before you begin / پیش از شروع</h2>
+<p class="warning">This document <b>cannot independently prove Android hardware operation</b>. Even ten reported successes remain <b>USER_REPORTED_PASS_UNVERIFIED</b> until separate review. Do not enter personal data, passwords or real workspace content.</p>
+<p>Open the <a href="https://nexus-offline-pilot.onrender.com/" rel="noopener noreferrer">exact legacy Pilot 12 address</a> in your Android browser, preferably an empty, separate browser profile. Do not confuse it with NEXUS Studio. Keep this form in another tab or local file.</p>
+<p class="rtl">نسخهٔ مورد آزمایش همان Pilot 12 است، نه Studio. برای آزمایش، فقط از داده‌های ساختگی و یک مرورگر بدون اطلاعات شخصی استفاده کنید.</p>
+<p class="muted">Expected reviewed HTML SHA-256 (public CI baseline; <b>not measured on this phone</b>): <code>7e205bf30f8c2347845fc03a3578676d46f22e83d2897a17fcf1bd34bd058dd1</code></p>
+<label for="browser">Browser category (not a device identifier)</label>
+<select id="browser">
+<option value="not_specified">Not specified</option>
+<option value="chrome">Chrome</option>
+<option value="firefox">Firefox</option>
+<option value="edge">Edge</option>
+<option value="other">Other browser</option>
+</select>
+</section>
+<section>
+<h2>Real-device observations / مراحل آزمایش</h2>
+<p class="muted">Select a result for every step. Do not mark PASS unless you personally performed the action. If a step cannot be checked, leave Not tested. Never erase an existing workspace to complete the test.</p>
+<div id="stages"></div>
+</section>
+<section>
+<h2>Safety attestations / ایمنی داده‌ها</h2>
+<label class="check"><input id="android" type="checkbox"><span>I performed these steps on a physical Android phone (not an emulator).<span class="rtl">آزمایش روی گوشی واقعی اندروید انجام شده است.</span></span></label>
+<label class="check"><input id="fictional" type="checkbox"><span>I used fictional content only; I did not enter real workspace, secrets or identifying information.<span class="rtl">تنها اطلاعات ساختگی استفاده شده و اطلاعات شخصی ثبت نشده است.</span></span></label>
+<p class="warning">These are self-attestations, not independently verified facts. Offline network isolation is an observation, not a value of navigator.onLine.</p>
+</section>
+<section>
+<h2>Create a local JSON receipt / ساخت گزارش</h2>
+<p>Click <b>Generate</b>, then optionally copy or download the JSON locally. Nothing is sent anywhere. Reviewing the receipt requires a separate step; a self-report must never be used as release authorization.</p>
+<button id="generate" type="button">Generate receipt</button>
+<button class="secondary" id="copy" type="button">Copy JSON</button>
+<button class="secondary" id="download" type="button">Save JSON</button>
+<p id="status" role="status" aria-live="polite">No report generated.</p>
+<label for="output">Sanitized JSON result — public origin and fixed stage states only</label>
+<textarea id="output" readonly spellcheck="false"></textarea>
+</section>
+<p class="muted">Offline HTML field form v1 · Read-only observation; local app installation/removal is always your explicit choice · All results are unverified until independently reviewed.</p>
+</main>
+<script>
+'use strict';
+(function(){
+ const origin='https://nexus-offline-pilot.onrender.com/';
+ const definitions=[
+  ['online_exact_origin','Open exact HTTPS Pilot 12 origin while connected','آدرس اصلی Pilot 12 را با اینترنت باز کردم'],
+  ['offline_opt_in_ready','Tap Prepare offline mode; app reports ready','گزینهٔ آماده‌سازی آفلاین را زدم و برنامه آماده شد'],
+  ['shortcut_created','Create an install or home-screen shortcut','میان‌بر برنامه را در صفحهٔ اصلی ساختم'],
+  ['physical_radio_cut','Disable Wi-Fi and mobile data / enable airplane mode','وای‌فای و اینترنت همراه را قطع کردم'],
+  ['independent_network_unreachable','In a separate tab, unrelated internet site truly fails to load','در تب جداگانه بازشدن سایت اینترنتی دیگر ناموفق بود'],
+  ['reopen_one','Fully close and reopen Pilot 12 shortcut offline; actual UI loads','برنامه را بستم و بدون اینترنت باز کردم؛ رابط اصلی دیده شد'],
+  ['fictional_demo','Run the fictional example; two claims and alternatives, no automatic judgment','نمونهٔ ساختگی با دو ادعا و دو گزینه، بدون تصمیم خودکار اجرا شد'],
+  ['reopen_two','Close again and independently reopen the same cached app offline','بار دوم نیز برنامه را بسته و بدون اینترنت باز کردم'],
+  ['remove_after_network_restore','Only on an isolated profile: reconnect, explicitly remove offline app copy','فقط در پروفایل خالی، پس از اتصال مجدد نسخهٔ آفلاین حذف شد'],
+  ['unrelated_workspace_unchanged','Confirm unrelated workspace or independent exported files were not erased','فایل‌ها یا فضای کاری جداگانه پاک نشده‌اند']
+ ];
+ const wrapper=document.getElementById('stages');
+ definitions.forEach(function(def,i){
+   const row=document.createElement('div');row.className='row';
+   const label=document.createElement('label');label.htmlFor='stage-'+def[0];
+   label.textContent=(i+1)+'. '+def[1];
+   const fa=document.createElement('div');fa.className='rtl';fa.textContent=def[2];
+   const selector=document.createElement('select');selector.id='stage-'+def[0];
+   for(const item of [['not_tested','Not tested / نامشخص'],['pass','Observed PASS / موفق'],['fail','Observed FAIL / ناموفق']]){
+     const option=document.createElement('option');option.value=item[0];option.textContent=item[1];selector.appendChild(option);
+   }
+   row.append(label,fa,selector);wrapper.appendChild(row);
+ });
+ let receipt=null;
+ function generate(){
+  const stages={};
+  definitions.forEach(function(def){stages[def[0]]=document.getElementById('stage-'+def[0]).value});
+  const android=document.getElementById('android').checked;
+  const fictional=document.getElementById('fictional').checked;
+  const all=Object.values(stages).every(function(value){return value==='pass'});
+  receipt={
+    schema:'nexus.pilot12.android-device-self-report.v1',
+    origin:origin,
+    app:'legacy-public-pilot12',
+    browser:document.getElementById('browser').value,
+    created_at:new Date().toISOString(),
+    stages:stages,
+    self_attested_physical_android:android,
+    self_attested_fictional_only:fictional,
+    reviewed_public_html_sha256:'7e205bf30f8c2347845fc03a3578676d46f22e83d2897a17fcf1bd34bd058dd1',
+    device_sha256_measured:false,
+    independent_hardware_verified:false,
+    production_release_authorized:false,
+    authority:'none',
+    transmission:'none',
+    status:all&&android&&fictional?'USER_REPORTED_PASS_UNVERIFIED':'INCOMPLETE_OR_FAILED'
+  };
+  document.getElementById('output').value=JSON.stringify(receipt,null,2);
+  document.getElementById('status').textContent=receipt.status+' — No independent verification or network submission.';
+ }
+ document.getElementById('generate').addEventListener('click',generate);
+ document.getElementById('copy').addEventListener('click',async function(){
+   if(!receipt)generate();
+   const area=document.getElementById('output');
+   try{await navigator.clipboard.writeText(area.value);document.getElementById('status').textContent='Copied locally. Not submitted.'}
+   catch{area.focus();area.select();document.getElementById('status').textContent='Copy not available. Select the JSON manually.'}
+ });
+ document.getElementById('download').addEventListener('click',function(){
+   if(!receipt)generate();
+   const blob=new Blob([JSON.stringify(receipt,null,2)],{type:'application/json'});
+   const url=URL.createObjectURL(blob);
+   const link=document.createElement('a');link.download='nexus-pilot12-android-self-report.json';link.href=url;
+   document.body.appendChild(link);link.click();link.remove();
+   setTimeout(function(){URL.revokeObjectURL(url)},1200);
+   document.getElementById('status').textContent='Local download requested. No upload or external request.';
+ });
+})();
+</script>
+</body>
+</html>
