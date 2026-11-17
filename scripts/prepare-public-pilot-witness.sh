@@ -235,13 +235,37 @@ replace_exact(" if(stage==='real-network-offline')\n   process.stderr.write(JSON
 replace_exact(" if(['online-bootstrap','real-network-offline'].includes(stage))\n   process.stderr.write(JSON.stringify({event:'pilot12-proxy-diagnostic',...proxy.stats(),authority:'none'})+'\\n');",
     """ if(stage==='online-bootstrap'){
    let onlineBoot=null;
-   try{onlineBoot=await retryJs("(async()=>{const r=await navigator.serviceWorker?.getRegistration('/');const names=await caches.keys();return {document_ready:document.readyState==='complete',install_button:!!document.getElementById('offline-install'),installation_ready:document.getElementById('offline-install-state')?.textContent?.includes('آماده است')===true,registration:!!r,active:r?.active?.state==='activated',waiting:!!r?.waiting,installing:!!r?.installing,controlled:!!navigator.serviceWorker?.controller,expected_worker:r?.active?.scriptURL===location.origin+'/service-worker.js',shell_cache:names.some(n=>n.startsWith('nexus-app-shell-v12-'))}})()")}catch{}
+   try{onlineBoot=await retryJs("(async()=>{const r=await navigator.serviceWorker?.getRegistration('/');const names=await caches.keys();return {document_ready:document.readyState==='complete',install_button:!!document.getElementById('offline-install'),button_disabled:document.getElementById('offline-install')?.disabled===true,sw_api:'serviceWorker' in navigator,cache_api:'caches' in window,secure:isSecureContext,expected_origin:location.origin===new URL('https://nexus-offline-pilot.onrender.com').origin,installation_ready:document.getElementById('offline-install-state')?.textContent?.includes('آماده است')===true,registration:!!r,active:r?.active?.state==='activated',waiting:!!r?.waiting,installing:!!r?.installing,controlled:!!navigator.serviceWorker?.controller,expected_worker:r?.active?.scriptURL===location.origin+'/service-worker.js',shell_cache:names.some(n=>n.startsWith('nexus-app-shell-v12-'))}})()")}catch{}
    process.stderr.write(JSON.stringify({event:'pilot12-online-worker-bootstrap',
      state:onlineBoot,contains_page_content:false,authority:'none'})+'\\n');
  }
  if(['online-bootstrap','real-network-offline'].includes(stage))
    process.stderr.write(JSON.stringify({event:'pilot12-proxy-diagnostic',...proxy.stats(),authority:'none'})+'\\n');""",
     "online-worker-bootstrap-diagnostic")
+
+
+# Passive CDP worker-domain events avoid altering app registration semantics.
+# Only allowlisted states/booleans are recorded; no worker script source,
+# console text, full URL, request body or other user-controlled content.
+replace_exact("const navTrace={responses:[],failures:[],frames:[]};",
+    "const navTrace={responses:[],failures:[],frames:[],workers:[],worker_errors:[]};",
+    "bounded-service-worker-target-history")
+replace_exact("  if(!p)return;pending.delete(msg.id);",
+    """  if(msg.method==='ServiceWorker.workerVersionUpdated')
+    for(const v of msg.params?.versions||[])
+      if(v.scriptURL===ORIGIN+'service-worker.js')
+        capped('workers',{stage,status:['new','installing','installed','activating','activated','redundant'].includes(v.status)?v.status:'unknown',running:['starting','running','stopping','stopped'].includes(v.runningStatus)?v.runningStatus:'unknown'});
+  if(msg.method==='ServiceWorker.workerRegistrationUpdated')
+    for(const r of msg.params?.registrations||[])
+      if(r.scopeURL===ORIGIN)
+        capped('workers',{stage,registration_deleted:r.isDeleted===true});
+  if(msg.method==='ServiceWorker.workerErrorReported')
+    capped('worker_errors',{stage,observed:true});
+  if(!p)return;pending.delete(msg.id);""",
+    "passive-cdp-service-worker-events")
+replace_exact(" await rpc('Page.enable');await rpc('Network.enable');",
+    " await rpc('Page.enable');await rpc('Network.enable');\n try{await rpc('ServiceWorker.enable')}catch{}",
+    "best-effort-worker-target-observer")
 
 replace_exact(" await rm(profile,{recursive:true,force:true});",
     " await proxy.close();\n await rm(profile,{recursive:true,force:true});",
