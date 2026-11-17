@@ -18,6 +18,7 @@ spec.loader.exec_module(cutover)
 P = "2ac7887b-d67a-48be-8a7b-bd54092893ae"
 S = "0032fc74-2c52-475d-b9df-9dca59237d93"
 V = "cc47a350-6c7e-4487-89d9-c4b390f94884"
+E = "56c4bc45-0e62-4aa9-832f-884bb1aa620c"
 C = "a" * 40
 D = "b" * 64
 O = "https://nexus-stage-d-production.up.railway.app"
@@ -30,9 +31,10 @@ def fixture():
                    for path, status in cutover.PUBLIC_PATHS.items()}
     return {
         "schema": cutover.SCHEMA, "captured_at_utc": NOW.isoformat(),
-        "inventory": {"project": {"id": P}, "environment": {"name": "production"}, "staged": None},
+        "inventory": {"project": {"id": P}, "environment": {"name": "production", "id": E}, "staged": None},
         "service": {
-            "service": {"id": S, "state": "live"}, "staged": None, "stagedChanges": [],
+            "service": {"id": S, "state": "live"}, "environment": {"id": E},
+            "staged": None, "stagedChanges": [],
             "config": {"source": {"repo": "maghsoodsaadatmerikation-sudo/nexus",
                                   "branch": "main", "commitSha": C},
                        "deploy": {"healthcheckPath": "/readyz", "sleepApplication": False}},
@@ -40,11 +42,13 @@ def fixture():
             "volumes": [{"id": V, "mountPath": "/data", "state": "live"}],
             "domains": {"serviceDomains": [{"domain": "nexus-stage-d-production.up.railway.app", "targetPort": 3000}]},
         },
-        "health": {"services": [{"serviceId": S, "state": "online",
+        "health": {"environment": {"id": E},
+                   "services": [{"serviceId": S, "state": "online",
                                   "activeDeployments": [{"id": RUN, "status": "SUCCESS"}],
                                   "issues": {"criticalCount": 0}, "recentFailures": 0}],
                    "pendingWork": []},
-        "deployments": {"deployments": [{"id": RUN, "serviceId": S, "status": "SUCCESS",
+        "deployments": {"deployments": [{"id": RUN, "serviceId": S,
+                                          "environmentId": E, "status": "SUCCESS",
                                           "meta": {"commitHash": C}}]},
         "public_observation": {"schema": "nexus.pilot.public-observation.v1",
                                "observed_at_utc": NOW.isoformat(), "origin": O,
@@ -82,6 +86,16 @@ class CutoverTests(unittest.TestCase):
                     data["service"]["config"]["source"]["commitSha"] = "c" * 40
                 else:
                     data["deployments"]["deployments"][0]["meta"]["commitHash"] = "c" * 40
+                self.assertEqual(assess(data)["technical_preflight"], "BLOCKED")
+
+    def test_mixed_environment_evidence_blocks(self):
+        for changed in ("service", "health", "deployments"):
+            with self.subTest(changed=changed):
+                data = fixture()
+                if changed == "deployments":
+                    data["deployments"]["deployments"][0]["environmentId"] = "wrong"
+                else:
+                    data[changed]["environment"]["id"] = "wrong"
                 self.assertEqual(assess(data)["technical_preflight"], "BLOCKED")
 
     def test_sleeping_service_and_on_demand_mode(self):
