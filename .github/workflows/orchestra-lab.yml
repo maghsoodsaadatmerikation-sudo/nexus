@@ -58,6 +58,28 @@ jobs:
           set -euo pipefail
           python3 scripts/build-studio.py --check
           python3 scripts/build-studio-static.py --check
+      - name: Diagnose immutable public Studio byte mismatch when acceptance fails
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import importlib.util, hashlib
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location("builder",Path("scripts/build-studio-static.py"))
+          mod=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          expected=mod.artifacts()["index.html"]
+          current=Path("public/studio/index.html").read_bytes()
+          common=min(len(expected),len(current))
+          offset=next((i for i in range(common) if expected[i]!=current[i]),common)
+          print("expected_bytes",len(expected),"stored_bytes",len(current))
+          print("expected_sha256",hashlib.sha256(expected).hexdigest())
+          print("stored_sha256",hashlib.sha256(current).hexdigest())
+          print("first_byte_mismatch",offset)
+          print("expected_slice",repr(expected[max(0,offset-30):offset+80]))
+          print("stored_slice",repr(current[max(0,offset-30):offset+80]))
+          PY
       - name: Real offline narrow Chromium file import/export and notation
         shell: bash
         run: |
