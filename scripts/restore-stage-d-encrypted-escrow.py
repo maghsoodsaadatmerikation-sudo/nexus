@@ -104,7 +104,8 @@ def decrypt_authenticated(verified_ciphertext, key, private_home):
         input=verified_ciphertext,
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         timeout=90, check=False,
-        env=child_env(railway_download=False, private_home=private_home),
+        env=child_env(railway_download=False, private_home=private_home,
+                      allow_termux_openssl=True),
     )
     require(process.returncode == 0 and
             0 < len(process.stdout) <= MAX_PLAINTEXT_TAR)
