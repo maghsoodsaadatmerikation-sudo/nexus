@@ -182,6 +182,25 @@ replace_exact(" await rpc('Network.emulateNetworkConditions',{offline:true,laten
  // Actual browser HTTPS egress is blocked by the physical CONNECT proxy cut.
  // navigator.onLine may still be true; this is NOT the acceptance condition.""",
     "force-network-cut-before-reload")
+# An existing button and readyState=complete do not prove the application's
+# consent click handler is registered. Observe the exact DOM click listener in
+# disposable Chrome before acting; do not synthesize a second click or treat
+# a pending/failed listener gate as a successful app installation.
+replace_exact(" await js(\"document.getElementById('offline-install').click();true\");",
+    """ await poll(async()=>{
+   const node=await rpc('Runtime.evaluate',{expression:"document.getElementById('offline-install')",returnByValue:false});
+   const objectId=node.result?.objectId;
+   if(!objectId)return false;
+   let hasClick=false;
+   try{
+     const events=await rpc('DOMDebugger.getEventListeners',{objectId});
+     hasClick=events.listeners?.some(e=>e.type==='click')===true;
+   }finally{await rpc('Runtime.releaseObject',{objectId}).catch(()=>{})}
+   return hasClick;
+ },15000,'offline-install-consent-handler-not-ready');
+ await js("document.getElementById('offline-install').click();true");""",
+    "exact-dom-click-handler-ready-before-optin")
+
 # A forced hard reload may bypass the Service Worker (shift-reload semantics)
 # and turn a good offline cache into a misleading Chrome error page. Exercise
 # the same ordinary reload a returning user performs, while retaining the
