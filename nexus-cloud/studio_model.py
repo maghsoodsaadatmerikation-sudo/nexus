@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from typing import Literal
 import httpx
+from transport_bounds import read_bounded_body
 
 MAX_INPUT = 96000
 MAX_OUTPUT = 128000
@@ -95,22 +96,26 @@ def register(app):
         c = config()
         if c is None:
             raise HTTPException(503, "No model provider is configured")
-        authorization = request.headers.get("authorization", "")
+        authorization_values = request.headers.getlist("authorization")
+        authorization = authorization_values[0] if len(authorization_values) == 1 else ""
         if not hmac.compare_digest(authorization.encode(), ("Bearer " + c[2]).encode()):
             raise HTTPException(401, "Studio authentication required", headers={"WWW-Authenticate": "Bearer"})
-        if not request.headers.get("content-type", "").lower().startswith("application/json"):
+        media_values = request.headers.getlist("content-type")
+        if len(media_values) != 1 or media_values[0].split(";", 1)[0].strip().lower() != "application/json":
             raise HTTPException(415, "JSON required")
         try:
             request.app.state.model_limiter.acquire_nowait()
         except anyio.WouldBlock:
             raise HTTPException(429, "Model capacity is busy", headers={"Retry-After": "5"}) from None
         try:
-            body = bytearray()
-            with anyio.fail_after(45):
-                async for chunk in request.stream():
-                    if len(body) + len(chunk) > MAX_INPUT:
-                        raise HTTPException(413, "Model context too large")
-                    body.extend(chunk)
+            body = await read_bounded_body(
+                request,
+                max_bytes=MAX_INPUT,
+                timeout_seconds=45,
+                too_large_detail="Model context too large",
+                timeout_detail="Model request timed out",
+                timeout_status=504,
+            )
             try:
                 data = Completion.model_validate_json(body)
             except ValidationError:

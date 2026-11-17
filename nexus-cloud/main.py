@@ -13,6 +13,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 import studio_model
+from transport_bounds import read_bounded_body
 
 
 MAX_REQUEST_BYTES = 1024 * 1024
@@ -105,7 +106,8 @@ async def health() -> dict[str, str]:
 )
 async def delegate_to_constitutional_gateway(path: str, request: Request) -> Response:
     """Forward an opaque request without authorizing or interpreting it."""
-    authorization = request.headers.get("authorization", "")
+    authorization_values = request.headers.getlist("authorization")
+    authorization = authorization_values[0] if len(authorization_values) == 1 else ""
     if not authorization.startswith("Bearer ") or not authorization[7:].strip():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -144,21 +146,14 @@ async def delegate_to_constitutional_gateway(path: str, request: Request) -> Res
 async def _forward_to_core(
     path: str, request: Request, core_url: str, authorization: str
 ) -> Response:
-    declared = request.headers.get("content-length")
-    if declared is not None:
-        if not declared.isascii() or not declared.isdecimal():
-            raise HTTPException(status_code=400, detail="Invalid Content-Length")
-        if len(declared) > 10 or int(declared) > MAX_REQUEST_BYTES:
-            raise HTTPException(status_code=413, detail="Request body is too large")
-    body = bytearray()
-    try:
-        with anyio.fail_after(BODY_TIMEOUT_SECONDS):
-            async for chunk in request.stream():
-                if len(body) + len(chunk) > MAX_REQUEST_BYTES:
-                    raise HTTPException(status_code=413, detail="Request body is too large")
-                body.extend(chunk)
-    except TimeoutError as exc:
-        raise HTTPException(status_code=408, detail="Request body timed out") from exc
+    body = await read_bounded_body(
+        request,
+        max_bytes=MAX_REQUEST_BYTES,
+        timeout_seconds=BODY_TIMEOUT_SECONDS,
+        too_large_detail="Request body is too large",
+        timeout_detail="Request body timed out",
+        timeout_status=408,
+    )
 
     headers = {"authorization": authorization, "accept-encoding": "identity"}
     if content_type := request.headers.get("content-type"):

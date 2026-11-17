@@ -77,6 +77,9 @@ the secure upstream through `NEXUS_CORE_URL`.
 ## Project structure
 
 - `main.py` - non-authoritative FastAPI transport adapter
+- `studio_model.py` - optional consent-gated model bridge
+- `transport_bounds.py` - shared strict Content-Length, body-size and deadline admission
+- `tests/test_admission_shared.py` - cross-edge authorization/framing regressions
 - `tests/test_contract.py` - transport-boundary contract tests
 - `pyproject.toml` / `uv.lock` - locked Python environment
 
@@ -108,3 +111,16 @@ complete response body; progress cannot extend it indefinitely. Existing
 a generic `503`; the adapter never automatically retries an opaque operation.
 A timeout does not prove that the core did not accept a mutation; callers must
 reconcile request state before deciding to resubmit.
+
+## Shared cloud admission boundary
+
+The delegated core API and Studio model API use the same bounded streaming reader.
+Both reject duplicated or contradictory HTTP request framing, including a
+Content-Length/Transfer-Encoding combination and declared/received length
+mismatch. Both reject duplicate Authorization headers. The Studio model edge
+additionally requires an exact JSON media type, not a string prefix. The core
+limit remains 1 MiB / 30 seconds; the Studio input limit remains 96,000 bytes /
+45 seconds. The client-side model toggle does not bypass either server policy
+or consent review. See
+[`docs/CLOUD-TRANSPORT-ADMISSION-BOUNDARY-2026-11-17.md`](../docs/CLOUD-TRANSPORT-ADMISSION-BOUNDARY-2026-11-17.md)
+for invariants, tests, and the evidence boundary.
