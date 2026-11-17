@@ -23,7 +23,7 @@ jobs:
       - name: Checkout exact current PR snapshot without persisted credentials
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: \${{ github.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Python syntax
         run: python3 -m py_compile scripts/review-railway-staged-change.py scripts/test-review-railway-staged-change.py
