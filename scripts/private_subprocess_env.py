@@ -11,12 +11,17 @@ from pathlib import Path
 RAILWAY_CREDENTIAL_KEYS = ("RAILWAY_TOKEN", "RAILWAY_API_TOKEN")
 
 
-def child_env(*, railway_download=False, private_home=None):
+def child_env(*, railway_download=False, private_home=None, allow_termux_openssl=False):
     """Explicit allowlist; Railway credentials exist ONLY in download mode."""
     home = str(private_home) if private_home is not None else os.environ.get("HOME", "/tmp")
+    # Only the offline recovery decrypt may explicitly opt into Termux.
+    # Never extend authenticated Railway CLI or independent Rust-validator PATH.
+    path = "/usr/local/bin:/usr/bin:/bin"
+    if allow_termux_openssl:
+        path += ":/data/data/com.termux/files/usr/bin"
     env = {
         "HOME": home,
-        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "PATH": path,
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
         "CI": "true",
