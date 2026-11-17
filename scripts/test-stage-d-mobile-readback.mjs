@@ -10,8 +10,8 @@ const html = readFileSync(new URL('../web/stage-d-mobile-readback.html', import.
 const embedded = html.match(/<script id="nexus-readback-core">([\s\S]*?)<\/script>/);
 assert.ok(embedded, 'single-file offline core must be embedded');
 const window = {crypto: webcrypto};
-vm.runInNewContext(embedded[1], {window, TextDecoder, Uint8Array, Set, BigInt}, {timeout: 3000});
-const {verifyCopies} = window.NexusReadback;
+vm.runInNewContext(embedded[1], {window, TextDecoder, TextEncoder, Uint8Array, Set, BigInt}, {timeout: 3000});
+const {verifyCopies, selfTestBrowser} = window.NexusReadback;
 const sha = b => createHash('sha256').update(b).digest('hex');
 const CIPHER = Buffer.from('NOT_REAL_CMS_SYNTHETIC_' + 'x'.repeat(500));
 const CERT = 'b27cc7a84e333fce78f790dce20335258b11e724bac1a91b3b7c886ac3812091';
@@ -88,4 +88,30 @@ test('single HTML has strict CSP and no external resources or network APIs',()=>
   assert.match(html,/connect-src 'none'/);
   assert.doesNotMatch(html,/<script[^>]+src=|<link[^>]+href=|<img\b/i);
   assert.doesNotMatch(html,/fetch\(|XMLHttpRequest|sendBeacon|WebSocket|serviceWorker\.register|https?:\/\//i);
+});
+
+test('device self-check uses synthetic SHA-256, matching, tamper denial and no authority',async()=>{
+  const result = await selfTestBrowser();
+  assert.equal(result.status,'SYNTHETIC_BROWSER_SELFTEST_PASS');
+  assert.equal(result.checks,4);
+  for(const key of ['synthetic_only']) assert.equal(result[key],true);
+  for(const key of ['file_picker_tested','real_ciphertext_tested','real_backup_decrypted',
+    'independent_custody_proven','deployment_authorized','network_required']) assert.equal(result[key],false);
+  assert.equal(result.authority,'none');
+});
+test('device self-check rejects unavailable WebCrypto rather than faking pass',async()=>{
+  window.crypto=undefined;
+  try {await assert.rejects(selfTestBrowser())} finally {window.crypto=webcrypto}
+});
+test('device self-check blocks corrupted SHA implementation',async()=>{
+  const original=window.crypto;
+  window.crypto={subtle:{digest:async()=>new Uint8Array(32).buffer}};
+  try {await assert.rejects(selfTestBrowser(),/sha256_known_answer_failed/)}
+  finally {window.crypto=original}
+});
+test('device-check is an explicit action; does not silently load files',()=>{
+  assert.match(html,/id="self-check"[^>]*>Run on-device safety check<\/button>/);
+  assert.match(html,/id="self-check-result"/);
+  assert.match(html,/selfCheck.addEventListener\('click'/);
+  assert.doesNotMatch(html,/localStorage\.|sessionStorage\./);
 });
