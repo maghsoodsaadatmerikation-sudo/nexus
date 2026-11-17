@@ -5,6 +5,9 @@ on:
     paths:
       - 'scripts/studio-static-release-gate.py'
       - 'scripts/test-studio-static-release-gate.py'
+      - 'scripts/verify-studio-public.py'
+      - 'scripts/verify-studio-public-acceptance.py'
+      - 'scripts/test-studio-public-acceptance.py'
       - 'public/studio/**'
       - 'scripts/build-studio-static.py'
       - '.github/workflows/studio-static-source-release.yml'
@@ -14,6 +17,9 @@ on:
     paths:
       - 'scripts/studio-static-release-gate.py'
       - 'scripts/test-studio-static-release-gate.py'
+      - 'scripts/verify-studio-public.py'
+      - 'scripts/verify-studio-public-acceptance.py'
+      - 'scripts/test-studio-public-acceptance.py'
       - 'public/studio/**'
       - 'scripts/build-studio-static.py'
       - '.github/workflows/studio-static-source-release.yml'
@@ -51,6 +57,21 @@ jobs:
           python3 -m py_compile scripts/studio-static-release-gate.py scripts/test-studio-static-release-gate.py
           python3 scripts/build-studio-static.py --check
           python3 scripts/test-studio-static-release-gate.py
+          python3 scripts/verify-studio-public.py --self-test
+          python3 scripts/test-studio-public-acceptance.py
+          python3 - <<'PY'
+          import importlib.util
+          import sys
+          from pathlib import Path
+          sys.path.insert(0,str(Path.cwd()/'scripts'))
+          spec=importlib.util.spec_from_file_location('nexus_public_witness',Path('scripts/verify-studio-public.py'))
+          w=importlib.util.module_from_spec(spec);spec.loader.exec_module(w)
+          assert w.observer.MAX_BYTES==450_000
+          body=b'x'*350_000
+          assert w.observer.compare(200,'text/html',body,body,'text/html')['ok']
+          body=b'x'*450_001
+          assert not w.observer.compare(200,'text/html',body,body,'text/html')['ok']
+          PY
       - name: Package exact public site and verify source-bound SHA manifest
         shell: bash
         run: |

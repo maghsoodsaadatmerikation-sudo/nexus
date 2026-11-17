@@ -76,7 +76,15 @@ a fresh disposable Chromium profile to test actual offline navigation,
 encrypted reopen, removal and rejection of a corrupted cached shell. It uploads
 the asset and browser reports, then runs the real pinned device model on the
 public origin with a supplied-fact prompt and network-disconnected inference.
-All three reports are uploaded. No provider credentials or actual user files are used.
+Two independent real public-origin Chromium sessions are now required in the
+[Phase 47 post-promotion acceptance](STUDIO-PUBLIC-ACCEPTANCE.md), together with
+exact-source SHA verification and a separately tested pinned model. Public
+acceptance needs explicit dispatch with the expected commit or the existing
+manual verification marker; ordinary green source CI is not proof of public
+promotion. The public HTML observer uses a bounded Studio-specific 450KB cap,
+not the smaller Pilot 12 limit.
+
+All evidence reports are uploaded. No provider credentials or actual user files are used.
 
 A passing Chromium witness is not a real Android hardware test. Installation,
 voice support and browser retention vary by device. This static site provides

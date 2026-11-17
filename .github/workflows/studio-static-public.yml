@@ -1,37 +1,149 @@
 name: NEXUS Public Studio Witness
+
 on:
   pull_request:
     paths:
       - '.github/workflows/studio-static-public.yml'
+      - 'scripts/verify-studio-public.py'
+      - 'scripts/verify-studio-public-acceptance.py'
+      - 'scripts/test-studio-public-acceptance.py'
       - 'docs/STUDIO-STATIC.md'
+      - 'docs/STUDIO-PUBLIC-ACCEPTANCE.md'
       - 'README.md'
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      expected_source_commit:
+        description: "Exact 40-hex Git source SHA independently verified against promoted Render site"
+        required: true
+        type: string
+
 permissions:
   contents: read
+
 jobs:
-  public-browser:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[verify-studio-public]') || (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[verify-studio-public]'))
+  public-witness-unit:
+    name: static-public-witness-read-only-unit
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 6
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - name: Checkout exact public-witness source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Compare public HTTPS assets against this exact source
-        run: python3 scripts/verify-studio-public.py > studio-public-assets.json
-      - name: Exercise actual public-origin offline navigation with synthetic data
+      - name: Check deterministic static source and public-readonly verifier constraints
+        shell: bash
         run: |
-          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
-          node scripts/test-studio-static-browser.mjs --public > studio-public-browser.json
-      - name: Generate with the real pinned model on the public origin
+          set -euo pipefail
+          python3 scripts/build-studio-static.py --check
+          python3 scripts/verify-studio-public.py --self-test
+          python3 scripts/test-studio-public-acceptance.py
+          python3 - <<'PY'
+          import importlib.util
+          import sys
+          from pathlib import Path
+          sys.path.insert(0,str(Path.cwd()/'scripts'))
+          root=Path.cwd()
+          p=root/'scripts/verify-studio-public.py'
+          spec=importlib.util.spec_from_file_location('nexus_public_studio',p)
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          html=(root/'public/studio/index.html').stat().st_size
+          assert html<=mod.observer.MAX_BYTES==450_000, 'Studio source exceeds published bounded verifier'
+          synthetic_large=b'x'*350_000
+          assert mod.observer.compare(200,'text/html',synthetic_large,synthetic_large,'text/html')['ok']
+          synthetic_oversize=b'x'*450_001
+          assert not mod.observer.compare(200,'text/html',synthetic_oversize,synthetic_oversize,'text/html')['ok']
+          assert len(mod.observer.ASSETS)==9
+          assert mod.observer.ORIGIN=='https://nexus-studio-merikation.onrender.com'
+          print('PUBLIC STUDIO READ-ONLY SOURCE BOUNDARY PASS; no live deployment')
+          PY
+
+  public-browser:
+    name: public-https-two-browser-and-pinned-model
+    needs: [public-witness-unit]
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[verify-studio-public]') || (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[verify-studio-public]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout immutable review source without persistent credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate intended commit and reject any deployment/provider credentials
+        shell: bash
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ inputs.expected_source_commit }}
         run: |
+          set -euo pipefail
+          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
+          if [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]]; then
+            [[ "$EXPECTED_SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ ]]
+            test "$EXPECTED_SOURCE_COMMIT" = "$GITHUB_SHA"
+          fi
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          python3 scripts/build-studio-static.py --check
+      - name: Verify exact public HTTPS asset and icon-pixel identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-studio-public.py > studio-public-assets.json
+      - name: Two truly separate fresh Chromium profiles with real offline reloads
+        shell: bash
+        run: |
+          set -euo pipefail
           export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
+          test -n "$NEXUS_PWA_CHROME"
+          node scripts/test-studio-static-browser.mjs --public > studio-public-browser-first.json
+          node scripts/test-studio-static-browser.mjs --public > studio-public-browser-second.json
+      - name: Exercise actual pinned WASM model on public origin and disconnect browser network
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
+          test -n "$NEXUS_PWA_CHROME"
           node scripts/test-device-model-browser.mjs --public > studio-public-model.json
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+      - name: Independently bind all public read-only evidence to exact Git source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-studio-public-acceptance.py \
+            --assets studio-public-assets.json \
+            --browser-first studio-public-browser-first.json \
+            --browser-second studio-public-browser-second.json \
+            --model studio-public-model.json \
+            --source-commit "$GITHUB_SHA" \
+            --output studio-public-acceptance.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          x=json.loads(Path('studio-public-acceptance.json').read_text())
+          assert x['status']=='PUBLIC_CHROMIUM_ACCEPTED'
+          assert x['independent_fresh_chromium_runs']==2
+          assert x['owner_promotion_authorized'] is False
+          assert x['actual_render_deploy_id_verified'] is False
+          assert x['real_android_hardware_verified'] is False
+          print('PUBLIC STUDIO POST-PROMOTION CODE/CHROMIUM/MODEL ACCEPTED (not Render deploy attestation)')
+          PY
+      - name: Retain public source/acceptance witnesses (no private user content)
         if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: studio-public-witness
-          path: studio-public-*.json
-          if-no-files-found: error
+          path: |
+            studio-public-assets.json
+            studio-public-browser-first.json
+            studio-public-browser-second.json
+            studio-public-model.json
+            studio-public-acceptance.json
+          if-no-files-found: warn
+          retention-days: 30
