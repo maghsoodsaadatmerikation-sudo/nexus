@@ -1,0 +1,31 @@
+name: NEXUS Railway Cutover Preflight Contract
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/check-railway-cutover.py'
+      - 'scripts/test-railway-cutover.py'
+      - 'docs/RAILWAY-CUTOVER-PREFLIGHT.md'
+      - '.github/workflows/railway-cutover-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  no-provider-mutation-contract:
+    name: railway-cutover-contract
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact review commit without persisted credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate Python syntax
+        run: python3 -m py_compile scripts/check-railway-cutover.py scripts/test-railway-cutover.py
+      - name: Run synthetic fail-closed cutover tests
+        run: python3 scripts/test-railway-cutover.py
