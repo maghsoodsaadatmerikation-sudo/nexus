@@ -66,6 +66,8 @@ async function retryJs(expression){
  }
 }
 const checks=[];
+// CDP document-only status records, never request bodies or user data.
+const observedDocuments=[];
 try{
  const port=await poll(async()=>{
   try{const s=await readFile(path.join(profile,'DevToolsActivePort'),'utf8');
@@ -89,6 +91,11 @@ try{
  });
  socket.addEventListener('message',e=>{
   const msg=JSON.parse(e.data),p=pending.get(msg.id);
+  if(msg.method==='Network.responseReceived'&&msg.params?.type==='Document'){
+    const d=msg.params.response||{};
+    observedDocuments.push({public_root:d.url===ORIGIN,
+      status:Number(d.status)||0,from_worker:d.fromServiceWorker===true});
+  }
   if(!p)return;pending.delete(msg.id);
   msg.error?p.reject(Error('cdp-failure')):p.resolve(msg.result);
  });
@@ -115,6 +122,35 @@ try{
  const actual=await js("(async()=>{const ns=await caches.keys();const c=await caches.open(ns[0]);const r=await c.match('/');return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await r.arrayBuffer())),x=>x.toString(16).padStart(2,'0')).join('')})()");
  assert(actual===sourceDigest,'cached-shell-differs-from-reviewed-source');
  checks.push('installed-cache-sha256-is-exact-reviewed-html');
+ if(process.env.NEXUS_PWA_TAMPER==='true'){
+   // Mutate actual Chromium CacheStorage bytes after verified installation.
+   // This does not use the VM mock, a network fixture or real user data.
+   stage='chromium-cache-tampering';
+   const changed=await js("(async()=>{const keys=await caches.keys();const c=await caches.open(keys[0]);const r=await c.match('/');const original=new Uint8Array(await r.arrayBuffer());const modified=original.slice();modified[modified.length-128]^=1;await c.put('/',new Response(modified,{status:200,headers:{'Content-Type':'text/html'}}));const saved=new Uint8Array(await (await c.match('/')).arrayBuffer());return {equal_length:saved.length===original.length,changed_byte:saved[original.length-128]!==original[original.length-128],local_records:localStorage.length}})()");
+   assert(changed.equal_length&&changed.changed_byte&&changed.local_records===0,
+     'chromium-tampered-cache-mutation-not-persisted');
+   checks.push('actual-chromium-cache-storage-tampered-with-no-user-data');
+   stage='real-network-offline-corrupt-cache';
+   await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,
+     downloadThroughput:0,uploadThroughput:0});
+   await rpc('Page.reload',{ignoreCache:true});
+   const blocked=await poll(async()=>{
+     const doc=observedDocuments.findLast(x=>x.public_root&&x.status===503);
+     if(!doc)return null;
+     const dom=await retryJs("(()=>({complete:document.readyState==='complete',fallback:document.body?.textContent?.includes('NEXUS offline app shell is unavailable.')===true,app_shell:!!document.getElementById('load-demo'),offline:navigator.onLine===false}))()");
+     return dom?.complete?{...dom,...doc}:null;
+   },20000,'corrupt-cache-did-not-show-verified-503-error-shell');
+   assert(blocked.from_worker===true&&blocked.status===503&&blocked.fallback===true&&
+     blocked.app_shell===false&&blocked.offline===true,
+     'corrupt-offline-app-must-fail-closed-in-real-browser');
+   checks.push('real-chromium-offline-navigation-refuses-corrupt-cache-as-503');
+   process.stdout.write(JSON.stringify({schema:'nexus.pilot-12.chrome-corrupt-cache.v1',
+     status:'PASS',checks,source_sha256:sourceDigest,
+     real_chromium:true,public_https_tested:false,real_android_hardware:false,
+     cache_corruption_in_disposable_profile:true,
+     attempted_runtime_execution_on_bad_shell:false,production_mutation:false,
+     private_data_submitted:false,authority:'none'})+'\n');
+ } else {
  await js("window.__nexusBeforeOfflineReload=true;true");
  stage='real-network-offline';
  await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
@@ -146,6 +182,7 @@ try{
    private_data_submitted:false,authenticated_rust_tested:false,
    volume_recovery_verified:false,production_mutation:false,authority:'none'};
  process.stdout.write(JSON.stringify(report)+'\n');
+ }
 }catch(error){
  process.stderr.write(JSON.stringify({event:'pwa-browser-fail-closed',stage,
   reason:String(error?.message||'unknown').replace(/[^A-Za-z0-9-]/g,'').slice(0,90),
