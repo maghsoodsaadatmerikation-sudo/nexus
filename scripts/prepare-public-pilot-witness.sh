@@ -236,8 +236,19 @@ replace_exact(" if(['online-bootstrap','real-network-offline'].includes(stage))\
     """ if(stage==='online-bootstrap'){
    let onlineBoot=null;
    try{onlineBoot=await retryJs("(async()=>{const r=await navigator.serviceWorker?.getRegistration('/');const names=await caches.keys();return {document_ready:document.readyState==='complete',install_button:!!document.getElementById('offline-install'),button_disabled:document.getElementById('offline-install')?.disabled===true,sw_api:'serviceWorker' in navigator,cache_api:'caches' in window,secure:isSecureContext,expected_origin:location.origin===new URL('https://nexus-offline-pilot.onrender.com').origin,installation_ready:document.getElementById('offline-install-state')?.textContent?.includes('آماده است')===true,registration:!!r,active:r?.active?.state==='activated',waiting:!!r?.waiting,installing:!!r?.installing,controlled:!!navigator.serviceWorker?.controller,expected_worker:r?.active?.scriptURL===location.origin+'/service-worker.js',shell_cache:names.some(n=>n.startsWith('nexus-app-shell-v12-'))}})()")}catch{}
+   // Diagnostic ONLY after a failed UI opt-in. A second, fixed-script
+   // registration attempt can classify a browser error, but NEVER counts PASS.
+   let diagnosticRegistration={kind:'not-run',acceptance:false};
+   if(onlineBoot?.sw_api&&onlineBoot?.expected_origin&&!onlineBoot.registration){
+     try{
+       diagnosticRegistration=await Promise.race([
+         retryJs("(async()=>{try{await navigator.serviceWorker.register('/service-worker.js',{scope:'/',updateViaCache:'none'});return {kind:'resolved',acceptance:false}}catch(e){const name=['TypeError','SecurityError','InvalidStateError','AbortError','NetworkError'].includes(e?.name)?e.name:'other';const msg=String(e?.message||'');const status=/response code \\((4[0-9][0-9]|5[0-9][0-9])\\)/i.exec(msg);return {kind:'rejected',name,category:status?'http-response':/certificate|SSL/i.test(msg)?'tls':/network|fetch/i.test(msg)?'network':'other',http_status:status?Number(status[1]):null,acceptance:false}}})()").then(result=>result||{kind:'no-context',acceptance:false}),
+         delay(8000).then(()=>({kind:'timeout',acceptance:false}))
+       ]);
+     }catch{diagnosticRegistration={kind:'cdp-unavailable',acceptance:false}}
+   }
    process.stderr.write(JSON.stringify({event:'pilot12-online-worker-bootstrap',
-     state:onlineBoot,worker_events:navTrace.workers.slice(-8),worker_error_count:navTrace.worker_errors.length,contains_page_content:false,authority:'none'})+'\\n');
+     state:onlineBoot,worker_events:navTrace.workers.slice(-8),worker_error_count:navTrace.worker_errors.length,diagnostic_registration:diagnosticRegistration,contains_page_content:false,authority:'none'})+'\\n');
  }
  if(['online-bootstrap','real-network-offline'].includes(stage))
    process.stderr.write(JSON.stringify({event:'pilot12-proxy-diagnostic',...proxy.stats(),authority:'none'})+'\\n');""",
