@@ -139,7 +139,7 @@ def replace_exact(old,new,label):
     text=text.replace(old,new)
 
 replace_exact("const checks=[];",
-    "const checks=[];\\nlet lifecycleBeforeCut=null;",
+    "const checks=[];\nlet lifecycleBeforeCut=null;",
     "diagnostic-lifecycle-variable-in-catch-scope")
 
 # The page onLine flag is NOT evidence of a whole-browser outage. The actual
