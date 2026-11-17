@@ -11,6 +11,7 @@ on:
       - 'public/**'
       - 'web/offline-pilot.html'
       - 'scripts/prepare-public-pilot-witness.sh'
+      - 'scripts/pilot12-public-egress-proxy.mjs'
       - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
   push:
     branches: [main]
@@ -23,6 +24,7 @@ on:
       - 'public/**'
       - 'web/offline-pilot.html'
       - 'scripts/prepare-public-pilot-witness.sh'
+      - 'scripts/pilot12-public-egress-proxy.mjs'
       - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
   workflow_dispatch:
   schedule:
@@ -79,7 +81,7 @@ jobs:
           assert r['authority']=='none' and not r['production_mutation']
           print('PASS: exact app HTML/manifest/worker bytes and identical decoded PNG icon pixels')
           PY
-      - name: Test real PUBLIC HTTPS PWA install and network outage in Chromium
+      - name: Test real public Chromium after browser-wide bounded CONNECT proxy egress cut
         working-directory: ${{ runner.temp }}/nexus-live-pilot
         shell: bash
         run: |
@@ -101,7 +103,11 @@ jobs:
           assert len(reports)==4
           first=reports[0]
           for r in reports:
-              assert r['status']=='PASS' and len(r['checks'])==8
+              assert r['status']=='PASS' and len(r['checks'])==9
+              assert 'chrome-proxy-cut-with-worker-served-cache' in r['checks']
+              assert r['chromium_origin_proxy_cut'] is True
+              assert r['isolated_to_reviewed_public_origin'] is True
+              assert r['worker_online_baseline'] is True
               assert r['checks']==first['checks']
               assert r['source_sha256']==first['source_sha256']
               assert r['origin']=='public-render-pilot'
@@ -111,7 +117,7 @@ jobs:
               assert r['authenticated_rust_tested'] is False
               assert r['volume_recovery_verified'] is False
               assert r['production_mutation'] is False and r['authority']=='none'
-          print('PASS: four independent fresh-profile Chromium offline public-origin witnesses')
+          print('PASS: four public Chromium profiles proved proxy egress cut and service-worker cached navigation')
           PY
       - name: Upload sanitized public-only receipts
         if: always()

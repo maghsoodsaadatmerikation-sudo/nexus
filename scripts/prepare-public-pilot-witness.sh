@@ -12,6 +12,10 @@ mkdir -m 700 "$target"
 # a newer test contract with an older deployed app and produce a false red.
 # Candidate checks remain in their separate PR/offline CI workflows.
 git archive "$baseline" web public scripts | tar -x -C "$target"
+# The only candidate addition is a test-only browser egress proxy; it cannot
+# replace any pinned public application/source/worker/browser logic.
+test "$(git hash-object scripts/pilot12-public-egress-proxy.mjs)" = "$(git rev-parse HEAD:scripts/pilot12-public-egress-proxy.mjs)"
+cp scripts/pilot12-public-egress-proxy.mjs "$target/scripts/pilot12-public-egress-proxy.mjs"
 # Use exactly the deployed revision for ALL application bytes. On public HTTPS,
 # the cached HTML body can exist before its inline DOM handlers finish parsing.
 # The historical Chromium witness only checked existence of the install button,
@@ -122,9 +126,184 @@ if text.count(trace_catch_before)!=1 or trace_catch_after in text:
     raise SystemExit("BLOCKED: historical failure handler changed")
 text=text.replace(trace_catch_before,trace_catch_after)
 
+
+# Browser-wide public HTTPS egress isolation: Chrome's CONNECT proxy is
+# allowlisted to the single reviewed public origin. Cut its actual tunnels
+# after opt-in registration so BOTH page and Service Worker lose network.
+# Network.overrideNetworkState only changes page onLine display; evidence
+# relies on physical proxy refusal, not its boolean alone.
+def replace_exact(old,new,label):
+    global text
+    if text.count(old)!=1:
+        raise SystemExit('BLOCKED: pinned proxy witness anchor: '+label)
+    text=text.replace(old,new)
+
+replace_exact("const checks=[];",
+    "const checks=[];\nlet lifecycleBeforeCut=null;",
+    "diagnostic-lifecycle-variable-in-catch-scope")
+
+# The page onLine flag is NOT evidence of a whole-browser outage. The actual
+# Chrome CONNECT egress cut below provides independent network disconnection.
+replace_exact("document.readyState==='complete' && document.getElementById('offline-install') && navigator.onLine===false",
+    "document.readyState==='complete' && document.getElementById('offline-install')",
+    "offline-navigation-no-boolean-shortcut")
+replace_exact("&& navigator.onLine===false && navigator.serviceWorker?.controller?.scriptURL",
+    "&& navigator.serviceWorker?.controller?.scriptURL",
+    "stable-nav-does-not-require-page-network-emulation")
+replace_exact("browser_offline:offline.net===false",
+    "origin_proxy_cut:proxy.stats().live===false&&proxy.stats().active===0",
+    "offline-acceptance-uses-actual-proxy")
+replace_exact("offlineContract.browser_offline",
+    "offlineContract.origin_proxy_cut",
+    "synthetic-demo-contract-uses-actual-proxy")
+
+replace_exact("import path from 'node:path';",
+    "import path from 'node:path';\nimport {startProbeProxy} from './pilot12-public-egress-proxy.mjs';",
+    "proxy-module-import")
+replace_exact("const profile=await mkdtemp(path.join(tmpdir(),'nexus-pwa-private-'));",
+    "const profile=await mkdtemp(path.join(tmpdir(),'nexus-pwa-private-'));\nconst proxy=await startProbeProxy();",
+    "ephemeral-proxy-launch")
+replace_exact(" '--user-data-dir='+profile,'--window-size=500,980','about:blank'",
+    " '--proxy-server=http://127.0.0.1:'+proxy.port,\n '--user-data-dir='+profile,'--window-size=500,980','about:blank'",
+    "chrome-bounded-proxy")
+replace_exact(" await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});",
+    """ lifecycleBeforeCut=await js("(async()=>{const r=await navigator.serviceWorker.getRegistration('/');return {scope:r?.scope===location.origin+'/',active:r?.active?.state==='activated',controller:navigator.serviceWorker?.controller?.scriptURL===location.origin+'/service-worker.js',waiting:!!r?.waiting,installing:!!r?.installing}})()");
+ assert(lifecycleBeforeCut.scope&&lifecycleBeforeCut.active&&
+   lifecycleBeforeCut.controller&&!lifecycleBeforeCut.waiting&&
+   !lifecycleBeforeCut.installing,
+   'public-worker-lifecycle-not-active-before-proxy-cut');
+ const beforeCut=proxy.stats();
+ assert(beforeCut.allowed>0,
+   'public-browser-did-not-actually-use-allowlisted-proxy');
+ await proxy.cut();
+ assert(proxy.stats().live===false&&proxy.stats().active===0,
+   'browser-origin-tunnels-still-open');
+ // No CDP page-offline setting: it can bypass or abort SW navigation.
+ // Actual browser HTTPS egress is blocked by the physical CONNECT proxy cut.
+ // navigator.onLine may still be true; this is NOT the acceptance condition.""",
+    "force-network-cut-before-reload")
+# An existing button and readyState=complete do not prove the application's
+# consent click handler is registered. Observe the exact DOM click listener in
+# disposable Chrome before acting; do not synthesize a second click or treat
+# a pending/failed listener gate as a successful app installation.
+replace_exact(" await js(\"document.getElementById('offline-install').click();true\");",
+    """ await poll(async()=>{
+   const node=await rpc('Runtime.evaluate',{expression:"document.getElementById('offline-install')",returnByValue:false});
+   const objectId=node.result?.objectId;
+   if(!objectId)return false;
+   let hasClick=false;
+   try{
+     const events=await rpc('DOMDebugger.getEventListeners',{objectId});
+     hasClick=events.listeners?.some(e=>e.type==='click')===true;
+   }finally{await rpc('Runtime.releaseObject',{objectId}).catch(()=>{})}
+   return hasClick;
+ },15000,'offline-install-consent-handler-not-ready');
+ await js("document.getElementById('offline-install').click();true");""",
+    "exact-dom-click-handler-ready-before-optin")
+
+# A forced hard reload may bypass the Service Worker (shift-reload semantics)
+# and turn a good offline cache into a misleading Chrome error page. Exercise
+# the same ordinary reload a returning user performs, while retaining the
+# independent proxy egress cut and all worker-delivery assertions.
+replace_exact(" await rpc('Page.reload',{ignoreCache:true});",
+    " await rpc('Page.reload',{ignoreCache:false});",
+    "normal-user-reload-does-not-bypass-service-worker")
+
+replace_exact(" checks.push('real-chrome-network-offline-reload-served-cached-app');",
+    """ const navProof=await retryJs("(()=>{const n=performance.getEntriesByType('navigation')[0];return {worker_started:Number(n?.workerStart)>0,controller:navigator.serviceWorker?.controller?.scriptURL===location.origin+'/service-worker.js'}})()");
+ assert(navProof?.worker_started===true&&navProof.controller===true,
+   'public-offline-navigation-not-proved-worker-delivered');
+ assert(proxy.stats().live===false&&proxy.stats().active===0,
+   'public-egress-regained-unexpectedly');
+ const observed=navTrace.responses.filter(r=>r.stage==='real-network-offline'&&r.app_origin);
+ assert(observed.every(r=>r.from_service_worker&&r.status===200&&r.html),
+   'public-offline-network-observation-not-from-worker');
+ checks.push('real-chrome-network-offline-reload-served-cached-app');
+ checks.push('chrome-proxy-cut-with-worker-served-cache');""",
+    "worker-delivery-after-full-proxy-cut")
+replace_exact("   actual_offline_navigation:true,real_android_hardware:false,",
+    """   actual_offline_navigation:true,
+   chromium_origin_proxy_cut:proxy.stats().live===false&&
+     proxy.stats().active===0&&proxy.stats().allowed>0,
+   isolated_to_reviewed_public_origin:true,real_android_hardware:false,""",
+    "proxy-disconnection-report")
+replace_exact("   origin:PUBLIC_MODE?'public-render-pilot':'local-loopback-test-only',",
+    "   origin:PUBLIC_MODE?'public-render-pilot':'local-loopback-test-only',\n   worker_online_baseline:before.controller===true&&actual===sourceDigest,",
+    "report-evidence-bound-online-worker-state")
+
+# If public navigation still fails, report only safe worker lifecycle and
+# navigation booleans. Never log the public document body, URL list, or tokens.
+replace_exact(" if(stage==='real-network-offline')\n   process.stderr.write(JSON.stringify({event:'pilot12-public-cdp-navigation',",
+    """ if(stage==='real-network-offline'){
+   let lifecycleAfterCut=null;
+   try{lifecycleAfterCut=await retryJs("(()=>({browser_error:location.protocol==='chrome-error:',controller:!!navigator.serviceWorker?.controller,worker_start:Number(performance.getEntriesByType('navigation')[0]?.workerStart)>0,dom_complete:document.readyState==='complete',has_reviewed_app:!!document.getElementById('offline-install')}))()")}catch{}
+   process.stderr.write(JSON.stringify({event:'pilot12-worker-lifecycle-sanitized',
+     baseline:lifecycleBeforeCut||null,after:lifecycleAfterCut,
+     page_content_logged:false,authority:'none'})+'\\n');
+ }
+ if(stage==='real-network-offline')
+   process.stderr.write(JSON.stringify({event:'pilot12-public-cdp-navigation',""",
+    "sanitized-worker-lifecycle-after-disconnect")
+
+replace_exact(" if(stage==='real-network-offline')\n   process.stderr.write(JSON.stringify({event:'pilot12-public-cdp-navigation',",
+    " if(['online-bootstrap','real-network-offline'].includes(stage))\n   process.stderr.write(JSON.stringify({event:'pilot12-proxy-diagnostic',...proxy.stats(),authority:'none'})+'\\n');\n if(stage==='real-network-offline')\n   process.stderr.write(JSON.stringify({event:'pilot12-public-cdp-navigation',",
+    "proxy-failure-counter")
+
+# Report only booleans and enumerated worker lifecycle states if opt-in
+# bootstrap fails, never the page text, source document, or request URLs.
+replace_exact(" if(['online-bootstrap','real-network-offline'].includes(stage))\n   process.stderr.write(JSON.stringify({event:'pilot12-proxy-diagnostic',...proxy.stats(),authority:'none'})+'\\n');",
+    """ if(stage==='online-bootstrap'){
+   let onlineBoot=null;
+   try{onlineBoot=await retryJs("(async()=>{const r=await navigator.serviceWorker?.getRegistration('/');const names=await caches.keys();return {document_ready:document.readyState==='complete',install_button:!!document.getElementById('offline-install'),button_disabled:document.getElementById('offline-install')?.disabled===true,sw_api:'serviceWorker' in navigator,cache_api:'caches' in window,secure:isSecureContext,expected_origin:location.origin===new URL('https://nexus-offline-pilot.onrender.com').origin,installation_ready:document.getElementById('offline-install-state')?.textContent?.includes('آماده است')===true,registration:!!r,active:r?.active?.state==='activated',waiting:!!r?.waiting,installing:!!r?.installing,controlled:!!navigator.serviceWorker?.controller,expected_worker:r?.active?.scriptURL===location.origin+'/service-worker.js',shell_cache:names.some(n=>n.startsWith('nexus-app-shell-v12-'))}})()")}catch{}
+   // Diagnostic ONLY after a failed UI opt-in. A second, fixed-script
+   // registration attempt can classify a browser error, but NEVER counts PASS.
+   let diagnosticRegistration={kind:'not-run',acceptance:false};
+   if(onlineBoot?.sw_api&&onlineBoot?.expected_origin&&!onlineBoot.registration){
+     try{
+       diagnosticRegistration=await Promise.race([
+         retryJs("(async()=>{try{await navigator.serviceWorker.register('/service-worker.js',{scope:'/',updateViaCache:'none'});return {kind:'resolved',acceptance:false}}catch(e){const name=['TypeError','SecurityError','InvalidStateError','AbortError','NetworkError'].includes(e?.name)?e.name:'other';const msg=String(e?.message||'');const status=/response code \\((4[0-9][0-9]|5[0-9][0-9])\\)/i.exec(msg);return {kind:'rejected',name,category:status?'http-response':/certificate|SSL/i.test(msg)?'tls':/network|fetch/i.test(msg)?'network':'other',http_status:status?Number(status[1]):null,acceptance:false}}})()").then(result=>result||{kind:'no-context',acceptance:false}),
+         delay(8000).then(()=>({kind:'timeout',acceptance:false}))
+       ]);
+     }catch{diagnosticRegistration={kind:'cdp-unavailable',acceptance:false}}
+   }
+   process.stderr.write(JSON.stringify({event:'pilot12-online-worker-bootstrap',
+     state:onlineBoot,worker_events:navTrace.workers.slice(-8),worker_error_count:navTrace.worker_errors.length,diagnostic_registration:diagnosticRegistration,contains_page_content:false,authority:'none'})+'\\n');
+ }
+ if(['online-bootstrap','real-network-offline'].includes(stage))
+   process.stderr.write(JSON.stringify({event:'pilot12-proxy-diagnostic',...proxy.stats(),authority:'none'})+'\\n');""",
+    "online-worker-bootstrap-diagnostic")
+
+
+# Passive CDP worker-domain events avoid altering app registration semantics.
+# Only allowlisted states/booleans are recorded; no worker script source,
+# console text, full URL, request body or other user-controlled content.
+replace_exact("const navTrace={responses:[],failures:[],frames:[]};",
+    "const navTrace={responses:[],failures:[],frames:[],workers:[],worker_errors:[]};",
+    "bounded-service-worker-target-history")
+replace_exact("  if(!p)return;pending.delete(msg.id);",
+    """  if(msg.method==='ServiceWorker.workerVersionUpdated')
+    for(const v of msg.params?.versions||[])
+      if(v.scriptURL===ORIGIN+'service-worker.js')
+        capped('workers',{stage,status:['new','installing','installed','activating','activated','redundant'].includes(v.status)?v.status:'unknown',running:['starting','running','stopping','stopped'].includes(v.runningStatus)?v.runningStatus:'unknown'});
+  if(msg.method==='ServiceWorker.workerRegistrationUpdated')
+    for(const r of msg.params?.registrations||[])
+      if(r.scopeURL===ORIGIN)
+        capped('workers',{stage,registration_deleted:r.isDeleted===true});
+  if(msg.method==='ServiceWorker.workerErrorReported')
+    capped('worker_errors',{stage,observed:true});
+  if(!p)return;pending.delete(msg.id);""",
+    "passive-cdp-service-worker-events")
+replace_exact(" await rpc('Page.enable');await rpc('Network.enable');",
+    " await rpc('Page.enable');await rpc('Network.enable');\n try{await rpc('ServiceWorker.enable')}catch{}",
+    "best-effort-worker-target-observer")
+
+replace_exact(" await rm(profile,{recursive:true,force:true});",
+    " await proxy.close();\n await rm(profile,{recursive:true,force:true});",
+    "close-disposable-proxy")
+
 path.write_text(text)
 print(json.dumps({'witness_source':'pinned-deployed-baseline',
-  'witness_patch':'stable-offline-document-and-bounded-cdp-failure-trace',
+  'witness_patch':'pinned-public-browser-proxy-egress-cut-and-worker-navigation',
   'witness_sha256':hashlib.sha256(text.encode()).hexdigest(),
   'published_application_bytes_modified':False,
   'acceptance_checks_relaxed':False, 'authority':'none'},sort_keys=True), file=sys.stderr)
