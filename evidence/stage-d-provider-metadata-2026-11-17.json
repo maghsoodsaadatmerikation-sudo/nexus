@@ -1,0 +1,19 @@
+{
+  "schema": "nexus.stage-d.provider-readonly-snapshot.v1",
+  "observed_date": "2026-11-17",
+  "provider": "Railway",
+  "service": "nexus-stage-d",
+  "environment": "production",
+  "github_main_at_observation": "4d97bafd840165469270e724195fd16ce8e33a13",
+  "historical_v17_gate_target": "3c0977f4c7fc9fb5e9a78bdb1eeb581cb3cb4959",
+  "railway_live_source": "9abbc067aad3ebbb0956432cf6682d2ea70e2824",
+  "railway_deployment_status": "SUCCESS",
+  "live_healthcheck_path": "/",
+  "staged_healthcheck_path": "/readyz",
+  "staged_change_count": 2,
+  "sleep_application_enabled": true,
+  "durable_mount_path": "/data",
+  "runtime_identity_observed": false,
+  "independent_volume_restore_observed": false,
+  "provider_metadata_only": true
+}
