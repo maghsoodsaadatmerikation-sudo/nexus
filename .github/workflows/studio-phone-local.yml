@@ -1,0 +1,92 @@
+name: NEXUS Studio Phone-Local Distribution
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/build-studio-phone-local.py'
+      - 'scripts/test-studio-phone-local.py'
+      - 'scripts/test-studio-static-browser.mjs'
+      - 'scripts/build-studio-static.py'
+      - 'public/studio/**'
+      - 'docs/STUDIO-PHONE-LOCAL.md'
+      - '.github/workflows/studio-phone-local.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/build-studio-phone-local.py'
+      - 'scripts/test-studio-phone-local.py'
+      - 'scripts/test-studio-static-browser.mjs'
+      - 'scripts/build-studio-static.py'
+      - 'public/studio/**'
+      - 'docs/STUDIO-PHONE-LOCAL.md'
+      - '.github/workflows/studio-phone-local.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-only-local-phone-studio:
+    name: phone-local-studio-real-browser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact SHA without persisted credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Require no ambient provider credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_MODEL_API_KEY:-}"
+      - name: Verify deterministic reviewed Studio source and local server tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/build-studio-phone-local.py scripts/test-studio-phone-local.py
+          python3 scripts/build-studio-static.py --check
+          python3 scripts/test-studio-phone-local.py
+      - name: Produce source-bound public ZIP and verify it before browser test
+        shell: bash
+        run: |
+          set -euo pipefail
+          export BUNDLE="$RUNNER_TEMP/nexus-studio-phone-local.zip"
+          python3 scripts/build-studio-phone-local.py --output "$BUNDLE" --source-commit "$GITHUB_SHA"
+          python3 scripts/build-studio-phone-local.py --verify-zip "$BUNDLE" --source-commit "$GITHUB_SHA"
+          mkdir -m 0700 "$RUNNER_TEMP/nexus-studio-phone-test"
+          python3 -m zipfile -e "$BUNDLE" "$RUNNER_TEMP/nexus-studio-phone-test"
+          test -f "$RUNNER_TEMP/nexus-studio-phone-test/nexus-studio-phone-local/index.html"
+          sha256sum "$BUNDLE" | tee "$BUNDLE.sha256"
+      - name: Exercise actual extracted phone ZIP in real Chromium with offline encrypted reopening
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
+          test -n "$NEXUS_PWA_CHROME"
+          export NEXUS_STUDIO_PACKAGE_DIR="$RUNNER_TEMP/nexus-studio-phone-test/nexus-studio-phone-local"
+          node --check scripts/test-studio-static-browser.mjs
+          node scripts/test-studio-static-browser.mjs > "$RUNNER_TEMP/nexus-studio-phone-browser.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ['RUNNER_TEMP'])/'nexus-studio-phone-browser.json').read_text())
+          print('Offline real-Chromium extracted-package acceptance completed.')
+          assert r['status']=='PASS'
+          PY
+      - name: Publish public-only mobile Studio ZIP and SHA-256
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-studio-phone-local
+          path: |
+            ${{ runner.temp }}/nexus-studio-phone-local.zip
+            ${{ runner.temp }}/nexus-studio-phone-local.zip.sha256
+            ${{ runner.temp }}/nexus-studio-phone-browser.json
+          if-no-files-found: error
+          retention-days: 30
