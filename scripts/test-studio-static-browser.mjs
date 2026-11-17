@@ -17,7 +17,7 @@ if(!browser||typeof WebSocket==='undefined')throw Error('real-chromium-and-node-
 const sha=buf=>createHash('sha256').update(buf).digest('hex');
 const sourceHtml=await readFile(new URL('index.html',root)),sourceDigest=sha(sourceHtml);
 const assert=(v,label)=>{if(!v)throw Error(label)};
-const allowed={'/':'index.html','/index.html':'index.html','/service-worker.js':'service-worker.js','/manifest.json':'manifest.json','/icons/nexus-192.png':'icons/nexus-192.png','/icons/nexus-512.png':'icons/nexus-512.png'};
+const allowed={'/':'index.html','/index.html':'index.html','/service-worker.js':'service-worker.js','/manifest.json':'manifest.json','/icons/nexus-192.png':'icons/nexus-192.png','/icons/nexus-512.png':'icons/nexus-512.png',...(packageRoot?{'/device-check.html':'device-check.html'}:{})};
 let server;
 if(!PUBLIC_MODE){server=createServer(async(req,res)=>{const file=allowed[req.url]||(['device-engine.js','device-worker.js','device-ui.js','model-manifest.json'].some(n=>req.url==='/device/'+n)?req.url.slice(1):null);if(req.method!=='GET'||!file){res.writeHead(404);res.end();return}res.setHeader('content-type',file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.js')?'text/javascript':file.endsWith('.json')?'application/manifest+json':'image/png');res.end(await readFile(new URL(file,root)))});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))}
 const ORIGIN=PUBLIC_MODE?'https://nexus-studio-merikation.onrender.com/':`http://127.0.0.1:${server.address().port}/`;
@@ -104,6 +104,34 @@ try{
  await rpc('Page.enable');await rpc('Network.enable');await rpc('Network.setCacheDisabled',{cacheDisabled:true});
  stage='bootstrap';await rpc('Page.navigate',{url:ORIGIN});
  await poll(()=>retryJs("document.readyState==='complete'&&Boolean(window.NexusStudioUI)&&Boolean(document.getElementById('studio-offline'))"),15000,'studio-not-rendered');
+
+ if(packageRoot){
+  stage='phone-fieldcheck-from-extracted-zip';
+  await rpc('Page.navigate',{url:ORIGIN+'device-check.html'});
+  await poll(()=>retryJs("document.readyState==='complete'&&Boolean(window.NexusPhoneCheck)&&Boolean(document.getElementById('run'))"),10000,'fieldcheck-page-not-ready');
+  await js("NexusPhoneCheck.run()");
+  const report=await js("NexusPhoneCheck.report()");
+  assert(report?.schema==='nexus.studio.owner-phone-field.v1'&&
+    report?.source_sha256===sourceDigest&&
+    report?.personal_data_collected===false&&report?.telemetry_sent===false&&
+    report?.app_content_uploaded===false&&report?.actual_android_hardware_independently_verified===false&&
+    report?.real_disconnected_reload_automatically_verified===false&&report?.result==='NOT_PREPARED'&&
+    report.checks?.length===8&&
+    report.checks.filter(c=>c.state==='PASS').length===6&&
+    report.checks.filter(c=>c.state==='NOT_PREPARED').length===2&&
+    report.owner_reported?.disconnected_reopen===false,
+    'fieldcheck-honesty-or-public-asset-hash-invalid');
+  assert(await js("localStorage.length===0&&Boolean(document.querySelector('#checks .item'))"),'fieldcheck-should-not-touch-private-storage');
+  await js("document.getElementById('manual-offline').click();true");
+  const self=await js("NexusPhoneCheck.report()");
+  assert(self.owner_reported.disconnected_reopen===true&&
+    self.actual_android_hardware_independently_verified===false,
+    'self-report-must-never-be-treated-as-independent-proof');
+  checks.push('fieldcheck-real-chromium-no-data-and-self-report-distinction');
+  stage='bootstrap-after-fieldcheck';
+  await rpc('Page.navigate',{url:ORIGIN});
+  await poll(()=>retryJs("document.readyState==='complete'&&Boolean(window.NexusStudioUI)&&Boolean(document.getElementById('studio-offline'))"),15000,'studio-after-fieldcheck-not-rendered');
+ }
  assert(await js("document.documentElement.scrollWidth<=innerWidth+2"),'mobile-overflow');checks.push('responsive-studio-renders');
  assert(await js("NexusStudioFocus.isFocused()&&NexusStudioFocus.active()==='conversation-card'&&!document.getElementById('conversation-card').hidden&&document.getElementById('projects-card').hidden&&!document.getElementById('studio-focus-onboarding').hidden&&document.getElementById('studio-focus-nav').getAttribute('aria-label')==='Primary Studio navigation'"),'mobile-default-chat-not-focused');checks.push('chat-first-first-project-guidance');
  assert(await js("Boolean(window.NexusStudioCompose)&&NexusStudioCompose.mode()==='guide'&&document.getElementById('studio-compose-send').disabled&&document.getElementById('studio-compose-privacy').textContent.includes('not generative AI')&&document.getElementById('studio-compose-storage').textContent.includes('No encrypted archive')"),'initial-honest-composer');
