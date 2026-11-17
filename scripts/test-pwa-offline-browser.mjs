@@ -66,6 +66,33 @@ async function retryJs(expression){
  }
 }
 const checks=[];
+// CDP document-only status records, never request bodies or user data.
+// A page-target CDP offline flag does not necessarily stop the Service
+// Worker process from fetching the origin. In the disposable localhost CI
+// fixture, terminate the independent test HTTP server before navigation and
+// confirm a separate Node fetch cannot reach it. No production host access.
+const hardCut=process.env.NEXUS_PWA_HARD_CUT==='true';
+async function cutLocalTestOrigin(){
+ if(PUBLIC_MODE||process.env.GITHUB_ACTIONS!=='true'||
+    ORIGIN!=='http://127.0.0.1:8765/'||
+    !/^[1-9][0-9]*$/.test(process.env.NEXUS_PWA_SERVER_PID||''))
+   throw Error('hard-cut-requires-ephemeral-local-ci-http-server');
+ const pid=Number(process.env.NEXUS_PWA_SERVER_PID);
+ assert(pid!==process.pid&&pid!==child.pid&&Number.isSafeInteger(pid),
+   'unsafe-server-process-id');
+ process.kill(pid,'SIGTERM');
+ await poll(async()=>{
+   try{
+     await fetch(ORIGIN,{signal:AbortSignal.timeout(550)});
+     return false;
+   }catch(error){
+     return error instanceof TypeError;
+   }
+ },8000,'test-origin-still-network-accessible');
+}
+const observedDocuments=[];
+const documentFailures=[];
+const frameTransitions=[];
 try{
  const port=await poll(async()=>{
   try{const s=await readFile(path.join(profile,'DevToolsActivePort'),'utf8');
@@ -89,6 +116,20 @@ try{
  });
  socket.addEventListener('message',e=>{
   const msg=JSON.parse(e.data),p=pending.get(msg.id);
+  if(msg.method==='Network.responseReceived'&&msg.params?.type==='Document'){
+    const d=msg.params.response||{};
+    observedDocuments.push({public_root:d.url===ORIGIN,
+      status:Number(d.status)||0,from_worker:d.fromServiceWorker===true});
+  }
+  if(msg.method==='Network.loadingFailed'&&msg.params?.type==='Document'){
+    const label=String(msg.params.errorText||'');
+    documentFailures.push({at_stage:stage,network_disconnected:label.includes('ERR_INTERNET_DISCONNECTED'),
+      aborted:label.includes('ERR_ABORTED'),other:!label.includes('ERR_INTERNET_DISCONNECTED')&&!label.includes('ERR_ABORTED')});
+  }
+  if(msg.method==='Page.frameNavigated'){
+    const url=String(msg.params?.frame?.url||'');
+    frameTransitions.push({at_stage:stage,known_origin:url===ORIGIN,browser_error:url.startsWith('chrome-error:')});
+  }
   if(!p)return;pending.delete(msg.id);
   msg.error?p.reject(Error('cdp-failure')):p.resolve(msg.result);
  });
@@ -115,8 +156,39 @@ try{
  const actual=await js("(async()=>{const ns=await caches.keys();const c=await caches.open(ns[0]);const r=await c.match('/');return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await r.arrayBuffer())),x=>x.toString(16).padStart(2,'0')).join('')})()");
  assert(actual===sourceDigest,'cached-shell-differs-from-reviewed-source');
  checks.push('installed-cache-sha256-is-exact-reviewed-html');
+ if(process.env.NEXUS_PWA_TAMPER==='true'){
+   // Mutate actual Chromium CacheStorage bytes after verified installation.
+   // This does not use the VM mock, a network fixture or real user data.
+   stage='chromium-cache-tampering';
+   const changed=await js("(async()=>{const keys=await caches.keys();const c=await caches.open(keys[0]);const r=await c.match('/');const original=new Uint8Array(await r.arrayBuffer());const modified=original.slice();modified[modified.length-128]^=1;await c.put('/',new Response(modified,{status:200,headers:{'Content-Type':'text/html'}}));const saved=new Uint8Array(await (await c.match('/')).arrayBuffer());return {equal_length:saved.length===original.length,changed_byte:saved[original.length-128]!==original[original.length-128],local_records:localStorage.length}})()");
+   assert(changed.equal_length&&changed.changed_byte&&changed.local_records===0,
+     'chromium-tampered-cache-mutation-not-persisted');
+   checks.push('actual-chromium-cache-storage-tampered-with-no-user-data');
+   stage='real-network-offline-corrupt-cache';
+   if(hardCut)await cutLocalTestOrigin();
+   await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,
+     downloadThroughput:0,uploadThroughput:0});
+   await rpc('Page.reload',{ignoreCache:true});
+   const blocked=await poll(async()=>{
+     const doc=observedDocuments.findLast(x=>x.public_root&&x.status===503);
+     if(!doc)return null;
+     const dom=await retryJs("(()=>({complete:document.readyState==='complete',fallback:document.body?.textContent?.includes('NEXUS offline app shell is unavailable.')===true,app_shell:!!document.getElementById('load-demo'),offline:navigator.onLine===false}))()");
+     return dom?.complete?{...dom,...doc}:null;
+   },20000,'corrupt-cache-did-not-show-verified-503-error-shell');
+   assert(blocked.from_worker===true&&blocked.status===503&&blocked.fallback===true&&
+     blocked.app_shell===false&&blocked.offline===true,
+     'corrupt-offline-app-must-fail-closed-in-real-browser');
+   checks.push('real-chromium-offline-navigation-refuses-corrupt-cache-as-503');
+   process.stdout.write(JSON.stringify({schema:'nexus.pilot-12.chrome-corrupt-cache.v1',
+     status:'PASS',checks,source_sha256:sourceDigest,
+     real_chromium:true,public_https_tested:false,real_android_hardware:false,
+     cache_corruption_in_disposable_profile:true,test_origin_unreachable:hardCut,
+     attempted_runtime_execution_on_bad_shell:false,production_mutation:false,
+     private_data_submitted:false,authority:'none'})+'\n');
+ } else {
  await js("window.__nexusBeforeOfflineReload=true;true");
  stage='real-network-offline';
+ if(hardCut)await cutLocalTestOrigin();
  await rpc('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
  await rpc('Page.reload',{ignoreCache:true});
  await poll(()=>retryJs("!window.__nexusBeforeOfflineReload&&document.readyState==='complete'&&document.getElementById('offline-install')&&navigator.onLine===false"),15000,'offline-navigation-not-served');
@@ -142,11 +214,20 @@ try{
    checks,source_sha256:sourceDigest,source_bytes:sourceHtml.length,
    origin:PUBLIC_MODE?'public-render-pilot':'local-loopback-test-only',
    browser:'headless-chromium',
-   actual_offline_navigation:true,real_android_hardware:false,
+   actual_offline_navigation:true,test_origin_unreachable:hardCut,real_android_hardware:false,
    private_data_submitted:false,authenticated_rust_tested:false,
    volume_recovery_verified:false,production_mutation:false,authority:'none'};
  process.stdout.write(JSON.stringify(report)+'\n');
+ }
 }catch(error){
+ if(stage==='real-network-offline-corrupt-cache'){
+   let safeDom=null;
+   try{safeDom=await retryJs("(()=>({state:document.readyState,offline:navigator.onLine===false,has_app:!!document.getElementById('load-demo'),has_fallback:document.body?.textContent?.includes('NEXUS offline app shell is unavailable.')===true,worker_controls:!!navigator.serviceWorker?.controller,at_root:location.href==='https://nexus-pilot12-disposable.example/'||location.href==='http://127.0.0.1:8765/'}))()")}catch{}
+   process.stderr.write(JSON.stringify({event:'pilot12-corrupt-cache-diagnostic',
+     documents:observedDocuments.slice(-8),failures:documentFailures.slice(-8),
+     frames:frameTransitions.slice(-8),dom:safeDom,
+     page_content_logged:false,request_urls_logged:false,authority:'none'})+'\n');
+ }
  process.stderr.write(JSON.stringify({event:'pwa-browser-fail-closed',stage,
   reason:String(error?.message||'unknown').replace(/[^A-Za-z0-9-]/g,'').slice(0,90),
   production_verified:false,authority:'none'})+'\n');

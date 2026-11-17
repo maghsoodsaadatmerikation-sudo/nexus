@@ -103,11 +103,18 @@ jobs:
           set -euo pipefail
           export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
           test -n "$NEXUS_PWA_CHROME"
-          python3 -m http.server 8765 --bind 127.0.0.1 --directory public \
-            > "$RUNNER_TEMP/nexus-pwa-http.log" 2>&1 &
-          server=$!
-          trap 'kill "$server" 2>/dev/null || true' EXIT
-          python3 - <<'PY'
+          # Server is strictly ephemeral loopback; the test process
+          # terminates it and independently verifies socket unreachability
+          # before CDP offline reload (page CDP alone may leave SW online).
+          server=''
+          trap 'if test -n "$server"; then kill "$server" 2>/dev/null || true; fi' EXIT
+          export NEXUS_PWA_HARD_CUT=true
+          start_server() {
+            python3 -m http.server 8765 --bind 127.0.0.1 --directory public \
+              > "$RUNNER_TEMP/nexus-pwa-http.log" 2>&1 &
+            server=$!
+            export NEXUS_PWA_SERVER_PID="$server"
+            python3 - <<'PY'
           import time,urllib.request
           for attempt in range(40):
               try:
@@ -118,7 +125,15 @@ jobs:
                   if attempt==39: raise
                   time.sleep(.1)
           PY
+          }
+          start_server
           node scripts/test-pwa-offline-browser.mjs > pilot-12-offline-witness.json
+          wait "$server" || true
+          # Independent fresh browser profile: deliberately mutate real
+          # Chromium CacheStorage bytes, then kill and verify the origin.
+          start_server
+          NEXUS_PWA_TAMPER=true node scripts/test-pwa-offline-browser.mjs > pilot-12-real-corrupt-cache.json
+          wait "$server" || true
           python3 - <<'PY'
           import json
           r=json.load(open('pilot-12-offline-witness.json'))
@@ -126,12 +141,29 @@ jobs:
           assert r['status']=='PASS'
           assert len(r['checks'])==8
           assert r['actual_offline_navigation'] is True
+          assert r['test_origin_unreachable'] is True
           assert r['real_android_hardware'] is False
           assert r['private_data_submitted'] is False
           assert r['authenticated_rust_tested'] is False
           assert r['volume_recovery_verified'] is False
           assert r['production_mutation'] is False and r['authority']=='none'
           print('PASS: real Chromium opt-in install, true offline reload, data isolation and uninstall')
+          PY
+          python3 - <<'PY'
+          import json
+          r=json.load(open('pilot-12-real-corrupt-cache.json'))
+          assert r['schema']=='nexus.pilot-12.chrome-corrupt-cache.v1'
+          assert r['status']=='PASS' and len(r['checks'])==6
+          assert 'actual-chromium-cache-storage-tampered-with-no-user-data' in r['checks']
+          assert 'real-chromium-offline-navigation-refuses-corrupt-cache-as-503' in r['checks']
+          assert r['real_chromium'] is True and r['public_https_tested'] is False
+          assert r['real_android_hardware'] is False
+          assert r['cache_corruption_in_disposable_profile'] is True
+          assert r['test_origin_unreachable'] is True
+          assert r['attempted_runtime_execution_on_bad_shell'] is False
+          assert r['production_mutation'] is False and r['private_data_submitted'] is False
+          assert r['authority']=='none'
+          print('PASS: tampered actual Chromium CacheStorage serves worker-origin 503 offline')
           PY
       - name: Upload sanitized offline install acceptance witness
         if: always()
@@ -141,5 +173,6 @@ jobs:
           path: |
             pilot-12-offline-witness.json
             pilot-12-worker-negative.json
+            pilot-12-real-corrupt-cache.json
           if-no-files-found: ignore
           retention-days: 14
