@@ -97,8 +97,11 @@ def assess(*, repo: dict, main: dict, pr: dict, ruleset: dict, runs: dict,
             and ruleset.get("target") == "branch"
             and ruleset.get("source") == REPO,
             "expected active branch ruleset missing/changed")
-    require(ruleset.get("bypass_actors") == [],
-            "ruleset has bypass actors or bypass metadata was withheld")
+    # A read-only GITHUB_TOKEN can receive a redacted ruleset response.
+    # Missing bypass_actors is UNKNOWN, never proof that bypass is impossible.
+    bypass = ruleset.get("bypass_actors")
+    require(bypass is None or type(bypass) is list,
+            "malformed ruleset bypass metadata")
     require(nested(ruleset, "conditions", "ref_name", "include") == ["~DEFAULT_BRANCH"]
             and nested(ruleset, "conditions", "ref_name", "exclude") == [],
             "branch ruleset no longer targets exactly default branch")
@@ -161,6 +164,10 @@ def assess(*, repo: dict, main: dict, pr: dict, ruleset: dict, runs: dict,
         blockers.append("STRICT_BASE_FRESHNESS_NOT_ENFORCED")
     if reviews_required == 0:
         blockers.append("INDEPENDENT_APPROVAL_NOT_REQUIRED_BY_RULESET")
+    if bypass is None:
+        blockers.append("RULESET_BYPASS_METADATA_NOT_VISIBLE")
+    elif bypass:
+        blockers.append("RULESET_BYPASS_ACTORS_PRESENT")
     if any(x["status"] != "PASS" for x in evidence.values()):
         blockers.append("EXPECTED_CI_NOT_FULLY_VERIFIED")
     blockers.append("OWNER_REVIEW_AND_EXPLICIT_MERGE_DECISION_REQUIRED")
@@ -173,7 +180,9 @@ def assess(*, repo: dict, main: dict, pr: dict, ruleset: dict, runs: dict,
         "main_sha": main_sha,
         "ruleset_id": ruleset["id"],
         "required_readonly_check_enforced": True,
-        "ruleset_has_no_bypass_actors": True,
+        "ruleset_has_no_bypass_actors": bypass == [],
+        "ruleset_bypass_visibility": "UNKNOWN" if bypass is None else "VISIBLE",
+
         "strict_base_freshness_enforced": checks_options["strict_required_status_checks_policy"],
         "required_approvals": reviews_required,
         "workflow_results": evidence,
