@@ -1,0 +1,62 @@
+name: NEXUS Read-only Integration Merge Audit
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/merge-readiness-audit.yml'
+      - 'scripts/merge-readiness-audit.py'
+      - 'scripts/test-merge-readiness-audit.py'
+      - 'docs/MERGE-READINESS-REVIEW-2026-11-18.md'
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  informational-merge-audit:
+    name: informational-merge-audit-no-authorization
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    steps:
+      - name: Checkout unprivileged review code without credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Test merge-readiness report against adversarial snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/test-merge-readiness-audit.py
+
+      - name: Independently inspect active main ruleset and integrated PR status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TARGET_PR: '288'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$REPO" = 'maghsoodsaadatmerikation-sudo/nexus'
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          gh api "repos/${REPO}" > "$tmp/repo.json"
+          gh api "repos/${REPO}/branches/main" > "$tmp/main.json"
+          gh api "repos/${REPO}/pulls/${TARGET_PR}" > "$tmp/pr.json"
+          gh api "repos/${REPO}/rulesets/20870033" > "$tmp/ruleset.json"
+          source_sha="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["head"]["sha"])' "$tmp/pr.json")"
+          [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]
+          gh api -X GET "repos/${REPO}/actions/runs" \
+            -f head_sha="$source_sha" -f per_page=100 > "$tmp/runs.json"
+          python3 scripts/merge-readiness-audit.py \
+            --repo-json "$tmp/repo.json" --main-json "$tmp/main.json" \
+            --pr-json "$tmp/pr.json" --ruleset-json "$tmp/ruleset.json" \
+            --runs-json "$tmp/runs.json" --pr-number "$TARGET_PR" \
+            --head-sha "$source_sha"
+          echo 'INFORMATIONAL ONLY: a green audit job is NOT permission to merge.'
