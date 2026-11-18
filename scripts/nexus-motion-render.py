@@ -290,8 +290,9 @@ def project_source(path: Path):
                     name = info.filename
                     require(name not in seen, "duplicate ZIP filename")
                     seen.add(name)
-                    require(not info.is_dir() and not (info.external_attr >> 16) & 0o170000
-                            == 0o120000 and info.compress_type == zipfile.ZIP_STORED,
+                    mode = (info.external_attr >> 16) & 0o170000
+                    require(not info.is_dir() and mode != 0o120000
+                            and info.compress_type == zipfile.ZIP_STORED,
                             "links and compressed ZIP records are not allowed")
                     require(name == "storyboard.json"
                             or (name.startswith("assets/")
