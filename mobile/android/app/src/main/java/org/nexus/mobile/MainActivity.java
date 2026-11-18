@@ -187,7 +187,7 @@ public final class MainActivity extends Activity {
                 return !local(req.getUrl()) || !allowed.containsKey(req.getUrl().getEncodedPath());
             }
             @Override public void onPageFinished(WebView view, String url) {
-                if (!url.startsWith(ROOT)) return;
+                if (!local(Uri.parse(url))) return;
                 // The signed, bundled JavaScript adapter is evaluated only on
                 // the trusted local appassets origin; no remote frames exist.
                 try {
@@ -262,7 +262,7 @@ public final class MainActivity extends Activity {
                     count<=0 || count>MAX_EXPORT || count!=Math.rint(count) ||
                     name==null || !name.matches("[a-zA-Z0-9_. -]{1,90}") ||
                     name.contains("..") || type==null ||
-                    !type.matches("application/(json|zip|octet-stream)|text/plain|video/(mp4|webm)|audio/(wav|mpeg|ogg)|image/(png|jpeg|webp)"))
+                    !type.matches("application/(json|zip|octet-stream|pdf)|text/(plain|html|markdown)|video/(mp4|webm)|audio/(wav|mpeg|ogg)|image/(png|jpeg|webp)"))
                 return "";
             try {
                 id=java.util.UUID.randomUUID().toString();
