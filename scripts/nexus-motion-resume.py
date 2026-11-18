@@ -27,6 +27,9 @@ SPEC.loader.exec_module(BASE)
 QC_SPEC = importlib.util.spec_from_file_location("nexus_motion_quality", ROOT / "nexus-motion-quality.py")
 QUALITY = importlib.util.module_from_spec(QC_SPEC)
 QC_SPEC.loader.exec_module(QUALITY)
+DIAG_SPEC = importlib.util.spec_from_file_location("nexus_motion_diagnostics", ROOT / "nexus-motion-diagnostics.py")
+DIAG = importlib.util.module_from_spec(DIAG_SPEC)
+DIAG_SPEC.loader.exec_module(DIAG)
 SCHEMA = "nexus.motion.resume.v1"
 MIN_FREE = 128 * 1024 * 1024
 
@@ -97,6 +100,7 @@ def identity(story: dict, project: Path, *, font: Path, crf: int,
            "renderer_sha256": digest(ROOT / "nexus-motion-render.py"),
            "queue_sha256": digest(Path(__file__)),
            "quality_sha256": digest(ROOT / "nexus-motion-quality.py"),
+           "diagnostics_sha256": digest(ROOT / "nexus-motion-diagnostics.py"),
            "font_sha256": digest(font),
            "ffmpeg": version, "crf": crf, "preset": preset, "threads": threads}
     return hashlib.sha256(json.dumps(obj, ensure_ascii=False, sort_keys=True,
@@ -120,7 +124,8 @@ def safe_workspace(output: Path, *, resume: bool) -> Path:
         require(not child.is_symlink() and child.is_file()
                 and (child.name in {"manifest.json", "manifest.pending", ".lock",
                                     "joined.partial.mp4", "final.partial.mp4", "parts.ffconcat",
-                                    "quality.json", "quality.pending"}
+                                    "quality.json", "quality.pending",
+                                    "visual.json", "visual.pending"}
                      or (child.name.startswith("scene-") and
                          child.name[6:9].isdigit() and child.name[9:] in (".mp4", ".partial.mp4"))
                      or (child.name.startswith(("title-", "subtitle-")) and
@@ -215,7 +220,7 @@ def encode_scene(story: dict, project: Path, work: Path, index: int,
     return target
 
 
-def create_output(story: dict, project: Path, output: Path, work: Path) -> None:
+def create_output(story: dict, project: Path, output: Path, work: Path, *, visual_qc: bool = False) -> dict:
     count = len(story["scenes"])
     total = sum(scene["duration"] for scene in story["scenes"])
     w, h, fps = story["width"], story["height"], story["fps"]
@@ -255,18 +260,35 @@ def create_output(story: dict, project: Path, output: Path, work: Path) -> None:
         handle.flush()
         os.fsync(handle.fileno())
     os.replace(checkpoint, work / "quality.json")
+    visual = None
+    if visual_qc:
+        # Bounded sampled visual warnings are advisory, unlike the mandatory
+        # packet/audio quality gate. Scene fades and stills can trigger alerts.
+        visual = DIAG.scan_visual(final, duration=total)
+        visual_checkpoint = work / "visual.pending"
+        require(not visual_checkpoint.is_symlink(), "unsafe visual report checkpoint")
+        with visual_checkpoint.open("wb") as handle:
+            handle.write((json.dumps(visual, sort_keys=True) + "\\n").encode("utf-8"))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(visual_checkpoint, work / "visual.json")
     require(not output.is_symlink(), "final output became a symlink")
     os.replace(final, output)
+    return {"visual_qc_performed": visual is not None,
+            "visual_review_suggested": bool(visual and visual["review_suggested"]),
+            "visual_report": str(work / "visual.json") if visual is not None else None}
 
 
 def render(project: Path, output: Path, *, resume: bool = False,
            force: bool = False, font: Path | None = None, crf: int = 18,
-           preset: str = "medium", threads: int = 2, max_new_scenes: int | None = None) -> dict:
+           preset: str = "medium", threads: int = 2, max_new_scenes: int | None = None,
+           visual_qc: bool = False) -> dict:
     require(shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None,
             "FFmpeg and ffprobe must be installed")
     require(type(crf) is int and 10 <= crf <= 30, "CRF out of range")
     require(preset in {"ultrafast", "fast", "medium", "slow"}, "preset unsupported")
     require(type(threads) is int and 1 <= threads <= 16, "thread count unsupported")
+    require(type(visual_qc) is bool, "visual scan flag must be boolean")
     require(max_new_scenes is None or (type(max_new_scenes) is int and 1 <= max_new_scenes <= 120),
             "scene batch limit unsupported")
     output = output.absolute()
@@ -320,7 +342,7 @@ def render(project: Path, output: Path, *, resume: bool = False,
             save_manifest(work, state)
             rendered += 1
         ensure_capacity(output)
-        create_output(story, project, output, work)
+        visual_report = create_output(story, project, output, work, visual_qc=visual_qc)
     return {"status": "RENDERED_RESUMABLE_LOCAL", "width": story["width"],
             "height": story["height"], "fps": story["fps"],
             "duration_seconds": sum(x["duration"] for x in story["scenes"]),
@@ -329,6 +351,7 @@ def render(project: Path, output: Path, *, resume: bool = False,
             "path": str(output), "workspace": str(work),
             "ai_video_model_used": False, "upload_performed": False,
             "technical_mp4_verified": True, "quality_report": str(work / "quality.json"),
+            **visual_report,
             "merge_authorized": False}
 
 
@@ -344,12 +367,15 @@ def main() -> int:
     p.add_argument("--threads", type=int, default=2)
     p.add_argument("--max-new-scenes", type=int, default=None,
                    help="Thermal/battery-friendly bounded manual batch, then use --resume")
+    p.add_argument("--visual-qc", action="store_true",
+                   help="Scan three short windows for dark/frozen imagery (advisory only)")
     args = p.parse_args()
     try:
         with BASE.project_source(args.project) as project:
             report = render(project, args.output, resume=args.resume, force=args.force,
                             font=args.font, crf=args.crf, preset=args.preset,
-                            threads=args.threads, max_new_scenes=args.max_new_scenes)
+                            threads=args.threads, max_new_scenes=args.max_new_scenes,
+                            visual_qc=args.visual_qc)
         print(json.dumps(report, sort_keys=True, ensure_ascii=False))
         return 0
     except (BASE.MotionError, OSError, FileNotFoundError, ValueError) as error:
