@@ -23,6 +23,9 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Guard Public Studio job expression grammar and read-only authority
+        run: python3 scripts/test-public-studio-workflow-expression.py
+
       - name: Verify workflow authority boundary
         run: |
           python3 scripts/test-workflow-authority.py
