@@ -54,10 +54,12 @@ def one_gray_frame(path: Path, *, frame_index: int, fps: int) -> bytes:
             and type(fps) is int and fps in (24, 25, 30, 60),
             "invalid frame selection")
     t = frame_index / fps
-    # Input seek with accurate-seek enabled. Keep the seek timestamp slightly
-    # inside the desired frame; avoid boundary floating point rounding.
+    # FFmpeg input seeking discards frames with PTS *before* the request.
+    # A positive epsilon accidentally selects the NEXT frame, which hides
+    # black->white cuts. Seek just BEFORE the target PTS instead.
+    seek = max(0.0, t - .10 / fps)
     cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-v", "error",
-           "-ss", f"{t + .10 / fps:.9f}", "-protocol_whitelist", "file,pipe",
+           "-ss", f"{seek:.9f}", "-protocol_whitelist", "file,pipe",
            "-i", str(path), "-frames:v", "1",
            "-vf", f"scale={FRAME_W}:{FRAME_H}:flags=area,format=gray",
            "-pix_fmt", "gray", "-f", "rawvideo", "-"]
