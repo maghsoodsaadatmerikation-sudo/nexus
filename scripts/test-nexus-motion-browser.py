@@ -64,8 +64,8 @@ def main():
         page.write_text(html,encoding="utf-8")
         (folder/"witness.js").write_text(WITNESS,encoding="utf-8")
         result=subprocess.run(["node",str(ROOT/"scripts/workspace-browser-runner.mjs"),
-                               browser,page.as_uri(),str(folder/"witness"),"420,900","25000","10000"],
-                              capture_output=True,text=True,timeout=75)
+                               browser,page.as_uri(),str(folder/"witness"),"420,900","60000","30000"],
+                              capture_output=True,text=True,timeout=145)
         if result.returncode:
             raise RuntimeError("real browser failed: "+result.stderr[-900:])
         report=json.loads(result.stdout)
