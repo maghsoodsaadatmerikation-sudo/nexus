@@ -1,0 +1,23 @@
+{
+  "authority_expansion": "NONE",
+  "builders": {
+    "a": {
+      "environment": "github-hosted ubuntu-24.04",
+      "executable_sha256": "c6dd176f82b2789e669bcc5fc1f9e0cd47b569c46d888612457ca44f2166de32"
+    },
+    "b": {
+      "environment": "github-hosted ubuntu-24.04",
+      "executable_sha256": "c6dd176f82b2789e669bcc5fc1f9e0cd47b569c46d888612457ca44f2166de32"
+    }
+  },
+  "candidate_sha": "1ee30f7784420f27bba5d5d5798d9cdf3b64c89f",
+  "claim_boundary": "Byte-identical gateway executable across the two independent GitHub-hosted rebuild jobs in this run under the recorded pinned build definition only.",
+  "executable_digest_match": true,
+  "independent_rebuild_run_id": "44222980195",
+  "nexus_verification_run_id": "44222413691",
+  "paid_upgrade_required": false,
+  "production_mutation_performed": false,
+  "schema": "nexus.v1.8.independent-rebuild-evidence.v1",
+  "secret_value_recorded": false,
+  "status": "PASS"
+}
