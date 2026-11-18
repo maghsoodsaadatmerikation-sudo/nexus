@@ -253,7 +253,7 @@ $('motion-compare-file').addEventListener('change',async event=>{
  const file=event.target.files[0];event.target.value='';
  if(!file||comparisonBusy)return;
  resetCompare();
- if(file.size<501||file.size>8*1024*1024*1024||!/\\.mp4$/i.test(file.name)||
+ if(file.size<501||file.size>8*1024*1024*1024||!/\.mp4$/i.test(file.name)||
     (file.type&&file.type!=='video/mp4'&&file.type!=='application/octet-stream')){
    result.textContent='Choose a local MP4 from 501 bytes to 8 GiB (streamed by browser, not copied).';
    return;
