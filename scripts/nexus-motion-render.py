@@ -229,7 +229,8 @@ def render(project_path: Path, output: Path, *, font: Path | None = None,
             if scene.get("image"):
                 image = safe_media(project_path.parent, scene["image"], CODECS, 64*1024*1024)
                 cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-y",
-                       "-loop", "1", "-framerate", str(fps), "-i", str(image)]
+                       "-loop", "1", "-framerate", str(fps),
+                       "-protocol_whitelist", "file,pipe", "-i", str(image)]
             else:
                 cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-y",
                        "-f", "lavfi", "-i",
@@ -248,7 +249,8 @@ def render(project_path: Path, output: Path, *, font: Path | None = None,
                             encoding="utf-8")
         joined = work / "joined.mp4"
         run(["ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-y",
-             "-safe", "0", "-f", "concat", "-i", str(manifest),
+             "-safe", "0", "-f", "concat", "-protocol_whitelist", "file,pipe",
+             "-i", str(manifest),
              "-c", "copy", "-movflags", "+faststart", str(joined)], max(180, total * 3))
         final = joined
         if story.get("soundtrack"):
@@ -256,7 +258,8 @@ def render(project_path: Path, output: Path, *, font: Path | None = None,
             final = work / "final.mp4"
             fade_at = max(0, total - 1.0)
             run(["ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-y",
-                 "-i", str(joined), "-i", str(soundtrack), "-map", "0:v:0",
+                 "-protocol_whitelist", "file,pipe", "-i", str(joined),
+                 "-protocol_whitelist", "file,pipe", "-i", str(soundtrack), "-map", "0:v:0",
                  "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "256k",
                  "-af", f"apad,atrim=0:{total},afade=t=out:st={fade_at:.3f}:d=1",
                  "-t", str(total), "-movflags", "+faststart", str(final)], max(180, total * 3))
