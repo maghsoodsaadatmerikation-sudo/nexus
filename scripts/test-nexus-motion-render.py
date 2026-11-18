@@ -160,6 +160,11 @@ class MotionSecurityTests(unittest.TestCase):
         self.assertEqual(audio["codec_name"],"aac")
         self.assertAlmostEqual(float(p["format"]["duration"]),2,delta=.2)
 
+    def test_all_file_inputs_use_strict_local_ffmpeg_protocols(self):
+        source=script.read_text(encoding="utf-8")
+        self.assertGreaterEqual(source.count('"-protocol_whitelist", "file,pipe"'),4)
+        self.assertNotIn('"http,https"',source)
+
     def test_no_shell_network_or_autonomous_media_uploader(self):
         source=script.read_text(encoding="utf-8")
         for forbidden in ("shell=True","requests.post(", "urllib.request", "os.system(",
