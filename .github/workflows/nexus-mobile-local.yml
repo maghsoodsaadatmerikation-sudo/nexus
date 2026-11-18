@@ -1,0 +1,85 @@
+name: NEXUS Android Studio + Motion Offline-Local Distribution
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/nexus-mobile-local.yml'
+      - 'scripts/build-nexus-mobile-local.py'
+      - 'scripts/test-nexus-mobile-local.py'
+      - 'scripts/build-studio-phone-local.py'
+      - 'scripts/build-studio-static.py'
+      - 'web/motion*'
+      - 'public/studio/**'
+      - 'docs/NEXUS-MOBILE-LOCAL-INTEGRATED.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/nexus-mobile-local.yml'
+      - 'scripts/build-nexus-mobile-local.py'
+      - 'scripts/test-nexus-mobile-local.py'
+      - 'web/motion*'
+      - 'public/studio/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verified-mobile-zip:
+    name: reproducible-local-android-studio-motion-kit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact candidate without persisting GitHub credential
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify reviewable public sources and Python/JS syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_MODEL_API_KEY:-}"
+          python3 scripts/build-studio-static.py --check
+          python3 -m py_compile scripts/build-studio-phone-local.py scripts/build-nexus-mobile-local.py scripts/test-nexus-mobile-local.py
+          node --check web/motion-core.js
+          node --check web/motion-ui.js
+          node scripts/test-nexus-motion-core.mjs
+
+      - name: Prove ZIP integrity, local Studio + Motion HTTP, denial of mutations
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v python3
+          python3 scripts/test-nexus-mobile-local.py
+
+      - name: Create independently verifiable public-code-only Android ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          export OUTPUT="$RUNNER_TEMP/nexus-mobile-local.zip"
+          python3 scripts/build-nexus-mobile-local.py --output "$OUTPUT" --source-commit "$GITHUB_SHA" > "$RUNNER_TEMP/nexus-mobile-local-receipt.json"
+          python3 scripts/build-nexus-mobile-local.py --verify-zip "$OUTPUT" --source-commit "$GITHUB_SHA"
+          sha256sum "$OUTPUT" > "$OUTPUT.sha256"
+          mkdir -m 0700 "$RUNNER_TEMP/nexus-mobile-real-zip"
+          python3 -m zipfile -e "$OUTPUT" "$RUNNER_TEMP/nexus-mobile-real-zip"
+          test -f "$RUNNER_TEMP/nexus-mobile-real-zip/nexus-mobile-local/run-nexus.py"
+          test -f "$RUNNER_TEMP/nexus-mobile-real-zip/nexus-mobile-local/motion/index.html"
+          test -f "$RUNNER_TEMP/nexus-mobile-real-zip/nexus-mobile-local/apps.html"
+          echo 'Verified Studio and Motion public-code package created; Android hardware NOT tested.'
+
+      - name: Publish exact-source mobile ZIP and independent SHA-256
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-mobile-studio-motion-local
+          path: |
+            ${{ runner.temp }}/nexus-mobile-local.zip
+            ${{ runner.temp }}/nexus-mobile-local.zip.sha256
+            ${{ runner.temp }}/nexus-mobile-local-receipt.json
+          if-no-files-found: error
+          retention-days: 30
