@@ -97,6 +97,27 @@ class ResumeTests(unittest.TestCase):
         with self.assertRaisesRegex(Q.BASE.MotionError, "unrecognized"):
             self.render(resume=True)
 
+    def test_resume_workspace_must_remain_owner_only(self):
+        first = self.render(max_new_scenes=1)
+        cache = Path(first["workspace"])
+        cache.chmod(0o755)
+        try:
+            with self.assertRaisesRegex(Q.BASE.MotionError, "privately owned"):
+                self.render(resume=True)
+        finally:
+            cache.chmod(0o700)
+
+    def test_lock_file_cannot_be_world_readable(self):
+        first = self.render(max_new_scenes=1)
+        cache = Path(first["workspace"])
+        lock = cache / ".lock"
+        lock.chmod(0o644)
+        try:
+            with self.assertRaisesRegex(Q.BASE.MotionError, "unsafe lock"):
+                self.render(resume=True)
+        finally:
+            lock.chmod(0o600)
+
     def test_concurrent_job_is_denied(self):
         first = self.render(max_new_scenes=1)
         cache = Path(first["workspace"])
