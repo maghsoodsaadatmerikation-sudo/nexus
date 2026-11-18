@@ -6,7 +6,7 @@
 - All six distinct exact-head workflows in the last integrated PR run completed **successfully**.
 - The repository has an **active repository ruleset** (ID `20870033`, “Merikation”), targeting its default branch and enforcing required check `readonly-verification` with GitHub Actions integration ID `15368`.
 - The legacy branch-protection endpoint is not accessible to the GitHub App. Its limited branch metadata showed `required_status_checks.enforcement_level=off`—this does **not** override or negate the separate, active ruleset. Earlier statements treating this as no required check were incomplete.
-- The current ruleset API response reports `bypass_actors=[]`. The audit now **rejects any bypass actor or missing bypass metadata** rather than treating the mere existence of a required check as unconditional enforcement.
+- The full GitHub connector ruleset response reports `bypass_actors=[]`, but the **read-only GitHub Actions token can omit this field**. The auditor must not assume that absent metadata proves no bypass. Missing data creates `RULESET_BYPASS_METADATA_NOT_VISIBLE`; nonempty data creates `RULESET_BYPASS_ACTORS_PRESENT`. Both produce an explicit **REVIEW HOLD**, never merge authority. Malformed types are rejected.
 - That active ruleset requires **zero approving reviews** and sets `strict_required_status_checks_policy=false`. Thus an independent review is not required by GitHub and a freshly updated base is not required by that rule.
 - No release-publishing workflow has been modified and historical attestation proof does not authorize current release.
 
@@ -15,7 +15,7 @@
 `scripts/merge-readiness-audit.py` is an **offline, read-only snapshot parser** with exact-sha and repository-ID pinning. It validates:
 
 1. Repository identity, live default branch SHA, PR #288 head/base binding, same-repository PR provenance.
-2. Active ruleset ID, exact default-branch coverage, required GitHub Actions `readonly-verification` check, ruleset review and strict status options.
+2. Active ruleset ID, exact default-branch coverage, required GitHub Actions `readonly-verification` check, ruleset review and strict status options, plus visibility/contents of bypass-actor metadata (which may be redacted for a read-only token).
 3. The six expected workflow names **and exact paths**, successful complete first-attempt PR run metadata, source/head repository IDs, PR association and exact candidate SHA.
 4. Failures and missing runs as `NOT_PROVEN`. A prior successful run with a later failed matching run cannot mask the failure.
 5. A human-readable blocker report: `DRAFT_PR`, non-strict base freshness, no independent required approval, not-all-CI-proven and need for an explicit owner merge decision. Output ALWAYS sets `merge_authorized=false` and `release_authorized=false`.
