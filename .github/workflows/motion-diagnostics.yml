@@ -7,6 +7,10 @@ on:
       - 'scripts/nexus-motion-diagnostics.py'
       - 'scripts/nexus-motion-resume.py'
       - 'scripts/test-nexus-motion-diagnostics.py'
+      - 'scripts/test-nexus-motion-core.mjs'
+      - 'web/motion-core.js'
+      - 'web/motion-ui.js'
+      - 'web/motion.html'
       - 'docs/NEXUS-MOTION-VISUAL-RESOURCE-DIAGNOSTICS.md'
   push:
     branches: [main]
@@ -15,6 +19,10 @@ on:
       - 'scripts/nexus-motion-diagnostics.py'
       - 'scripts/nexus-motion-resume.py'
       - 'scripts/test-nexus-motion-diagnostics.py'
+      - 'scripts/test-nexus-motion-core.mjs'
+      - 'web/motion-core.js'
+      - 'web/motion-ui.js'
+      - 'web/motion.html'
   workflow_dispatch:
 
 permissions:
@@ -49,6 +57,13 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/nexus-motion-diagnostics.py scripts/test-nexus-motion-diagnostics.py scripts/nexus-motion-resume.py
           python3 scripts/test-nexus-motion-diagnostics.py
+      - name: Verify Android storyboard estimates are deterministic and code is valid
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check web/motion-core.js
+          node --check web/motion-ui.js
+          node scripts/test-nexus-motion-core.mjs
       - name: Confirm this CI cannot publish or use deployment secrets
         shell: bash
         run: |
