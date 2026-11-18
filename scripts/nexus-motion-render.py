@@ -149,6 +149,11 @@ def scene_filter(scene: dict, folder: Path, tempdir: Path, index: int,
         f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=0x{scene['background'][1:]}",
         "setsar=1",
     ]
+    # Procedural line geometry gives photo-free scenes actual pixel motion
+    # when zoom/pan is selected; a uniform color alone cannot visibly move.
+    if not scene.get("image"):
+        text.append(f"drawgrid=w={max(80,w//8)}:h={max(70,h//6)}:"
+                    f"t={max(1,w//800)}:c=0x{scene['accent'][1:]}@0.15")
     motion = scene["motion"]
     if motion != "still":
         length = scene["duration"] * fps
