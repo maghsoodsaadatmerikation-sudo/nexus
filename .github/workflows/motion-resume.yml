@@ -1,0 +1,59 @@
+name: NEXUS Motion Resumable Render Acceptance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/motion-resume.yml'
+      - 'scripts/nexus-motion-render.py'
+      - 'scripts/nexus-motion-resume.py'
+      - 'scripts/test-nexus-motion-render.py'
+      - 'scripts/test-nexus-motion-resume.py'
+      - 'artifact-05/src/lib.rs'
+      - 'docs/NEXUS-MOTION-RESUMABLE-RENDER.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/motion-resume.yml'
+      - 'scripts/nexus-motion-render.py'
+      - 'scripts/nexus-motion-resume.py'
+      - 'scripts/test-nexus-motion-resume.py'
+      - 'artifact-05/src/lib.rs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-resume:
+    name: offline-resumable-h264-cache-integrity-and-atomic-output
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact read-only head
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Install FFmpeg only if required by runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq
+            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg
+          fi
+          command -v ffmpeg
+          command -v ffprobe
+      - name: Test exact scene cache, interrupted batches, tampering and AAC output
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/nexus-motion-resume.py scripts/test-nexus-motion-resume.py
+          python3 scripts/test-nexus-motion-resume.py
+      - name: Check only Motion-facing Rust gateway formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check artifact-05/src/lib.rs
