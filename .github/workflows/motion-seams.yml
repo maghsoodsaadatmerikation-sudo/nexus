@@ -1,0 +1,56 @@
+name: NEXUS Motion Scene Boundary Continuity Acceptance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/motion-seams.yml'
+      - 'scripts/nexus-motion-seams.py'
+      - 'scripts/test-nexus-motion-seams.py'
+      - 'scripts/nexus-motion-resume.py'
+      - 'docs/NEXUS-MOTION-SEAM-DIAGNOSTICS.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/motion-seams.yml'
+      - 'scripts/nexus-motion-seams.py'
+      - 'scripts/test-nexus-motion-seams.py'
+      - 'scripts/nexus-motion-resume.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-seam-decoding:
+    name: offline-black-white-seam-and-safe-final-render
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact unprivileged commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Ensure local FFmpeg with x264 and ffprobe
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq
+            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg
+          fi
+          ffmpeg -hide_banner -encoders | grep -w libx264
+      - name: Test real abrupt and unchanged boundaries and MP4 output nonreplacement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/nexus-motion-seams.py scripts/test-nexus-motion-seams.py scripts/nexus-motion-resume.py
+          python3 scripts/test-nexus-motion-seams.py
+      - name: Confirm this report cannot deploy or publish
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          echo 'NEXUS MOTION: SCENE SEAMS EDITORIAL WARNING ONLY; NO RELEASE AUTHORITY'
