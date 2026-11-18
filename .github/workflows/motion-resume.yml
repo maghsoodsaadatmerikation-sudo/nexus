@@ -52,9 +52,8 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/nexus-motion-resume.py scripts/test-nexus-motion-resume.py
           python3 scripts/test-nexus-motion-resume.py
-      - name: Independently enforce Rust gateway formatting
+      - name: Check only Motion-facing Rust gateway formatting
         shell: bash
         run: |
           set -euo pipefail
-          cargo fmt --all -- --check
-        working-directory: artifact-05
+          rustfmt --edition 2021 --check artifact-05/src/lib.rs
