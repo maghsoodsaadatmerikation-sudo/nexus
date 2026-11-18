@@ -181,7 +181,19 @@ def source_assets(commit: str) -> dict[str, bytes]:
     old = '    assets["/"] = assets["/index.html"]'
     if launcher.count(old) != 1:
         raise ValueError("base launcher routing changed")
-    launcher = launcher.replace(old, '    assets.update(load_motion())\n' + old)
+    launcher = launcher.replace(old, old + '\n    assets["/motion/"] = assets["/motion/index.html"]')
+    opener = "        assets = load_public()"
+    if launcher.count(opener) != 1:
+        raise ValueError("base public asset verification flow changed")
+    launcher = launcher.replace(opener, opener + '\n        assets.update(load_motion())')
+    mime = 'Path("/index.html" if name == "/" else name).suffix'
+    if launcher.count(mime) != 1:
+        raise ValueError("base launcher MIME selection changed")
+    launcher = launcher.replace(
+        mime,
+        'Path("/index.html" if name == "/" else '
+        '"/motion/index.html" if name == "/motion/" else name).suffix'
+    )
     if '("127.0.0.1", args.port)' not in launcher:
         raise ValueError("base launcher bind boundary changed")
     output = {
