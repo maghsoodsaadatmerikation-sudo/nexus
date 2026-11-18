@@ -1,0 +1,192 @@
+name: NEXUS Android — Real Emulator UI and Safe Reinstall Gate
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/nexus-android-emulator.yml'
+      - 'mobile/android/**'
+      - 'scripts/test-nexus-android-emulator.py'
+      - 'scripts/build-nexus-android-assets.py'
+      - 'scripts/build-nexus-mobile-local.py'
+      - 'web/motion*'
+      - 'public/studio/**'
+      - 'docs/NEXUS-ANDROID-EMULATOR-ACCEPTANCE.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NEXUS_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  real-android-emulator-acceptance:
+    name: api35-real-WebView-pages-and-inplace-data-preservation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact reviewed commit without credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ env.NEXUS_SOURCE_SHA }}
+          persist-credentials: false
+
+      - name: Use Java 17 and exact Gradle runtime
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle without cache publishing
+        uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3
+        with:
+          gradle-version: '8.10.2'
+          cache-disabled: true
+
+      - name: Install Android 35 build, emulator and public x86_64 system image
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${ANDROID_HOME:?Android SDK required}"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" \
+            "platform-tools" "emulator" "system-images;android-35;google_apis;x86_64" >/dev/null
+          test -x "$ANDROID_HOME/emulator/emulator"
+          test -x "$ANDROID_HOME/platform-tools/adb"
+          test -c /dev/kvm
+          sudo chmod 0666 /dev/kvm
+          test -w /dev/kvm
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+
+      - name: Bind exact public APK assets to immutable source and compile debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build-studio-static.py --check
+          python3 -m py_compile scripts/test-nexus-android-emulator.py scripts/build-nexus-android-assets.py
+          python3 scripts/test-nexus-android-assets.py
+          mkdir -p mobile/android/app/src/main/assets
+          python3 scripts/build-nexus-android-assets.py \
+            --output-dir mobile/android/app/src/main/assets/nexus \
+            --source-commit "$NEXUS_SOURCE_SHA"
+          python3 scripts/build-nexus-android-assets.py \
+            --output-dir mobile/android/app/src/main/assets/nexus \
+            --source-commit "$NEXUS_SOURCE_SHA" --verify-only
+          (cd mobile/android && gradle --no-daemon --console plain :app:assembleDebug)
+          APK=mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$APK" > "$RUNNER_TEMP/nexus-android-emu-permissions.txt"
+          if grep -Eq 'uses-permission|android.permission.INTERNET' "$RUNNER_TEMP/nexus-android-emu-permissions.txt"; then
+            echo 'Native APK unexpectedly requests Android permissions' >&2; exit 1
+          fi
+
+      - name: Boot real Android API35 emulator with local KVM acceleration
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
+          AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/nexus-android-avds"
+          mkdir -p "$ANDROID_AVD_HOME"
+          printf 'no\n' | "$AVDMANAGER" create avd --force \
+            --name nexus_android_ci35 --package "system-images;android-35;google_apis;x86_64" \
+            --path "$ANDROID_AVD_HOME/nexus_android_ci35.avd"
+          echo 'AVD configuration files:'
+          find "$ANDROID_AVD_HOME" -maxdepth 2 -type f | head -n 25
+          test -f "$ANDROID_AVD_HOME/nexus_android_ci35.ini"
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx 'nexus_android_ci35'
+          nohup "$ANDROID_HOME/emulator/emulator" \
+            -avd nexus_android_ci35 -no-window -no-audio -no-boot-anim \
+            -no-snapshot -no-metrics -gpu swiftshader_indirect -memory 2048 \
+            -cores 2 -accel on > "$RUNNER_TEMP/nexus-emulator.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/nexus-emulator.pid"
+          if ! timeout 150 adb wait-for-device; then
+            echo 'ANDROID EMULATOR: ADB device never appeared' >&2
+            tail -n 150 "$RUNNER_TEMP/nexus-emulator.log" || true
+            adb devices -l || true
+            exit 1
+          fi
+          if ! timeout 300 bash -c '
+            until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = 1 ]; do
+              sleep 3
+            done
+          '; then
+            echo 'ANDROID EMULATOR: Android boot-complete not observed' >&2
+            tail -n 150 "$RUNNER_TEMP/nexus-emulator.log" || true
+            adb devices -l || true
+            exit 1
+          fi
+          adb shell input keyevent 82
+          adb shell wm size 1080x1920
+          adb shell wm density 360
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          adb shell svc wifi disable || true
+          adb shell svc data disable || true
+          echo "Android API: $(adb shell getprop ro.build.version.sdk)"
+          echo "Model: $(adb shell getprop ro.product.model)"
+
+      - name: Run actual installed APK navigation and same-signature reinstall acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/test-nexus-android-emulator.py \
+            mobile/android/app/build/outputs/apk/debug/app-debug.apk \
+            --report "$RUNNER_TEMP/nexus-android-emulator-acceptance.json"
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,os
+          data=json.loads((Path(os.environ['RUNNER_TEMP'])/'nexus-android-emulator-acceptance.json').read_text())
+          assert data['status']=='EMULATOR_RUNTIME_PASS'
+          assert data['real_android_emulator'] is True
+          assert data['physical_android_device_tested'] is False
+          assert data['upgrade_same_signature_data_preserved'] is True
+          assert data['upgrade_different_signature_tested'] is False
+          assert len(data['checks'])>=8
+          print('Verified real Android emulator test:',len(data['checks']),'checks')
+          PY
+
+      - name: Package debug APK with exact emulator witness for review only
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk \
+            "$RUNNER_TEMP/nexus-mobile-emulator-tested-debug.apk"
+          sha256sum "$RUNNER_TEMP/nexus-mobile-emulator-tested-debug.apk" \
+            > "$RUNNER_TEMP/nexus-mobile-emulator-tested-debug.apk.sha256"
+
+      - name: Upload tested APK and non-private emulator evidence
+        if: success()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-mobile-android-emulator-tested-debug-apk
+          path: |
+            ${{ runner.temp }}/nexus-mobile-emulator-tested-debug.apk
+            ${{ runner.temp }}/nexus-mobile-emulator-tested-debug.apk.sha256
+            ${{ runner.temp }}/nexus-android-emulator-acceptance.json
+            ${{ runner.temp }}/nexus-android-emulator-studio.png
+            ${{ runner.temp }}/nexus-android-emu-permissions.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Preserve truncated emulator boot log only on failure
+        if: failure()
+        shell: bash
+        run: |
+          tail -n 160 "$RUNNER_TEMP/nexus-emulator.log" || true
+          adb logcat -d -t 400 -s NEXUS_ANDROID_SMOKE:I AndroidRuntime:E '*:S' || true
+
+      - name: Shut down disposable emulator
+        if: always()
+        shell: bash
+        run: |
+          adb emu kill || true
+          if test -f "$RUNNER_TEMP/nexus-emulator.pid"; then
+            kill "$(cat "$RUNNER_TEMP/nexus-emulator.pid")" || true
+          fi

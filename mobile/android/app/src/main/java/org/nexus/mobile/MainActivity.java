@@ -7,6 +7,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
 import android.util.Base64;
+import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.SafeBrowsingResponse;
 import android.webkit.ValueCallback;
@@ -188,6 +189,31 @@ public final class MainActivity extends Activity {
             }
             @Override public void onPageFinished(WebView view, String url) {
                 if (!local(Uri.parse(url))) return;
+                // Never log project content, user inputs, URLs with queries or
+                // secret values. Emulator-only witness checks static public
+                // UI readiness rather than trusting a successful Activity boot.
+                if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+                    String page = Uri.parse(url).getEncodedPath();
+                    String witness = null;
+                    if ("/apps.html".equals(page)) {
+                        witness = "(document.title.includes('NEXUS Mobile') && " +
+                                  "!!document.querySelector('a[href=\\\"./motion/\\\"]') && " +
+                                  "!!document.querySelector('a[href=\\\"./\\\"]'))";
+                    } else if ("/motion/".equals(page)) {
+                        witness = "(document.title.includes('NEXUS Motion') && " +
+                                  "typeof window.NexusMotion === 'object' && " +
+                                  "!!document.getElementById('motion-canvas') && " +
+                                  "!!document.getElementById('motion-add'))";
+                    } else if ("/".equals(page)) {
+                        witness = "(document.title === 'NEXUS Studio' && " +
+                                  "!!document.getElementById('messages'))";
+                    }
+                    if (witness != null) {
+                        final String publicPath = page;
+                        view.evaluateJavascript(witness, value ->
+                            Log.i("NEXUS_ANDROID_SMOKE", publicPath + " ready=" + value));
+                    }
+                }
                 // The signed, bundled JavaScript adapter is evaluated only on
                 // the trusted local appassets origin; no remote frames exist.
                 try {
