@@ -31,7 +31,8 @@ bad(()=>M.validate({...sample,scenes:[{...sample.scenes[0],title:'<'.repeat(121)
 bad(()=>M.validate({...sample,scenes:[{...sample.scenes[0],image:'../secret.png'}]}));
 bad(()=>M.validate({...sample,scenes:[{...sample.scenes[0],image:'https://bad.test/a.png'}]}));
 bad(()=>M.validate({...sample,soundtrack:'../../key.mp3'}));
-bad(()=>M.validate({...sample,scenes:sample.scenes.concat(Array.from({length:118},()=>({...sample.scenes[0]}))}));
+const tooMany=[...sample.scenes,...Array.from({length:118},()=>({...sample.scenes[0]}))];
+bad(()=>M.validate({...sample,scenes:tooMany}));
 const accepted={...sample,scenes:[{...sample.scenes[0],image:'assets/My Film 2.png'}],soundtrack:'assets/voice.wav'};
 check(()=>assert.equal(M.validate(accepted),4));
 const timeline={...sample,scenes:[{...sample.scenes[0],duration:900},...Array.from({length:7},()=>({...sample.scenes[1],duration:900}))]};
