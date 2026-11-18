@@ -109,13 +109,27 @@ class AuditTests(unittest.TestCase):
     def test_ruleset_disabled_denied(self):
         self.deny(lambda f: f["ruleset"].update(enforcement="disabled"), "ruleset")
 
-    def test_ruleset_bypass_actor_forbidden_even_with_green_ci(self):
-        self.deny(lambda f: f["ruleset"].update(
-            bypass_actors=[{"actor_id": 1, "actor_type": "Team", "bypass_mode": "always"}]),
-            "bypass")
+    def test_ruleset_bypass_actor_requires_explicit_review_hold(self):
+        f = payload()
+        f["ruleset"]["bypass_actors"] = [
+            {"actor_id": 1, "actor_type": "Team", "bypass_mode": "always"}]
+        result = gate.assess(**f)
+        self.assertTrue(result["ci_snapshot_green"])
+        self.assertFalse(result["ruleset_has_no_bypass_actors"])
+        self.assertIn("RULESET_BYPASS_ACTORS_PRESENT", result["blockers"])
+        self.assertFalse(result["merge_authorized"])
 
-    def test_missing_bypass_metadata_denied(self):
-        self.deny(lambda f: f["ruleset"].pop("bypass_actors"), "bypass")
+    def test_redacted_bypass_metadata_is_reported_as_unknown_hold(self):
+        f = payload()
+        f["ruleset"].pop("bypass_actors")
+        result = gate.assess(**f)
+        self.assertEqual(result["ruleset_bypass_visibility"], "UNKNOWN")
+        self.assertFalse(result["ruleset_has_no_bypass_actors"])
+        self.assertIn("RULESET_BYPASS_METADATA_NOT_VISIBLE", result["blockers"])
+        self.assertFalse(result["merge_authorized"])
+
+    def test_malformed_bypass_metadata_denied(self):
+        self.deny(lambda f: f["ruleset"].update(bypass_actors="nobody"), "bypass")
 
     def test_ruleset_scope_changed_denied(self):
         self.deny(lambda f: f["ruleset"]["conditions"]["ref_name"].update(include=["refs/heads/other"]),
