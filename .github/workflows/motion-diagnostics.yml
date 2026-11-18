@@ -1,0 +1,74 @@
+name: NEXUS Motion Resource & Sampled Visual Diagnostics
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/motion-diagnostics.yml'
+      - 'scripts/nexus-motion-diagnostics.py'
+      - 'scripts/nexus-motion-resume.py'
+      - 'scripts/test-nexus-motion-diagnostics.py'
+      - 'scripts/test-nexus-motion-core.mjs'
+      - 'web/motion-core.js'
+      - 'web/motion-ui.js'
+      - 'web/motion.html'
+      - 'docs/NEXUS-MOTION-VISUAL-RESOURCE-DIAGNOSTICS.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/motion-diagnostics.yml'
+      - 'scripts/nexus-motion-diagnostics.py'
+      - 'scripts/nexus-motion-resume.py'
+      - 'scripts/test-nexus-motion-diagnostics.py'
+      - 'scripts/test-nexus-motion-core.mjs'
+      - 'web/motion-core.js'
+      - 'web/motion-ui.js'
+      - 'web/motion.html'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bounded-motion-diagnostics:
+    name: local-real-video-visual-warnings-and-4k-resource-plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exactly reviewed source without retained credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Ensure local FFmpeg and ffprobe exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq
+            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg
+          fi
+          ffmpeg -hide_banner -filters | grep -w blackdetect
+          ffmpeg -hide_banner -filters | grep -w freezedetect
+      - name: Test storage estimates, actual video warnings and safe atomic output
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/nexus-motion-diagnostics.py scripts/test-nexus-motion-diagnostics.py scripts/nexus-motion-resume.py
+          python3 scripts/test-nexus-motion-diagnostics.py
+      - name: Verify Android storyboard estimates are deterministic and code is valid
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check web/motion-core.js
+          node --check web/motion-ui.js
+          node scripts/test-nexus-motion-core.mjs
+      - name: Confirm this CI cannot publish or use deployment secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_RELEASE_TOKEN:-}"
+          echo 'MOTION DIAGNOSTICS: NON-AUTHORIZING LOCAL TESTS ONLY'

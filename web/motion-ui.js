@@ -7,6 +7,23 @@ let running=false,tick=0,startClock=0,position=0,recording=false,cancelRecord=fa
 const canvas=$('motion-canvas'),ctx=canvas.getContext('2d',{alpha:false});
 const status=(msg,error=false)=>{const p=$('motion-status');p.textContent=msg;p.style.color=error?'#ffc5b4':'#b6e9de'};
 const secs=t=>{const n=Math.floor(Math.max(0,t));return String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0')};
+let budgetKey='';
+function updateBudget(){
+ const key=[story.width,story.height,story.fps,story.soundtrack?'audio':'mute',
+            ...story.scenes.map(s=>s.duration)].join(':');
+ if(key===budgetKey)return;
+ budgetKey=key;
+ const e=M.resourceEstimate(story),gib=x=>(x/1073741824).toFixed(2)+' GiB';
+ const output=$('motion-budget');
+ if(output)output.textContent=
+   story.width+'×'+story.height+' · '+story.fps+' fps · '+
+   e.expectedFrames.toLocaleString()+' frames · assumed H.264 '+e.assumedMbps+
+   ' Mb/s. Estimated compressed video '+gib(e.estimatedVideoBytes)+
+   '; suggested peak temporary disk '+gib(e.estimatedPeakBytes)+
+   '. Suggested phone batches: '+e.suggestedBatchScenes+
+   ' scene(s). This is NOT measured available space or an output-size guarantee.';
+}
+
 function valid(){return M.validate(story)}
 function drawable(){
  const factor=Math.min(960/story.width,540/story.height,1);
@@ -17,6 +34,7 @@ function draw(t=position){
  try{
   let length=valid();
   position=Math.max(0,Math.min(t,length-.001));
+  updateBudget();
   M.frame(ctx,story,position,{images});
   $('motion-seek').value=Math.round(position/length*1000);
   $('motion-time').textContent=secs(position)+' / '+secs(length)+' · '+story.scenes.length+' scenes';
@@ -104,7 +122,7 @@ $('motion-sound').addEventListener('change',e=>{
     ||!/^[A-Za-z0-9 _().+-]{1,90}\.(mp3|wav|m4a|flac|ogg|aac)$/i.test(file.name))
   return status('Audio rejected (max 128 MiB; simple filename and supported format).',true);
  if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=URL.createObjectURL(file);
- audioFile=file;story.soundtrack='assets/'+file.name;status('Original audio selected; no voice transformation or remote upload.');
+ audioFile=file;story.soundtrack='assets/'+file.name;updateBudget();status('Original audio selected; no voice transformation or remote upload.');
 });
 function download(blob,name){
  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);

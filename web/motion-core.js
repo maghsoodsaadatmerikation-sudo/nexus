@@ -50,6 +50,30 @@ globalThis.NexusMotion = (() => {
       throw Error('Invalid local soundtrack');
     return duration;
   }
+  function resourceEstimate(story){
+    // Browser has no reliable authority to know actual available filesystem
+    // capacity. This matches the *assumptions* of the Python CLI planner,
+    // not a measured output size or a guarantee.
+    const duration=validate(story);
+    const {width,height,fps}=story;
+    const rate=Math.ceil(12000000*width*height*fps/(1920*1080*30));
+    const video=Math.ceil(rate*duration/8);
+    const audio=story.soundtrack?32000*duration:0;
+    const reserve=512*1048576+Math.min(2*1073741824,Math.floor(video/4));
+    const peak=(story.soundtrack?3:2)*video+audio+reserve;
+    return Object.freeze({
+      durationSeconds:duration,
+      expectedFrames:duration*fps,
+      estimatedVideoBytes:video,
+      estimatedPeakBytes:peak,
+      rawRgbaFrameBytes:width*height*4,
+      assumedMbps:Math.round(rate/10000)/100,
+      suggestedBatchScenes:width*height>=3840*2160?1:width*height>=1920*1080?3:5,
+      knownAvailableDiskBytes:null,
+      hardUpperBound:false,
+      androidThermalBenchmarked:false
+    });
+  }
   function locate(story,time){
     const total=validate(story);const t=Math.min(Math.max(0,Number(time)||0),Math.max(0,total-1e-6));
     let offset=0;
@@ -125,5 +149,5 @@ globalThis.NexusMotion = (() => {
     ctx.fillRect(W*.12,H*.83,W*.76*(at.elapsed/at.total),Math.max(2,W*.002));
     ctx.restore();return at;
   }
-  return Object.freeze({SCHEMA,PRESETS,FPS,MOTIONS,DEFAULT,validate,locate,frame});
+  return Object.freeze({SCHEMA,PRESETS,FPS,MOTIONS,DEFAULT,validate,resourceEstimate,locate,frame});
 })();
