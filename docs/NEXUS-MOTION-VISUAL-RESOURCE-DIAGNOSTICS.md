@@ -24,6 +24,14 @@ throughput and remaining battery cannot be inferred from this report.
 python3 scripts/nexus-motion-diagnostics.py plan project.zip --output-dir .
 ```
 
+The same planning formula is also exposed **inside the mobile Motion
+storyboard editor** as a live advisory panel. It displays expected frames,
+assumed bitrate, estimated staging storage, and suggested batch size as the
+resolution, FPS, duration or soundtrack changes. Browsers cannot reliably
+read the actual device's free disk space in this implementation, so the UI
+explicitly shows **no measured free-space claim**. Use the local CLI above
+to compare the estimate against actual filesystem free bytes.
+
 The JSON includes `free_space_below_recommendation`, the available bytes,
 `estimated_peak_local_bytes`, an absolute-minimum 128 MiB warning,
 `render_speed_guaranteed: false` and a **recommended manual batch size**.
