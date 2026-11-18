@@ -33,6 +33,11 @@ canvas{width:100%;height:auto;max-height:70vh;object-fit:contain;background:#050
 <label>Soundtrack / موسیقی<input id="motion-sound" type="file" accept="audio/*"></label>
 </div>
 <p class="muted small">Images remain in this browser tab. Original audio can be included in supported browser recordings. For MP4/4K/high-volume export, download the project and render with the independent FFmpeg command line. Place imported photos/audio in an <code>assets/</code> folder beside the JSON file.</p>
+<div role="region" aria-label="Local render resource estimate" style="background:#101b2f;border:1px solid #44617a;border-radius:10px;padding:12px;margin:10px 0">
+<strong>Render capacity planning / برآورد حجم ویدیو</strong>
+<p id="motion-budget" class="muted small" aria-live="polite">Estimating storyboard storage…</p>
+<p class="small muted">Estimate only: no actual disk-space permission or thermal measurements are available to this browser. The FFmpeg output may be much smaller or larger. Use the local resource preflight before long 4K rendering.</p>
+</div>
 <div id="motion-scenes" aria-label="Scenes" aria-live="polite"></div>
 <div class="row"><button id="motion-add" class="secondary">+ Add scene / افزودن</button>
 <button id="motion-remove" class="secondary">Remove last / حذف آخر</button>
