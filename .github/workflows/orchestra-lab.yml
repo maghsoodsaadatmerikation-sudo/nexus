@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/orchestra-lab.yml'
       - 'web/studio-orchestra.js'
+      - 'web/studio-vocal-mix.js'
       - 'web/studio-orchestra-ui.js'
       - 'web/studio-shell.html'
       - 'web/studio-focus-ui.js'
@@ -13,6 +14,7 @@ on:
       - 'public/studio/service-worker.js'
       - 'scripts/build-studio.py'
       - 'scripts/test-studio-orchestra.mjs'
+      - 'scripts/test-studio-vocal-mix.mjs'
       - 'scripts/test-studio-orchestra-browser.py'
       - 'docs/NEXUS-ORCHESTRA-VOCAL-LAB.md'
   push:
@@ -20,6 +22,7 @@ on:
     paths:
       - '.github/workflows/orchestra-lab.yml'
       - 'web/studio-orchestra.js'
+      - 'web/studio-vocal-mix.js'
       - 'web/studio-orchestra-ui.js'
       - 'web/studio-shell.html'
       - 'web/studio-focus-ui.js'
@@ -28,6 +31,7 @@ on:
       - 'public/studio/service-worker.js'
       - 'scripts/build-studio.py'
       - 'scripts/test-studio-orchestra.mjs'
+      - 'scripts/test-studio-vocal-mix.mjs'
       - 'scripts/test-studio-orchestra-browser.py'
       - 'docs/NEXUS-ORCHESTRA-VOCAL-LAB.md'
   workflow_dispatch:
@@ -52,6 +56,8 @@ jobs:
           node --check web/studio-orchestra.js
           node --check web/studio-orchestra-ui.js
           node scripts/test-studio-orchestra.mjs
+          node --check web/studio-vocal-mix.js
+          node scripts/test-studio-vocal-mix.mjs
       - name: Exact deterministic Studio and integrity-pinned offline package
         shell: bash
         run: |
