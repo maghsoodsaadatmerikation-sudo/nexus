@@ -98,7 +98,8 @@ const musical=O.compose(O.parsePrompt('operatic warm soprano choir harp flute in
 const withLead=await O.render(musical,{sampleRate:22050,excludeSyntheticLead:false});
 const withoutLead=await O.render(musical,{sampleRate:22050,excludeSyntheticLead:true});
 ok(()=>assert.notDeepEqual(withLead,withoutLead));
-ok(()=>assert.deepEqual(await O.render(musical,{sampleRate:22050,excludeSyntheticLead:true}),withoutLead));
+const repeatedWithoutLead=await O.render(musical,{sampleRate:22050,excludeSyntheticLead:true});
+ok(()=>assert.deepEqual(repeatedWithoutLead,withoutLead));
 ok(()=>assert.equal(V.parse(dry,withoutLead).backing.sampleRate,22050));
 await assert.rejects(O.render(musical,{excludeSyntheticLead:'yes'}),e=>e.message==='invalid-lead-voice-flag');checks++;
 const sources=['web/studio-vocal-mix.js','web/studio-orchestra-ui.js'];
