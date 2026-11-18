@@ -74,6 +74,43 @@ globalThis.NexusMotion = (() => {
       androidThermalBenchmarked:false
     });
   }
+  function sampleTimes(story){
+    validate(story);
+    // One mid-scene timestamp per selected scene: avoids deliberately
+    // black fade edges and limits seek/decode on mobile devices.
+    const n=story.scenes.length;
+    const indexes=[0,Math.floor((n-1)/2),n-1].filter((x,i,a)=>a.indexOf(x)===i);
+    let offset=0;
+    const starts=story.scenes.map(s=>{const v=offset;offset+=s.duration;return v;});
+    return indexes.map(i=>Math.min(offset-.001,starts[i]+story.scenes[i].duration/2));
+  }
+  function pixelDifference(a,b){
+    if(!(a instanceof Uint8ClampedArray||a instanceof Uint8Array)||
+       !(b instanceof Uint8ClampedArray||b instanceof Uint8Array)||
+       a.length!==b.length||a.length<4||a.length%4!==0||
+       a.length>640*480*4)throw Error('Invalid bounded RGBA frame pair');
+    let absolute=0,squared=0,high=0;
+    const total=a.length/4;
+    for(let i=0;i<a.length;i+=4){
+      let pixel=0;
+      for(let channel=0;channel<3;channel++){
+        const d=Math.abs(a[i+channel]-b[i+channel]);
+        absolute+=d;squared+=d*d;pixel+=d;
+      }
+      if(pixel/(3*255)>=.25)high++;
+    }
+    const mae=absolute/(total*3*255);
+    return Object.freeze({
+      normalizedRgbMae:Math.round(mae*1000000)/1000000,
+      normalizedRgbRmse:Math.round(Math.sqrt(squared/(total*3))/255*1000000)/1000000,
+      pixelsCompared:total,
+      highDifferencePixelFraction:Math.round(high/total*1000000)/1000000,
+      reviewSuggested:mae>=.08,
+      pixelParityProven:false,
+      artisticQualityAssessed:false,
+      onlyOneFrameCompared:true
+    });
+  }
   function locate(story,time){
     const total=validate(story);const t=Math.min(Math.max(0,Number(time)||0),Math.max(0,total-1e-6));
     let offset=0;
@@ -149,5 +186,5 @@ globalThis.NexusMotion = (() => {
     ctx.fillRect(W*.12,H*.83,W*.76*(at.elapsed/at.total),Math.max(2,W*.002));
     ctx.restore();return at;
   }
-  return Object.freeze({SCHEMA,PRESETS,FPS,MOTIONS,DEFAULT,validate,resourceEstimate,locate,frame});
+  return Object.freeze({SCHEMA,PRESETS,FPS,MOTIONS,DEFAULT,validate,resourceEstimate,sampleTimes,pixelDifference,locate,frame});
 })();
