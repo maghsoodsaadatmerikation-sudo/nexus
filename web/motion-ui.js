@@ -237,5 +237,113 @@ $('motion-record').onclick=async()=>{
   $('motion-record').disabled=false;$('motion-cancel').disabled=true;draw(position);
  }
 };
+// A real, local file is compared to the exact Canvas preview at the same
+// storyboard time. Nothing is uploaded and the original MP4 is never altered.
+let comparisonUrl=null,comparisonBusy=false;
+const realVideo=$('motion-final-video'),result=$('motion-compare-result');
+const currentButton=$('motion-compare-now'),samplesButton=$('motion-compare-three');
+const resetCompare=()=>{
+ realVideo.pause();realVideo.removeAttribute('src');realVideo.load();
+ if(comparisonUrl){URL.revokeObjectURL(comparisonUrl);comparisonUrl=null;}
+ currentButton.disabled=true;samplesButton.disabled=true;
+ result.textContent='No local export loaded.';
+};
+$('motion-compare-clear').onclick=()=>{if(!comparisonBusy)resetCompare()};
+$('motion-compare-file').addEventListener('change',async event=>{
+ const file=event.target.files[0];event.target.value='';
+ if(!file||comparisonBusy)return;
+ resetCompare();
+ if(file.size<501||file.size>8*1024*1024*1024||!/\.mp4$/i.test(file.name)||
+    (file.type&&file.type!=='video/mp4'&&file.type!=='application/octet-stream')){
+   result.textContent='Choose a local MP4 from 501 bytes to 8 GiB (streamed by browser, not copied).';
+   return;
+ }
+ comparisonUrl=URL.createObjectURL(file);
+ realVideo.src=comparisonUrl;
+ try{
+  if(realVideo.readyState<1)await new Promise((resolve,reject)=>{
+   let timer;
+   const clean=()=>{clearTimeout(timer);realVideo.removeEventListener('loadedmetadata',yes);realVideo.removeEventListener('error',no)};
+   const yes=()=>{clean();resolve()};
+   const no=()=>{clean();reject(Error('Browser cannot read local video metadata'))};
+   timer=setTimeout(()=>{clean();reject(Error('MP4 metadata load timed out'))},12000);
+   realVideo.addEventListener('loadedmetadata',yes);realVideo.addEventListener('error',no);
+  });
+  if(!Number.isFinite(realVideo.duration)||realVideo.duration<=0||
+     !realVideo.videoWidth||!realVideo.videoHeight)throw Error('Missing video dimensions/duration');
+  currentButton.disabled=false;samplesButton.disabled=false;realVideo.pause();
+  result.textContent='Local video loaded: '+realVideo.videoWidth+'×'+realVideo.videoHeight+
+    ', '+realVideo.duration.toFixed(2)+' s. Compare at a chosen timeline point.';
+ }catch(err){resetCompare();result.textContent='Local video rejected: '+err.message;}
+});
+function videoContract(){
+ if(!comparisonUrl||realVideo.readyState<1)throw Error('Load a local final MP4 first');
+ const total=valid();
+ if(realVideo.videoWidth!==story.width||realVideo.videoHeight!==story.height)
+  throw Error('MP4 resolution does not match the selected storyboard.');
+ if(!Number.isFinite(realVideo.duration)||
+    Math.abs(realVideo.duration-total)>Math.max(.3,2/story.fps))
+  throw Error('MP4 duration does not match the selected storyboard.');
+ return total;
+}
+function seekReal(time){
+ return new Promise((resolve,reject)=>{
+  const t=Math.max(0,Math.min(time,realVideo.duration-1/story.fps*.25));
+  if(Math.abs(realVideo.currentTime-t)<.0001&&realVideo.readyState>=2){resolve();return;}
+  let timer;
+  const clean=()=>{clearTimeout(timer);realVideo.removeEventListener('seeked',yes);
+    realVideo.removeEventListener('error',no);};
+  const yes=()=>{clean();resolve()};
+  const no=()=>{clean();reject(Error('Video decoding/seek failed'))};
+  timer=setTimeout(()=>{clean();reject(Error('Local video frame seek timed out'))},12000);
+  realVideo.addEventListener('seeked',yes);realVideo.addEventListener('error',no);
+  realVideo.currentTime=t;
+ });
+}
+async function compareOne(time,signature){
+ if(JSON.stringify(story)!==signature)throw Error('Storyboard changed during comparison');
+ await seekReal(time);
+ if(JSON.stringify(story)!==signature)throw Error('Storyboard changed during comparison');
+ draw(time);
+ const width=320,height=Math.max(2,Math.min(600,Math.round(width*story.height/story.width)));
+ const left=document.createElement('canvas'),right=document.createElement('canvas');
+ left.width=right.width=width;left.height=right.height=height;
+ const lctx=left.getContext('2d',{willReadFrequently:true});
+ const rctx=right.getContext('2d',{willReadFrequently:true});
+ if(!lctx||!rctx)throw Error('Pixel comparison unsupported in browser');
+ lctx.drawImage(canvas,0,0,width,height);
+ rctx.drawImage(realVideo,0,0,width,height);
+ return {second:Math.round(time*1000)/1000,
+         ...M.pixelDifference(lctx.getImageData(0,0,width,height).data,
+                             rctx.getImageData(0,0,width,height).data)};
+}
+async function compareSelected(three){
+ if(comparisonBusy)return;
+ let total;try{total=videoContract()}catch(e){result.textContent=e.message;return;}
+ comparisonBusy=true;halt();realVideo.pause();
+ currentButton.disabled=true;samplesButton.disabled=true;
+ const oldPosition=position,signature=JSON.stringify(story);
+ try{
+  const times=three?M.sampleTimes(story):[Math.min(position,total-.001)];
+  const points=[];
+  for(const t of times){
+   result.textContent='Comparing local video frame at '+t.toFixed(2)+' seconds…';
+   points.push(await compareOne(t,signature));
+  }
+  const avg=points.reduce((sum,p)=>sum+p.normalizedRgbMae,0)/points.length;
+  const worst=Math.max(...points.map(p=>p.normalizedRgbMae));
+  const warnings=points.filter(p=>p.reviewSuggested).length;
+  result.textContent='Measured '+points.length+' frame pair(s). Mean RGB pixel difference '+
+   (avg*100).toFixed(2)+'%, worst '+(worst*100).toFixed(2)+'%. '+
+   warnings+' flagged for human review. Frames at '+
+   points.map(p=>p.second.toFixed(2)+' s: '+(p.normalizedRgbMae*100).toFixed(1)+'%').join(' | ')+
+   '. This is measured image discrepancy, NOT a parity guarantee or a rendering error.';
+ }catch(e){result.textContent='Comparison incomplete: '+e.message;}
+ finally{comparisonBusy=false;currentButton.disabled=!comparisonUrl;
+   samplesButton.disabled=!comparisonUrl;draw(oldPosition);}
+}
+currentButton.onclick=()=>compareSelected(false);
+samplesButton.onclick=()=>compareSelected(true);
+
 setStory(M.DEFAULT());
 })();

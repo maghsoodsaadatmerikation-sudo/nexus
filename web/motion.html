@@ -48,6 +48,21 @@ canvas{width:100%;height:auto;max-height:70vh;object-fit:contain;background:#050
 <div class="row"><button id="motion-play">Play / پخش</button><button id="motion-pause" class="secondary">Pause / توقف</button>
 <label>Seek / زمان<input id="motion-seek" type="range" min="0" max="1000" value="0"></label></div>
 <p id="motion-time" class="muted">00:00 / 00:00</p></section>
+<section id="motion-compare-panel" aria-labelledby="motion-compare-title">
+<h2 id="motion-compare-title">Compare real MP4 / مقایسه با خروجی نهایی</h2>
+<p class="muted">Open your already rendered local MP4, compare the exact decoded video image against the Canvas preview at matching timestamps. No upload. / فایل MP4 خروجی خود را انتخاب و اختلاف را بررسی کنید.</p>
+<label>Finished MP4 file / فایل خروجی ویدیو
+<input id="motion-compare-file" type="file" accept=".mp4,video/mp4"></label>
+<video id="motion-final-video" controls playsinline preload="metadata"
+ aria-label="Actual decoded local MP4 export" style="width:100%;max-height:60vh;object-fit:contain;background:#050913;border-radius:10px"></video>
+<div class="row">
+<button id="motion-compare-now" class="secondary" disabled>Compare current frame / مقایسه فریم</button>
+<button id="motion-compare-three" class="secondary" disabled>Compare 3 scenes / سه نمونه</button>
+<button id="motion-compare-clear" class="secondary">Clear local video / حذف فایل</button>
+</div>
+<p id="motion-compare-result" aria-live="polite" role="status" class="muted">No local export loaded.</p>
+<p class="muted small">Metric: normalized RGB mean absolute error (0=identical at sampled resolution; 1=maximum difference). A warning at ≥0.08 means review the difference, not automatic failure. Browser color conversion, fonts, scaling, seek accuracy and intentional artistic styling can change scores. This tool does not prove pixel equality, source-video provenance, motion continuity, or 4K performance.</p>
+</section>
 <section><h2>Export / خروجی</h2>
 <p class="muted">Mobile browser recording is real time, memory bounded and limited to 15 seconds per segment at up to 1080p/30 fps. For longer videos, change the segment start and export another clip, or use FFmpeg for a continuous high-bitrate MP4.</p>
 <div class="row"><label>Segment start (seconds)<input id="motion-start" type="number" min="0" step="1" value="0"></label>
