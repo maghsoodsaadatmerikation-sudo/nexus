@@ -15,7 +15,8 @@ from pathlib import Path
 
 _BASE = Path(__file__).with_name("release-run-provenance.py")
 _spec = importlib.util.spec_from_file_location("nexus_release_run_provenance", _BASE)
-assert _spec is not None and _spec.loader is not None
+if _spec is None or _spec.loader is None:
+    raise RuntimeError("release provenance validator is unavailable")
 _core = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_core)
 
