@@ -30,6 +30,29 @@ permissions:
   contents: read
 
 jobs:
+  browser-motion-acceptance:
+    name: real-browser-motion-no-external-api
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact candidate without retained token
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate cinematic timeline and browser code
+        run: |
+          set -euo pipefail
+          node --check web/motion-core.js
+          node --check web/motion-ui.js
+          node scripts/test-nexus-motion-core.mjs
+      - name: Exercise real Chromium preview, ZIP and MediaRecorder export
+        run: |
+          set -euo pipefail
+          python3 scripts/test-nexus-motion-browser.py
+
   local-motion-acceptance:
     name: local-motion-original-video-no-provider-authority
     runs-on: ubuntu-24.04
@@ -55,19 +78,11 @@ jobs:
           ffmpeg -hide_banner -filters | grep -w drawtext
           ffmpeg -hide_banner -encoders | grep -w libx264
           python3 -m py_compile scripts/nexus-motion-render.py scripts/test-nexus-motion-render.py scripts/test-nexus-motion-browser.py
-          node --check web/motion-core.js
-          node --check web/motion-ui.js
-          node scripts/test-nexus-motion-core.mjs
       - name: Test 720p MP4 H264/AAC stream-by-scene and hostile media archive handling
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/test-nexus-motion-render.py
-      - name: Exercise actual Chromium animation, local ZIP and real MediaRecorder
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/test-nexus-motion-browser.py
       - name: Verify Rust HTTP gateway still compiles with three pinned Motion routes
         shell: bash
         run: |
