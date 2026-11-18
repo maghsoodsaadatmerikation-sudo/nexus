@@ -24,6 +24,9 @@ ROOT = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location("nexus_motion_base", ROOT / "nexus-motion-render.py")
 BASE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(BASE)
+QC_SPEC = importlib.util.spec_from_file_location("nexus_motion_quality", ROOT / "nexus-motion-quality.py")
+QUALITY = importlib.util.module_from_spec(QC_SPEC)
+QC_SPEC.loader.exec_module(QUALITY)
 SCHEMA = "nexus.motion.resume.v1"
 MIN_FREE = 128 * 1024 * 1024
 
@@ -92,7 +95,9 @@ def identity(story: dict, project: Path, *, font: Path, crf: int,
         raise BASE.MotionError("FFmpeg version could not be confirmed") from exc
     obj = {"schema": SCHEMA, "story": story, "media_sha256": inputs,
            "renderer_sha256": digest(ROOT / "nexus-motion-render.py"),
-           "queue_sha256": digest(Path(__file__)), "font_sha256": digest(font),
+           "queue_sha256": digest(Path(__file__)),
+           "quality_sha256": digest(ROOT / "nexus-motion-quality.py"),
+           "font_sha256": digest(font),
            "ffmpeg": version, "crf": crf, "preset": preset, "threads": threads}
     return hashlib.sha256(json.dumps(obj, ensure_ascii=False, sort_keys=True,
                                     separators=(",", ":")).encode("utf-8")).hexdigest()
@@ -114,7 +119,8 @@ def safe_workspace(output: Path, *, resume: bool) -> Path:
     for child in work.iterdir():
         require(not child.is_symlink() and child.is_file()
                 and (child.name in {"manifest.json", "manifest.pending", ".lock",
-                                    "joined.partial.mp4", "final.partial.mp4", "parts.ffconcat"}
+                                    "joined.partial.mp4", "final.partial.mp4", "parts.ffconcat",
+                                    "quality.json", "quality.pending"}
                      or (child.name.startswith("scene-") and
                          child.name[6:9].isdigit() and child.name[9:] in (".mp4", ".partial.mp4"))
                      or (child.name.startswith(("title-", "subtitle-")) and
@@ -238,6 +244,17 @@ def create_output(story: dict, project: Path, output: Path, work: Path) -> None:
                  max(180, total * 3))
     verify_video(final, w=w, h=h, fps=fps, seconds=total,
                  audio=bool(story.get("soundtrack")))
+    # Packet/timebase audit is a separate, stricter technical gate than
+    # the scene-level header check. The final MP4 is NOT published if this fails.
+    report = QUALITY.check(final, width=w, height=h, fps=fps, duration=total,
+                           require_audio=bool(story.get("soundtrack")))
+    checkpoint = work / "quality.pending"
+    require(not checkpoint.is_symlink(), "unsafe quality checkpoint")
+    with checkpoint.open("wb") as handle:
+        handle.write((json.dumps(report, sort_keys=True) + "\n").encode("utf-8"))
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(checkpoint, work / "quality.json")
     require(not output.is_symlink(), "final output became a symlink")
     os.replace(final, output)
 
@@ -311,6 +328,7 @@ def render(project: Path, output: Path, *, resume: bool = False,
             "total_scenes": len(story["scenes"]), "bytes": output.stat().st_size,
             "path": str(output), "workspace": str(work),
             "ai_video_model_used": False, "upload_performed": False,
+            "technical_mp4_verified": True, "quality_report": str(work / "quality.json"),
             "merge_authorized": False}
 
 
