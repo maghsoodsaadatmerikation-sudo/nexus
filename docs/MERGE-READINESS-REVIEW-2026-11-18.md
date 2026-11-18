@@ -6,6 +6,7 @@
 - All six distinct exact-head workflows in the last integrated PR run completed **successfully**.
 - The repository has an **active repository ruleset** (ID `20870033`, “Merikation”), targeting its default branch and enforcing required check `readonly-verification` with GitHub Actions integration ID `15368`.
 - The legacy branch-protection endpoint is not accessible to the GitHub App. Its limited branch metadata showed `required_status_checks.enforcement_level=off`—this does **not** override or negate the separate, active ruleset. Earlier statements treating this as no required check were incomplete.
+- The current ruleset API response reports `bypass_actors=[]`. The audit now **rejects any bypass actor or missing bypass metadata** rather than treating the mere existence of a required check as unconditional enforcement.
 - That active ruleset requires **zero approving reviews** and sets `strict_required_status_checks_policy=false`. Thus an independent review is not required by GitHub and a freshly updated base is not required by that rule.
 - No release-publishing workflow has been modified and historical attestation proof does not authorize current release.
 
