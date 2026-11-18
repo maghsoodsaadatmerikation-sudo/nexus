@@ -1,0 +1,92 @@
+name: NEXUS v1.8 Signed Evidence Preflight - Read Only
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: 'Exact current main commit SHA (40 lowercase hex)'
+        required: true
+        type: string
+      verification_run_id:
+        description: 'NEXUS Verification push run ID'
+        required: true
+        type: string
+      rebuild_run_id:
+        description: 'NEXUS v1.8 Independent Rebuild run ID'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  attestations: read
+
+jobs:
+  signed-evidence-preflight:
+    name: validate signed v1.8 source and subject without publication
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
+    steps:
+      - name: Checkout exact trusted default branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Check exact immutable inputs before network read
+        env:
+          CANDIDATE_SHA: ${{ inputs.source_sha }}
+          PARENT_ID: ${{ inputs.verification_run_id }}
+          REBUILD_ID: ${{ inputs.rebuild_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$PARENT_ID" =~ ^[1-9][0-9]{0,18}$ ]]
+          [[ "$REBUILD_ID" =~ ^[1-9][0-9]{0,18}$ ]]
+          test "$PARENT_ID" != "$REBUILD_ID"
+          test "$CANDIDATE_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Verify signature, signer, source and exact evidence bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          CANDIDATE_SHA: ${{ inputs.source_sha }}
+          PARENT_ID: ${{ inputs.verification_run_id }}
+          REBUILD_ID: ${{ inputs.rebuild_run_id }}
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          gh api "repos/${REPO}" > "$tmp/repository.json"
+          gh api "repos/${REPO}/branches/main" > "$tmp/main.json"
+          gh api "repos/${REPO}/actions/runs/${PARENT_ID}" > "$tmp/parent.json"
+          gh api "repos/${REPO}/actions/runs/${REBUILD_ID}" > "$tmp/rebuild.json"
+          mkdir -p "$tmp/evidence"
+          gh run download "$REBUILD_ID" --repo "$REPO" \
+            --name v1.8-independent-rebuild-evidence --dir "$tmp/evidence"
+          artifact="$tmp/evidence/v1.8-reproducibility-evidence.json"
+          test -s "$artifact"
+
+          gh attestation verify "$artifact" --repo "$REPO" \
+            --signer-workflow "$REPO/.github/workflows/v1.8-independent-rebuild.yml" \
+            --source-ref refs/heads/main --source-digest "$CANDIDATE_SHA" \
+            --deny-self-hosted-runners --format json > "$tmp/verified.json"
+
+          repository_id="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d["id"])' "$tmp/repository.json")"
+          python3 scripts/release-v18-attestation-subject.py \
+            --verified-json "$tmp/verified.json" --artifact "$artifact" --repo-id "$repository_id"
+          python3 scripts/release-chain-v18-audit.py \
+            --repo "$REPO" --sha "$CANDIDATE_SHA" --workflow-sha "$GITHUB_SHA" \
+            --parent-id "$PARENT_ID" --rebuild-id "$REBUILD_ID" \
+            --parent-json "$tmp/parent.json" --rebuild-json "$tmp/rebuild.json" \
+            --evidence-json "$artifact" --repo-metadata-json "$tmp/repository.json" \
+            --main-json "$tmp/main.json"
+          echo "READ-ONLY SIGNED EVIDENCE PREFLIGHT: PASS — no release, deployment or authorization"
