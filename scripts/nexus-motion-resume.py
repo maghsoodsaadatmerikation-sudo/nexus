@@ -103,8 +103,9 @@ def safe_workspace(output: Path, *, resume: bool) -> Path:
     require(not work.is_symlink(), "render workspace symlink denied")
     if work.exists():
         require(resume and work.is_dir(), "workspace exists; use --resume or choose a new output")
-        require(not (work.stat().st_mode & 0o022),
-                "render workspace is group/world writable")
+        require(work.stat().st_uid == os.getuid()
+                and not (stat.S_IMODE(work.stat().st_mode) & 0o077),
+                "render workspace must be privately owned with no group/world access")
     else:
         require(not resume, "no prior workspace exists to resume")
         work.mkdir(mode=0o700)
@@ -128,7 +129,10 @@ def exclusive(work: Path):
     fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
         info = os.fstat(fd)
-        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1, "unsafe lock file")
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+                and info.st_uid == os.getuid()
+                and not (stat.S_IMODE(info.st_mode) & 0o077),
+                "unsafe lock file")
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
