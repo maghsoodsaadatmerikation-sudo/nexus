@@ -30,6 +30,9 @@ QC_SPEC.loader.exec_module(QUALITY)
 DIAG_SPEC = importlib.util.spec_from_file_location("nexus_motion_diagnostics", ROOT / "nexus-motion-diagnostics.py")
 DIAG = importlib.util.module_from_spec(DIAG_SPEC)
 DIAG_SPEC.loader.exec_module(DIAG)
+SEAM_SPEC = importlib.util.spec_from_file_location("nexus_motion_seams", ROOT / "nexus-motion-seams.py")
+SEAM = importlib.util.module_from_spec(SEAM_SPEC)
+SEAM_SPEC.loader.exec_module(SEAM)
 SCHEMA = "nexus.motion.resume.v1"
 MIN_FREE = 128 * 1024 * 1024
 
@@ -101,6 +104,7 @@ def identity(story: dict, project: Path, *, font: Path, crf: int,
            "queue_sha256": digest(Path(__file__)),
            "quality_sha256": digest(ROOT / "nexus-motion-quality.py"),
            "diagnostics_sha256": digest(ROOT / "nexus-motion-diagnostics.py"),
+           "seam_audit_sha256": digest(ROOT / "nexus-motion-seams.py"),
            "font_sha256": digest(font),
            "ffmpeg": version, "crf": crf, "preset": preset, "threads": threads}
     return hashlib.sha256(json.dumps(obj, ensure_ascii=False, sort_keys=True,
@@ -125,7 +129,7 @@ def safe_workspace(output: Path, *, resume: bool) -> Path:
                 and (child.name in {"manifest.json", "manifest.pending", ".lock",
                                     "joined.partial.mp4", "final.partial.mp4", "parts.ffconcat",
                                     "quality.json", "quality.pending",
-                                    "visual.json", "visual.pending"}
+                                    "visual.json", "visual.pending", "seams.json", "seams.pending"}
                      or (child.name.startswith("scene-") and
                          child.name[6:9].isdigit() and child.name[9:] in (".mp4", ".partial.mp4"))
                      or (child.name.startswith(("title-", "subtitle-")) and
@@ -220,7 +224,8 @@ def encode_scene(story: dict, project: Path, work: Path, index: int,
     return target
 
 
-def create_output(story: dict, project: Path, output: Path, work: Path, *, visual_qc: bool = False) -> dict:
+def create_output(story: dict, project: Path, output: Path, work: Path, *,
+                  visual_qc: bool = False, seam_qc: bool = False) -> dict:
     count = len(story["scenes"])
     total = sum(scene["duration"] for scene in story["scenes"])
     w, h, fps = story["width"], story["height"], story["fps"]
@@ -272,9 +277,22 @@ def create_output(story: dict, project: Path, output: Path, work: Path, *, visua
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(visual_checkpoint, work / "visual.json")
+    seams = None
+    if seam_qc:
+        seams = SEAM.scan(final, story)
+        checkpoint = work / "seams.pending"
+        require(not checkpoint.is_symlink(), "unsafe seam checkpoint")
+        with checkpoint.open("wb") as handle:
+            handle.write((json.dumps(seams, sort_keys=True) + "\n").encode("utf-8"))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(checkpoint, work / "seams.json")
     require(not output.is_symlink(), "final output became a symlink")
     os.replace(final, output)
-    return {"visual_qc_performed": visual is not None,
+    return {"seam_qc_performed": seams is not None,
+            "seam_review_suggested": bool(seams and seams["review_suggested"]),
+            "seam_report": str(work / "seams.json") if seams is not None else None,
+            "visual_qc_performed": visual is not None,
             "visual_review_suggested": bool(visual and visual["review_suggested"]),
             "visual_report": str(work / "visual.json") if visual is not None else None}
 
@@ -282,13 +300,14 @@ def create_output(story: dict, project: Path, output: Path, work: Path, *, visua
 def render(project: Path, output: Path, *, resume: bool = False,
            force: bool = False, font: Path | None = None, crf: int = 18,
            preset: str = "medium", threads: int = 2, max_new_scenes: int | None = None,
-           visual_qc: bool = False) -> dict:
+           visual_qc: bool = False, seam_qc: bool = False) -> dict:
     require(shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None,
             "FFmpeg and ffprobe must be installed")
     require(type(crf) is int and 10 <= crf <= 30, "CRF out of range")
     require(preset in {"ultrafast", "fast", "medium", "slow"}, "preset unsupported")
     require(type(threads) is int and 1 <= threads <= 16, "thread count unsupported")
-    require(type(visual_qc) is bool, "visual scan flag must be boolean")
+    require(type(visual_qc) is bool and type(seam_qc) is bool,
+            "scene diagnostic flags must be boolean")
     require(max_new_scenes is None or (type(max_new_scenes) is int and 1 <= max_new_scenes <= 120),
             "scene batch limit unsupported")
     output = output.absolute()
@@ -342,7 +361,8 @@ def render(project: Path, output: Path, *, resume: bool = False,
             save_manifest(work, state)
             rendered += 1
         ensure_capacity(output)
-        visual_report = create_output(story, project, output, work, visual_qc=visual_qc)
+        visual_report = create_output(story, project, output, work,
+                                      visual_qc=visual_qc, seam_qc=seam_qc)
     return {"status": "RENDERED_RESUMABLE_LOCAL", "width": story["width"],
             "height": story["height"], "fps": story["fps"],
             "duration_seconds": sum(x["duration"] for x in story["scenes"]),
@@ -369,13 +389,15 @@ def main() -> int:
                    help="Thermal/battery-friendly bounded manual batch, then use --resume")
     p.add_argument("--visual-qc", action="store_true",
                    help="Scan three short windows for dark/frozen imagery (advisory only)")
+    p.add_argument("--seam-qc", action="store_true",
+                   help="Sample up to 24 scene boundary frame pairs (advisory only)")
     args = p.parse_args()
     try:
         with BASE.project_source(args.project) as project:
             report = render(project, args.output, resume=args.resume, force=args.force,
                             font=args.font, crf=args.crf, preset=args.preset,
                             threads=args.threads, max_new_scenes=args.max_new_scenes,
-                            visual_qc=args.visual_qc)
+                            visual_qc=args.visual_qc, seam_qc=args.seam_qc)
         print(json.dumps(report, sort_keys=True, ensure_ascii=False))
         return 0
     except (BASE.MotionError, OSError, FileNotFoundError, ValueError) as error:
