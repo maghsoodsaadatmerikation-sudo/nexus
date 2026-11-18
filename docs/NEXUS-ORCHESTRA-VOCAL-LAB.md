@@ -35,9 +35,50 @@ The MusicXML notation exporter uses fixed 12-tone major/minor Western pitch sets
 
 Only after you explicitly select a user-owned **PCM 16-bit WAV** (mono or stereo, 22,050 or 44,100 Hz, <=20 MiB, canonical 44-byte WAV header) does the browser read the file locally. It displays the SHA-256 fingerprint and provides byte-for-byte **Download original, untouched**. The source PCM is not pitch shifted, formant altered, time stretched, cloned, submitted for training, or sent to any service.
 
-The optional simultaneous backing audition starts two separate audio players at normal playback speed. It is *not sample-accurately synchronized*, does not export a combined vocal mix, and does not change the original recorded bytes. Any future real vocal mixing must preserve an independent dry track, ask for separate consent, and report the consequences of output gain or filtering.
+The older optional **Play vocal and backing together** audition still starts
+two separate audio players at normal speed and is not sample-accurate. A new
+independent **Align & Mix locally** button now produces a sample-aligned
+stereo WAV copy. Its source is the fully synthetic orchestral backing WAV
+plus a *user-authorized* user-owned dry PCM16 WAV, without a provider call.
+The dry original remains byte-for-byte intact in browser memory and can be
+downloaded independently.
+
+Use a signed, integer offset from -3000 to +3000 milliseconds: positive
+moves the original vocal later; negative moves **the backing later**, rather
+than trimming the beginning of the vocal. Relative alignment is rounded to
+the nearest PCM frame. Zero automatic onset detection is claimed: the artist
+chooses the offset based on listening. Both sources must have an identical
+22.05/44.1 kHz sample rate. If your original is 44.1 kHz, re-render backing
+*after* importing the vocal; its rate will then match automatically. There
+is **no resampling, formant or pitch transformation**.
+
+Three conservative mixing settings adjust voice and backing levels only in
+the *new mixed copy*. A two-pass PCM mixer scans exact linear sums before
+export, then applies a common protective attenuation if the peak exceeds
+-0.45 dBFS (95% amplitude). This prevents hard digital clipping while
+explicitly reporting the applied level change. The mixed output waveform
+**necessarily differs** from the original source, but the dry track is never
+mutated. An opt-in **Instrumental backing, omit synthetic lead** checkbox
+defaults to enabled; electronic choir remains separately controllable from
+the original prompt. No synthetic lead replacement or voice cloning happens.
+
+Output PCM must be exactly canonical 44-byte RIFF WAV, mono/stereo PCM16,
+at a supported matching rate. The dry file is limited to 20 MiB; the output
+to 64 MiB to reduce phone-memory risk. This is in-memory, synchronous sample
+alignment implemented with cooperative asynchronous chunks, not a streaming
+DAW, automatic vocal tuning, stem separator or mastering tool. On
+cancellation or changes to source/settings, existing mixed playback URLs are
+revoked and the stale mix is invalidated, while the original dry file remains
+available. It is never silently persisted in the encrypted workspace. Any future real vocal mixing must preserve an independent dry track, ask for separate consent, and report the consequences of output gain or filtering.
 
 No voice data is saved to the project automatically, transmitted, stored in the public offline cache, or recorded through a microphone. Removing the voice from the tab revokes its local playback and re-download handles.
+
+## Sample-aligned private WAV mix — Phase 3A
+
+Source and tests: [vocal mixer](../web/studio-vocal-mix.js),
+[adversarial PCM tests](../scripts/test-studio-vocal-mix.mjs). Real Chromium
+acceptance verifies the end-to-end dry import → sample alignment → local
+mix WAV export → original dry SHA-256 and byte-fidelity path.
 
 ## Independent acceptance and self-critique
 
@@ -45,6 +86,6 @@ Automated checks verify the fail-closed grammar, deterministic score generation,
 
 Those checks establish the **software workflow**. They are not independent human evidence of musical beauty, emotional hypnotic effect, accurate species calls, stage-quality opera, professional rap/popsong vocals or orchestral instrument realism.
 
-Next phases remain: authorized high-quality multisampling/physical modeling, phonetic sung-word generation, lyric-to-score alignment, professional note editing, off-main-thread long-form rendering, sample-accurate multitrack vocal alignment, non-destructive voice mixing, original user-vocal recording (optional consent), rights documentation, accessibility and real-person listening tests.
+Next phases remain: authorized high-quality multisampling/physical modeling, phonetic sung-word generation, lyric-to-score alignment, professional note editing, off-main-thread long-form rendering, automated alignment/onset measurement (rather than artist-entered offsets), multi-stem audio production, original user-vocal recording (optional consent), rights documentation, accessibility and real-person listening tests.
 
 NEXUS's constitutional rule stays **A_out <= A_in**: this program never grants authority to publish creative work, impersonate real singers, train on private voice, authorize accounts or incur external music API charges.
