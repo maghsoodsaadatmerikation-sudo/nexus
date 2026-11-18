@@ -461,7 +461,10 @@ async fn motion_workspace() -> impl IntoResponse {
 async fn motion_core() -> impl IntoResponse {
     (
         [
-            (header::CONTENT_TYPE, "application/javascript; charset=utf-8"),
+            (
+                header::CONTENT_TYPE,
+                "application/javascript; charset=utf-8",
+            ),
             (header::CACHE_CONTROL, "no-store"),
         ],
         include_str!("../../web/motion-core.js"),
@@ -471,7 +474,10 @@ async fn motion_core() -> impl IntoResponse {
 async fn motion_ui() -> impl IntoResponse {
     (
         [
-            (header::CONTENT_TYPE, "application/javascript; charset=utf-8"),
+            (
+                header::CONTENT_TYPE,
+                "application/javascript; charset=utf-8",
+            ),
             (header::CACHE_CONTROL, "no-store"),
         ],
         include_str!("../../web/motion-ui.js"),
