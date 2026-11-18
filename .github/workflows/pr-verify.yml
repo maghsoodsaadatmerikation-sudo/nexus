@@ -31,6 +31,9 @@ jobs:
           python3 scripts/test-workflow-authority.py
           python3 scripts/verify-workflow-authority.py
 
+      - name: Reject stale CI and ruleset-bypass claims in merge audit fixtures
+        run: python3 scripts/test-merge-readiness-audit.py
+
       - name: Test release-run origin validation without publication authority
         run: python3 scripts/test-release-run-provenance.py
 
