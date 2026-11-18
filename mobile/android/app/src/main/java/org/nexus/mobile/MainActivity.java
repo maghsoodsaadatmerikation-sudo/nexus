@@ -192,7 +192,7 @@ public final class MainActivity extends Activity {
                 // Never log project content, user inputs, URLs with queries or
                 // secret values. Emulator-only witness checks static public
                 // UI readiness rather than trusting a successful Activity boot.
-                if (BuildConfig.DEBUG) {
+                if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
                     String page = Uri.parse(url).getEncodedPath();
                     String witness = null;
                     if ("/apps.html".equals(page)) {
