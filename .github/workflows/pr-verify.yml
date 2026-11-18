@@ -34,6 +34,9 @@ jobs:
       - name: Test v1.8 two-hop release provenance with hostile synthetic evidence
         run: python3 scripts/test-release-chain-v18-audit.py
 
+      - name: Test verified attestation subject digest with hostile fixtures
+        run: python3 scripts/test-release-v18-attestation-subject.py
+
       - name: Test fail-closed runtime diagnostics
         run: |
           bash -n scripts/observe-runtime-drift.sh
