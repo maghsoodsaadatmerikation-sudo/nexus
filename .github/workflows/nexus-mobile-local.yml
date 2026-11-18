@@ -9,6 +9,7 @@ on:
       - 'scripts/build-studio-phone-local.py'
       - 'scripts/build-studio-static.py'
       - 'web/motion*'
+      - 'scripts/test-nexus-mobile-offline-browser.mjs'
       - 'public/studio/**'
       - 'docs/NEXUS-MOBILE-LOCAL-INTEGRATED.md'
   push:
@@ -18,11 +19,16 @@ on:
       - 'scripts/build-nexus-mobile-local.py'
       - 'scripts/test-nexus-mobile-local.py'
       - 'web/motion*'
+      - 'scripts/test-nexus-mobile-offline-browser.mjs'
       - 'public/studio/**'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Build from immutable reviewed head commit, not GitHub's synthetic PR merge.
+env:
+  NEXUS_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   verified-mobile-zip:
@@ -35,7 +41,7 @@ jobs:
       - name: Checkout exact candidate without persisting GitHub credential
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ env.NEXUS_CANDIDATE_SHA }}
           persist-credentials: false
 
       - name: Verify reviewable public sources and Python/JS syntax
@@ -49,6 +55,9 @@ jobs:
           python3 -m py_compile scripts/build-studio-phone-local.py scripts/build-nexus-mobile-local.py scripts/test-nexus-mobile-local.py
           node --check web/motion-core.js
           node --check web/motion-ui.js
+          node --check web/motion-offline-ui.js
+          node --check web/motion-offline-worker-template.js
+          node --check scripts/test-nexus-mobile-offline-browser.mjs
           node scripts/test-nexus-motion-core.mjs
 
       - name: Prove ZIP integrity, local Studio + Motion HTTP, denial of mutations
@@ -63,8 +72,8 @@ jobs:
         run: |
           set -euo pipefail
           export OUTPUT="$RUNNER_TEMP/nexus-mobile-local.zip"
-          python3 scripts/build-nexus-mobile-local.py --output "$OUTPUT" --source-commit "$GITHUB_SHA" > "$RUNNER_TEMP/nexus-mobile-local-receipt.json"
-          python3 scripts/build-nexus-mobile-local.py --verify-zip "$OUTPUT" --source-commit "$GITHUB_SHA"
+          python3 scripts/build-nexus-mobile-local.py --output "$OUTPUT" --source-commit "$NEXUS_CANDIDATE_SHA" > "$RUNNER_TEMP/nexus-mobile-local-receipt.json"
+          python3 scripts/build-nexus-mobile-local.py --verify-zip "$OUTPUT" --source-commit "$NEXUS_CANDIDATE_SHA"
           sha256sum "$OUTPUT" > "$OUTPUT.sha256"
           mkdir -m 0700 "$RUNNER_TEMP/nexus-mobile-real-zip"
           python3 -m zipfile -e "$OUTPUT" "$RUNNER_TEMP/nexus-mobile-real-zip"
@@ -72,6 +81,25 @@ jobs:
           test -f "$RUNNER_TEMP/nexus-mobile-real-zip/nexus-mobile-local/motion/index.html"
           test -f "$RUNNER_TEMP/nexus-mobile-real-zip/nexus-mobile-local/apps.html"
           echo 'Verified Studio and Motion public-code package created; Android hardware NOT tested.'
+
+      - name: Prove offline Motion reopening after actual loopback server shutdown in Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
+          test -n "$NEXUS_PWA_CHROME"
+          export NEXUS_MOBILE_PACKAGE_DIR="$RUNNER_TEMP/nexus-mobile-real-zip/nexus-mobile-local"
+          node scripts/test-nexus-mobile-offline-browser.mjs > "$RUNNER_TEMP/nexus-mobile-offline-browser.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ['RUNNER_TEMP'])/'nexus-mobile-offline-browser.json').read_text())
+          assert r["status"]=="PASS"
+          assert r["python_loopback_really_stopped"] is True
+          assert r["offline_public_code_only"] is True
+          assert r["actual_android_hardware_tested"] is False
+          print("Real offline Chromium reload passed; no Android hardware claim.")
+          PY
 
       - name: Publish exact-source mobile ZIP and independent SHA-256
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
@@ -81,5 +109,6 @@ jobs:
             ${{ runner.temp }}/nexus-mobile-local.zip
             ${{ runner.temp }}/nexus-mobile-local.zip.sha256
             ${{ runner.temp }}/nexus-mobile-local-receipt.json
+            ${{ runner.temp }}/nexus-mobile-offline-browser.json
           if-no-files-found: error
           retention-days: 30

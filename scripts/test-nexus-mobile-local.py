@@ -65,6 +65,17 @@ class MobileKitTests(unittest.TestCase):
             self.assertIn(b'("127.0.0.1", args.port)', launcher)
             self.assertNotIn(b'("0.0.0.0", args.port)', launcher)
             self.assertIn(b"assets.update(load_motion())", launcher)
+            self.assertIn(b"/motion/manifest.json", launcher)
+            html = archive.read(kit.BUNDLE + "/motion/index.html")
+            self.assertIn(b'manifest" href="./manifest.json"', html)
+            self.assertIn(b'id="motion-offline-prepare"', html)
+            self.assertIn(b'./offline-ui.js', html)
+            worker = archive.read(kit.BUNDLE + "/motion/offline-worker.js")
+            self.assertIn(b"nexus-motion-shell-v1-", worker)
+            self.assertNotIn(b"__VERSION__", worker)
+            self.assertNotIn(b"/*STATIC_DESCRIPTOR__*/[]", worker)
+            self.assertNotIn(b"requests.post", worker)
+            self.assertIn(b"mode", archive.read(kit.BUNDLE + "/motion/motion-core.js"))
             self.assertIn(b"LOCAL PUBLIC PACKAGE VERIFICATION BLOCKED", launcher)
             self.assertNotIn(b"requests.post", launcher)
 
@@ -149,6 +160,11 @@ class MobileKitTests(unittest.TestCase):
             "/motion/index.html": "motion/index.html",
             "/motion/motion-core.js": "motion/motion-core.js",
             "/motion/motion-ui.js": "motion/motion-ui.js",
+            "/motion/offline-ui.js": "motion/offline-ui.js",
+            "/motion/offline-worker.js": "motion/offline-worker.js",
+            "/motion/manifest.json": "motion/manifest.json",
+            "/motion/icons/nexus-192.png": "motion/icons/nexus-192.png",
+            "/motion/icons/nexus-512.png": "motion/icons/nexus-512.png",
         }
         for url, relative in allowed.items():
             with self.subTest(url=url):
@@ -185,7 +201,8 @@ class MobileKitTests(unittest.TestCase):
     def test_tampered_motion_or_studio_refuses_to_start(self):
         self.build()
         home = self.extract()
-        for name in ("motion/motion-ui.js", "index.html"):
+        for name in ("motion/motion-ui.js", "motion/offline-worker.js",
+                     "motion/offline-ui.js", "motion/manifest.json", "index.html"):
             original = (home / name).read_bytes()
             (home / name).write_bytes(original + b"UNREVIEWED")
             proc = subprocess.run(

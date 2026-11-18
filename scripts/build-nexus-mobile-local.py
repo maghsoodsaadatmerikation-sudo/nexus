@@ -26,7 +26,11 @@ spec.loader.exec_module(base)
 
 BUNDLE = "nexus-mobile-local"
 SCHEMA = "nexus.mobile-studio-motion.v1"
-MOTION = ("motion/index.html", "motion/motion-core.js", "motion/motion-ui.js")
+MOTION = (
+    "motion/index.html", "motion/motion-core.js", "motion/motion-ui.js",
+    "motion/offline-ui.js", "motion/offline-worker.js", "motion/manifest.json",
+    "motion/icons/nexus-192.png", "motion/icons/nexus-512.png",
+)
 PAGE = "apps.html"
 MANIFEST = "motion-integrity.json"
 LAUNCHER_NAME = "run-nexus.py"
@@ -62,14 +66,19 @@ http://127.0.0.1:8765/device-check.html.
 Motion supports original local photos, offline Canvas preview, and
 short real-time local browser video export where the browser supports
 MediaRecorder. It can compare a locally selected final MP4 against its
-preview without uploading it. For continuous high-quality 4K MP4,
+preview without uploading it. In Motion, tap "Prepare Motion offline" to
+verify/cache PUBLIC app files. Only after preparation, use Chrome's menu
+"Install app" or "Add to Home screen"; actual support varies by browser. For continuous high-quality 4K MP4,
 the separate original NEXUS FFmpeg source scripts from the SAME reviewed
 Git revision must be installed; this ZIP does not bundle FFmpeg or a
 Python video renderer. Neither app has a trained text-to-video model.
 
 Studio's service-worker scope is unchanged and covers its own existing
-cache. Motion requires the local Termux server while you use it;
-there is NO claim of offline Motion reload after Termux closes.
+cache. Motion has a separate, opt-in, source-verified worker with
+scope /motion/. After setup, it can reopen its PUBLIC editor code
+without a running Termux server in browsers with ServiceWorker support.
+This does not preserve imported user photos, audio or project state; save
+a ZIP or JSON before closing. Studio encryption remains untouched.
 This is a local web package, NOT an Android APK. Keeping Termux running
 may require Android battery/background permissions. No model inference
 or public HTTPS uptime is guaranteed.
@@ -109,7 +118,10 @@ def load_motion():
     manifest = json.loads(path.read_bytes())
     items = manifest.get("assets")
     names = ("motion/index.html", "motion/motion-core.js",
-             "motion/motion-ui.js", "apps.html")
+             "motion/motion-ui.js", "motion/offline-ui.js",
+             "motion/offline-worker.js", "motion/manifest.json",
+             "motion/icons/nexus-192.png", "motion/icons/nexus-512.png",
+             "apps.html")
     studio = json.loads((BASE / "source-manifest.json").read_bytes())
     if (manifest.get("schema") != "nexus.mobile-studio-motion.v1" or
         manifest.get("source_commit") != studio.get("source_commit") or
@@ -152,12 +164,77 @@ def source_assets(commit: str) -> dict[str, bytes]:
     if page.count('href="/studio"') != 1:
         raise ValueError("Motion's Rust-only Studio link changed")
     page = page.replace('href="/studio"', 'href="/"')
+    if (page.count("<title>") != 1 or
+        page.count("<section><h2>Storyboard") != 1 or
+        page.count("</body>") != 1 or
+        page.count("connect-src 'none';") != 1):
+        raise ValueError("Motion HTML offline-integration anchors changed")
+    page = page.replace(
+        "connect-src 'none';",
+        "connect-src 'none'; worker-src 'self'; manifest-src 'self';",
+    )
+    page = page.replace(
+        "<title>", '<link rel="manifest" href="./manifest.json">'
+        '<meta name="theme-color" content="#0b1020"><title>',
+    )
+    panel = (
+        '<section id="motion-offline-panel">'
+        '<h2>Install / استفاده آفلاین</h2>'
+        '<p class="muted">Cache only verified public Motion code on this phone. '
+        'No photos, audio, drafts or exported movies are cached. '
+        'The Studio offline copy is separate. / فقط کد عمومی ذخیره می‌شود.</p>'
+        '<div class="row"><button id="motion-offline-prepare" class="secondary">'
+        'Prepare Motion offline / آماده‌سازی آفلاین</button>'
+        '<button id="motion-offline-remove" class="secondary">'
+        'Remove offline copy / حذف نسخه آفلاین</button></div>'
+        '<p id="motion-offline-status" role="status" aria-live="polite" '
+        'class="muted small">Use your browser menu to install or add to home '
+        'screen after preparation. The local app can still need Termux for '
+        'new video sources, models or uncached features.</p></section>'
+    )
+    page = page.replace("<section><h2>Storyboard", panel + "<section><h2>Storyboard")
+    page = page.replace("</body>", '<script src="./offline-ui.js"></script></body>')
+    browser_manifest = {
+        "id": "./", "name": "NEXUS Motion", "short_name": "Motion",
+        "start_url": "./", "scope": "./", "display": "standalone",
+        "lang": "en", "dir": "ltr", "background_color": "#0b1020",
+        "theme_color": "#0b1020",
+        "icons": [
+            {"src": f"./icons/nexus-{size}.png", "sizes": f"{size}x{size}",
+             "type": "image/png", "purpose": "any"}
+            for size in (192, 512)
+        ],
+    }
     motion = {
         MOTION[0]: page.encode("utf-8"),
         MOTION[1]: (ROOT / "web/motion-core.js").read_bytes(),
         MOTION[2]: (ROOT / "web/motion-ui.js").read_bytes(),
+        MOTION[3]: (ROOT / "web/motion-offline-ui.js").read_bytes(),
+        MOTION[5]: (json.dumps(browser_manifest, sort_keys=True) + "\n").encode(),
+        MOTION[6]: (ROOT / "public/icons/nexus-192.png").read_bytes(),
+        MOTION[7]: (ROOT / "public/icons/nexus-512.png").read_bytes(),
         PAGE: APPS.encode("utf-8"),
     }
+    public = []
+    for name, data in sorted(motion.items()):
+        if not name.startswith("motion/"):
+            continue
+        suffix = name.removeprefix("motion/")
+        kind = (
+            "html" if name.endswith(".html") else
+            "javascript" if name.endswith(".js") else
+            "json" if name.endswith(".json") else "png"
+        )
+        public.append({"path": suffix, "bytes": len(data),
+                       "sha256": digest(data), "kind": kind})
+    template = (ROOT / "web/motion-offline-worker-template.js").read_text()
+    if template.count("/*STATIC_DESCRIPTOR__*/[]") != 1 or template.count("__VERSION__") != 1:
+        raise ValueError("Motion offline worker template changed")
+    assets_json = json.dumps(public, sort_keys=True, separators=(",", ":"))
+    motion[MOTION[4]] = template.replace(
+        "/*STATIC_DESCRIPTOR__*/[]", assets_json,
+    ).replace("__VERSION__", digest(assets_json.encode())[:16]).encode()
+
     for name, data in motion.items():
         if not (0 < len(data) <= 450000):
             raise ValueError("motion public asset exceeds size budget")
@@ -193,6 +270,13 @@ def source_assets(commit: str) -> dict[str, bytes]:
         mime,
         'Path("/index.html" if name == "/" else '
         '"/motion/index.html" if name == "/motion/" else name).suffix'
+    )
+    original_mime = 'name == "/manifest.json" else mime'
+    if launcher.count(original_mime) != 1:
+        raise ValueError("base PWA manifest MIME routing changed")
+    launcher = launcher.replace(
+        original_mime,
+        'name in ("/manifest.json", "/motion/manifest.json") else mime'
     )
     if '("127.0.0.1", args.port)' not in launcher:
         raise ValueError("base launcher bind boundary changed")
