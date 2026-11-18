@@ -21,6 +21,7 @@ PR = 288
 def payload():
     rules = {"id": 20870033, "enforcement": "active", "target": "branch",
              "source": gate.REPO,
+             "bypass_actors": [],
              "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
              "rules": [
                  {"type": "deletion"},
@@ -107,6 +108,14 @@ class AuditTests(unittest.TestCase):
 
     def test_ruleset_disabled_denied(self):
         self.deny(lambda f: f["ruleset"].update(enforcement="disabled"), "ruleset")
+
+    def test_ruleset_bypass_actor_forbidden_even_with_green_ci(self):
+        self.deny(lambda f: f["ruleset"].update(
+            bypass_actors=[{"actor_id": 1, "actor_type": "Team", "bypass_mode": "always"}]),
+            "bypass")
+
+    def test_missing_bypass_metadata_denied(self):
+        self.deny(lambda f: f["ruleset"].pop("bypass_actors"), "bypass")
 
     def test_ruleset_scope_changed_denied(self):
         self.deny(lambda f: f["ruleset"]["conditions"]["ref_name"].update(include=["refs/heads/other"]),
