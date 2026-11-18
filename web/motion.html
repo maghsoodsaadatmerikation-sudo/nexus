@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src blob: data:; media-src blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>NEXUS Motion — Local Video & Animation</title>
+<style>
+:root{color-scheme:dark;font:16px/1.5 system-ui,sans-serif;background:#0b1020;color:#ecf2fb}*{box-sizing:border-box}
+body{margin:0}main{max-width:1140px;margin:auto;padding:20px}header{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+h1{font-size:clamp(1.6rem,5vw,2.7rem);margin:8px 0}h2{font-size:1.18rem}.muted{color:#afbed2}
+a{color:#95e6d7}section{background:#182137;border:1px solid #34415e;border-radius:15px;padding:18px;margin:15px 0}
+.row{display:flex;gap:12px;flex-wrap:wrap}.row>*{flex:1 1 150px}label{display:block;font-size:.91rem;font-weight:620;margin:8px 0}
+input,select,textarea{font:inherit;display:block;background:#0b1428;color:#fff;border:1px solid #53627a;border-radius:8px;padding:10px;width:100%;margin-top:4px}
+button{font:inherit;font-weight:650;color:#081727;background:#9de6d6;border:0;border-radius:8px;padding:11px 15px;margin:3px;cursor:pointer}button.secondary{background:#33415c;color:#fff}
+button:disabled{opacity:.45;cursor:wait}:focus-visible{outline:3px solid #f0bd77;outline-offset:2px}
+canvas{width:100%;height:auto;max-height:70vh;object-fit:contain;background:#050913;border-radius:12px;border:1px solid #53627a}
+#motion-scenes{display:grid;gap:10px}.scene{border:1px solid #33415c;border-radius:10px;padding:11px}
+.scene .row{align-items:end}.scene strong{display:block;margin-bottom:8px}
+#motion-status{white-space:pre-wrap;overflow-wrap:anywhere;min-height:3em}code{word-break:break-word}
+.small{font-size:.86rem}.danger{color:#ffccab}progress{width:100%}
+[hidden]{display:none!important}@media(max-width:720px){main{padding:12px}section{padding:12px}}
+</style></head><body><main>
+<header><div><h1>NEXUS <span style="color:#9de6d6">Motion</span></h1><p class="muted">Local video & animation · ویدیو و انیمیشن</p></div>
+<div><a href="/studio">Back to NEXUS Studio</a> · <a href="/">NEXUS</a></div></header>
+<section><h2>Storyboard / استوری‌بورد</h2>
+<p class="muted">Create original moving backgrounds and title sequences, or animate your own photos without face modification. No AI video model, external API or upload. No account required. / بدون آپلود و بدون ابزار پولی.</p>
+<div class="row">
+<label>Project title / عنوان<input id="motion-title" maxlength="100"></label>
+<label>Format / اندازه<select id="motion-format"><option value="1920x1080">Full HD — 1920×1080</option><option value="1280x720">HD — 1280×720</option><option value="1080x1920">Vertical HD — 1080×1920</option><option value="3840x2160">4K — 3840×2160</option><option value="2160x3840">Vertical 4K — 2160×3840</option></select></label>
+<label>Frame rate / فریم<select id="motion-fps"><option>24</option><option>25</option><option selected>30</option><option>60</option></select></label>
+</div>
+<div class="row">
+<label>Load storyboard JSON / ورود فایل<input id="motion-import" type="file" accept=".json,application/json"></label>
+<label>Import photos / عکس‌ها<input id="motion-images" type="file" multiple accept="image/png,image/jpeg,image/webp"></label>
+<label>Soundtrack / موسیقی<input id="motion-sound" type="file" accept="audio/*"></label>
+</div>
+<p class="muted small">Images remain in this browser tab. Original audio can be included in supported browser recordings. For MP4/4K/high-volume export, download the project and render with the independent FFmpeg command line. Place imported photos/audio in an <code>assets/</code> folder beside the JSON file.</p>
+<div id="motion-scenes" aria-label="Scenes" aria-live="polite"></div>
+<div class="row"><button id="motion-add" class="secondary">+ Add scene / افزودن</button>
+<button id="motion-remove" class="secondary">Remove last / حذف آخر</button>
+<button id="motion-example" class="secondary">Load example / نمونه</button></div>
+</section>
+<section><h2>Preview / پیش‌نمایش</h2>
+<canvas id="motion-canvas" width="960" height="540" aria-label="Local procedural video preview"></canvas>
+<div class="row"><button id="motion-play">Play / پخش</button><button id="motion-pause" class="secondary">Pause / توقف</button>
+<label>Seek / زمان<input id="motion-seek" type="range" min="0" max="1000" value="0"></label></div>
+<p id="motion-time" class="muted">00:00 / 00:00</p></section>
+<section><h2>Export / خروجی</h2>
+<p class="muted">Mobile browser recording is real time, memory bounded and limited to 15 seconds per segment at up to 1080p/30 fps. For longer videos, change the segment start and export another clip, or use FFmpeg for a continuous high-bitrate MP4.</p>
+<div class="row"><label>Segment start (seconds)<input id="motion-start" type="number" min="0" step="1" value="0"></label>
+<label>Clip duration (seconds, max 15)<input id="motion-clip" type="number" min="1" max="15" step="1" value="10"></label></div>
+<div class="row"><button id="motion-record">Record local video / ضبط</button><button id="motion-cancel" class="secondary" disabled>Cancel / لغو</button>
+<button id="motion-export-json" class="secondary">Download project JSON</button>
+<button id="motion-export-zip" class="secondary">Download project + media ZIP</button></div>
+<progress id="motion-progress" max="100" value="0"></progress>
+<p id="motion-status" role="status" aria-live="polite" class="muted">Ready. Nothing has been uploaded.</p>
+<p class="small danger">Device limits: 4K/60 fps and videos lasting hours require sufficient RAM, compute, disk and time. The standalone FFmpeg renderer encodes scenes sequentially; it is not a generative text-to-video AI model or a background cloud GPU service.</p></section>
+<footer class="muted small">NEXUS Motion v1 · User-owned content, explicit local export, no publication authority.</footer>
+</main>
+<script src="./motion-core.js"></script><script src="./motion-ui.js"></script>
+</body></html>
