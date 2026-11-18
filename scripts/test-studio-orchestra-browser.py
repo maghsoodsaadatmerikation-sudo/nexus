@@ -64,6 +64,26 @@ window.addEventListener('load',async()=>{
   assert(same.length===bytes.length&&same.every((x,i)=>x===bytes[i]),
     'original-dry-vocal-downloaded-byte-for-byte');
   assert($('orchestra-together').disabled===false,'optional-voice-and-backing-audition-available');
+  assert($('orchestra-exclude-lead').checked,'original-voice-lead-replaces-synthetic-by-default');
+  $('orchestra-offset').value='350';$('orchestra-offset').dispatchEvent(new Event('change',{bubbles:true}));
+  assert(!$('orchestra-mix').disabled,'original-wav-and-backing-can-be-aligned');
+  $('orchestra-mix').click();
+  assert(!$('orchestra-cancel').disabled,'local-mix-can-be-cancelled');
+  await wait(()=>NexusOrchestraUI.hasMixedWav(),750);
+  assert($('orchestra-mix-play').src.startsWith('blob:'),'aligned-stereo-mix-is-playable');
+  const mixReport=NexusOrchestraUI.getMixReport();
+  assert(mixReport.dryStartFrames===7718,'350ms-positive-voice-offset-exact-samples');
+  assert(mixReport.sourceDryBytesUntouched&&mixReport.clippedSamplesAfterGain===0,
+    'no-edit-to-dry-and-safe-new-mix-gain');
+  $('orchestra-mix-download').click();
+  assert(objects.at(-1).type==='audio/wav'&&objects.at(-1).size>100000,
+    'explicit-mixed-wav-download');
+  assert($('orchestra-dry-report').textContent.includes('Original WAV SHA-256:'),
+    'dry-original-remains-accessible-after-making-new-mix');
+  $('orchestra-offset').value='500';$('orchestra-offset').dispatchEvent(new Event('change',{bubbles:true}));
+  assert(!NexusOrchestraUI.hasMixedWav(),'changing-timing-revokes-old-mix-only');
+  assert(NexusOrchestraUI.hasOriginalVocal()&&NexusOrchestraUI.hasWav(),
+    'changing-timing-preserves-recording-and-backing');
   assert(networkCalls===0,'no-provider-or-music-api-network');
   $('orchestra-dry-clear').click();
   assert(!NexusOrchestraUI.hasOriginalVocal(),'clear-removes-voice-from-tab');
