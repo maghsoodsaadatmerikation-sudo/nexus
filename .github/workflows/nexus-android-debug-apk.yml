@@ -1,0 +1,149 @@
+name: NEXUS Android Standalone Test APK — Offline Native Wrapper
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/nexus-android-debug-apk.yml'
+      - 'mobile/android/**'
+      - 'scripts/build-nexus-android-assets.py'
+      - 'scripts/test-nexus-android-assets.py'
+      - 'scripts/build-nexus-mobile-local.py'
+      - 'web/motion*'
+      - 'public/studio/**'
+      - 'docs/NEXUS-NATIVE-ANDROID-APK.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NEXUS_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  compile-verified-offline-debug-apk:
+    name: real-android-apk-build-no-internet-permission
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact unprivileged PR source commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ env.NEXUS_SOURCE_SHA }}
+          persist-credentials: false
+
+      - name: Set up Java 17 for Android Gradle plugin
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up pinned Gradle build runtime
+        uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3
+        with:
+          gradle-version: '8.10.2'
+          cache-disabled: true
+
+      - name: Install Android API 35 build tools if not present
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${ANDROID_HOME:?GitHub Ubuntu Android SDK must exist}"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" >/dev/null
+          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/aapt"
+
+      - name: Verify source and generate exact public APK assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build-studio-static.py --check
+          python3 -m py_compile scripts/build-nexus-android-assets.py scripts/test-nexus-android-assets.py
+          node --check mobile/android/android-export.js
+          python3 scripts/test-nexus-android-assets.py
+          mkdir -p mobile/android/app/src/main/assets
+          python3 scripts/build-nexus-android-assets.py \
+            --output-dir mobile/android/app/src/main/assets/nexus \
+            --source-commit "$NEXUS_SOURCE_SHA" > "$RUNNER_TEMP/nexus-native-assets.json"
+          python3 scripts/build-nexus-android-assets.py \
+            --output-dir mobile/android/app/src/main/assets/nexus \
+            --source-commit "$NEXUS_SOURCE_SHA" --verify-only
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,os
+          root=Path('mobile/android/app/src/main/assets/nexus')
+          catalog=json.loads((root/'nexus-catalog.json').read_text())
+          assert catalog['source_commit']==os.environ['NEXUS_SOURCE_SHA']
+          assert all('secret' not in s and 'run-local' not in s for s in catalog['assets'])
+          assert not any((root/x).exists() for x in (
+            'source-manifest.json','motion-integrity.json','run-nexus.py','README.txt'
+          ))
+          print('APK embed provenance:',catalog['source_commit'],len(catalog['assets']))
+          PY
+
+      - name: Compile the actual offline debug APK
+        shell: bash
+        working-directory: mobile/android
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace --console plain :app:assembleDebug
+
+      - name: Verify Android APK signature, permissions and exact embedded file digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$APK" > "$RUNNER_TEMP/nexus-apk-permissions.txt"
+          if grep -Eq 'uses-permission|android.permission.INTERNET|android.permission.(CAMERA|RECORD_AUDIO|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE)' "$RUNNER_TEMP/nexus-apk-permissions.txt"; then
+            echo 'Unexpected network or dangerous Android permission' >&2
+            cat "$RUNNER_TEMP/nexus-apk-permissions.txt"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json,zipfile,hashlib,os
+          from pathlib import Path
+          apk=Path('mobile/android/app/build/outputs/apk/debug/app-debug.apk')
+          manifest=json.loads(Path('mobile/android/app/src/main/assets/nexus/nexus-catalog.json').read_text())
+          with zipfile.ZipFile(apk) as z:
+            names=set(z.namelist())
+            for name,info in manifest['assets'].items():
+              actual=z.read('assets/nexus/'+name)
+              assert len(actual)==info['bytes'],name
+              assert hashlib.sha256(actual).hexdigest()==info['sha256'],name
+            assert 'assets/nexus/nexus-catalog.json' in names
+            assert 'classes.dex' in names
+          receipt={'schema':'nexus.android.debug-apk-receipt.v1',
+            'status':'DEBUG_APK_BUILT_AND_SIGNED',
+            'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),
+            'bytes':apk.stat().st_size,
+            'source_commit':os.environ['NEXUS_SOURCE_SHA'],
+            'asset_count':len(manifest['assets']),
+            'internet_permission':False,'production_signed':False,
+            'android_hardware_tested':False,'termux_required':False,
+            'generative_model_included':False,'play_store_published':False,
+            'release_authorized':False}
+          Path(os.environ['RUNNER_TEMP'],'nexus-android-debug-receipt.json').write_text(
+            json.dumps(receipt,sort_keys=True,indent=2)+'\n')
+          print(json.dumps(receipt,sort_keys=True))
+          PY
+          cp "$APK" "$RUNNER_TEMP/nexus-mobile-standalone-debug.apk"
+          sha256sum "$RUNNER_TEMP/nexus-mobile-standalone-debug.apk" > "$RUNNER_TEMP/nexus-mobile-standalone-debug.apk.sha256"
+
+      - name: Upload test-only standalone APK and attestation-free technical receipt
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-mobile-standalone-debug-apk
+          path: |
+            ${{ runner.temp }}/nexus-mobile-standalone-debug.apk
+            ${{ runner.temp }}/nexus-mobile-standalone-debug.apk.sha256
+            ${{ runner.temp }}/nexus-android-debug-receipt.json
+            ${{ runner.temp }}/nexus-apk-permissions.txt
+            ${{ runner.temp }}/nexus-native-assets.json
+          if-no-files-found: error
+          retention-days: 30
