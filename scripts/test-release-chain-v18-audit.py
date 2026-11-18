@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import importlib.util
 from pathlib import Path
 import tempfile
@@ -48,8 +50,8 @@ def fixture():
         "evidence": {
             "schema": "nexus.v1.8.independent-rebuild-evidence.v1",
             "status": "PASS", "candidate_sha": SHA,
-            "nexus_verification_run_id": PARENT,
-            "independent_rebuild_run_id": CHILD,
+            "nexus_verification_run_id": str(PARENT),
+            "independent_rebuild_run_id": str(CHILD),
             "builders": {
                 "a": {"environment": "github-hosted ubuntu-24.04", "executable_sha256": DIGEST},
                 "b": {"environment": "github-hosted ubuntu-24.04", "executable_sha256": DIGEST},
@@ -72,6 +74,34 @@ class TestReleaseChain(unittest.TestCase):
             audit.validate_chain(**inputs)
         if message:
             self.assertIn(message, str(ctx.exception))
+
+    def test_real_public_2026_11_18_artifact_byte_identity_and_chain(self):
+        # Source: GitHub Actions artifact ID 14390824887, run 44222980195.
+        # SHA-256 is calculated from the ORIGINAL JSON entry in the ZIP,
+        # independently of this committed regression fixture.
+        artifact = (ROOT / "fixtures" / "v1.8-rebuild-evidence-main-2026-11-18.json").read_bytes()
+        self.assertEqual(hashlib.sha256(artifact).hexdigest(),
+                         "220b08c8c41f875679cbb18044746dc00f7e3d16e8d5a411cd276a0fd02a4474")
+        real = json.loads(artifact)
+        self.assertIs(type(real["nexus_verification_run_id"]), str)
+        self.assertIs(type(real["independent_rebuild_run_id"]), str)
+        inputs = fixture()
+        inputs["evidence"] = real
+        inputs["sha"] = real["candidate_sha"]
+        inputs["workflow_sha"] = real["candidate_sha"]
+        inputs["parent_id"] = int(real["nexus_verification_run_id"])
+        inputs["rebuild_id"] = int(real["independent_rebuild_run_id"])
+        inputs["parent"]["id"] = inputs["parent_id"]
+        inputs["rebuild"]["id"] = inputs["rebuild_id"]
+        for obj in (inputs["parent"], inputs["rebuild"]):
+            obj["head_sha"] = real["candidate_sha"]
+            obj["head_commit"]["id"] = real["candidate_sha"]
+        inputs["main_branch"]["commit"]["sha"] = real["candidate_sha"]
+        report = audit.validate_chain(**inputs)
+        self.assertEqual(report["status"], "CONSISTENT_ONLY")
+        self.assertFalse(report["release_authorized"])
+        self.assertEqual(report["independent_executable_sha256"],
+                         "c6dd176f82b2789e669bcc5fc1f9e0cd47b569c46d888612457ca44f2166de32")
 
     def test_valid_two_hop_consistency_without_release_authority(self):
         report = audit.validate_chain(**fixture())
@@ -121,6 +151,18 @@ class TestReleaseChain(unittest.TestCase):
 
     def test_main_advanced_since_rebuild_rejected(self):
         self.deny(lambda v: v["main_branch"]["commit"].update(sha="c" * 40), "current trusted main")
+
+    def test_actual_evidence_requires_canonical_string_run_ids(self):
+        for key, wrong in (
+            ("nexus_verification_run_id", PARENT),
+            ("independent_rebuild_run_id", CHILD),
+            ("nexus_verification_run_id", "0" + str(PARENT)),
+            ("independent_rebuild_run_id", "+" + str(CHILD)),
+            ("independent_rebuild_run_id", str(CHILD) + " "),
+            ("nexus_verification_run_id", True),
+        ):
+            with self.subTest(key=key, wrong=wrong):
+                self.deny(lambda v: v["evidence"].update({key: wrong}), "run ID mismatch")
 
     def test_evidence_wrong_parent_run_id_rejected(self):
         self.deny(lambda v: v["evidence"].update(nexus_verification_run_id=999), "parent run ID")
