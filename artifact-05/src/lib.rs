@@ -316,6 +316,9 @@ where
     Router::new()
         .route("/", get(web_workspace))
         .route("/studio", get(studio_workspace))
+        .route("/motion", get(motion_workspace))
+        .route("/motion-core.js", get(motion_core))
+        .route("/motion-ui.js", get(motion_ui))
         .route("/studio-api/status", get(studio_model_status))
         .route("/livez", get(liveness))
         .route("/readyz", get(readiness::<D>))
@@ -440,6 +443,44 @@ async fn studio_workspace() -> impl IntoResponse {
             (header::CONTENT_SECURITY_POLICY, "frame-ancestors 'none'"),
         ],
         Html(include_str!("../../web/studio.html")),
+    )
+}
+
+async fn motion_workspace() -> impl IntoResponse {
+    (
+        [
+            (header::CACHE_CONTROL, "no-store"),
+            (header::CONTENT_SECURITY_POLICY, "frame-ancestors 'none'"),
+        ],
+        Html(include_str!("../../web/motion.html")),
+    )
+}
+
+// Exact reviewed scripts only: never expose an arbitrary filesystem path or
+// user uploaded media through this public, read-only route.
+async fn motion_core() -> impl IntoResponse {
+    (
+        [
+            (
+                header::CONTENT_TYPE,
+                "application/javascript; charset=utf-8",
+            ),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        include_str!("../../web/motion-core.js"),
+    )
+}
+
+async fn motion_ui() -> impl IntoResponse {
+    (
+        [
+            (
+                header::CONTENT_TYPE,
+                "application/javascript; charset=utf-8",
+            ),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        include_str!("../../web/motion-ui.js"),
     )
 }
 
