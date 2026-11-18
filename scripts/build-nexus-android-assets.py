@@ -36,6 +36,16 @@ def assets(commit: str)->dict[str,bytes]:
     if not isinstance(commit,str) or not re.fullmatch("[0-9a-f]{40}",commit):
         raise ValueError("exact Git commit SHA is required")
     raw=source.source_assets(commit)
+    old_message=(b"No server upload. This page is served only on 127.0.0.1 by Termux.\n"
+                 b"Studio offline cache does not cover Motion.")
+    if old_message not in raw["apps.html"]:
+        raise ValueError("mobile launcher messaging changed")
+    raw["apps.html"]=raw["apps.html"].replace(
+        old_message,
+        b"Native Android test app: offline public assets embedded in the APK. "
+        b"No Termux server or external connection. Private projects remain local."
+    )
+    raw["android-export.js"]=(ROOT/"mobile/android/android-export.js").read_bytes()
     selected={}
     for name,data in raw.items():
         if name in SKIP:continue
@@ -50,7 +60,7 @@ def assets(commit: str)->dict[str,bytes]:
     required={"apps.html","index.html","motion/index.html",
               "motion/motion-core.js","motion/motion-ui.js",
               "device/device-engine.js","motion/manifest.json",
-              "service-worker.js"}
+              "service-worker.js","android-export.js"}
     if not required<=set(selected):
         raise ValueError("missing required Studio/Motion public assets")
     return selected
