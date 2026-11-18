@@ -33,8 +33,9 @@ class ResumeTests(unittest.TestCase):
         self.out = self.root / "movie.mp4"
 
     def render(self, **options):
-        return Q.render(self.project, self.out, preset="ultrafast",
-                        crf=28, threads=2, **options)
+        settings = {"preset": "ultrafast", "crf": 28, "threads": 2}
+        settings.update(options)
+        return Q.render(self.project, self.out, **settings)
 
     def test_real_interrupt_resume_reuse_and_final_audio(self):
         first = self.render(max_new_scenes=1)
