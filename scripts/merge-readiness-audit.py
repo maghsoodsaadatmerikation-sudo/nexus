@@ -136,8 +136,10 @@ def assess(*, repo: dict, main: dict, pr: dict, ruleset: dict, runs: dict,
             and nested(x, "head_repository", "id") == REPO_ID
             and type(x.get("id")) is int and x["id"] > 0
             and type(x.get("run_attempt")) is int and x["run_attempt"] == 1
-            and any(type(p) is dict and p.get("number") == expected_pr
-                    for p in x.get("pull_requests", []) if type(x.get("pull_requests")) is list)
+            and type(x.get("pull_requests")) is list
+            and any(type(p) is dict and type(p.get("number")) is int
+                    and p["number"] == expected_pr
+                    for p in x["pull_requests"])
         ]
         # Report all matches. A past success doesn't override a later failed
         # attempt for the same exact SHA and PR, and cannot authorize anything.
