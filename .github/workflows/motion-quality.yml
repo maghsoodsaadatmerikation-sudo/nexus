@@ -1,0 +1,61 @@
+name: NEXUS Motion Technical Quality & 4K Frame Acceptance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/motion-quality.yml'
+      - 'scripts/nexus-motion-quality.py'
+      - 'scripts/nexus-motion-resume.py'
+      - 'scripts/test-nexus-motion-quality.py'
+      - 'scripts/nexus-motion-render.py'
+      - 'docs/NEXUS-MOTION-TECHNICAL-QUALITY.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/motion-quality.yml'
+      - 'scripts/nexus-motion-quality.py'
+      - 'scripts/nexus-motion-resume.py'
+      - 'scripts/test-nexus-motion-quality.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  technical-mp4-qc:
+    name: real-720p-frame-audio-qc-and-bounded-4k-encode
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact unprivileged source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install local FFmpeg/ffprobe only if necessary
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq
+            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg
+          fi
+          command -v ffmpeg
+          command -v ffprobe
+          ffmpeg -hide_banner -encoders | grep -w libx264
+
+      - name: Real H.264/AAC frame packet count and one-frame 4K codec check
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/nexus-motion-quality.py scripts/nexus-motion-resume.py scripts/test-nexus-motion-quality.py
+          python3 scripts/test-nexus-motion-quality.py
+
+      - name: No publication or public provider authority
+        run: |
+          set -euo pipefail
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${NEXUS_RELEASE_TOKEN:-}"
+          echo 'TECHNICAL VIDEO QC: READ-ONLY TEST ONLY; NOT PRODUCTION OR ARTISTIC QUALITY PROOF'
