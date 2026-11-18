@@ -268,7 +268,7 @@ def create_output(story: dict, project: Path, output: Path, work: Path, *, visua
         visual_checkpoint = work / "visual.pending"
         require(not visual_checkpoint.is_symlink(), "unsafe visual report checkpoint")
         with visual_checkpoint.open("wb") as handle:
-            handle.write((json.dumps(visual, sort_keys=True) + "\\n").encode("utf-8"))
+            handle.write((json.dumps(visual, sort_keys=True) + "\n").encode("utf-8"))
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(visual_checkpoint, work / "visual.json")
