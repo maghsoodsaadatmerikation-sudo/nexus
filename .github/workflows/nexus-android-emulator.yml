@@ -59,6 +59,7 @@ jobs:
           test -c /dev/kvm
           sudo chmod 0666 /dev/kvm
           test -w /dev/kvm
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
 
       - name: Bind exact public APK assets to immutable source and compile debug APK
         shell: bash
@@ -89,8 +90,15 @@ jobs:
           set -euo pipefail
           export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
           AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/nexus-android-avds"
+          mkdir -p "$ANDROID_AVD_HOME"
           printf 'no\n' | "$AVDMANAGER" create avd --force \
-            --name nexus_android_ci35 --package "system-images;android-35;google_apis;x86_64"
+            --name nexus_android_ci35 --package "system-images;android-35;google_apis;x86_64" \
+            --path "$ANDROID_AVD_HOME/nexus_android_ci35.avd"
+          echo 'AVD configuration files:'
+          find "$ANDROID_AVD_HOME" -maxdepth 2 -type f | head -n 25
+          test -f "$ANDROID_AVD_HOME/nexus_android_ci35.ini"
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx 'nexus_android_ci35'
           nohup "$ANDROID_HOME/emulator/emulator" \
             -avd nexus_android_ci35 -no-window -no-audio -no-boot-anim \
             -no-snapshot -no-metrics -gpu swiftshader_indirect -memory 2048 \
