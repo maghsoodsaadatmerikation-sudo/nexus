@@ -251,7 +251,7 @@ def create_output(story: dict, project: Path, output: Path, work: Path) -> None:
     checkpoint = work / "quality.pending"
     require(not checkpoint.is_symlink(), "unsafe quality checkpoint")
     with checkpoint.open("wb") as handle:
-        handle.write((json.dumps(report, sort_keys=True) + "\\n").encode("utf-8"))
+        handle.write((json.dumps(report, sort_keys=True) + "\n").encode("utf-8"))
         handle.flush()
         os.fsync(handle.fileno())
     os.replace(checkpoint, work / "quality.json")
