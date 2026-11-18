@@ -4,6 +4,9 @@ from __future__ import annotations
 from contextlib import contextmanager
 import importlib.util
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import shutil
@@ -36,6 +39,48 @@ class ResumeTests(unittest.TestCase):
         settings = {"preset": "ultrafast", "crf": 28, "threads": 2}
         settings.update(options)
         return Q.render(self.project, self.out, **settings)
+
+    def test_actual_process_death_after_checkpoint_can_resume(self):
+        # Simulate a terminated Android/Termux process AFTER the first
+        # scene has been fsynced. No graceful cleanup code is executed.
+        code = """
+import importlib.util, os, sys
+spec = importlib.util.spec_from_file_location('motion_queue', sys.argv[1])
+q = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(q)
+original = q.save_manifest
+def crash_after_first(work, data):
+    original(work, data)
+    if len(data['segments']) == 1:
+        os._exit(83)
+q.save_manifest = crash_after_first
+q.render(__import__('pathlib').Path(sys.argv[2]),
+         __import__('pathlib').Path(sys.argv[3]),
+         crf=28, preset='ultrafast', threads=2)
+"""
+        child = subprocess.run(
+            [sys.executable, "-c", code,
+             str(ROOT / "scripts/nexus-motion-resume.py"),
+             str(self.project), str(self.out)],
+            capture_output=True, text=True, timeout=70,
+        )
+        self.assertEqual(child.returncode, 83, child.stderr[-300:])
+        self.assertFalse(self.out.exists())
+        cache = self.out.with_name(self.out.name + ".motion-work")
+        self.assertTrue((cache / "manifest.json").exists())
+        resumed = self.render(resume=True)
+        self.assertEqual(resumed["reused_scenes"], 1)
+        self.assertEqual(resumed["rendered_scenes"], 1)
+        Q.verify_video(self.out, w=1280, h=720, fps=24, seconds=2, audio=True)
+
+    def test_low_disk_budget_blocks_start_before_creating_a_cache(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        with patch.object(Q.shutil, "disk_usage", return_value=SimpleNamespace(free=1024)):
+            with self.assertRaisesRegex(Q.BASE.MotionError, "free disk"):
+                self.render()
+        self.assertFalse(self.out.exists())
+        self.assertFalse(self.out.with_name(self.out.name + ".motion-work").exists())
 
     def test_real_interrupt_resume_reuse_and_final_audio(self):
         first = self.render(max_new_scenes=1)
