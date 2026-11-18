@@ -8,6 +8,7 @@ Scene-by-scene H.264 encoding and concat avoid keeping full 4K frames in RAM.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 
 SCHEMA = "nexus.motion.storyboard.v1"
 DIMENSIONS = {(1280, 720), (1920, 1080), (1080, 1920), (3840, 2160), (2160, 3840)}
@@ -261,6 +263,55 @@ def render(project_path: Path, output: Path, *, font: Path | None = None,
             "ai_video_model_used": False, "upload_performed": False}
 
 
+@contextmanager
+def project_source(path: Path):
+    """Accept either a JSON storyboard or the exact local STORE ZIP bundle.
+
+    ZIP extraction is bounded, restricted to assets/ and storyboard.json,
+    rejects duplicates/symlinks, and uses a temporary private directory.
+    """
+    if path.suffix.lower() != ".zip":
+        require(path.suffix.lower() == ".json", "project must be .json or local .zip")
+        yield path
+        return
+    require(path.is_file() and not path.is_symlink()
+            and 0 < path.stat().st_size <= 100 * 1024 * 1024,
+            "invalid or oversized project ZIP")
+    with tempfile.TemporaryDirectory(prefix="nexus-motion-input-") as folder:
+        target = Path(folder)
+        try:
+            with zipfile.ZipFile(path, "r", allowZip64=False) as archive:
+                entries = archive.infolist()
+                require(1 <= len(entries) <= 123, "ZIP contains too many entries")
+                require(sum(i.file_size for i in entries) <= 96 * 1024 * 1024,
+                        "ZIP uncompressed media budget exceeded")
+                seen = set()
+                for info in entries:
+                    name = info.filename
+                    require(name not in seen, "duplicate ZIP filename")
+                    seen.add(name)
+                    require(not info.is_dir() and not (info.external_attr >> 16) & 0o170000
+                            == 0o120000 and info.compress_type == zipfile.ZIP_STORED,
+                            "links and compressed ZIP records are not allowed")
+                    require(name == "storyboard.json"
+                            or (name.startswith("assets/")
+                                and FILES.fullmatch(name) is not None
+                                and name.count("/") == 1
+                                and Path(name).suffix.lower() in CODECS | AUDIO),
+                            "unexpected ZIP path")
+                    require(info.file_size <= (1024*1024*1024 if name.endswith(".wav") else 64*1024*1024),
+                            "ZIP entry too large")
+                    dest = target / name
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    with archive.open(info) as src, dest.open("xb") as out:
+                        shutil.copyfileobj(src, out, 128 * 1024)
+                    require(dest.stat().st_size == info.file_size, "ZIP truncated entry")
+                require("storyboard.json" in seen, "ZIP missing storyboard.json")
+        except (zipfile.BadZipFile, EOFError) as exc:
+            raise MotionError("invalid ZIP container") from exc
+        yield target / "storyboard.json"
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="NEXUS Motion: local scene-by-scene MP4 renderer")
     p.add_argument("storyboard", type=Path, help="Project JSON next to local assets/")
@@ -273,14 +324,15 @@ def main() -> int:
     p.add_argument("--check", action="store_true", help="Validate project, no rendering")
     x = p.parse_args()
     try:
-        if x.check:
-            story = load_project(x.storyboard)
-            report = {"status": "VALID_LOCAL_PROJECT", "scenes": len(story["scenes"]),
-                      "duration_seconds": sum(q["duration"] for q in story["scenes"]),
-                      "width": story["width"], "height": story["height"], "fps": story["fps"]}
-        else:
-            report = render(x.storyboard, x.output, font=x.font, crf=x.crf,
-                            preset=x.preset, threads=x.threads, force=x.force)
+        with project_source(x.storyboard) as project:
+            if x.check:
+                story = load_project(project)
+                report = {"status": "VALID_LOCAL_PROJECT", "scenes": len(story["scenes"]),
+                          "duration_seconds": sum(q["duration"] for q in story["scenes"]),
+                          "width": story["width"], "height": story["height"], "fps": story["fps"]}
+            else:
+                report = render(project, x.output, font=x.font, crf=x.crf,
+                                preset=x.preset, threads=x.threads, force=x.force)
         print(json.dumps(report, ensure_ascii=False, sort_keys=True))
         return 0
     except (MotionError, OSError, FileNotFoundError) as exc:
