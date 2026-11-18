@@ -404,15 +404,17 @@ function voiceSample(note,phase,t,seconds,freq,index,rate,spec){
  const presence=inst.family==='vowel'?({airy:.87,warm:.96,dark:.9,bright:1,soft:.73,powerful:1.18}[spec.tone]||1):1;
  return (sum*.82+breath+instability+percussive)*env*velocity*decay*presence*tremolo;
 }
-async function render(score,{sampleRate=22050,onProgress=()=>{},shouldAbort=()=>false}={}){
+async function render(score,{sampleRate=22050,excludeSyntheticLead=false,onProgress=()=>{},shouldAbort=()=>false}={}){
  if(score?.schema!=='nexus.music.orchestra-score.v1'||![22050,44100].includes(sampleRate))fail('invalid-render-input');
+ if(typeof excludeSyntheticLead!=='boolean')fail('invalid-lead-voice-flag');
  if(score.durationSeconds>120||score.notes.length>1800)fail('render-limit');
+ const playable=excludeSyntheticLead?score.notes.filter(n=>n.part!=='lead_voice'):score.notes;
  const frames=Math.ceil((score.durationSeconds+.25)*sampleRate);
  if(frames*12>80*1024*1024)fail('render-memory-budget');
  const l=new Float32Array(frames),r=new Float32Array(frames);
- for(let j=0;j<score.notes.length;j++){
+ for(let j=0;j<playable.length;j++){
   if(shouldAbort())fail('render-cancelled');
-  const n=score.notes[j],offset=Math.floor(n.startTick/TPQ*60/score.bpm*sampleRate),
+  const n=playable[j],offset=Math.floor(n.startTick/TPQ*60/score.bpm*sampleRate),
    end=clamp(Math.floor((n.startTick+n.lengthTicks)/TPQ*60/score.bpm*sampleRate),0,frames);
   const length=(end-offset)/sampleRate,frequency=440*2**((n.pitch-69)/12);
   const power=.19,gl=power*Math.sqrt((1-n.pan)/2),gr=power*Math.sqrt((1+n.pan)/2);
@@ -422,7 +424,7 @@ async function render(score,{sampleRate=22050,onProgress=()=>{},shouldAbort=()=>
    l[k]+=v*gl;r[k]+=v*gr;
    phase+=step;if(phase>TAU*2048)phase%=TAU;
   }
-  if(j%12===0){onProgress(j/score.notes.length*.7);await new Promise(resolve=>setTimeout(resolve,0))}
+  if(j%12===0){onProgress(j/Math.max(1,playable.length)*.7);await new Promise(resolve=>setTimeout(resolve,0))}
  }
  let peak=0;
  for(let k=0;k<frames;k++){if(shouldAbort())fail('render-cancelled');peak=Math.max(peak,Math.abs(l[k]),Math.abs(r[k]))}
