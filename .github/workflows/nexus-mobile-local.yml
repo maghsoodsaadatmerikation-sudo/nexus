@@ -26,6 +26,10 @@ on:
 permissions:
   contents: read
 
+# Build from immutable reviewed head commit, not GitHub's synthetic PR merge.
+env:
+  NEXUS_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   verified-mobile-zip:
     name: reproducible-local-android-studio-motion-kit
@@ -37,7 +41,7 @@ jobs:
       - name: Checkout exact candidate without persisting GitHub credential
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ env.NEXUS_CANDIDATE_SHA }}
           persist-credentials: false
 
       - name: Verify reviewable public sources and Python/JS syntax
@@ -68,8 +72,8 @@ jobs:
         run: |
           set -euo pipefail
           export OUTPUT="$RUNNER_TEMP/nexus-mobile-local.zip"
-          python3 scripts/build-nexus-mobile-local.py --output "$OUTPUT" --source-commit "$GITHUB_SHA" > "$RUNNER_TEMP/nexus-mobile-local-receipt.json"
-          python3 scripts/build-nexus-mobile-local.py --verify-zip "$OUTPUT" --source-commit "$GITHUB_SHA"
+          python3 scripts/build-nexus-mobile-local.py --output "$OUTPUT" --source-commit "$NEXUS_CANDIDATE_SHA" > "$RUNNER_TEMP/nexus-mobile-local-receipt.json"
+          python3 scripts/build-nexus-mobile-local.py --verify-zip "$OUTPUT" --source-commit "$NEXUS_CANDIDATE_SHA"
           sha256sum "$OUTPUT" > "$OUTPUT.sha256"
           mkdir -m 0700 "$RUNNER_TEMP/nexus-mobile-real-zip"
           python3 -m zipfile -e "$OUTPUT" "$RUNNER_TEMP/nexus-mobile-real-zip"
