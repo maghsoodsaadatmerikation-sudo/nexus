@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import importlib.util
 from pathlib import Path
 import tempfile
@@ -72,6 +74,34 @@ class TestReleaseChain(unittest.TestCase):
             audit.validate_chain(**inputs)
         if message:
             self.assertIn(message, str(ctx.exception))
+
+    def test_real_public_2026_11_18_artifact_byte_identity_and_chain(self):
+        # Source: GitHub Actions artifact ID 14390824887, run 44222980195.
+        # SHA-256 is calculated from the ORIGINAL JSON entry in the ZIP,
+        # independently of this committed regression fixture.
+        artifact = (ROOT / "fixtures" / "v1.8-rebuild-evidence-main-2026-11-18.json").read_bytes()
+        self.assertEqual(hashlib.sha256(artifact).hexdigest(),
+                         "220b08c8c41f875679cbb18044746dc00f7e3d16e8d5a411cd276a0fd02a4474")
+        real = json.loads(artifact)
+        self.assertIs(type(real["nexus_verification_run_id"]), str)
+        self.assertIs(type(real["independent_rebuild_run_id"]), str)
+        inputs = fixture()
+        inputs["evidence"] = real
+        inputs["sha"] = real["candidate_sha"]
+        inputs["workflow_sha"] = real["candidate_sha"]
+        inputs["parent_id"] = int(real["nexus_verification_run_id"])
+        inputs["rebuild_id"] = int(real["independent_rebuild_run_id"])
+        inputs["parent"]["id"] = inputs["parent_id"]
+        inputs["rebuild"]["id"] = inputs["rebuild_id"]
+        for obj in (inputs["parent"], inputs["rebuild"]):
+            obj["head_sha"] = real["candidate_sha"]
+            obj["head_commit"]["id"] = real["candidate_sha"]
+        inputs["main_branch"]["commit"]["sha"] = real["candidate_sha"]
+        report = audit.validate_chain(**inputs)
+        self.assertEqual(report["status"], "CONSISTENT_ONLY")
+        self.assertFalse(report["release_authorized"])
+        self.assertEqual(report["independent_executable_sha256"],
+                         "c6dd176f82b2789e669bcc5fc1f9e0cd47b569c46d888612457ca44f2166de32")
 
     def test_valid_two_hop_consistency_without_release_authority(self):
         report = audit.validate_chain(**fixture())
