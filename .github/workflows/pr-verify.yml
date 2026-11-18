@@ -28,6 +28,9 @@ jobs:
           python3 scripts/test-workflow-authority.py
           python3 scripts/verify-workflow-authority.py
 
+      - name: Test release-run origin validation without publication authority
+        run: python3 scripts/test-release-run-provenance.py
+
       - name: Test fail-closed runtime diagnostics
         run: |
           bash -n scripts/observe-runtime-drift.sh
