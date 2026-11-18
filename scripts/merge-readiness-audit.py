@@ -97,6 +97,8 @@ def assess(*, repo: dict, main: dict, pr: dict, ruleset: dict, runs: dict,
             and ruleset.get("target") == "branch"
             and ruleset.get("source") == REPO,
             "expected active branch ruleset missing/changed")
+    require(ruleset.get("bypass_actors") == [],
+            "ruleset has bypass actors or bypass metadata was withheld")
     require(nested(ruleset, "conditions", "ref_name", "include") == ["~DEFAULT_BRANCH"]
             and nested(ruleset, "conditions", "ref_name", "exclude") == [],
             "branch ruleset no longer targets exactly default branch")
@@ -171,6 +173,7 @@ def assess(*, repo: dict, main: dict, pr: dict, ruleset: dict, runs: dict,
         "main_sha": main_sha,
         "ruleset_id": ruleset["id"],
         "required_readonly_check_enforced": True,
+        "ruleset_has_no_bypass_actors": True,
         "strict_base_freshness_enforced": checks_options["strict_required_status_checks_policy"],
         "required_approvals": reviews_required,
         "workflow_results": evidence,
