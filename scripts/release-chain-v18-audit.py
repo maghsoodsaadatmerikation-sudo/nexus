@@ -79,11 +79,14 @@ def validate_chain(*, repo: str, sha: str, workflow_sha: str, parent_id: int,
     require(evidence["schema"] == _SCHEMA and evidence["status"] == "PASS",
             "invalid rebuild evidence schema/status")
     require(evidence["candidate_sha"] == sha, "evidence candidate SHA mismatch")
-    require(type(evidence["nexus_verification_run_id"]) is int
-            and evidence["nexus_verification_run_id"] == parent_id,
+    # The real v1.8 shell evidence writer marshals both IDs as decimal
+    # strings (sys.argv values), NOT JSON integers. Enforce its exact wire
+    # format and reject bools, floats, leading zeros, signs and whitespace.
+    require(type(evidence["nexus_verification_run_id"]) is str
+            and evidence["nexus_verification_run_id"] == str(parent_id),
             "evidence parent run ID mismatch")
-    require(type(evidence["independent_rebuild_run_id"]) is int
-            and evidence["independent_rebuild_run_id"] == rebuild_id,
+    require(type(evidence["independent_rebuild_run_id"]) is str
+            and evidence["independent_rebuild_run_id"] == str(rebuild_id),
             "evidence rebuild run ID mismatch")
     require(type(evidence["builders"]) is dict
             and set(evidence["builders"]) == {"a", "b"},
