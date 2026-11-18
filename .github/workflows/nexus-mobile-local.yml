@@ -9,6 +9,7 @@ on:
       - 'scripts/build-studio-phone-local.py'
       - 'scripts/build-studio-static.py'
       - 'web/motion*'
+      - 'scripts/test-nexus-mobile-offline-browser.mjs'
       - 'public/studio/**'
       - 'docs/NEXUS-MOBILE-LOCAL-INTEGRATED.md'
   push:
@@ -18,6 +19,7 @@ on:
       - 'scripts/build-nexus-mobile-local.py'
       - 'scripts/test-nexus-mobile-local.py'
       - 'web/motion*'
+      - 'scripts/test-nexus-mobile-offline-browser.mjs'
       - 'public/studio/**'
   workflow_dispatch:
 
@@ -49,6 +51,9 @@ jobs:
           python3 -m py_compile scripts/build-studio-phone-local.py scripts/build-nexus-mobile-local.py scripts/test-nexus-mobile-local.py
           node --check web/motion-core.js
           node --check web/motion-ui.js
+          node --check web/motion-offline-ui.js
+          node --check web/motion-offline-worker-template.js
+          node --check scripts/test-nexus-mobile-offline-browser.mjs
           node scripts/test-nexus-motion-core.mjs
 
       - name: Prove ZIP integrity, local Studio + Motion HTTP, denial of mutations
@@ -73,6 +78,25 @@ jobs:
           test -f "$RUNNER_TEMP/nexus-mobile-real-zip/nexus-mobile-local/apps.html"
           echo 'Verified Studio and Motion public-code package created; Android hardware NOT tested.'
 
+      - name: Prove offline Motion reopening after actual loopback server shutdown in Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
+          test -n "$NEXUS_PWA_CHROME"
+          export NEXUS_MOBILE_PACKAGE_DIR="$RUNNER_TEMP/nexus-mobile-real-zip/nexus-mobile-local"
+          node scripts/test-nexus-mobile-offline-browser.mjs > "$RUNNER_TEMP/nexus-mobile-offline-browser.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ['RUNNER_TEMP'])/'nexus-mobile-offline-browser.json').read_text())
+          assert r["status"]=="PASS"
+          assert r["python_loopback_really_stopped"] is True
+          assert r["offline_public_code_only"] is True
+          assert r["actual_android_hardware_tested"] is False
+          print("Real offline Chromium reload passed; no Android hardware claim.")
+          PY
+
       - name: Publish exact-source mobile ZIP and independent SHA-256
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
@@ -81,5 +105,6 @@ jobs:
             ${{ runner.temp }}/nexus-mobile-local.zip
             ${{ runner.temp }}/nexus-mobile-local.zip.sha256
             ${{ runner.temp }}/nexus-mobile-local-receipt.json
+            ${{ runner.temp }}/nexus-mobile-offline-browser.json
           if-no-files-found: error
           retention-days: 30
