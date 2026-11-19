@@ -90,6 +90,25 @@ main:has(#studio-focus-onboarding:not([hidden])) #retention {display: none;}
 .studio-brand h1 span {font-weight: 440; color: #c7e2d4;}
 .studio-brand p {color: #ddeee5; margin: 4px 0 0; font-size: .9rem;}
 .studio-masthead #language {width: auto; min-width: 92px; margin: 0;}
+/* Persistent privacy transparency without exposing user text or audio. */
+.studio-storage-center {
+  padding: 10px 15px 12px;
+  margin: 10px 0 18px;
+  border: 1px solid var(--studio-line);
+  border-radius: 14px;
+  background: var(--studio-card);
+}
+.studio-storage-center summary {overflow-wrap: anywhere;}
+.studio-storage-center summary span:last-child {font-weight: 450; color: var(--studio-muted);}
+.studio-storage-center[data-unsaved="true"] {border-color: #d9bd90;}
+.studio-storage-grid {display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 10px 0;}
+.studio-storage-grid > div {min-width: 0; padding: 9px 11px; border: 1px solid var(--studio-line); border-radius: 10px;}
+.studio-storage-grid dt {font-weight: 650; font-size: .9rem;}
+.studio-storage-grid dd {margin: 4px 0 0; color: var(--studio-muted); font-size: .86rem; overflow-wrap: anywhere;}
+.studio-storage-risk {font-size: .87rem; margin: 10px 0 2px; color: var(--studio-muted);}
+.studio-storage-center[data-unsaved="true"] .studio-storage-risk {color: #694921;}
+@media (max-width: 600px) {.studio-storage-grid {grid-template-columns: minmax(0, 1fr);}}
+
 #studio-install-card {
   border: 1px solid var(--studio-line);
   border-radius: 12px;
