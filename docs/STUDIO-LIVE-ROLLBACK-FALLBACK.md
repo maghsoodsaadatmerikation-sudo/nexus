@@ -1,14 +1,23 @@
 # Phase 48 — independently matched previous-live Studio source fallback
 
-## Current provider facts (read-only observation, November 17 2026)
+## Current provider facts (read-only Render observation, 19 November 2026)
 
-The connected Render account confirmed the existing **public** static site is `nexus-studio-merikation` (service `srv-dbrjurc9v7es73cqe0v0`, workspace `tea-dabhioe10ojc73acbs8g`) on `https://nexus-studio-merikation.onrender.com/`. Its current live deploy is `dep-dbrle58n74is73971t0g`, source commit `560badfa977f6ed1e1298388ee1ce3650ebc9daa`. It uses repository `maghsoodsaadatmerikation-sudo/nexus`, branch `main`, build check `python3 scripts/build-studio-static.py --check`, publish path `public/studio`; AutoDeploy OFF. The next reviewed Git main commit for Phase 47 is distinct.
+The connected Render workspace confirmed the existing **public Studio** static site:
+- Service: `nexus-studio-merikation`, `srv-dbrjurc9v7es73cqe0v0`; workspace: `tea-dabhioe10ojc73acbs8g`.
+- Public origin: `https://nexus-studio-merikation.onrender.com/`.
+- **Currently live deploy at this observation:** `dep-dbvgqotg1s2s73f6ghtg`.
+- **Currently live Git source:** `e4f24218d7a3882391b593d78641d7a5ff50866d` (19 November 2026, Studio navigation/onboarding update, PR #306).
+- Repository: `maghsoodsaadatmerikation-sudo/nexus`; branch `main`; build check `python3 scripts/build-studio-static.py --check`; published directory `public/studio`; AutoDeploy **OFF**.
+
+**Detected and corrected stale recovery pin:** The earlier fallback tool and workflow still pinned `560badfa977f6ed1e1298388ee1ce3650ebc9daa` / `dep-dbrle58n74is73971t0g` (13 November). This was no longer the currently live source and could not independently establish a usable backup of the current public site. The current fallback code, tests and workflow now bind the actual latest observed live source and deploy above.
+
+This is a time-stamped **provider metadata observation**, not proof that the public origin actually serves the same code. That independent claim requires the fallback workflow's read-only nine-asset HTTPS comparison to succeed. Re-read the Render deployment metadata immediately before promotion; an archived fallback becomes stale if the live site changes. The source ZIP does not prove the Render provider retained the old build artifact.
 
 Render [official rollback documentation](https://render.com/docs/rollbacks) says a service can be rolled back from its Dashboard **Deploys → recent successful deploy → Rollback → Rollback to this deploy**, or with Render's rollback API, **but only while that previous deploy's build artifact remains retained**. Current connected Render actions permit `get_deploy`/`list_deploys`/`trigger_deploy`, but do not expose **rollback** or test the retained artifact. Therefore the existence of a live historical deployment record **must not be presented as proof** that an instantaneous rollback can currently be executed through this chat.
 
 ## Concrete independent source fallback
 
-The [Previous-Live Public Source Fallback workflow](https://github.com/maghsoodsaadatmerikation-sudo/nexus/actions/workflows/studio-live-source-fallback.yml) checks out the exact historical **public static source** commit alongside the current reviewed tool code, verifies that the 13 allowed `public/studio/` files have not changed, and performs nine **actual read-only HTTPS GETs** against the public origin (HTML, service worker, manifest, icons and four device modules). It requires exact bytes for **seven code/manifest files** and canonical decoded RGBA pixel identity for **two PNG icons**, because Render can reencode PNG containers without changing the image. An unavailable URL, changed HTML/JS/worker, changed image pixel, or wrong historical source blocks publishing.
+The [Previous-Live Public Source Fallback workflow](https://github.com/maghsoodsaadatmerikation-sudo/nexus/actions/workflows/studio-live-source-fallback.yml) checks out the exact current **public static source** commit at the recorded snapshot alongside the current reviewed tool code, verifies that the 13 allowed `public/studio/` files have not changed, and performs nine **actual read-only HTTPS GETs** against the public origin (HTML, service worker, manifest, icons and four device modules). It requires exact bytes for **seven code/manifest files** and canonical decoded RGBA pixel identity for **two PNG icons**, because Render can reencode PNG containers without changing the image. An unavailable URL, changed HTML/JS/worker, changed image pixel, or wrong historical source blocks publishing.
 
 If all checks pass, the workflow publishes for 30 days: `nexus-studio-previous-live-source.zip`, its independent SHA-256 sidecar, and `nexus-studio-previous-live-witness.json` containing source/deploy IDs and the nine verified path statuses, explicitly marking pixel-equivalent icons as `PIXEL_MATCH` when raw PNG bytes differ. The source ZIP contains exactly 13 **public code** files and **no** archive, user chats, keys, passwords, runtime model weights, private environment variables, provider tokens or Railway data. Source commit and public bytes are pinned independently of Render's cached build artifact.
 
