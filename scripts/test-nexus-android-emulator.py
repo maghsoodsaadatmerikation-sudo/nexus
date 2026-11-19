@@ -69,17 +69,22 @@ def ui_tree() -> ET.Element:
 
 
 def tap_link(needle: str) -> None:
-    for index in range(5):
+    # UIAutomator can briefly return a partial/empty WebView tree immediately
+    # after a successful DOM readiness callback. Poll without scrolling first;
+    # the old test swept off the initial chooser after its first empty dump.
+    observations = 0
+    for index in range(14):
         try:
             tree = ui_tree()
+            observations += sum(1 for node in tree.iter("node")
+                                if node.attrib.get("text") or node.attrib.get("content-desc"))
             for node in tree.iter("node"):
                 title = (node.attrib.get("text", "") + " " +
                          node.attrib.get("content-desc", ""))
-                if needle.lower() not in title.lower():
+                if needle.casefold() not in title.casefold():
                     continue
-                bounds = node.attrib.get("bounds", "")
-                coords = re.findall(r"\d+", bounds)
-                if len(coords) != 4:
+                coords = re.findall(r"\d+", node.attrib.get("bounds", ""))
+                if len(coords) != 4 or node.attrib.get("enabled") == "false":
                     continue
                 x1, y1, x2, y2 = map(int, coords)
                 if x2 <= x1 or y2 <= y1:
@@ -88,11 +93,15 @@ def tap_link(needle: str) -> None:
                 return
         except (ET.ParseError, RuntimeError):
             pass
-        if index == 4:
-            break
-        adb("shell", "input", "swipe", "480", "1300", "480", "360", "350", timeout=15)
-        time.sleep(1)
-    raise RuntimeError("Real UI did not expose an actionable link: " + needle)
+        if index in (5, 8, 11):
+            adb("shell", "input", "swipe", "480", "1420", "480", "450", "260", timeout=15)
+        elif index in (6, 9, 12):
+            adb("shell", "input", "swipe", "480", "480", "480", "1480", "260", timeout=15)
+        else:
+            time.sleep(.7)
+    raise RuntimeError("Real UI did not expose actionable link " + needle +
+                       " after 14 tree checks (accessible-node-observations=" +
+                       str(observations) + ")")
 
 
 def package_private_file() -> bytes:
