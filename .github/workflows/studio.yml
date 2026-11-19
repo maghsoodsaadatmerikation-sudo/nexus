@@ -33,6 +33,7 @@ jobs:
           persist-credentials: false
       - name: Verify deterministic bundle and bounded state
         run: |
+          python3 scripts/test-studio-module-graph.py
           python3 scripts/build-studio.py --check
           node --check web/studio-core.js
           node --check web/studio-app.js
