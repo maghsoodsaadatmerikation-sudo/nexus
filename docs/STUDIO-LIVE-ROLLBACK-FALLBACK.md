@@ -5,11 +5,11 @@
 The connected Render workspace confirmed the existing **public Studio** static site:
 - Service: `nexus-studio-merikation`, `srv-dbrjurc9v7es73cqe0v0`; workspace: `tea-dabhioe10ojc73acbs8g`.
 - Public origin: `https://nexus-studio-merikation.onrender.com/`.
-- **Currently live deploy at this observation:** `dep-dbvgqotg1s2s73f6ghtg`.
-- **Currently live Git source:** `e4f24218d7a3882391b593d78641d7a5ff50866d` (19 November 2026, Studio navigation/onboarding update, PR #306).
+- **Currently live deploy at this observation:** `dep-dbvkuonf3r2c73cj3930`.
+- **Currently live Git source:** `9e05b840fc2d36d7bc268aede2693ab4d6fb08e3` (19 November 2026, Studio fallback review, PR #321).
 - Repository: `maghsoodsaadatmerikation-sudo/nexus`; branch `main`; build check `python3 scripts/build-studio-static.py --check`; published directory `public/studio`; AutoDeploy **OFF**.
 
-**Detected and corrected stale recovery pin:** The earlier fallback tool and workflow still pinned `560badfa977f6ed1e1298388ee1ce3650ebc9daa` / `dep-dbrle58n74is73971t0g` (13 November). This was no longer the currently live source and could not independently establish a usable backup of the current public site. The current fallback code, tests and workflow now bind the actual latest observed live source and deploy above.
+The previous successful deploy `dep-dbvgqotg1s2s73f6ghtg` from `e4f24218d7a3882391b593d78641d7a5ff50866d` is now deactivated. The fallback tool, tests and workflow pin the confirmed live deployment above.
 
 This is a time-stamped **provider metadata observation**, not proof that the public origin actually serves the same code. That independent claim requires the fallback workflow's read-only nine-asset HTTPS comparison to succeed. Re-read the Render deployment metadata immediately before promotion; an archived fallback becomes stale if the live site changes. The source ZIP does not prove the Render provider retained the old build artifact.
 

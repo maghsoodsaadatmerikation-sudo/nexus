@@ -8,6 +8,8 @@ ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('studio_browser',ROOT/'scripts/test-studio-browser.py')
 module=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
+# This focused witness deliberately has fewer checks than the full Studio UI.
+module.MIN_CHECKS=30
 WITNESS=r"""
 window.addEventListener('load',async()=>{
  const $=id=>document.getElementById(id),checks=[];

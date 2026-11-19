@@ -25,8 +25,8 @@ _spec = importlib.util.spec_from_file_location("nexus_static_release_gate", SCRI
 gate = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(gate)
 
-LIVE_COMMIT = "e4f24218d7a3882391b593d78641d7a5ff50866d"
-LIVE_DEPLOY = "dep-dbvgqotg1s2s73f6ghtg"
+LIVE_COMMIT = "9e05b840fc2d36d7bc268aede2693ab4d6fb08e3"
+LIVE_DEPLOY = "dep-dbvkuonf3r2c73cj3930"
 SERVICE = "srv-dbrjurc9v7es73cqe0v0"
 WORKSPACE = "tea-dabhioe10ojc73acbs8g"
 SCHEMA = "nexus.studio.live-source-fallback.v1"
