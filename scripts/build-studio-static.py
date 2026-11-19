@@ -62,18 +62,37 @@ const modelClick=$('check-model').onclick;
 $('check-model').onclick=function(event){if($('model-engine')?.value!=='device'&&!$('gateway').value.trim()){$('model-status').textContent=text('No model hosted here. Local guide is available.','اینجا مدلی میزبانی نمی‌شود؛ راهنمای محلی در دسترس است.');return}return modelClick.call(this,event)};
 let changing=false;
 async function change(fn){if(changing)return;changing=true;$('studio-offline').disabled=$('studio-remove-offline').disabled=true;try{if(!isSecureContext||!('serviceWorker'in navigator))throw Error('unsupported');await fn()}catch{$('studio-offline-state').textContent=text('Offline setup failed. Reconnect and try again in a supported browser.','آماده‌سازی آفلاین انجام نشد؛ با اتصال اینترنت و مرورگر پشتیبانی‌شده دوباره تلاش کن.')}finally{changing=false;$('studio-offline').disabled=$('studio-remove-offline').disabled=false}}
+async function studioRegistration(){
+ const registration=await navigator.serviceWorker.getRegistration(base.href);
+ return registration?.scope===base.href?registration:null;
+}
+function workerAction(worker,type,reopen=false){
+ return new Promise((resolve,reject)=>{
+  const channel=new MessageChannel();
+  const finish=(fn,value)=>{clearTimeout(timer);channel.port1.close();channel.port2.close();fn(value)};
+  const timer=setTimeout(()=>finish(reject,Error('offline-worker-timeout')),10000);
+  channel.port1.onmessage=event=>event.data?.ok?finish(resolve):finish(reject,Error('offline-worker-refused'));
+  try{worker.postMessage({type,reopen},[channel.port2])}catch(error){finish(reject,error)}
+ });
+}
 $('studio-offline').onclick=()=>change(async()=>{
- const registration=await navigator.serviceWorker.register(new URL('service-worker.js',base),{scope:base.href,updateViaCache:'none'});
- const limit=Date.now()+15000;while(registration.installing||registration.waiting||!registration.active||registration.active.state!=='activated'){if(Date.now()>limit)throw Error('activation-timeout');await new Promise(r=>setTimeout(r,100))}
- await new Promise((resolve,reject)=>{const channel=new MessageChannel(),timer=setTimeout(()=>{channel.port1.close();reject(Error('cache-refresh-timeout'))},10000);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();event.data?.ok?resolve():reject(Error('cache-refresh-failed'))};registration.active.postMessage({type:'refresh-public-shell'},[channel.port2])});
- const names=(await caches.keys()).filter(n=>n.startsWith(prefix));let present=false;
- for(const name of names){const cache=await caches.open(name);if(await cache.match(base.href))present=true}
- if(!present)throw Error('missing-shell');
+ const existing=await studioRegistration();
+ const registration=existing??await navigator.serviceWorker.register(
+  new URL('service-worker.js',base),{scope:base.href,updateViaCache:'none'}
+ );
+ const limit=Date.now()+15000;
+ while(registration.active?.state!=='activated'){
+  if(Date.now()>limit)throw Error('activation-failed');
+  await new Promise(r=>setTimeout(r,100));
+ }
+ await workerAction(registration.active,'refresh-public-shell',!existing);
  $('studio-offline-state').textContent=text('Offline app code is ready. Save your session separately.','کد برنامه برای حالت آفلاین آماده است؛ نشست را جدا ذخیره کن.');
 });
 $('studio-remove-offline').onclick=()=>change(async()=>{
- const registration=await navigator.serviceWorker.getRegistration(base.href);
- if(registration&&registration.scope===base.href)await registration.unregister();
+ const registration=await studioRegistration();
+ // Older, already installed workers ignore the removal message.
+ if(registration?.active)await workerAction(registration.active,'discard-public-shell').catch(()=>{});
+ if(registration)await registration.unregister();
  await Promise.all((await caches.keys()).filter(n=>n.startsWith(prefix)).map(n=>caches.delete(n)));
  $('studio-offline-state').textContent=text('Offline copy removed. Your open session and encrypted archives were retained.','نسخهٔ آفلاین حذف شد؛ نشست باز و آرشیوهای رمزگذاری‌شده حفظ شدند.');
 });
@@ -86,7 +105,8 @@ const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'__PACKAGE_ID__';
 const ENTRY=new URL('./',self.location.href).href;
 const HTML={url:ENTRY,bytes:__INDEX_BYTES__,sha256:EXPECTED_SHA256,kind:'html'};
 const CODE=__CODE_ASSETS__.map(a=>({...a,url:new URL(a.path,ENTRY).href}));
-const NETWORK_DEADLINE_MS=8000;
+const ASSETS=[HTML,...CODE],NETWORK_DEADLINE_MS=8000;
+let preparing=null,removing=null,discarded=false;
 async function verified(response,asset=HTML){
  if(!response||response.status!==200||response.redirected||response.type!=='basic'||!response.body)return false;
  const mime=(response.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
@@ -118,29 +138,79 @@ async function fetchVerified(request,asset,options={}){
   if(await verified(response,asset))return response;
  }catch{}finally{clearTimeout(timer)}
  controller.abort();
- if(response?.body)void response.body.cancel().catch(()=>{});
+ releaseBody(response);
  return null;
 }
+function releaseBody(response){if(response?.body)void response.body.cancel().catch(()=>{})}
+async function cachedAsset(asset){
+ let response;
+ try{
+  response=await caches.match(asset.url,{cacheName:CACHE});
+  if(await verified(response,asset))return response;
+ }catch{}
+ releaseBody(response);
+ return null;
+}
+async function hasShell(){
+ for(const asset of ASSETS){
+  const response=await cachedAsset(asset);
+  if(!response)return false;
+  releaseBody(response);
+ }
+ return true;
+}
 async function cacheShell(){
- const assets=[HTML,...CODE];
- const responses=await Promise.all(assets.map(asset=>fetchVerified(
+ const responses=await Promise.all(ASSETS.map(asset=>fetchVerified(
   asset.url,asset,{cache:'no-store',credentials:'omit',redirect:'error'}
  )));
- if(responses.some(response=>!response)){
-  for(const response of responses)if(response?.body)void response.body.cancel().catch(()=>{});
+ if(discarded||responses.some(response=>!response)){
+  responses.forEach(releaseBody);
   throw Error('studio-integrity-mismatch');
  }
  const cache=await caches.open(CACHE);
- for(const [index,asset] of assets.entries())await cache.put(asset.url,responses[index]);
+ for(const [index,asset] of ASSETS.entries())await cache.put(asset.url,responses[index]);
 }
-self.addEventListener('install',event=>event.waitUntil((async()=>{await cacheShell();await self.skipWaiting()})()));
-self.addEventListener('message',event=>{if(event.data?.type!=='refresh-public-shell'||!event.ports[0])return;event.waitUntil(cacheShell().then(()=>event.ports[0].postMessage({ok:true}),()=>event.ports[0].postMessage({ok:false})))});
+async function ensureShell(){
+ if(discarded)throw Error('studio-offline-disabled');
+ if(!preparing)preparing=(async()=>{if(!await hasShell())await cacheShell()})().finally(()=>{preparing=null});
+ await preparing;
+ if(discarded)throw Error('studio-offline-disabled');
+}
+async function discardShell(){
+ discarded=true;
+ if(!removing)removing=(async()=>{
+  if(preparing)await preparing.catch(()=>{});
+  await caches.delete(CACHE);
+ })().finally(()=>{removing=null});
+ await removing;
+}
+async function refreshShell(reopen){
+ if(removing)throw Error('studio-removal-in-progress');
+ if(reopen)discarded=false;
+ await ensureShell();
+}
+self.addEventListener('install',event=>event.waitUntil((async()=>{await ensureShell();await self.skipWaiting()})()));
+self.addEventListener('message',event=>{
+ const port=event.ports[0];
+ if(!port)return;
+ const type=event.data?.type;
+ const action=type==='refresh-public-shell'?()=>refreshShell(event.data.reopen===true):type==='discard-public-shell'?discardShell:null;
+ if(action)event.waitUntil(action().then(()=>port.postMessage({ok:true}),()=>port.postMessage({ok:false})));
+});
 self.addEventListener('activate',event=>event.waitUntil((async()=>{await Promise.all((await caches.keys()).filter(n=>n.startsWith(PREFIX)&&n!==CACHE).map(n=>caches.delete(n)));await self.clients.claim()})()));
 self.addEventListener('fetch',event=>{
  const request=event.request,url=new URL(request.url),entry=new URL(ENTRY);
- if(request.method!=='GET'||url.origin!==entry.origin||url.search)return;
- const asset=CODE.find(a=>a.url===url.href)||(request.mode==='navigate'&&[entry.pathname,entry.pathname+'index.html'].includes(url.pathname)?HTML:null);if(!asset)return;
- event.respondWith((async()=>{const online=await fetchVerified(request,asset);if(online)return online;const cache=await caches.open(CACHE),response=await cache.match(asset.url);try{if(await verified(response,asset))return response}catch{}if(response?.body)void response.body.cancel().catch(()=>{});return new Response('Studio offline code is unavailable. Reconnect and retry.',{status:503,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}})})());
+ if(discarded||request.method!=='GET'||url.origin!==entry.origin)return;
+ const isEntry=request.mode==='navigate'&&[entry.pathname,entry.pathname+'index.html'].includes(url.pathname);
+ const asset=isEntry?HTML:!url.search?CODE.find(a=>a.url===url.href):null;
+ if(!asset)return;
+ event.respondWith((async()=>{
+  const online=await fetchVerified(request,asset);
+  if(online)return online;
+  const cached=await cachedAsset(asset);
+  if(cached)return cached;
+  return new Response('Studio offline code is unavailable. Reconnect and retry.',{status:503,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}});
+ })());
 });
 '''
 

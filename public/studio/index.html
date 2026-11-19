@@ -3757,18 +3757,37 @@ const modelClick=$('check-model').onclick;
 $('check-model').onclick=function(event){if($('model-engine')?.value!=='device'&&!$('gateway').value.trim()){$('model-status').textContent=text('No model hosted here. Local guide is available.','اینجا مدلی میزبانی نمی‌شود؛ راهنمای محلی در دسترس است.');return}return modelClick.call(this,event)};
 let changing=false;
 async function change(fn){if(changing)return;changing=true;$('studio-offline').disabled=$('studio-remove-offline').disabled=true;try{if(!isSecureContext||!('serviceWorker'in navigator))throw Error('unsupported');await fn()}catch{$('studio-offline-state').textContent=text('Offline setup failed. Reconnect and try again in a supported browser.','آماده‌سازی آفلاین انجام نشد؛ با اتصال اینترنت و مرورگر پشتیبانی‌شده دوباره تلاش کن.')}finally{changing=false;$('studio-offline').disabled=$('studio-remove-offline').disabled=false}}
+async function studioRegistration(){
+ const registration=await navigator.serviceWorker.getRegistration(base.href);
+ return registration?.scope===base.href?registration:null;
+}
+function workerAction(worker,type,reopen=false){
+ return new Promise((resolve,reject)=>{
+  const channel=new MessageChannel();
+  const finish=(fn,value)=>{clearTimeout(timer);channel.port1.close();channel.port2.close();fn(value)};
+  const timer=setTimeout(()=>finish(reject,Error('offline-worker-timeout')),10000);
+  channel.port1.onmessage=event=>event.data?.ok?finish(resolve):finish(reject,Error('offline-worker-refused'));
+  try{worker.postMessage({type,reopen},[channel.port2])}catch(error){finish(reject,error)}
+ });
+}
 $('studio-offline').onclick=()=>change(async()=>{
- const registration=await navigator.serviceWorker.register(new URL('service-worker.js',base),{scope:base.href,updateViaCache:'none'});
- const limit=Date.now()+15000;while(registration.installing||registration.waiting||!registration.active||registration.active.state!=='activated'){if(Date.now()>limit)throw Error('activation-timeout');await new Promise(r=>setTimeout(r,100))}
- await new Promise((resolve,reject)=>{const channel=new MessageChannel(),timer=setTimeout(()=>{channel.port1.close();reject(Error('cache-refresh-timeout'))},10000);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();event.data?.ok?resolve():reject(Error('cache-refresh-failed'))};registration.active.postMessage({type:'refresh-public-shell'},[channel.port2])});
- const names=(await caches.keys()).filter(n=>n.startsWith(prefix));let present=false;
- for(const name of names){const cache=await caches.open(name);if(await cache.match(base.href))present=true}
- if(!present)throw Error('missing-shell');
+ const existing=await studioRegistration();
+ const registration=existing??await navigator.serviceWorker.register(
+  new URL('service-worker.js',base),{scope:base.href,updateViaCache:'none'}
+ );
+ const limit=Date.now()+15000;
+ while(registration.active?.state!=='activated'){
+  if(Date.now()>limit)throw Error('activation-failed');
+  await new Promise(r=>setTimeout(r,100));
+ }
+ await workerAction(registration.active,'refresh-public-shell',!existing);
  $('studio-offline-state').textContent=text('Offline app code is ready. Save your session separately.','کد برنامه برای حالت آفلاین آماده است؛ نشست را جدا ذخیره کن.');
 });
 $('studio-remove-offline').onclick=()=>change(async()=>{
- const registration=await navigator.serviceWorker.getRegistration(base.href);
- if(registration&&registration.scope===base.href)await registration.unregister();
+ const registration=await studioRegistration();
+ // Older, already installed workers ignore the removal message.
+ if(registration?.active)await workerAction(registration.active,'discard-public-shell').catch(()=>{});
+ if(registration)await registration.unregister();
  await Promise.all((await caches.keys()).filter(n=>n.startsWith(prefix)).map(n=>caches.delete(n)));
  $('studio-offline-state').textContent=text('Offline copy removed. Your open session and encrypted archives were retained.','نسخهٔ آفلاین حذف شد؛ نشست باز و آرشیوهای رمزگذاری‌شده حفظ شدند.');
 });

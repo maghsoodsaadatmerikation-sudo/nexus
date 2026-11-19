@@ -224,17 +224,21 @@ try{
  assert(cached.names.length===1&&cached.names[0].startsWith('nexus-studio-shell-v1-')&&cached.entries.length===5&&cached.entries.includes(ORIGIN)&&cached.sha===sourceDigest&&!cached.private,'cache-not-public-code-only');checks.push('opt-in-cache-exact-public-code-only');
  await poll(()=>retryJs("Boolean(navigator.serviceWorker.controller)"),10000,'worker-control');
  await js("window.__beforeOfflineReload=true;true");
- stage='true-offline';await setOffline(true);await rpc('Page.reload',{ignoreCache:true});
+ stage='true-offline';await setOffline(true);await rpc('Page.navigate',{url:ORIGIN+'?offline=1'});
  await poll(()=>retryJs("!window.__beforeOfflineReload&&navigator.onLine===false&&document.readyState==='complete'&&Boolean(window.NexusStudioUI)&&Boolean(document.getElementById('studio-offline'))"),15000,'offline-reload');
- assert(await js("NexusStudioUI.snapshot().projects.length===0"),'automatic-private-reopen');checks.push('true-offline-reload-still-locked');
+ assert(await js("location.search==='?offline=1'&&NexusStudioUI.snapshot().projects.length===0"),'offline-query-or-private-reopen');checks.push('true-offline-reload-still-locked');
+ await js("document.getElementById('studio-offline').click();true");
+ await poll(()=>retryJs("document.getElementById('studio-offline-state').textContent.includes('code is ready')"),12000,'offline-recheck-without-network');
+ checks.push('offline-prepare-is-idempotent-without-network');
  await js("document.getElementById('passphrase').value='synthetic secret phrase 123';document.getElementById('unlock').click();true");
  await poll(()=>retryJs("NexusStudioUI.snapshot().projects[0]?.title==='SYNTHETIC MOBILE PROJECT'"),12000,'offline-unlock');checks.push('offline-encrypted-reopen');
  await js("document.getElementById('language').value='fa';document.getElementById('language').dispatchEvent(new Event('change'));true");
  assert(await js("document.documentElement.dir==='rtl'&&getComputedStyle(document.querySelector('.studio-en')).display==='none'&&document.querySelector('#studio-focus-nav button[data-panel=conversation-card] .studio-control-label').textContent==='گفتگو'&&document.getElementById('studio-compose-send').textContent==='استفاده از راهنمای محلی'"),'persian-static-panel');checks.push('persian-rtl-navigation-and-installation-panel');
- stage='remove';await setOffline(false);
+ stage='remove';
  await js("document.getElementById('studio-remove-offline').click();true");await poll(()=>retryJs("document.getElementById('studio-offline-state').textContent.includes('حذف شد')"),12000,'remove-offline');
  assert(await js("(async()=>!(await navigator.serviceWorker.getRegistration(location.href))&&(await caches.keys()).length===0&&NexusStudioUI.snapshot().projects.length===1&&Boolean(await new NexusStudio.IndexedStore().read()))()"),'remove-destroyed-private-state');checks.push('remove-code-retains-open-and-encrypted-work');
  // Reinstall, corrupt only the cached public bytes, then verify true-offline fail-closed.
+ await setOffline(false);
  await js("document.getElementById('studio-offline').click();true");await poll(()=>retryJs("document.getElementById('studio-offline-state').textContent.includes('آماده است')"),25000,'reinstall');
  await js("(async()=>{const cache=await caches.open((await caches.keys())[0]);await cache.put(location.origin+'/',new Response('CORRUPTED PUBLIC SHELL',{headers:{'content-type':'text/html'}}));return true})()");
  lastDocumentStatus=null;await setOffline(true);await rpc('Page.reload',{ignoreCache:true});
