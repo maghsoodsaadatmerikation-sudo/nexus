@@ -2,6 +2,8 @@
 
 **Constitutional infrastructure for human judgment.**
 
+Created by **Maryam Najafi** · [maryamnajafi4991@gmail.com](mailto:maryamnajafi4991@gmail.com)
+
 NEXUS is a Rust-based constitutional core, epistemic workspace, authenticated HTTP gateway, browser client, and verification pipeline designed to help humans examine questions, evidence, alternatives, uncertainty, and consequences without transferring meaning, identity, or final decision authority to a machine.
 
 ## Core principle
