@@ -334,12 +334,55 @@ public final class MainActivity extends Activity {
         web.loadUrl(ROOT+"apps.html");
     }
 
+    /** Debug-only bounded native readback AFTER Android's real picker returns.
+     * The JavaScript result is just 1 / 0 / -1, never source bytes or text.
+     * No callbacks or permissions are exposed to user-controlled scripts.
+     */
+    private void debugReadbackOfImportedStoryboard(int remaining) {
+        if (remaining<=0 || web==null || web.getUrl()==null ||
+            (getApplicationInfo().flags &
+             android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)==0 ||
+            !local(Uri.parse(web.getUrl())) ||
+            !"/motion/".equals(Uri.parse(web.getUrl()).getEncodedPath())) return;
+        String check="(() => {const n=document.getElementById('motion-status');"+
+            "if(!n)return 0;const s=n.textContent||'';"+
+            "if(s.startsWith('Import rejected:'))return -1;"+
+            "return (s.startsWith('Imported storyboard JSON: 3 scenes')&&"+
+            "document.getElementById('motion-title')?.value==='NEXUS — A Journey'&&"+
+            "document.getElementById('motion-format')?.value==='1920x1080'&&"+
+            "document.getElementById('motion-fps')?.value==='30'&&"+
+            "document.querySelectorAll('#motion-scenes .scene').length===3)?1:0;"+
+            "})()";
+        web.evaluateJavascript(check,result -> {
+            if ("1".equals(result)) {
+                Log.i("NEXUS_ANDROID_SMOKE","/motion/ saf_import_ok=true");
+            } else if ("-1".equals(result)) {
+                Log.i("NEXUS_ANDROID_SMOKE","/motion/ saf_import_rejected=true");
+            } else if (remaining>1) {
+                web.postDelayed(() -> debugReadbackOfImportedStoryboard(remaining-1),450);
+            } else {
+                Log.i("NEXUS_ANDROID_SMOKE","/motion/ saf_import_unconfirmed=true");
+            }
+        });
+    }
+
     @Override protected void onActivityResult(int request,int result,Intent data) {
         super.onActivityResult(request,result,data);
         if (request==PICK_SOURCE && selectedFiles!=null) {
             Uri[] files=WebChromeClient.FileChooserParams.parseResult(result,data);
             selectedFiles.onReceiveValue(files);
             selectedFiles=null;
+            if (web!=null && web.getUrl()!=null &&
+                (getApplicationInfo().flags &
+                 android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0 &&
+                local(Uri.parse(web.getUrl())) &&
+                "/motion/".equals(Uri.parse(web.getUrl()).getEncodedPath())) {
+                // No filenames, Uris, file contents or user messages in logs.
+                boolean chosen=files!=null && files.length>0;
+                Log.i("NEXUS_ANDROID_SMOKE","/motion/ source_file_selected="+chosen);
+                if (chosen)
+                    web.postDelayed(() -> debugReadbackOfImportedStoryboard(32),450);
+            }
         } else if (request==PICK_EXPORT) {
             exporter.complete(result==RESULT_OK && data!=null ? data.getData() : null);
         }
