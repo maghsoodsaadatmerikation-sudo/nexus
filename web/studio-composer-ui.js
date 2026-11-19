@@ -6,7 +6,7 @@ const $=id=>document.getElementById(id);
 const required=['conversation-card','message','guide','prepare','request-review','consent',
  'send-model','save','vault-card','language','branch-notice'];
 if(required.some(id=>!$(id))||!window.NexusStudioUI?.uiStatus)return;
-const words=(en,fa)=>document.documentElement.lang==='fa'?fa:en;
+const words=window.NexusStudioUI.words;
 const box=document.createElement('section');box.id='studio-compose';box.className='studio-compose';
 box.setAttribute('aria-label','Conversation actions');
 const heading=document.createElement('strong');heading.id='studio-compose-heading';
@@ -102,7 +102,7 @@ $('message').addEventListener('keydown',event=>{
   run(); // In model mode only opens the consent review.
  }
 });
-$('language').addEventListener('change',()=>queueMicrotask(refresh));
+document.addEventListener('nexus-studio-language',()=>queueMicrotask(refresh));
 document.addEventListener('nexus-studio-state',refresh);
 window.NexusStudioCompose={refresh,mode:()=>select.value};
 refresh();

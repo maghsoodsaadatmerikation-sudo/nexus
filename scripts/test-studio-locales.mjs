@@ -17,3 +17,14 @@ assert.equal(MAX_PACKS,8);assert.throws(()=>install(value('sv')));assert.equal(r
 const updated=install(value('es','New Spanish'));assert.equal(registry.get('es'),updated);assert.equal(registry.get('he').dir,'rtl');checks++;
 assert.equal(registry.get('de').messages.conversation,'de');checks++;
 console.log(JSON.stringify({status:'PASS',checks,scope:'bounded-tab-local-label-packs',real_browser_tested:false}));
+
+await import('../web/studio-language-data.js');
+const bundled = globalThis.NexusStudioLanguages;
+assert.deepEqual(bundled.map(({code,dir})=>[code,dir]), [['es','ltr'],['tr','ltr'],['ar','rtl']]);
+for (const locale of bundled) {
+ assert.ok(Object.isFrozen(locale.messages));
+ assert.equal((locale.messages.localGuidePrompt.match(/\{message\}/g)||[]).length,1);
+ assert.ok(locale.controls['Reply using']);
+ assert.ok(locale.messages.consent);
+}
+console.log(JSON.stringify({status:'PASS',locales:bundled.map(pack=>pack.code),labels:Object.keys(bundled[0].messages).length}));

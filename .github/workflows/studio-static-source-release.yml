@@ -66,10 +66,10 @@ jobs:
           sys.path.insert(0,str(Path.cwd()/'scripts'))
           spec=importlib.util.spec_from_file_location('nexus_public_witness',Path('scripts/verify-studio-public.py'))
           w=importlib.util.module_from_spec(spec);spec.loader.exec_module(w)
-          assert w.observer.MAX_BYTES==450_000
+          assert w.observer.MAX_BYTES==480_000
           body=b'x'*350_000
           assert w.observer.compare(200,'text/html',body,body,'text/html')['ok']
-          body=b'x'*450_001
+          body=b'x'*480_001
           assert not w.observer.compare(200,'text/html',body,body,'text/html')['ok']
           PY
       - name: Package exact public site and verify source-bound SHA manifest

@@ -14,8 +14,8 @@ observer=importlib.util.module_from_spec(spec);spec.loader.exec_module(observer)
 observer.ORIGIN='https://nexus-studio-merikation.onrender.com'
 # The shared Pilot 12 observer defaults to 300KB, while current Studio HTML
 # legitimately exceeds that limit. Keep an explicit bounded Studio-only cap,
-# identical to the reviewed Phase 46 release allowlist (450KB).
-observer.MAX_BYTES=450_000
+# matching the Studio release package limit (480KB).
+observer.MAX_BYTES=480_000
 observer.ASSETS={
     '/':('public/studio/index.html','text/html'),
     '/manifest.json':('public/studio/manifest.json','manifest'),

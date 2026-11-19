@@ -216,7 +216,7 @@ section h2:focus, #studio-focus-tools-title:focus {outline: none;}
     <span class="studio-mark" aria-hidden="true">N</span>
     <div><h1>NEXUS <span>Studio</span></h1><p data-t="subtitle">Your conversations, sources and drafts — under your control.</p></div>
   </div>
-  <select id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option></select>
+  <select id="language" data-aria="languageLabel" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option></select>
 </header><details id="studio-install-card">
 <summary><span class="studio-en">Install or use offline</span><span class="studio-fa" lang="fa" dir="rtl">نصب یا استفادهٔ آفلاین</span></summary>
 <div class="studio-install-content">
@@ -231,8 +231,8 @@ section h2:focus, #studio-focus-tools-title:focus {outline: none;}
 <p id="studio-install-state" role="status" aria-live="polite"></p>
 <a href="#studio-privacy"><span class="studio-en">Privacy policy</span><span class="studio-fa">سیاست حریم خصوصی</span></a>
 </div></details>
-<details><summary data-t="languagePacks">Interface language packs</summary><p class="help" data-t="languageHelp">Up to eight complete translation packs can be kept in this tab. They contain labels only, not your projects.</p><button id="language-template" class="secondary" data-t="languageTemplate">Download English label template</button><input id="language-file" type="file" accept="application/json" aria-label="Import interface language pack"></details>
-<nav class="tool-nav" aria-label="Studio tools"><a href="#conversation-card" data-t="conversation">Conversation</a><a href="#data-card" data-t="dataTitle">Data analysis</a><a href="#research-card" data-t="research">Research</a><a href="#code-card" data-t="codeLab">Code</a><a href="#tasks-card" data-t="tasks">Tasks</a><a href="#chart-card" data-t="chartLab">Chart</a><a href="#music-card">Music Lab / موسیقی</a><a href="#orchestra-card">Orchestra / آواز</a><a href="#astrology-card" data-t="astroTitle">Astrology</a><a href="#sky-card" data-t="skyTitle">Sky</a><a href="#canvas-card" data-t="canvas">Canvas</a><a href="#vault-card" data-t="archive">Archive</a></nav>
+<details><summary data-t="languagePacks">Interface language packs</summary><p class="help" data-t="languageHelp">Up to eight complete translation packs can be kept in this tab. They contain labels only, not your projects.</p><button id="language-template" class="secondary" data-t="languageTemplate">Download English label template</button><input id="language-file" data-aria="importLanguage" type="file" accept="application/json" aria-label="Import interface language pack"></details>
+<nav class="tool-nav" aria-label="Studio tools"><a href="#conversation-card" data-t="conversation">Conversation</a><a href="#data-card" data-t="dataTitle">Data analysis</a><a href="#research-card" data-t="research">Research</a><a href="#code-card" data-t="codeLab">Code</a><a href="#tasks-card" data-t="tasks">Tasks</a><a href="#chart-card" data-t="chartLab">Chart</a><a href="#music-card" data-t="musicNav">Music Lab</a><a href="#orchestra-card" data-t="orchestraNav">Orchestra &amp; vocal</a><a href="#astrology-card" data-t="astroTitle">Astrology</a><a href="#sky-card" data-t="skyTitle">Sky</a><a href="#canvas-card" data-t="canvas">Canvas</a><a href="#vault-card" data-t="archive">Archive</a></nav>
 <details><summary data-t="capabilitiesTitle">Capability status & shortcuts</summary><p class="help" data-t="shortcutsHelp"></p><ul id="capability-status"></ul></details>
 <button id="undo-removal" class="secondary" data-t="undoRemoval" disabled>Undo last removal</button><p id="status" role="status" aria-live="polite"></p><p class="notice" id="retention"></p>
 <div class="grid"><aside>
@@ -1335,20 +1335,234 @@ class Registry{
 root.NexusLocales=Object.freeze({Registry,MAX_BYTES,MAX_PACKS});
 })(globalThis);
 
+/* Built-in Studio translations. Columns are Spanish, Turkish and Arabic. */
+(function(root){'use strict';
+const locales=[
+ {code:'es',name:'Español',dir:'ltr'},
+ {code:'tr',name:'Türkçe',dir:'ltr'},
+ {code:'ar',name:'العربية',dir:'rtl'}
+];
+const labels={
+ subtitle:['Tus conversaciones, fuentes y borradores, bajo tu control.','Sohbetleriniz, kaynaklarınız ve taslaklarınız sizin denetiminizde.','محادثاتك ومصادرك ومسوداتك تحت سيطرتك.'],
+ languageLabel:['Idioma de la interfaz','Arayüz dili','لغة الواجهة'],
+ languagePacks:['Paquetes de idioma','Dil paketleri','حزم اللغات'],
+ languageHelp:['Puedes importar hasta ocho paquetes de etiquetas para esta pestaña.','Bu sekmeye en fazla sekiz arayüz dil paketi aktarabilirsiniz.','يمكنك استيراد ما يصل إلى ثماني حزم لترجمة الواجهة في علامة التبويب هذه.'],
+ languageTemplate:['Descargar plantilla en inglés','İngilizce şablonu indir','تنزيل القالب الإنجليزي'],
+ importLanguage:['Importar paquete de idioma','Dil paketi aktar','استيراد حزمة لغة'],
+ projects:['Proyectos','Projeler','المشاريع'],
+ projectName:['Nombre del nuevo proyecto','Yeni proje adı','اسم المشروع الجديد'],
+ createProject:['Crear proyecto','Proje oluştur','إنشاء مشروع'],
+ deleteProject:['Eliminar proyecto','Projeyi sil','حذف المشروع'],
+ history:['Historial de conversaciones','Sohbet geçmişi','سجل المحادثات'],
+ search:['Buscar en todas las conversaciones','Tüm sohbetlerde ara','البحث في جميع المحادثات'],
+ showArchived:['Incluir archivadas','Arşivlenenleri göster','إظهار المحادثات المؤرشفة'],
+ newChat:['Nueva conversación','Yeni sohbet','محادثة جديدة'],
+ archive:['Archivo privado','Özel arşiv','الأرشيف الخاص'],
+ archiveHelp:['El guardado es manual y cifrado en este navegador. Conserva la copia cifrada y la contraseña por separado.','Bu tarayıcıda kayıt elle yapılır ve şifrelenir. Şifreli yedeği ve parolayı ayrı saklayın.','يتم الحفظ يدوياً وبتشفير داخل هذا المتصفح. احتفظ بالنسخة الاحتياطية المشفرة وعبارة المرور في مكانين منفصلين.'],
+ pass:['Contraseña de al menos 12 caracteres','En az 12 karakterlik parola','عبارة مرور لا تقل عن 12 حرفاً'],
+ repeat:['Repetir para crear un archivo o una copia','Yeni arşiv veya yedek için tekrar girin','أعد الإدخال لإنشاء أرشيف أو نسخة احتياطية'],
+ createVault:['Crear archivo','Arşiv oluştur','إنشاء أرشيف'],
+ unlock:['Desbloquear','Kilidi aç','فتح الأرشيف'],
+ lock:['Bloquear y limpiar','Kilitle ve temizle','قفل الأرشيف ومسح الشاشة'],
+ save:['Guardar sesión','Oturumu kaydet','حفظ الجلسة'],
+ backup:['Copia cifrada','Şifreli yedek','نسخة احتياطية مشفرة'],
+ restore:['Abrir archivo cifrado','Şifreli dosyayı aç','فتح ملف مشفر'],
+ erase:['Borrar archivo','Arşivi sil','حذف الأرشيف'],
+ conversation:['Conversación','Sohbet','المحادثة'],
+ rename:['Cambiar nombre','Yeniden adlandır','إعادة التسمية'],
+ archiveChat:['Archivar o reabrir','Arşivle veya yeniden aç','أرشفة أو إعادة فتح المحادثة'],
+ deleteChat:['Eliminar conversación','Sohbeti sil','حذف المحادثة'],
+ exportChat:['Exportar conversación','Sohbeti dışa aktar','تصدير المحادثة'],
+ temporary:['La sesión permanece en esta pestaña hasta que la guardes. Si la cierras, puedes perder tu trabajo.','Siz kaydedene kadar oturum yalnızca bu sekmede kalır. Sekmeyi kapatırsanız çalışmanız kaybolabilir.','تبقى الجلسة في علامة التبويب هذه إلى أن تحفظها. قد تفقد عملك إذا أغلقتها.'],
+ message:['Tu mensaje','Mesajınız','رسالتك'],
+ useMemory:['Incluir la memoria revisada del proyecto','Projenin gözden geçirilmiş belleğini ekle','تضمين ذاكرة المشروع التي راجعتها'],
+ useSources:['Incluir extractos pertinentes del proyecto','İlgili kaynak alıntılarını ekle','تضمين مقتطفات من مصادر المشروع ذات الصلة'],
+ guide:['Usar la guía de reflexión local','Yerel düşünme rehberini kullan','استخدام دليل التأمل المحلي'],
+ prepare:['Preparar solicitud al modelo','Model isteğini hazırla','إعداد الطلب للنموذج'],
+ regenerate:['Preparar otra respuesta','Başka bir yanıt hazırla','إعداد رد آخر'],
+ stop:['Detener','Durdur','إيقاف'],
+ modelSettings:['Conexión opcional a un modelo generativo','İsteğe bağlı üretken model bağlantısı','اتصال اختياري بنموذج توليدي'],
+ modelHelp:['El operador debe configurar una pasarela de modelos. Una suscripción a ChatGPT no es una credencial de API. Las claves del proveedor permanecen en la pasarela.','Model ağ geçidini yönetici yapılandırır. ChatGPT aboneliği API kimlik bilgisi değildir. Sağlayıcı anahtarları ağ geçidinde kalır.','يجب أن يضبط المشغّل بوابة النماذج. اشتراك ChatGPT لا يمنح بيانات اعتماد API. تبقى مفاتيح المزود في البوابة.'],
+ gatewayOrigin:['Dirección de la pasarela','Ağ geçidi adresi','عنوان بوابة النموذج'],
+ gatewayAccess:['Token de acceso a la pasarela','Ağ geçidi erişim belirteci','رمز دخول بوابة النموذج'],
+ checkModel:['Comprobar modelo configurado','Yapılandırılmış modeli denetle','التحقق من النموذج المضبوط'],
+ requestReview:['Contenido exacto que se enviará','Gönderilecek içeriğin tamamı','المحتوى الذي سيُرسل كما هو'],
+ consent:['Enviar este contenido exacto una vez al proveedor configurado.','Bu içeriği yapılandırılmış sağlayıcıya bir kez gönder.','إرسال هذا المحتوى كما هو مرة واحدة إلى المزود المحدد.'],
+ send:['Enviar solicitud aprobada','Onaylı isteği gönder','إرسال الطلب الموافق عليه'],
+ profile:['Asistente y memoria del proyecto','Proje asistanı ve belleği','مساعد المشروع وذاكرته'],
+ instructions:['Instrucciones personalizadas','Özel talimatlar','تعليمات مخصصة'],
+ memories:['Memoria revisada, una entrada por línea, hasta 30','Gözden geçirilmiş bellek, satır başına bir öğe, en fazla 30','الذاكرة التي راجعتها، عنصر واحد في كل سطر، بحد أقصى 30'],
+ applyProfile:['Aplicar preferencias del proyecto','Proje tercihlerini uygula','تطبيق تفضيلات المشروع'],
+ sources:['Fuentes locales','Yerel kaynaklar','المصادر المحلية'],
+ sourceQuery:['Texto que quieres encontrar','Aranacak metin','النص المراد العثور عليه'],
+ searchSources:['Buscar en fuentes','Kaynaklarda ara','البحث في المصادر'],
+ canvas:['Editor de escritura con versiones','Sürümlü yazı alanı','محرر كتابة يحتفظ بالإصدارات'],
+ documentTitle:['Título del documento','Belge başlığı','عنوان المستند'],
+ newDocument:['Nuevo documento','Yeni belge','مستند جديد'],
+ saveVersion:['Guardar nueva versión','Yeni sürümü kaydet','حفظ إصدار جديد'],
+ exportDocument:['Exportar Markdown','Markdown olarak dışa aktar','تصدير بصيغة Markdown'],
+ deleteDocument:['Eliminar documento','Belgeyi sil','حذف المستند'],
+ loadVersion:['Cargar versión en el editor','Sürümü düzenleyicide aç','فتح الإصدار في المحرر'],
+ unsaved:['Sesión temporal con cambios sin guardar','Geçici oturum, kaydedilmemiş değişiklikler','جلسة مؤقتة وتغييرات غير محفوظة'],
+ saved:['Sesión guardada con cifrado.','Oturum şifreli olarak kaydedildi.','حُفظت الجلسة بشكل مشفر.'],
+ failed:['No se pudo completar la operación. Comprueba los datos, los límites y la contraseña.','İşlem tamamlanamadı. Girdileri, sınırları ve parolayı kontrol edin.','تعذر إكمال العملية. تحقّق من المدخلات والحدود وعبارة المرور.'],
+ discard:['¿Reemplazar o eliminar este trabajo? Podrías perder los cambios sin guardar.','Bu çalışma değiştirilsin veya silinsin mi? Kaydedilmeyen değişiklikler kaybolabilir.','هل تريد استبدال هذا العمل أو حذفه؟ قد تفقد التغييرات غير المحفوظة.'],
+ plain:['¿Exportar texto sin cifrar? Puede contener datos privados.','Şifrelenmemiş metin dışa aktarılsın mı? Özel bilgiler içerebilir.','هل تريد تصدير نص غير مشفر؟ قد يتضمن معلومات خاصة.'],
+ branching:['Tu próximo mensaje creará una rama nueva. La original seguirá disponible.','Sonraki mesajınız yeni bir dal oluşturur. Özgün dal korunur.','ستنشئ رسالتك التالية فرعاً جديداً، وسيظل الفرع الأصلي متاحاً.'],
+ local:['Guía local','Yerel rehber','الدليل المحلي'],
+ human:['Tú','Siz','أنت'],
+ model:['Borrador del modelo','Model taslağı','مسودة النموذج'],
+ edit:['Editar en una rama nueva','Yeni dalda düzenle','تحرير في فرع جديد'],
+ toCanvas:['Copiar al editor','Yazı alanına kopyala','نسخ إلى المحرر'],
+ speak:['Leer en voz alta','Sesli oku','القراءة بصوت عالٍ'],
+ empty:['Crea un proyecto y luego inicia una conversación.','Bir proje oluşturup yeni bir sohbet başlatın.','أنشئ مشروعاً ثم ابدأ محادثة جديدة.'],
+ noModel:['No hay un modelo configurado. Puedes usar la guía local.','Model yapılandırılmadı. Yerel rehberi kullanabilirsiniz.','لم يُضبط نموذج بعد. يمكنك استخدام الدليل المحلي.'],
+ configured:['Modelo configurado','Yapılandırılmış model','النموذج المضبوط'],
+ apply:['Aplicado localmente. Guarda los cambios si quieres conservarlos.','Yerel olarak uygulandı. Kalıcı olması için kaydedin.','طُبق محلياً. احفظ التغييرات إذا أردت الاحتفاظ بها.'],
+ chatAttachments:['Adjuntar archivos de texto','Metin dosyası ekle','إرفاق ملفات نصية'],
+ chatAttachmentsHelp:['Adjunta hasta cuatro archivos TXT, Markdown, CSV, TSV o JSON de 128 KiB cada uno. Solo los extractos que revises se incluirán en la solicitud. Los archivos originales permanecen en esta pestaña.','Her biri en fazla 128 KiB olan dört TXT, Markdown, CSV, TSV veya JSON dosyası ekleyin. İsteğe yalnızca gözden geçirdiğiniz alıntılar eklenir. Özgün dosyalar bu sekmede kalır.','أرفق حتى أربعة ملفات TXT أو Markdown أو CSV أو TSV أو JSON، بحد أقصى 128 KiB لكل ملف. لا تُضاف إلى الطلب إلا المقتطفات التي تراجعها. تبقى الملفات الأصلية في علامة التبويب هذه.'],
+ chatAttachmentAdded:['Archivos listos para revisar antes del envío.','Dosyalar gönderim öncesi incelemeye hazır.','الملفات جاهزة للمراجعة قبل الإرسال.'],
+ chatAttachedUsed:['Extractos de esta solicitud:','Bu istekteki alıntılar:','مقتطفات هذا الطلب:'],
+ chatFilesNotSaved:['El contenido de los archivos no se guarda en el historial.','Dosya içeriği sohbet geçmişine kaydedilmez.','لا يُحفظ محتوى الملفات في سجل المحادثة.'],
+ chatRegenRequiresFiles:['Para generar otra respuesta, edita el mensaje y adjunta de nuevo los archivos.','Yeni bir yanıt için mesajı düzenleyin ve dosyaları yeniden ekleyin.','لإنشاء رد آخر، حرّر الرسالة وأرفق الملفات مجدداً.'],
+ needApply:['Aplica las preferencias y guarda las versiones antes de guardar o exportar la sesión.','Oturumu kaydetmeden veya dışa aktarmadan önce tercihleri uygulayın ve sürümleri kaydedin.','طبّق التفضيلات واحفظ الإصدارات قبل حفظ الجلسة أو تصديرها.'],
+ archiveDamaged:['El archivo está dañado o no es compatible. Tu sesión abierta sigue disponible para crear una copia cifrada.','Arşiv bozuk veya desteklenmiyor. Açık oturumunuzdan şifreli yedek oluşturabilirsiniz.','الأرشيف تالف أو غير مدعوم. تظل جلستك المفتوحة متاحة لإنشاء نسخة احتياطية مشفرة.'],
+ modelMode:['Modo de ejecución del modelo','Model çalışma modu','وضع تشغيل النموذج'],
+ modeDefault:['Configuración del proveedor','Sağlayıcı varsayılanı','الإعداد الافتراضي للمزود'],
+ modeThinking:['Razonamiento','Düşünme','التفكير'],
+ modeFast:['Sin razonamiento','Düşünme kapalı','دون تفكير'],
+ modelBudget:['Máximo de tokens generados (1–8192)','En fazla üretilecek belirteç sayısı (1–8192)','الحد الأقصى للرموز المولّدة (1–8192)'],
+ boundary:['NEXUS te ayuda a decidir. No toma decisiones ni actúa fuera del chat en tu nombre.','NEXUS karar vermenize yardımcı olur. Sizin adınıza karar vermez veya sohbet dışında işlem yapmaz.','يساعدك NEXUS على اتخاذ القرار. لا يتخذ قرارات نيابةً عنك أو ينفّذ إجراءات خارج المحادثة.'],
+ chatAttachedDocument:['Adjuntar un extracto de la última versión guardada','Son kaydedilen sürümden alıntı ekle','إرفاق مقتطف من آخر إصدار محفوظ'],
+ chatClearAttachments:['Quitar adjuntos','Ekleri kaldır','إزالة المرفقات'],
+ chatNoFiles:['No hay archivos de texto adjuntos','Ekli metin dosyası yok','لا توجد ملفات نصية مرفقة'],
+ chatAttachmentInvalid:['No se pudieron leer los archivos. Comprueba el tamaño y el formato.','Dosyalar okunamadı. Boyutu ve biçimi kontrol edin.','تعذرت قراءة الملفات. تحقّق من الحجم والصيغة.'],
+ chatAttachmentRequiresModel:['Los archivos adjuntos requieren un modelo. La guía local no puede leerlos.','Ekler için yapılandırılmış model gerekir. Yerel rehber ekleri okuyamaz.','تتطلب المرفقات نموذجاً مضبوطاً. لا يستطيع الدليل المحلي قراءتها.'],
+ musicNav:['Laboratorio musical','Müzik laboratuvarı','مختبر الموسيقى'],
+ orchestraNav:['Orquesta y voz','Orkestra ve vokal','الأوركسترا والغناء'],
+ dataTitle:['Análisis de datos','Veri analizi','تحليل البيانات'],
+ research:['Búsqueda de fuentes','Kaynak araştırması','البحث عن المصادر'],
+ researchQuery:['Consulta de búsqueda','Arama sorgusu','عبارة البحث'],
+ researchProvider:['Proveedor de búsqueda','Arama sağlayıcısı','مزود البحث'],
+ researchLanguage:['Idioma de búsqueda','Arama dili','لغة البحث'],
+ researchSearch:['Buscar','Ara','بحث'],
+ researchStop:['Detener búsqueda','Aramayı durdur','إيقاف البحث'],
+ codeLab:['Laboratorio de código','Kod laboratuvarı','مختبر البرمجة'],
+ tasks:['Tareas','Görevler','المهام'],
+ chartLab:['Gráficos','Grafikler','الرسوم البيانية'],
+ astroTitle:['Astrología','Astroloji','التنجيم'],
+ skyTitle:['Cielo','Gökyüzü','السماء'],
+ capabilitiesTitle:['Funciones y atajos','Özellikler ve kısayollar','الميزات والاختصارات'],
+ undoRemoval:['Deshacer última eliminación','Son silmeyi geri al','التراجع عن آخر حذف'],
+ localGuidePrompt:[
+  'Guía local de reflexión.\n\n¿Qué observaste directamente sobre «{message}»? Distingue lo observado, las interpretaciones y lo que aún no sabes. ¿Qué opción te gustaría considerar?',
+  'Yerel düşünme rehberi.\n\n«{message}» konusunda doğrudan ne gözlemlediniz? Gözlemlerinizi, yorumlarınızı ve belirsizlikleri ayırın. Hangi seçeneği değerlendirmek istersiniz?',
+  'دليل التأمل المحلي.\n\nما الذي لاحظته مباشرةً بشأن «{message}»؟ ميّز بين ما لاحظته وما فسّرته وما لا تعرفه بعد. أي خيار تود أن تفكر فيه؟'
+ ]
+};
+const controls={
+ 'Chat':['Chat','Sohbet','المحادثة'],
+ 'Projects':['Proyectos','Projeler','المشاريع'],
+ 'Tools':['Herramientas','Araçlar','الأدوات'],
+ 'Save':['Guardar','Kaydet','حفظ'],
+ 'Writing':['Escritura','Yazı','الكتابة'],
+ 'Research':['Investigación','Araştırma','البحث'],
+ 'Music Lab':['Laboratorio musical','Müzik laboratuvarı','مختبر الموسيقى'],
+ 'Orchestra & vocal':['Orquesta y voz','Orkestra ve vokal','الأوركسترا والغناء'],
+ 'Data analysis':['Análisis de datos','Veri analizi','تحليل البيانات'],
+ 'Charts':['Gráficos','Grafikler','الرسوم البيانية'],
+ 'Sources':['Fuentes','Kaynaklar','المصادر'],
+ 'Assistant & memory':['Asistente y memoria','Asistan ve bellek','المساعد والذاكرة'],
+ 'Code':['Código','Kod','البرمجة'],
+ 'Tasks':['Tareas','Görevler','المهام'],
+ 'Astrology':['Astrología','Astroloji','التنجيم'],
+ 'Sky':['Cielo','Gökyüzü','السماء'],
+ 'Draft and revisit versions':['Redacta y revisa versiones','Taslak yazın ve sürümleri inceleyin','اكتب مسودات وراجع الإصدارات'],
+ 'Look up public sources':['Consulta fuentes públicas','Herkese açık kaynaklarda arayın','ابحث في المصادر العامة'],
+ 'Compose and export WAV or MIDI':['Compón y exporta WAV o MIDI','Beste yapın ve WAV veya MIDI olarak aktarın','ألّف وصدّر بصيغة WAV أو MIDI'],
+ 'Arrange and mix your vocal':['Arregla y mezcla tu voz','Vokalinizi düzenleyin ve miksleyin','وزِّع وامزج صوتك الغنائي'],
+ 'Summarize CSV and JSON':['Resume archivos CSV y JSON','CSV ve JSON dosyalarını özetleyin','لخّص ملفات CSV وJSON'],
+ 'Draw charts and export PNG':['Crea gráficos y exporta PNG','Grafik çizin ve PNG olarak aktarın','ارسم مخططات وصدّرها بصيغة PNG'],
+ 'Find text in your files':['Busca texto en tus archivos','Dosyalarınızda metin bulun','ابحث عن نص في ملفاتك'],
+ 'Set project preferences':['Configura el proyecto','Proje tercihlerini düzenleyin','اضبط تفضيلات المشروع'],
+ 'Run reviewed JavaScript':['Ejecuta JavaScript revisado','Gözden geçirilmiş JavaScript çalıştırın','شغّل JavaScript الذي راجعته'],
+ 'Run a reviewed task plan':['Ejecuta un plan revisado','Gözden geçirilmiş görev planını çalıştırın','نفّذ خطة مهام راجعتها'],
+ 'Explore charts and transits':['Explora cartas y tránsitos','Haritaları ve geçişleri inceleyin','استكشف الخرائط والعبور'],
+ 'Inspect local sky calculations':['Consulta cálculos locales del cielo','Yerel gökyüzü hesaplarını inceleyin','راجع حسابات السماء المحلية'],
+ 'Show all sections':['Mostrar todas las secciones','Tüm bölümleri göster','عرض كل الأقسام'],
+ 'Focus on one section':['Centrarse en una sección','Tek bölüme odaklan','التركيز على قسم واحد'],
+ 'Primary Studio navigation':['Navegación principal de Studio','Studio ana gezinme menüsü','التنقل الرئيسي في الاستوديو'],
+ 'Studio tools':['Herramientas de Studio','Studio araçları','أدوات الاستوديو'],
+ 'Getting started':['Primeros pasos','Başlarken','البدء'],
+ 'Choose a tool':['Elige una herramienta','Bir araç seçin','اختر أداة'],
+ 'Close tools':['Cerrar herramientas','Araçları kapat','إغلاق الأدوات'],
+ 'Browse tools':['Ver herramientas','Araçlara göz at','تصفح الأدوات'],
+ 'Search tools':['Buscar herramientas','Araçlarda ara','البحث في الأدوات'],
+ 'No tools match your search.':['No hay herramientas que coincidan.','Aramanızla eşleşen araç yok.','لا توجد أدوات تطابق بحثك.'],
+ 'Step 1 of 2: Create a project. Your work stays in this tab until you explicitly save it to an encrypted archive.':['Paso 1 de 2. Crea un proyecto. Tu trabajo permanece en esta pestaña hasta que lo guardes en un archivo cifrado.','Adım 1/2. Bir proje oluşturun. Çalışmanız, şifreli arşive kaydedene kadar bu sekmede kalır.','الخطوة 1 من 2. أنشئ مشروعاً. يبقى عملك في علامة التبويب هذه إلى أن تحفظه في أرشيف مشفر.'],
+ 'Step 2 of 2: Start a conversation. The local reflection guide is not a generative AI model.':['Paso 2 de 2. Inicia una conversación. La guía de reflexión funciona de forma local y no usa IA generativa.','Adım 2/2. Bir sohbet başlatın. Yerel düşünme rehberi üretken yapay zekâ kullanmaz.','الخطوة 2 من 2. ابدأ محادثة. يعمل دليل التأمل محلياً دون نموذج ذكاء اصطناعي توليدي.'],
+ 'Create a project':['Crear un proyecto','Bir proje oluştur','إنشاء مشروع'],
+ 'New conversation':['Nueva conversación','Yeni sohbet','محادثة جديدة'],
+ 'Local reflection guide':['Guía de reflexión local','Yerel düşünme rehberi','دليل التأمل المحلي'],
+ 'Review AI model request':['Revisar solicitud al modelo','Model isteğini gözden geçir','مراجعة طلب نموذج الذكاء الاصطناعي'],
+ 'Reply using':['Responder con','Yanıtlama yöntemi','الرد باستخدام'],
+ 'Conversation actions':['Acciones de conversación','Sohbet işlemleri','إجراءات المحادثة'],
+ 'Choose how to respond':['Elige cómo responder','Yanıt yöntemini seçin','اختر طريقة الرد'],
+ 'Review before sending':['Revisar antes de enviar','Göndermeden önce incele','مراجعة قبل الإرسال'],
+ 'Use local guide':['Usar guía local','Yerel rehberi kullan','استخدام الدليل المحلي'],
+ 'Save encrypted session':['Guardar sesión cifrada','Şifreli oturumu kaydet','حفظ جلسة مشفرة'],
+ 'Set up private archive':['Configurar archivo privado','Özel arşivi yapılandır','إعداد الأرشيف الخاص'],
+ 'Model settings':['Ajustes del modelo','Model ayarları','إعدادات النموذج'],
+ 'No message is sent by this button. Review the exact context and separately approve it. A configured model is required.':['Este botón abre la revisión. Comprueba el contenido y autoriza el envío por separado. Se requiere un modelo configurado.','Bu düğme inceleme ekranını açar. İçeriği kontrol edip göndermeyi ayrıca onaylayın. Yapılandırılmış model gerekir.','يفتح هذا الزر شاشة المراجعة. تحقّق من المحتوى ثم وافق على إرساله بشكل منفصل. يلزم ضبط نموذج.'],
+ 'Local guide only — not generative AI. It cannot read attached files.':['Guía local sin IA generativa. No puede leer archivos adjuntos.','Üretken yapay zekâ içermeyen yerel rehber. Ekleri okuyamaz.','دليل محلي دون ذكاء اصطناعي توليدي. لا يقرأ الملفات المرفقة.'],
+ 'Work is not fully saved. Finish or clear draft fields, then save explicitly.':['Hay cambios sin guardar. Termina o borra los borradores y guarda la sesión.','Kaydedilmemiş değişiklikler var. Taslakları tamamlayın veya temizleyin, ardından kaydedin.','هناك تغييرات غير محفوظة. أكمل المسودات أو امسحها، ثم احفظ الجلسة.'],
+ 'Encrypted archive unlocked. Use Save to retain changes; keep a separate encrypted backup.':['Archivo cifrado abierto. Guarda los cambios y conserva una copia cifrada aparte.','Şifreli arşiv açık. Değişiklikleri kaydedin ve ayrı bir şifreli yedek saklayın.','الأرشيف المشفر مفتوح. احفظ التغييرات واحتفظ بنسخة احتياطية مشفرة منفصلة.'],
+ 'No encrypted archive is unlocked. This work can be lost if the tab closes.':['No hay ningún archivo cifrado abierto. Podrías perder el trabajo si cierras la pestaña.','Açık şifreli arşiv yok. Sekmeyi kapatırsanız çalışmanız kaybolabilir.','لا يوجد أرشيف مشفر مفتوح. قد تفقد العمل إذا أغلقت علامة التبويب.']
+};
+function column(rows,index){
+ return Object.freeze(Object.fromEntries(Object.entries(rows).map(([key,values])=>{
+  if(values.length!==locales.length||!values[index]?.trim())throw Error('studio-bundled-translation');
+  return [key,values[index]];
+ })));
+}
+root.NexusStudioLanguages=Object.freeze(locales.map((locale,index)=>Object.freeze({
+ ...locale,messages:column(labels,index),controls:column(controls,index)
+})));
+})(globalThis);
+
 'use strict';
 const S=NexusStudio,$=id=>document.getElementById(id),vault=new S.Vault(),undoSlot=new S.UndoSlot(),localePacks=new NexusLocales.Registry();
 let data=S.empty(),projectId=null,threadId=null,documentId=null,dirty=false,profileDirty=false,editorDirty=false,revision=0,branchBase=undefined,pending=null,controller=null,busy=false,language='en',modelInfo=null,languageImport=0,sourceViewStamp='';
 let chatAttachments=[],attachmentEpoch=0;
+const builtInLanguages=new Map(NexusStudioLanguages.map(pack=>[pack.code,pack]));
+const preferenceKey='nexus.studio.interface-language.v1';
+function restoreLanguage(){
+ try{
+  const saved=localStorage.getItem(preferenceKey);
+  if(saved==='fa'||builtInLanguages.has(saved))return saved;
+ }catch{}
+ return 'en';
+}
+function rememberLanguage(){
+ if(!['en','fa'].includes(language)&&!builtInLanguages.has(language))return;
+ try{localStorage.setItem(preferenceKey,language)}catch{}
+}
+language=restoreLanguage();
 const EN={subtitle:'Your conversations, sources and drafts — under your control.',projects:'Projects',projectName:'New project name',createProject:'Create project',deleteProject:'Delete project',history:'Conversation history',search:'Search all conversations',showArchived:'Include archived',newChat:'New conversation',archive:'Private archive',archiveHelp:'Saving is explicit and encrypted in this browser. Keep an encrypted backup and its passphrase separately.',pass:'Passphrase: at least 12 characters',repeat:'Repeat for a new archive or backup',createVault:'Create archive',unlock:'Unlock',lock:'Lock & clear',save:'Save session',backup:'Encrypted backup',restore:'Open encrypted file',erase:'Erase archive',conversation:'Conversation',rename:'Rename',archiveChat:'Archive / reopen',deleteChat:'Delete chat',exportChat:'Export transcript',temporary:'Until you explicitly save, this session exists only in this tab. Closing it can lose your work.',message:'Your message',useMemory:"Include this project's reviewed memory",useSources:'Include relevant project source excerpts',guide:'Use local reflection guide',prepare:'Prepare model request',regenerate:'Prepare another answer',stop:'Stop',modelSettings:'Optional generative model connection',modelHelp:'An operator must configure a model gateway. A ChatGPT subscription is not an API credential. Provider keys stay on the gateway; only its access token is entered here, for this tab.',checkModel:'Check configured model',requestReview:'Exact context to send',consent:'Send this exact context to the configured provider once.',send:'Send approved request',profile:'Project assistant & memory',instructions:'Custom instructions (preferences, not authority)',memories:'Reviewed memory — one item per line, up to 30',applyProfile:'Apply project preferences',memoryHelp:'Nothing is learned automatically. Memory is isolated to this project and sent only when selected. Removing memory does not remove earlier transcript text.',sources:'Local source search',sourceHelp:'Select UTF-8 TXT, Markdown, CSV, TSV or JSON files together, up to 256 KiB each and 12 per project. A batch is added only if every file is valid. Excerpts are local lexical search results, not verified facts. Files are never executed.',sourceQuery:'Words to find in project sources',searchSources:'Search sources',canvas:'Versioned writing canvas',documentTitle:'Document title',newDocument:'New document',saveVersion:'Save new version',exportDocument:'Export Markdown',deleteDocument:'Delete document',loadVersion:'Load version into editor',canvasHelp:'Every saved version remains available, up to 30 per document. Text and code are edited as inert text and never executed.',boundary:'NEXUS assists judgment. It cannot make a human decision or take external actions from a conversation.',unsaved:'Temporary session / unsaved changes',saved:'Applied session saved as encrypted data. Unapplied form text is excluded.',failed:'Operation failed. Check input, capacity, passphrase or archive conflicts. Work has not been silently overwritten.',discard:'Replace or delete this work? Unsaved work and form text can be lost.',plain:'Export unencrypted text? It may include private information.',needApply:'Apply preferences / astrology profiles and save document versions before saving/exporting the session.',branching:'Your next message creates a new branch; the original remains available.',local:'Guide — not a generative model',human:'You',model:'Model draft',edit:'Edit into a new branch',toCanvas:'Copy to canvas',speak:'Read aloud (device voice)',empty:'Create a project, then choose New conversation.',noModel:'No model configured. Local guide remains available.',configured:'Configured model',apply:'Applied locally. Save explicitly to retain this change.'};
 Object.assign(EN,{languagePacks:'Interface language packs',languageHelp:'Up to eight complete translation packs can be kept in this tab. They contain labels only, not your projects.',languageTemplate:'Download English label template',gatewayOrigin:'Model gateway origin',gatewayAccess:'Gateway access token (not the provider API key)'});
 const FA={subtitle:'گفتگو، منابع و نوشته‌هایت — در اختیار خودت.',projects:'پروژه‌ها',projectName:'نام پروژهٔ جدید',createProject:'ساخت پروژه',deleteProject:'حذف پروژه',history:'تاریخچهٔ گفتگو',search:'جست‌وجو در همهٔ گفتگوها',showArchived:'نمایش بایگانی‌شده‌ها',newChat:'گفتگوی جدید',archive:'آرشیو خصوصی',archiveHelp:'ذخیره‌سازی دستی و رمزگذاری‌شده در همین مرورگر است. پشتیبان رمزگذاری‌شده و گذرواژه را جدا نگه دار.',pass:'گذرواژه: حداقل ۱۲ نویسه',repeat:'تکرار برای آرشیو یا پشتیبان جدید',createVault:'ساخت آرشیو',unlock:'بازکردن قفل',lock:'قفل و پاک‌کردن صفحه',save:'ذخیرهٔ نشست',backup:'پشتیبان رمزگذاری‌شده',restore:'بازکردن فایل رمزگذاری‌شده',erase:'حذف آرشیو',conversation:'گفتگو',rename:'تغییر نام',archiveChat:'بایگانی / بازگردانی',deleteChat:'حذف گفتگو',exportChat:'خروجی گفتگو',temporary:'تا وقتی خودت ذخیره نکنی، این نشست فقط در همین برگه است. بستن آن ممکن است کار را از بین ببرد.',message:'پیام تو',useMemory:'حافظهٔ بازبینی‌شدهٔ همین پروژه را اضافه کن',useSources:'بخش‌های مرتبط منابع پروژه را اضافه کن',guide:'استفاده از راهنمای تأمل محلی',prepare:'آماده‌سازی درخواست مدل',regenerate:'آماده‌سازی پاسخ دیگر',stop:'توقف',modelSettings:'اتصال اختیاری مدل مولد',modelHelp:'مدیر سرور باید درگاه مدل را پیکربندی کند. اشتراک ChatGPT کلید API نیست. کلید مدل روی سرور می‌ماند؛ فقط توکن دسترسی درگاه در همین برگه وارد می‌شود.',checkModel:'بررسی مدل پیکربندی‌شده',requestReview:'متن دقیق ارسالی',consent:'این متن دقیق را یک بار به ارائه‌دهندهٔ پیکربندی‌شده بفرست.',send:'ارسال درخواست تأییدشده',profile:'دستیار و حافظهٔ پروژه',instructions:'دستورهای سفارشی — ترجیح، نه اختیار',memories:'حافظهٔ بازبینی‌شده — هر مورد یک خط، حداکثر ۳۰ مورد',applyProfile:'اعمال ترجیحات پروژه',memoryHelp:'یادگیری خودکار انجام نمی‌شود. حافظه فقط به همین پروژه تعلق دارد و با انتخاب تو ارسال می‌شود. حذف حافظه متن گفتگوهای قبلی را حذف نمی‌کند.',sources:'جست‌وجوی منابع محلی',sourceHelp:'فایل‌های متنی UTF-8 با قالب TXT، Markdown، CSV، TSV و JSON را گروهی انتخاب کن؛ هر فایل تا ۲۵۶ کیبی‌بایت و حداکثر ۱۲ فایل در پروژه. گروه فقط وقتی وارد می‌شود که همهٔ فایل‌ها معتبر باشند. نتیجهٔ جست‌وجوی واژگانی تأیید حقیقت نیست. فایل‌ها اجرا نمی‌شوند.',sourceQuery:'عبارت جست‌وجو در منابع پروژه',searchSources:'جست‌وجوی منابع',canvas:'ویرایشگر نسخه‌دار نوشته',documentTitle:'عنوان سند',newDocument:'سند جدید',saveVersion:'ذخیرهٔ نسخهٔ جدید',exportDocument:'خروجی Markdown',deleteDocument:'حذف سند',loadVersion:'بازکردن نسخه در ویرایشگر',canvasHelp:'هر نسخهٔ ذخیره‌شده تا سقف ۳۰ نسخه حفظ می‌شود. متن و کد اجرا نمی‌شوند.',boundary:'نکسوس به قضاوت کمک می‌کند؛ از داخل گفتگو تصمیم انسانی نمی‌گیرد و اقدام خارجی انجام نمی‌دهد.',unsaved:'نشست موقت / تغییرات ذخیره‌نشده',saved:'نشست اعمال‌شده رمزگذاری و ذخیره شد. متن فرم‌های اعمال‌نشده ذخیره نمی‌شود.',failed:'عملیات ناموفق بود. ورودی، ظرفیت، گذرواژه یا تداخل آرشیو را بررسی کن. کار بدون اطلاع بازنویسی نشده است.',discard:'این کار جایگزین یا حذف شود؟ تغییرات ذخیره‌نشده ممکن است از دست بروند.',plain:'خروجی متن بدون رمزگذاری تهیه شود؟ ممکن است شامل اطلاعات خصوصی باشد.',needApply:'پیش از ذخیره یا خروجی نشست، پروفایل‌ها و ترجیحات را اعمال و نسخهٔ سند را ذخیره کن.',branching:'پیام بعدی شاخهٔ تازه می‌سازد؛ شاخهٔ اصلی باقی می‌ماند.',local:'راهنما — پاسخ مدل مولد نیست',human:'تو',model:'پیش‌نویس مدل',edit:'ویرایش در شاخهٔ تازه',toCanvas:'کپی به ویرایشگر',speak:'خواندن با صدای دستگاه',empty:'یک پروژه بساز، سپس گفتگوی جدید را انتخاب کن.',noModel:'مدل پیکربندی نشده؛ راهنمای محلی در دسترس است.',configured:'مدل پیکربندی‌شده',apply:'محلی اعمال شد. برای نگهداری، خودت ذخیره کن.'};
 Object.assign(FA,{languagePacks:'بسته‌های زبان رابط',languageHelp:'تا هشت بستهٔ ترجمهٔ کامل در همین برگه نگه داشته می‌شوند. فقط برچسب‌ها را شامل می‌شوند، نه پروژه‌هایت.',languageTemplate:'دانلود الگوی برچسب‌های انگلیسی',gatewayOrigin:'آدرس درگاه مدل',gatewayAccess:'توکن درگاه — کلید API ارائه‌دهنده نیست'});
 Object.assign(EN,{archiveDamaged:'The browser archive is damaged or unsupported. It was not replaced; your open session remains available for encrypted backup.'});
+Object.assign(EN,{languageLabel:'Interface language',importLanguage:'Import interface language pack',musicNav:'Music Lab',orchestraNav:'Orchestra & vocal'});
+Object.assign(FA,{languageLabel:'زبان رابط',importLanguage:'وارد کردن بستهٔ زبان',musicNav:'موسیقی',orchestraNav:'ارکستر و آواز'});
 Object.assign(FA,{archiveDamaged:'آرشیو مرورگر آسیب‌دیده یا ناسازگار است؛ جایگزین نشد. نشست باز برای تهیهٔ پشتیبان رمزگذاری‌شده در دسترس است.'});
 Object.assign(EN,{chatAttachments:'Attach text files to this message',chatAttachmentsHelp:'Up to four TXT, Markdown, CSV, TSV or JSON files, 128 KiB each. Only short, clearly marked excerpts enter the exact reviewed model request. This is not image/PDF understanding. The original files are not stored in chat or archive; filenames are retained with your turn. Nothing is sent until you explicitly approve the model request.',chatAttachedDocument:'Include latest saved writing document as a temporary excerpt',chatClearAttachments:'Clear attachments',chatNoFiles:'No text files attached',chatAttachmentAdded:'Local files added to next reviewed model request.',chatAttachmentInvalid:'Could not read text files; check size, format and capacity.',chatAttachmentRequiresModel:'Attached file excerpts require a configured model request; the local guide cannot read them.',chatAttachedUsed:'One-turn excerpts supplied (not verified):',chatRegenRequiresFiles:'A response grounded in temporary files cannot be regenerated from the filenames alone. Edit the user message to a new branch and attach the files again.',chatFilesNotSaved:'Files are held only in this tab and their bytes are never saved to the chat archive.'});
 Object.assign(FA,{chatAttachments:'پیوست فایل متنی برای همین پیام',chatAttachmentsHelp:'حداکثر چهار فایل TXT، Markdown، CSV، TSV یا JSON، هرکدام تا ۱۲۸ کیبی‌بایت. فقط گزیده‌های کوتاه و مشخص وارد درخواست مدل پس از بازبینی می‌شوند. تصویر و PDF تحلیل نمی‌شوند. محتوای فایل‌ها در تاریخچه یا آرشیو ذخیره نمی‌شود؛ فقط نامشان کنار پیام می‌ماند. تا تأیید صریح شما چیزی فرستاده نمی‌شود.',chatAttachedDocument:'افزودن گزیده‌ای از آخرین نسخهٔ ذخیره‌شدهٔ سند',chatClearAttachments:'پاک‌کردن پیوست‌ها',chatNoFiles:'فایل متنی پیوست نشده است',chatAttachmentAdded:'فایل‌های محلی به درخواست بعدی اضافه شدند؛ قبل از ارسال بازبینی می‌شوند.',chatAttachmentInvalid:'خواندن فایل‌های متنی انجام نشد؛ اندازه، قالب یا ظرفیت را بررسی کن.',chatAttachmentRequiresModel:'گزیدهٔ فایل‌ها فقط در درخواست مدل پیکربندی‌شده استفاده می‌شود؛ راهنمای محلی فایل را نمی‌خواند.',chatAttachedUsed:'گزیده‌های موقت ارائه‌شده (تأییدنشده):',chatRegenRequiresFiles:'پاسخ مبتنی بر فایل موقت را نمی‌توان فقط از نام فایل بازتولید کرد. پیام را در شاخهٔ تازه ویرایش کن و فایل‌ها را دوباره اضافه کن.',chatFilesNotSaved:'محتوای فایل‌ها فقط در همین برگه است و در آرشیو گفتگو ذخیره نمی‌شود.'});
 const forms=()=>profileDirty||editorDirty||window.NexusAstrologyUI?.hasDraft()===true;
-const t=k=>(localePacks.get(language)?.messages||(language==='fa'?FA:EN))[k]||EN[k]||k,el=(tag,text)=>{const n=document.createElement(tag);n.textContent=text;return n},p=()=>data.projects.find(x=>x.id===projectId),chat=()=>p()?.threads.find(x=>x.id===threadId),doc=()=>p()?.documents.find(x=>x.id===documentId);
+const builtIn=()=>builtInLanguages.get(language);
+const t=k=>localePacks.get(language)?.messages[k]??builtIn()?.messages[k]??(language==='fa'?FA:EN)[k]??EN[k]??k;
+const uiWords=(en,fa)=>language==='fa'?fa:(builtIn()?.controls[en]??en);
+const el=(tag,text)=>{const n=document.createElement(tag);n.textContent=text;return n},p=()=>data.projects.find(x=>x.id===projectId),chat=()=>p()?.threads.find(x=>x.id===threadId),doc=()=>p()?.documents.find(x=>x.id===documentId);
 Object.assign(EN,{modelMode:'Provider execution mode (requires a supporting gateway)',modeDefault:'Provider default',modeThinking:'Thinking',modeFast:'Non-thinking',modelBudget:'Maximum generated tokens (1–8192; existing response and time limits still apply)'});
 Object.assign(FA,{modelMode:'حالت اجرای مدل — نیازمند درگاه پشتیبان',modeDefault:'پیش‌فرض ارائه‌دهنده',modeThinking:'تفکر',modeFast:'بدون تفکر',modelBudget:'حداکثر توکن تولیدی — ۱ تا ۸۱۹۲؛ محدودیت زمان و حجم پاسخ همچنان برقرار است'});
 function status(k){$('status').textContent=t(k)}
@@ -1406,7 +1620,14 @@ function render(){
 }
 function mayReplace(){return (!forms()&&!$('message').value&&!chatAttachments.length&&!$('attach-document').checked)||confirm(t('discard'))}
 function selectProject(id){window.NexusTasksUI?.clear();window.NexusQualityUI?.clear();window.NexusAstrologyUI?.clear();window.NexusLabUI?.clear();stop();clearChatAttachments();projectId=id;threadId=p()?.threads.find(x=>!x.archived)?.id||null;documentId=p()?.documents[0]?.id||null;branchBase=undefined;profileDirty=editorDirty=false;$('message').value='';$('use-memory').checked=false;$('use-sources').checked=false;$('source-results').textContent='';$('branch-notice').textContent='';fillProfile();fillDoc()}
-function applyLanguage(){document.documentElement.lang=language;document.documentElement.dir=localePacks.get(language)?.dir||(language==='fa'?'rtl':'ltr');document.querySelectorAll('[data-t]').forEach(n=>n.textContent=t(n.dataset.t));document.querySelectorAll('[data-placeholder]').forEach(n=>n.placeholder=t(n.dataset.placeholder));render();if(branchBase!==undefined)$('branch-notice').textContent=t('branching')}
+for(const pack of builtInLanguages.values()){
+ const choice=option(pack.code,pack.name);choice.lang=pack.code;choice.dir=pack.dir;$('language').append(choice);
+}
+function applyLanguage(){
+ $('language').value=language;
+ document.documentElement.lang=language;
+ document.documentElement.dir=localePacks.get(language)?.dir??builtIn()?.dir??(language==='fa'?'rtl':'ltr');
+ document.querySelectorAll('[data-aria]').forEach(n=>n.setAttribute('aria-label',t(n.dataset.aria)));document.querySelectorAll('[data-t]').forEach(n=>n.textContent=t(n.dataset.t));document.querySelectorAll('[data-placeholder]').forEach(n=>n.placeholder=t(n.dataset.placeholder));render();if(branchBase!==undefined)$('branch-notice').textContent=t('branching');document.dispatchEvent(new Event('nexus-studio-language'))}
 function download(text,name,type='text/plain'){const u=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
 async function operation(fn,success='apply'){
  if(busy)return;languageImport++;const rev=revision,abort=new AbortController();controller=abort;busy=true;controls();
@@ -1430,7 +1651,7 @@ $('archive-thread').onclick=()=>{if(!chat())return;mutate(v=>{const c=projectIn(
 $('delete-thread').onclick=()=>{if(!chat()||!confirm(t('discard')))return;mutate(v=>{const q=projectIn(v);q.threads=q.threads.filter(x=>x.id!==threadId)},{undoable:true});clearChatAttachments();threadId=null;render()};
 $('search').oninput=render;$('archived').onchange=render;
 $('branch').onchange=()=>{if(!chat())return;if(!mayReplace()){render();return}const head=$('branch').value;mutate(v=>projectIn(v).threads.find(x=>x.id===threadId).head=head);clearChatAttachments();branchBase=undefined;$('message').value=''};
-$('guide').onclick=()=>{if(chatAttachments.length||$('attach-document').checked)return status('chatAttachmentRequiresModel');if($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())return status('needApply');try{const c=candidate();installThread(S.append(c,'assistant',S.guide(S.path(c).at(-1).text,language==='fa',{skyTone:$('sky-tone').checked})+($('use-astrology').checked?'\n\n'+NexusAstrology.reflection(p().astrology,language==='fa',{historical:$('astro-historical').checked}):''),'guide'))}catch{status('failed')}};
+$('guide').onclick=()=>{if(chatAttachments.length||$('attach-document').checked)return status('chatAttachmentRequiresModel');if($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())return status('needApply');try{const c=candidate();installThread(S.append(c,'assistant',(builtIn()?.messages.localGuidePrompt?.replace('{message}',()=>S.path(c).at(-1).text.slice(0,160))??S.guide(S.path(c).at(-1).text,language==='fa',{skyTone:$('sky-tone').checked}))+($('use-astrology').checked?'\n\n'+NexusAstrology.reflection(p().astrology,language==='fa',{historical:$('astro-historical').checked}):''),'guide'))}catch{status('failed')}};
 $('prepare').onclick=()=>prepare();$('regenerate').onclick=()=>prepare(true);$('consent').onchange=controls;$('stop').onclick=()=>{stop();render()};
 $('chat-file').onchange=async event=>{
  const files=Array.from(event.target.files);event.target.value='';
@@ -1491,9 +1712,9 @@ $('language-file').onchange=async event=>{
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}
 };
-$('language').onchange=()=>{stop();language=$('language').value;applyLanguage()};
+$('language').onchange=()=>{languageImport++;language=$('language').value;rememberLanguage();applyLanguage()};
 window.addEventListener('beforeunload',e=>{if(dirty||forms()||$('message').value){e.preventDefault();e.returnValue=''}});
-window.NexusStudioUI={snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}};applyLanguage();
+window.NexusStudioUI={words:uiWords,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}};applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
 </script><script>'use strict';
@@ -1766,14 +1987,13 @@ for(const [id,en,fa,icon,descriptionEn,descriptionFa] of tools){
  button.addEventListener('click',()=>openPanel(id));toolsGrid.append(button);
 }
 let selected='conversation-card',focused=media.matches,manual=false,toolsOpen=false;
-const isFa=()=>document.documentElement.lang==='fa';
-const words=(en,fa)=>isFa()?fa:en;
-const normalize=value=>value.toLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ').trim();
+const words=window.NexusStudioUI.words;
+const normalize=value=>value.toLocaleLowerCase(document.documentElement.lang).replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ').trim();
 function filterTools(){
  const query=normalize(search.value).split(/\s+/).filter(Boolean);
  let results=0;
  for(const [index,tool] of tools.entries()){
-  const text=normalize([...tool.slice(1,3),...tool.slice(4)].join(' '));
+  const text=normalize([...tool.slice(1,3),...tool.slice(4),words(tool[1],tool[2]),words(tool[4],tool[5])].join(' '));
   const visible=query.every(word=>text.includes(word));
   toolsGrid.children[index].hidden=!visible;
   if(visible)results++;
@@ -1862,7 +2082,7 @@ existingNav.addEventListener('click',event=>{
 const observer=new MutationObserver(()=>refreshOnboarding());
 observer.observe($('projects'),{childList:true});
 observer.observe($('history'),{childList:true});
-$('language').addEventListener('change',()=>queueMicrotask(()=>{refreshLabels();refreshOnboarding()}));
+document.addEventListener('nexus-studio-language',()=>queueMicrotask(()=>{refreshLabels();refreshOnboarding();filterTools()}));
 document.addEventListener('nexus-studio-open-chat',()=>openPanel('conversation-card'));
 document.addEventListener('keydown',event=>{
  if(event.key!=='Escape'||!toolsOpen||!toolsTray.contains(document.activeElement))return;
@@ -1891,7 +2111,7 @@ const $=id=>document.getElementById(id);
 const required=['conversation-card','message','guide','prepare','request-review','consent',
  'send-model','save','vault-card','language','branch-notice'];
 if(required.some(id=>!$(id))||!window.NexusStudioUI?.uiStatus)return;
-const words=(en,fa)=>document.documentElement.lang==='fa'?fa:en;
+const words=window.NexusStudioUI.words;
 const box=document.createElement('section');box.id='studio-compose';box.className='studio-compose';
 box.setAttribute('aria-label','Conversation actions');
 const heading=document.createElement('strong');heading.id='studio-compose-heading';
@@ -1987,7 +2207,7 @@ $('message').addEventListener('keydown',event=>{
   run(); // In model mode only opens the consent review.
  }
 });
-$('language').addEventListener('change',()=>queueMicrotask(refresh));
+document.addEventListener('nexus-studio-language',()=>queueMicrotask(refresh));
 document.addEventListener('nexus-studio-state',refresh);
 window.NexusStudioCompose={refresh,mode:()=>select.value};
 refresh();
