@@ -187,6 +187,20 @@ try{
  assert(await js("!document.getElementById('studio-focus-onboarding').hidden&&document.getElementById('studio-focus-onboarding').textContent.includes('Step 2')"),'new-thread-guidance-missing');
  await js("document.getElementById('studio-focus-onboarding').querySelector('button').click();true");
  assert(await js("NexusStudioFocus.active()==='conversation-card'&&document.activeElement.id==='message'&&document.getElementById('studio-focus-onboarding').hidden"),'new-thread-focus-route');
+
+  assert(await js("Boolean(document.getElementById('nexus-zen-menu'))&&Boolean(document.getElementById('nexus-zen-home'))&&getComputedStyle(document.getElementById('studio-focus-nav')).display==='none'"),'zen-home-has-no-tab-clutter');
+  await js("document.getElementById('nexus-zen-menu').click();true");
+  assert(await js("!document.getElementById('nexus-zen-drawer').hidden&&document.activeElement.id==='nexus-zen-find'"),'zen-menu-not-accessible');
+  await js("document.getElementById('nexus-zen-close').click();true");
+  assert(await js("document.getElementById('nexus-zen-drawer').hidden"),'zen-menu-not-dismissible');
+  checks.push('zen-default-and-collapsible-history');
+  await js("(()=>{const m=document.getElementById('message');m.value='/music cinematic instrumental';m.dispatchEvent(new Event('input'));document.getElementById('studio-compose-send').click();return true})()");
+  assert(await js("!document.getElementById('nexus-zen-offer').hidden&&NexusStudioUI.snapshot().projects[0].threads[0].nodes.length===0"),'chat-routing-must-be-consent-first');
+  await js("document.querySelector('#nexus-zen-offer button').click();true");
+  assert(await js("NexusStudioFocus.active()==='music-card'&&!document.getElementById('music-card').hidden&&NexusStudioUI.snapshot().projects[0].threads[0].nodes.length===0"),'chat-request-must-open-reviewed-tool-only');
+  await js("document.getElementById('nexus-zen-home').click();document.getElementById('message').value='';document.getElementById('message').dispatchEvent(new Event('input'));true");
+  assert(await js("NexusStudioFocus.active()==='conversation-card'&&!document.getElementById('conversation-card').hidden"),'one-tap-back-to-chat');
+  checks.push('text-to-tool-is-non-executing-and-reversible');
  await js("(()=>{const m=document.getElementById('message');m.value='SYNTHETIC UNSENT MODEL CONTEXT';m.dispatchEvent(new Event('input'));document.getElementById('studio-compose-mode').value='model';document.getElementById('studio-compose-mode').dispatchEvent(new Event('change'));document.getElementById('studio-compose-send').click();return true})()");
  assert(await js("document.getElementById('request-review').hidden&&!document.getElementById('consent').checked&&document.getElementById('message').value==='SYNTHETIC UNSENT MODEL CONTEXT'&&NexusStudioUI.snapshot().projects[0].threads[0].nodes.length===0&&performance.getEntriesByType('resource').every(r=>!r.name.includes('/studio-api/respond'))"),'no-model-quick-action-must-not-send');
  await js("(()=>{const m=document.getElementById('message');m.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true}));return true})()");
