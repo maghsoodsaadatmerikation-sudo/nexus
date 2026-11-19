@@ -211,6 +211,38 @@ async function operation(fn,success='apply'){
  try{await fn(rev,abort);if(rev===revision)status(success)}catch(error){if(rev===revision)status(error?.message==='archive-damaged'?'archiveDamaged':'failed')}
  finally{if(controller===abort)controller=null;if(rev===revision)busy=false;controls()}
 }
+// Create a local first conversation on the user's explicit action, retaining the typed draft.
+// No model request, archive write, or network activity happens here.
+function startConversation(fresh=false){
+ if(busy)return false;
+ const current=chat();
+ if(current&&!current.archived){
+  if(!fresh)return true;
+  const before=threadId;
+  $('new-thread').click(); // Existing draft-discard confirmation remains authoritative.
+  return Boolean(chat()&&threadId!==before);
+ }
+ const draft=$('message').value;
+ // A new project changes tool context. Never silently throw away unapplied work.
+ if(!p()&&(forms()||hasToolWork())){status('needApply');return false}
+ try{
+  let ok=false;
+  if(!p()){
+   const project=S.project(language==='fa'?'گفتگوهای من':'My conversations');
+   const thread=S.thread(t('newChat'));
+   ok=mutate(v=>{project.threads.push(thread);v.projects.push(project)},{
+    afterCommit:()=>{resetProject(project.id);resetConversation(thread.id);$('message').value=draft}
+   });
+  }else{
+   const thread=S.thread(t('newChat'));
+   ok=mutate(v=>projectIn(v).threads.push(thread),{
+    afterCommit:()=>{resetConversation(thread.id);$('message').value=draft}
+   });
+  }
+  if(ok)$('message').dispatchEvent(new Event('input',{bubbles:true}));
+  return Boolean(ok&&chat()&&!chat().archived);
+ }catch{status('failed');return false}
+}
 function noForms(){if(forms()||hasChatDraft()){status('needApply');return false}return true}
 function candidate(regenerate=false,materials=[]){const c=chat();if(!c||!p()||c.archived)throw Error('select-chat');if(regenerate){const path=S.path(c),last=path.at(-1);if(last?.role!=='assistant')throw Error('no-answer');if(path.at(-2)?.attached_files?.length)throw Error('reattach-required');return {...S.copy(c),head:last.parent}}return S.append(c,'user',$('message').value.trim(),'human',branchBase===undefined?c.head:branchBase,materials.map(x=>x.name))}
 function installThread(next){
@@ -347,6 +379,6 @@ window.addEventListener('beforeunload',e=>{if(storageSnapshot().lossRisk){e.prev
 document.addEventListener('input',renderStorage);
 document.addEventListener('change',renderStorage);
 document.addEventListener('nexus-studio-media-state',renderStorage);
-window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});applyLanguage();
+window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
