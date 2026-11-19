@@ -94,19 +94,67 @@ User retains control of every export, release and action.
 APPS = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1427">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 <title>NEXUS Mobile — Studio &amp; Motion</title>
-<style>body{background:#0b1427;color:#eaf2ff;font:1rem/1.6 system-ui,sans-serif;margin:0;padding:1rem}
-main{max-width:650px;margin:5vh auto}h1{font-size:clamp(1.8rem,6vw,2.8rem)}
-a{color:#a9eadc;display:block;border:1px solid #435576;border-radius:12px;padding:1.2rem;margin:1rem 0;font-weight:700}
-p{color:#c4d0df}</style></head><body><main>
-<h1>NEXUS Mobile</h1><p>Local Studio &amp; Video Studio · استودیو و ساخت ویدیو روی گوشی</p>
-<nav><a href="./">Open Studio — conversation, music, writing / استودیو</a>
-<a href="./motion/">Open Motion — video, animation, MP4 comparison / ویدیو و انیمیشن</a>
-<a href="./device-check.html">Run phone-local self-check / بررسی دستگاه</a></nav>
-<p>No server upload. This page is served only on 127.0.0.1 by Termux.
-Studio offline cache does not cover Motion.</p></main></body></html>
-"""
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}
+body{margin:0;background:#0b1427;color:#f4f7ff;font:1rem/1.55 system-ui,-apple-system,sans-serif}
+main{max-width:740px;margin:auto;padding:1.25rem clamp(1rem,5vw,2rem) 3rem}
+.skip{position:absolute;top:-100px;left:1rem;z-index:2;background:#fff;color:#14223b;padding:.5rem 1rem}
+.skip:focus{top:.5rem}a:focus-visible,summary:focus-visible{outline:3px solid #f8da87;outline-offset:4px}
+.eyebrow{color:#b1ebdf;font-weight:700;letter-spacing:.09em;text-transform:uppercase;font-size:.78rem}
+h1{font-size:clamp(2rem,7vw,3rem);line-height:1.12;margin:.35rem 0 .65rem}
+.intro{font-size:1.1rem;max-width:52ch;color:#dbe5f2}
+nav{display:grid;gap:.85rem;margin:1.5rem 0}
+.card{display:block;min-height:80px;padding:1rem 1.2rem;border-radius:16px;border:1px solid #526886;color:inherit;text-decoration:none;background:#15233d}
+.card:active{background:#243b58}
+.card.primary{background:#173b46;border:2px solid #9fe4d7}
+.card-title{display:block;font-size:1.16rem;font-weight:750}
+.card-detail{display:block;color:#d0deed;font-size:.93rem;margin-top:.2rem}
+[lang="fa"]{display:block;direction:rtl;text-align:left;color:#c1d0df;font-size:.89rem;margin-top:.35rem}
+.guide{border-top:1px solid #41536b;padding-top:1rem}
+h2{font-size:1.14rem;margin:.6rem 0}
+ol{padding-left:1.4rem}li{margin:.35rem 0}
+details{border:1px solid #526886;border-radius:12px;padding:.75rem 1rem;margin:1rem 0}
+summary{cursor:pointer;font-weight:650;min-height:48px;display:flex;align-items:center}
+.privacy{color:#cbd9e8;font-size:.86rem}
+@media(min-width:640px){nav{grid-template-columns:repeat(2,minmax(0,1fr))}.primary{grid-column:1/-1}}
+@media(prefers-reduced-motion:no-preference){.card{transition:background-color .12s ease}}
+</style></head><body>
+<a class="skip" href="#tools">Skip to tools</a>
+<main><header>
+<p class="eyebrow">Private-first · On-device start</p>
+<h1>NEXUS Mobile</h1>
+<p class="intro">Start with one workspace. Choose what you want to create; advanced options can wait.</p>
+<p lang="fa">از اینجا شروع کنید؛ ابزار موردنظرتان را انتخاب کنید.</p>
+</header>
+<nav id="tools" aria-label="NEXUS tools">
+<a class="card primary" href="./">
+<span class="card-title">Open Studio — Chat &amp; create</span>
+<span class="card-detail">Conversations, music, writing and available studio tools.</span>
+<span lang="fa">گفت‌وگو، موسیقی، نوشتن و ابزارهای استودیو</span></a>
+<a class="card" href="./motion/">
+<span class="card-title">Open Motion — Video &amp; animation</span>
+<span class="card-detail">Make a storyboard, preview scenes, and use supported local exports.</span>
+<span lang="fa">ساخت و پیش‌نمایش ویدیو و انیمیشن</span></a>
+<a class="card" href="./device-check.html">
+<span class="card-title">Check device — Is it ready?</span>
+<span class="card-detail">Open the local compatibility self-check before a larger project.</span>
+<span lang="fa">بررسی سازگاری و آمادگی دستگاه</span></a>
+</nav>
+<section class="guide" aria-labelledby="start-title">
+<h2 id="start-title">Your first two minutes</h2>
+<ol><li>Open Studio to start a conversation or creative task.</li>
+<li>Use Motion when you need an animated scene or video preview.</li>
+<li>Export important work yourself before clearing app data or changing installations.</li></ol>
+<details><summary>What's saved on this device?</summary>
+<p>Only features that explicitly offer local storage can keep your project. Studio and Motion have separate storage behavior. Offline app-code caching does not automatically preserve imported photos, audio, or drafts. Save your own copy before leaving.</p>
+</details></section>
+<footer><p class="privacy">No server upload. This page is served only on 127.0.0.1 by Termux.
+Studio offline cache does not cover Motion.</p>
+<p class="privacy">This launcher makes no network requests and contains no sign-in, tracking script, or user files.</p>
+</footer></main></body></html>"""
 
 # Reuse the exact existing, reviewed loopback-only HTTP server. All of the
 # original 14 Studio files and their hash validation remain unmodified.
