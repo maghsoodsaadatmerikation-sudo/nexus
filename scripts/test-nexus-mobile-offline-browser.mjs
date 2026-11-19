@@ -216,6 +216,14 @@ try{
  const after=await js("document.querySelectorAll('#motion-scenes .scene').length");
  assert(after===before+1,'Cached offline Motion editor cannot edit local scene');
  checks.push('interactive-offline-scene-edit-after-disconnection');
+ await js("window.confirm=()=>true;document.getElementById('motion-draft-clear').click();true");
+ assert(await js("localStorage.getItem('nexus.motion.encrypted.storyboard.v1')===null"),
+  'explicit delete did not remove the encrypted checkpoint');
+ await js("document.getElementById('motion-add').click();true");
+ await wait(950);
+ assert(await js("localStorage.getItem('nexus.motion.encrypted.storyboard.v1')===null"),
+  'draft recreated itself after user explicitly disabled and cleared storage');
+ checks.push('explicit-erase-and-no-silent-resave');
  stage='user-clears-offline-cache';
  await js("document.getElementById('motion-offline-remove').click();true");
  await poll(()=>retryJs("document.getElementById('motion-offline-status').textContent.includes('offline copy removed')"),
