@@ -1349,6 +1349,11 @@ const TOOL_LIFECYCLE=Object.freeze({
  private:Object.freeze([['NexusDevice','unload'],['NexusTasksUI','clear'],['NexusQualityUI','clear'],
   ['NexusAstrologyUI','clear'],['NexusLabUI','clear'],['NexusMusicUI','clear'],['NexusOrchestraUI','clear']])
 });
+function unsavedLocalMedia(){
+ // Preview buffers, unsaved scores and selected original vocals live outside the vault.
+ return window.NexusMusicUI?.hasTransientWork?.()===true||
+  window.NexusOrchestraUI?.hasTransientWork?.()===true;
+}
 function toolLifecycle(phase){
  let complete=true;
  for(const [name,method] of TOOL_LIFECYCLE[phase]){
@@ -1446,7 +1451,7 @@ $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+cha
 $('create-vault').onclick=()=>{const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation((rev,abort)=>vault.create(pass,{signal:abort.signal}))};
 $('unlock').onclick=()=>{if((dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked)&&!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const next=await vault.unlock(pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=next;dirty=false;selectProject(data.projects[0]?.id||null);render()})};
 $('save').onclick=()=>{if(!noForms())return;const snapshot=S.state(data);operation(async(rev,abort)=>{await vault.save(snapshot,{signal:abort.signal});if(rev===revision)dirty=false},'saved')};
-$('lock').onclick=()=>{if((dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked)&&!confirm(t('discard')))return;const clean=toolLifecycle('private');undoSlot.clear();stop();clearChatAttachments();modelInfo=null;vault.lock();data=S.empty();projectId=threadId=documentId=null;dirty=profileDirty=editorDirty=false;for(const id of ['passphrase','repeat-passphrase','gateway-token','message','project-title','document-title','instructions','memories','editor','source-query','search'])$(id).value='';$('model-status').textContent='';$('source-results').textContent='';$('request-context').textContent='';$('branch-notice').textContent='';renderVersions();render();if(!clean)location.reload()};
+$('lock').onclick=()=>{if((dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked||unsavedLocalMedia())&&!confirm(t('discard')))return;const clean=toolLifecycle('private');undoSlot.clear();stop();clearChatAttachments();modelInfo=null;vault.lock();data=S.empty();projectId=threadId=documentId=null;dirty=profileDirty=editorDirty=false;for(const id of ['passphrase','repeat-passphrase','gateway-token','message','project-title','document-title','instructions','memories','editor','source-query','search'])$(id).value='';$('model-status').textContent='';$('source-results').textContent='';$('request-context').textContent='';$('branch-notice').textContent='';renderVersions();render();if(!clean)location.reload()};
 $('backup').onclick=()=>{if(!noForms())return;const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await vault.export(data,pass,{signal:abort.signal});if(rev===revision)download(raw,'nexus-studio.encrypted.json','application/json')})};
 $('restore').onclick=()=>$('restore-file').click();$('restore-file').onchange=event=>{const f=event.target.files[0];event.target.value='';if(!f||f.size>6*1024*1024||!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await f.text();if(rev!==revision||abort.signal.aborted)return;const opened=await S.decrypt(raw,pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=opened.data;dirty=true;selectProject(data.projects[0]?.id||null);render()})};
 $('erase').onclick=()=>{if(confirm(t('discard')))operation(async(rev,abort)=>{
@@ -1467,8 +1472,8 @@ $('language-file').onchange=async event=>{
  }catch{if(current())status('failed')}
 };
 $('language').onchange=()=>{stop();language=$('language').value;applyLanguage()};
-window.addEventListener('beforeunload',e=>{if(dirty||forms()||$('message').value){e.preventDefault();e.returnValue=''}});
-window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',lifecycle_version:TOOL_LIFECYCLE.version,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});applyLanguage();
+window.addEventListener('beforeunload',e=>{if(dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked||unsavedLocalMedia()){e.preventDefault();e.returnValue=''}});
+window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',lifecycle_version:TOOL_LIFECYCLE.version,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
 </script><script>'use strict';
@@ -2622,7 +2627,8 @@ $('music-lock-motif').checked=true;
 document.addEventListener('nexus-music-clear',()=>{invalidate();$('music-title').value='Untitled journey'});
 window.addEventListener('pagehide',()=>{revision++;resetAudio()});
 out(txt('ready'));buttons();
-window.NexusMusicUI=Object.freeze({clear:invalidate,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav)});
+window.NexusMusicUI=Object.freeze({clear:invalidate,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
+ hasTransientWork:()=>Boolean(score||wav||working)});
 })();
 </script><script>/* NEXUS Orchestra Lab v1 — deterministic, original, offline score + sound.
  * Prompt understanding is an inspectable constrained grammar, NOT semantic AI.
@@ -3229,7 +3235,7 @@ if(!O||!$('orchestra-card'))return;
 const fa=()=>document.documentElement.lang==='fa';
 const say=(en,faText)=>fa()?faText:en;
 let plan=null,score=null,wav=null,rendering=false,mixing=false,ticket=0;
-let wavUrl=null,dryUrl=null,dryBytes=null,dryInfo=null,dryEpoch=0;
+let wavUrl=null,dryUrl=null,dryBytes=null,dryInfo=null,dryEpoch=0,dryPending=false;
 let mixWav=null,mixUrl=null,mixReport=null;
 function aligned(){return !!(wav&&dryInfo&&wav.byteLength>28&&
  new DataView(wav.buffer,wav.byteOffset,wav.byteLength).getUint32(24,true)===dryInfo.sampleRate)}
@@ -3365,7 +3371,7 @@ $('orchestra-exclude-lead').addEventListener('change',()=>{
 });
 function clearDry(){
  // Independent vocal generation: cancelling a pending read cannot reattach the file.
- dryEpoch++;
+ dryEpoch++;dryPending=false;
  clearMixed();
  $('orchestra-play').pause();$('orchestra-dry-play').pause();
  if(dryUrl)URL.revokeObjectURL(dryUrl);dryUrl=null;dryBytes=null;dryInfo=null;
@@ -3382,6 +3388,7 @@ $('orchestra-dry-file').addEventListener('change',async()=>{
  const file=$('orchestra-dry-file').files[0];clearDry();
  if(!file)return;
  const id=++ticket,voiceGeneration=dryEpoch;
+ dryPending=true;
  const current=()=>id===ticket&&voiceGeneration===dryEpoch;
  try{
   if(file.size>20*1024*1024||file.size<48)throw Error('file-size');
@@ -3410,7 +3417,7 @@ $('orchestra-dry-file').addEventListener('change',async()=>{
     'نرخ نمونه‌برداری دو صدا متفاوت است؛ موسیقی را پس از وارد کردن وکال دوباره تولید کن.');
  }catch{if(current())status('Dry vocal rejected: use a local PCM 16-bit WAV (22.05/44.1 kHz; 20 MiB max).',
      'فایل وکال پذیرفته نشد؛ WAV خام ۱۶ بیتی با نرخ ۲۲ یا ۴۴ کیلوهرتز، حداکثر ۲۰ مگابایت لازم است.')}
- finally{if(current())buttons()}
+ finally{if(current()){dryPending=false;buttons()}}
 });
 $('orchestra-dry-download').addEventListener('click',()=>{
  if(dryBytes)download(dryBytes,'original-voice-unchanged.wav','audio/wav');
@@ -3483,7 +3490,9 @@ window.addEventListener('pagehide',()=>{ticket++;clearWav();clearDry()});
 window.NexusOrchestraUI=Object.freeze({
  hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
  hasOriginalVocal:()=>Boolean(dryBytes),hasMixedWav:()=>Boolean(mixWav),
- getMixReport:()=>mixReport,clear:()=>{invalidate();clearDry()}
+ getMixReport:()=>mixReport,
+ hasTransientWork:()=>Boolean(plan||score||wav||dryBytes||mixWav||dryPending||rendering||mixing),
+ clear:()=>{invalidate();clearDry()}
 });
 status('Enter a supported prompt and preview the parsed plan.',
   'دستور موسیقی را بنویس و طرح شناسایی‌شده را بازبینی کن.');

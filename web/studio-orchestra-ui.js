@@ -8,7 +8,7 @@ if(!O||!$('orchestra-card'))return;
 const fa=()=>document.documentElement.lang==='fa';
 const say=(en,faText)=>fa()?faText:en;
 let plan=null,score=null,wav=null,rendering=false,mixing=false,ticket=0;
-let wavUrl=null,dryUrl=null,dryBytes=null,dryInfo=null,dryEpoch=0;
+let wavUrl=null,dryUrl=null,dryBytes=null,dryInfo=null,dryEpoch=0,dryPending=false;
 let mixWav=null,mixUrl=null,mixReport=null;
 function aligned(){return !!(wav&&dryInfo&&wav.byteLength>28&&
  new DataView(wav.buffer,wav.byteOffset,wav.byteLength).getUint32(24,true)===dryInfo.sampleRate)}
@@ -144,7 +144,7 @@ $('orchestra-exclude-lead').addEventListener('change',()=>{
 });
 function clearDry(){
  // Independent vocal generation: cancelling a pending read cannot reattach the file.
- dryEpoch++;
+ dryEpoch++;dryPending=false;
  clearMixed();
  $('orchestra-play').pause();$('orchestra-dry-play').pause();
  if(dryUrl)URL.revokeObjectURL(dryUrl);dryUrl=null;dryBytes=null;dryInfo=null;
@@ -161,6 +161,7 @@ $('orchestra-dry-file').addEventListener('change',async()=>{
  const file=$('orchestra-dry-file').files[0];clearDry();
  if(!file)return;
  const id=++ticket,voiceGeneration=dryEpoch;
+ dryPending=true;
  const current=()=>id===ticket&&voiceGeneration===dryEpoch;
  try{
   if(file.size>20*1024*1024||file.size<48)throw Error('file-size');
@@ -189,7 +190,7 @@ $('orchestra-dry-file').addEventListener('change',async()=>{
     'نرخ نمونه‌برداری دو صدا متفاوت است؛ موسیقی را پس از وارد کردن وکال دوباره تولید کن.');
  }catch{if(current())status('Dry vocal rejected: use a local PCM 16-bit WAV (22.05/44.1 kHz; 20 MiB max).',
      'فایل وکال پذیرفته نشد؛ WAV خام ۱۶ بیتی با نرخ ۲۲ یا ۴۴ کیلوهرتز، حداکثر ۲۰ مگابایت لازم است.')}
- finally{if(current())buttons()}
+ finally{if(current()){dryPending=false;buttons()}}
 });
 $('orchestra-dry-download').addEventListener('click',()=>{
  if(dryBytes)download(dryBytes,'original-voice-unchanged.wav','audio/wav');
@@ -262,7 +263,9 @@ window.addEventListener('pagehide',()=>{ticket++;clearWav();clearDry()});
 window.NexusOrchestraUI=Object.freeze({
  hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
  hasOriginalVocal:()=>Boolean(dryBytes),hasMixedWav:()=>Boolean(mixWav),
- getMixReport:()=>mixReport,clear:()=>{invalidate();clearDry()}
+ getMixReport:()=>mixReport,
+ hasTransientWork:()=>Boolean(plan||score||wav||dryBytes||mixWav||dryPending||rendering||mixing),
+ clear:()=>{invalidate();clearDry()}
 });
 status('Enter a supported prompt and preview the parsed plan.',
   'دستور موسیقی را بنویس و طرح شناسایی‌شده را بازبینی کن.');
