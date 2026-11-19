@@ -15,6 +15,8 @@ window.addEventListener('load',async()=>{
  const wait=async(fn,n=600)=>{for(let i=0;i<n;i++){if(fn())return;await new Promise(r=>setTimeout(r,30))}throw Error('timeout')};
  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const nativeRead=File.prototype.arrayBuffer,nativePlay=HTMLMediaElement.prototype.play;
+ // This regression explicitly approves the new unsaved-local-audio lock warning.
+ window.confirm=()=>true;
  let calls=0,pending=[],plays=[];
  window.fetch=()=>{calls++;throw Error('no-network-allowed')};
  const bytes=new Uint8Array(44+2205*2),v=new DataView(bytes.buffer);
