@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ORIGIN = "https://nexus-studio-merikation.onrender.com/"
 SCHEMA = "nexus.studio.public-post-promotion-witness.v1"
 REQUIRED_CHECKS = frozenset({
+    "static-tools-bootstrap-and-isolated-code",
     "encrypted-browser-save",
     "true-offline-reload-still-locked",
     "offline-encrypted-reopen",

@@ -133,6 +133,19 @@ try{
   await poll(()=>retryJs("document.readyState==='complete'&&Boolean(window.NexusStudioUI)&&Boolean(document.getElementById('studio-offline'))"),15000,'studio-after-fieldcheck-not-rendered');
  }
  assert(await js("document.documentElement.scrollWidth<=innerWidth+2"),'mobile-overflow');checks.push('responsive-studio-renders');
+ stage='static-tool-bootstrap';
+ assert(await js("Boolean(window.NexusLabUI)&&document.querySelector('#research-card h2').textContent==='Live research desk'"),'static-research-labels-not-loaded');
+ await js(`(()=>{
+   const code=document.getElementById('code');
+   code.value='return 6 * 7;';
+   code.dispatchEvent(new Event('input',{bubbles:true}));
+   document.getElementById('code-consent').checked=true;
+   document.getElementById('code-run').click();
+   return true;
+ })()`);
+ await poll(()=>retryJs("document.getElementById('code-result').textContent==='42'"),8000,'static-isolated-code-result-missing');
+ await js("(()=>{const code=document.getElementById('code');code.value='';code.dispatchEvent(new Event('input',{bubbles:true}));return true})()");
+ checks.push('static-tools-bootstrap-and-isolated-code');
  stage='web-app-install';
  const installCheck=await js(`(async()=>{
    const install=document.getElementById('studio-install');
