@@ -143,6 +143,16 @@ def run(apk: Path, out: Path) -> dict:
     tap_link("Open Motion")
     await_true(lambda: ready("/motion/"), "Motion canvas + script executed")
     checks.append("real-WebView-Motion-canvas-and-engine-ready")
+    # Use the visible in-page All tools link, not just browser history.
+    adb("logcat", "-c")
+    tap_link("All tools")
+    await_true(lambda: ready("/apps.html"),
+               "Motion All tools link returned to the real chooser")
+    checks.append("Motion-to-chooser-visible-home-link")
+    adb("logcat", "-c")
+    tap_link("Open Motion")
+    await_true(lambda: ready("/motion/"),
+               "Motion reopened from the real chooser")
     # Android should genuinely return to native chooser, without internet.
     adb("logcat", "-c")
     adb("shell", "input", "keyevent", "4")

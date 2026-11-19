@@ -212,6 +212,22 @@ def source_assets(commit: str) -> dict[str, bytes]:
     if page.count('href="/studio"') != 1:
         raise ValueError("Motion's Rust-only Studio link changed")
     page = page.replace('href="/studio"', 'href="/"')
+    # On the integrated mobile origin, the NEXUS brand link must return to
+    # the app chooser, NOT back into Studio. The standalone Rust route remains
+    # unchanged; only the source-bound ZIP/APK Motion copy is adapted.
+    home_link = '<a href="/">NEXUS</a>'
+    if page.count(home_link) != 1 or page.count('</header>') != 1:
+        raise ValueError("unexpected Motion home-navigation anchors")
+    page = page.replace(home_link, '<a href="/apps.html">All tools / همهٔ ابزارها</a>')
+    save_note = (
+        '<p id="motion-save-before-exit" role="note" class="small danger">'
+        'Before leaving Motion, select Download project + media ZIP in Export. '
+        'Closing or switching pages does not save your current storyboard. '
+        '/ پیش از خروج، فایل پروژه و رسانه‌ها را ذخیره کنید.'
+        '</p>'
+    )
+    page = page.replace('</header>', '</header>' + save_note)
+
     if (page.count("<title>") != 1 or
         page.count("<section><h2>Storyboard") != 1 or
         page.count("</body>") != 1 or
