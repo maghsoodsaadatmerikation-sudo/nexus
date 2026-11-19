@@ -135,14 +135,29 @@ def run(report):
                 continue
     tap("Downloads",scroll=3)
     tap("Save",exact=True,scroll=3)
-    def is_written():
+    # The DocumentsUI destination can appear on disk before the native
+    # ContentResolver stream has finished writing/flushing the entire JSON.
+    # Never treat mere existence or a nonempty partial read as a successful
+    # export: wait for schema-valid, complete, source-bound bytes.
+    observed={"length":None,"reason":"not yet available","payload":None,"sha":None}
+    def fully_written():
         try:
-            return bool(disk_bytes())
-        except RuntimeError:
+            raw=disk_bytes()
+            observed["length"]=len(raw)
+            sha256=strict_default_json(raw)
+            observed["payload"]=raw
+            observed["sha"]=sha256
+            return True
+        except (RuntimeError,UnicodeDecodeError,json.JSONDecodeError) as exc:
+            observed["reason"]=type(exc).__name__
             return False
-    smoke.await_true(is_written,"Android SAF file written",timeout=25)
-    payload=disk_bytes()
-    sha=strict_default_json(payload)
+    try:
+        smoke.await_true(fully_written,"Android SAF fully written source-valid JSON",timeout=35)
+    except RuntimeError as exc:
+        raise RuntimeError(str(exc)+" (last-length="+str(observed["length"])+
+                           ", last-error="+observed["reason"]+")") from exc
+    payload=observed["payload"]
+    sha=observed["sha"]
     # Round trip through Android's own file chooser. No direct programmatic
     # substitution into a web <input type=file> and no test-only JS bridge.
     # Create one synthetic in-memory change before loading the saved JSON.
