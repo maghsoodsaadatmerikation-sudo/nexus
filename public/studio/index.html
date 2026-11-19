@@ -101,6 +101,9 @@ summary {cursor: pointer; padding: 7px 0; font-weight: 600;}
 #status:empty, #studio-offline-state:empty, #studio-install-state:empty {display: none;}
 #status:not(:empty) {background: var(--studio-soft); border-radius: 10px; padding: 8px 12px;}
 .notice {border: 1px solid #e8d9b6; background: #fcf6e8; color: #553f18;}
+#undo-removal:disabled {display: none;}
+#conversation-card:has(#studio-focus-onboarding:not([hidden])) > .row:first-child button {display: none;}
+main:has(#studio-focus-onboarding:not([hidden])) #retention {display: none;}
 
 .studio-masthead {
   display: flex;
@@ -204,6 +207,7 @@ section h2:focus, #studio-focus-tools-title:focus {outline: none;}
   .studio-brand {gap: 10px;}
   .studio-compose-row button {flex: 1 1 120px;}
   .studio-focus-tools-grid button {align-items: flex-start; flex-direction: column; gap: 5px;}
+  #conversation-card > .row:first-child button {flex: 1 1 calc(50% - 12px); white-space: normal;}
 }
 
 .studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style></head><body><main>
