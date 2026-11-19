@@ -18,6 +18,7 @@ ORIGIN = "https://nexus-studio-merikation.onrender.com/"
 SCHEMA = "nexus.studio.public-post-promotion-witness.v1"
 REQUIRED_CHECKS = frozenset({
     "static-tools-bootstrap-and-isolated-code",
+    "approved-brand-renders-with-mobile-and-browser-icons",
     "encrypted-browser-save",
     "true-offline-reload-still-locked",
     "offline-encrypted-reopen",

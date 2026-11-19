@@ -2,6 +2,7 @@
 """Regression checks for fail-closed Studio source and public package assembly."""
 from __future__ import annotations
 
+import base64
 import importlib.util
 import json
 from pathlib import Path
@@ -46,7 +47,7 @@ class TemplateContractTests(unittest.TestCase):
         source = (ROOT / "web/studio.html").read_text()
         panel = (ROOT / "web/device/device-panel.html").read_text()
         for anchor in ("script-src 'unsafe-inline'", "frame-src 'self' blob:; worker-src blob:",
-                       "img-src 'none'", "<title>", "</style>", "</header>",
+                       "img-src data:", "<title>", "</style>", "</header>",
                        "</main>", 'value="2048"></details>',
                        '<label for="gateway"', "</body>"):
             with self.subTest(anchor=anchor, kind="missing"):
@@ -57,6 +58,18 @@ class TemplateContractTests(unittest.TestCase):
                 changed = source + anchor
                 with self.assertRaises(ValueError):
                     static_builder.render_public_shell(changed, panel)
+
+    def test_approved_logo_matches_source_and_every_package(self):
+        subprocess.run([sys.executable, str(HERE / "build-nexus-icons.py"), "--check"],
+                       check=True, timeout=15)
+        studio = (ROOT / "public/studio/index.html").read_text()
+        self.assertIn('src="data:image/png;base64,' + base64.b64encode(
+            (ROOT / "web/nexus-brand-icon.png").read_bytes()).decode("ascii") + '"', studio)
+        self.assertIn('rel="apple-touch-icon" href="./icons/nexus-192.png"', studio)
+        for size in (192, 512):
+            name = f"icons/nexus-{size}.png"
+            self.assertEqual((ROOT / "public/studio" / name).read_bytes(),
+                             (ROOT / "public" / name).read_bytes())
 
     def test_public_page_leaves_the_opaque_lab_module_intact(self):
         compiled = static_builder.render_public_shell(

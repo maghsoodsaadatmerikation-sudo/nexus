@@ -133,6 +133,14 @@ try{
   await poll(()=>retryJs("document.readyState==='complete'&&Boolean(window.NexusStudioUI)&&Boolean(document.getElementById('studio-offline'))"),15000,'studio-after-fieldcheck-not-rendered');
  }
  assert(await js("document.documentElement.scrollWidth<=innerWidth+2"),'mobile-overflow');checks.push('responsive-studio-renders');
+ stage='static-branding';
+ await poll(()=>retryJs(`(()=>{
+   const brand=document.querySelector('.studio-mark');
+   return brand?.complete&&brand.naturalWidth===64&&
+    document.querySelector('link[rel=icon]')?.getAttribute('href')==='./icons/nexus-192.png'&&
+    document.querySelector('link[rel=apple-touch-icon]')?.getAttribute('href')==='./icons/nexus-192.png';
+ })()`),5000,'approved-brand-did-not-render');
+ checks.push('approved-brand-renders-with-mobile-and-browser-icons');
  stage='static-tool-bootstrap';
  assert(await js("Boolean(window.NexusLabUI)&&document.querySelector('#research-card h2').textContent==='Live research desk'"),'static-research-labels-not-loaded');
  await js(`(()=>{

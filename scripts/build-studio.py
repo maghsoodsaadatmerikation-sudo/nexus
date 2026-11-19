@@ -2,6 +2,7 @@
 """Build the deterministic standalone Studio from reviewed, inert local sources."""
 from pathlib import Path
 import argparse
+import base64
 import hashlib
 from studio_module_graph import validate_module_graph
 from studio_template_contract import replace_exact
@@ -15,6 +16,8 @@ if '</style' in theme.lower() or shell.count('/*STUDIO_THEME*/') != 1:
     raise ValueError('invalid Studio theme source')
 modules = validate_module_graph(shell, root/'web')
 shell = replace_exact(shell, '/*STUDIO_THEME*/', theme)
+brand = base64.b64encode((root/'web/nexus-brand-icon.png').read_bytes()).decode('ascii')
+shell = replace_exact(shell, '__NEXUS_BRAND_PNG__', brand)
 for item in modules:
     marker, filename = item.marker, item.filename
     code = (root/'web'/filename).read_text()

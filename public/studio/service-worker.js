@@ -1,9 +1,9 @@
 /* Reviewed public Studio application code only; model bytes use a separate opt-in cache. */
 'use strict';
-const EXPECTED_SHA256='9c53bd022f678f63a925347ba98ebe3f8f1f09492b65748179b2711f41f765cb';
-const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'05e7ab9ad9733b05';
+const EXPECTED_SHA256='737be5cad7220e9846c96432ca481737a22caeff4c17c79cdf215852a1eaf580';
+const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'fc291ba8f1eb4f5c';
 const ENTRY=new URL('./',self.location.href).href;
-const HTML={url:ENTRY,bytes:446398,sha256:EXPECTED_SHA256,kind:'html'};
+const HTML={url:ENTRY,bytes:448478,sha256:EXPECTED_SHA256,kind:'html'};
 const CODE=[{"path":"device/device-engine.js","bytes":5332,"sha256":"aa7efe4d708f854ca35ff863edb602da7a9fb164d62e427c6521ddbd957e9175","kind":"javascript"},{"path":"device/device-worker.js","bytes":7863,"sha256":"a2b396fb0fe7a4411ba8a4e678b6c4f79bfc0eed673e1712f445baa8a9c60e85","kind":"javascript"},{"path":"device/device-ui.js","bytes":8683,"sha256":"08343f58bb01d1f26d37f55e1d3842e7f2fd22a02b23f8cfa4b7b7a2583192cd","kind":"javascript"},{"path":"device/model-manifest.json","bytes":3196,"sha256":"49353c4a16f7912fd4251b6d048923fd41d2819f9fab2faf5bfbccab9a7e3983","kind":"json"}].map(a=>({...a,url:new URL(a.path,ENTRY).href}));
 async function verified(response,asset=HTML){
  if(!response||response.status!==200||response.redirected||response.type!=='basic')return false;

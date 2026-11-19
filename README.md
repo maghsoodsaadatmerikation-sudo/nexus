@@ -384,6 +384,13 @@ The verification workflow preserves the rule:
 
 Continuous verification runs on source changes and at 00:00, 08:00, and 16:00 UTC. Scheduled verification may observe, verify, attest, and report; it carries neither release authority nor production-promotion authority.
 
+### Brand assets
+
+The approved purple-green Nexus mark is recorded at
+`assets/branding/nexus-logo-source.json`. Regenerate the browser, PWA, and
+Android launcher assets with `python3 scripts/build-nexus-icons.py`, then run
+the Studio builders. Run the icon builder with `--check` to verify the assets.
+
 ### Studio maintenance
 
 Run `python3 scripts/studio-maintenance.py` from a clean checkout to audit
