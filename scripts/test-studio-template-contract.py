@@ -71,7 +71,7 @@ class TemplateContractTests(unittest.TestCase):
             root = Path(directory)
             (root / "scripts").mkdir()
             shutil.copytree(ROOT / "web", root / "web")
-            for name in ("build-studio.py", "studio_template_contract.py"):
+            for name in ("build-studio.py", "studio_template_contract.py", "studio_module_graph.py"):
                 shutil.copy2(HERE / name, root / "scripts" / name)
             command = [sys.executable, "-O", str(root / "scripts/build-studio.py"), "--check"]
             baseline = subprocess.run(command, capture_output=True, text=True, timeout=15)
