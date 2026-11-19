@@ -204,6 +204,15 @@ function openHistoryThread(entry){
  }
  render();
 }
+function openConversation(project,thread){
+ // Reuse the existing unsaved-work confirmation. Never switch on cancellation.
+ if(busy||typeof project!=='string'||typeof thread!=='string')return false;
+ const target=data.projects.find(x=>x.id===project);
+ if(!target?.threads.some(x=>x.id===thread))return false;
+ if(projectId===project&&threadId===thread)return true;
+ openHistoryThread({project,thread});
+ return projectId===project&&threadId===thread;
+}
 function applyLanguage(){document.documentElement.lang=language;document.documentElement.dir=localePacks.get(language)?.dir||(language==='fa'?'rtl':'ltr');document.querySelectorAll('[data-t]').forEach(n=>n.textContent=t(n.dataset.t));document.querySelectorAll('[data-placeholder]').forEach(n=>n.placeholder=t(n.dataset.placeholder));render();if(branchBase!==undefined)$('branch-notice').textContent=t('branching')}
 function download(text,name,type='text/plain'){const u=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
 async function operation(fn,success='apply'){
@@ -379,6 +388,6 @@ window.addEventListener('beforeunload',e=>{if(storageSnapshot().lossRisk){e.prev
 document.addEventListener('input',renderStorage);
 document.addEventListener('change',renderStorage);
 document.addEventListener('nexus-studio-media-state',renderStorage);
-window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});applyLanguage();
+window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,openConversation,selection:()=>({projectId,threadId}),lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
