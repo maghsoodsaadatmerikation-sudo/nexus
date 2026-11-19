@@ -53,6 +53,7 @@ canvas{width:100%;height:auto;max-height:70vh;object-fit:contain;background:#050
 <div class="row"><button id="motion-draft-enable" class="secondary" type="button">Enable encrypted autosave</button>
 <button id="motion-draft-restore" class="secondary" type="button">Restore &amp; resume autosave</button>
 <button id="motion-draft-clear" class="secondary" type="button">Delete encrypted draft</button></div>
+<label class="small" style="display:flex;align-items:center;gap:10px"><input id="motion-draft-ack" type="checkbox" style="width:auto;margin:0;min-width:24px;min-height:24px">I understand: Restore replaces the open storyboard; Delete removes the saved checkpoint. / تأیید جایگزینی یا حذف</label>
 <p id="motion-draft-status" role="status" aria-live="polite" class="small muted">Autosave is off. A project + media ZIP remains the only complete backup.</p>
 <p class="small danger">You must remember your passphrase. An immediate exit can lose the last unsaved edit; browser data deletion and a different Android signing certificate can make this draft unavailable.</p>
 </section>
