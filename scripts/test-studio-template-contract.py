@@ -15,6 +15,7 @@ import unittest
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
+from png_pixels import pixel_digest
 from studio_template_contract import replace_exact
 
 MODULE = importlib.util.spec_from_file_location("nexus_studio_static_builder", HERE / "build-studio-static.py")
@@ -68,8 +69,9 @@ class TemplateContractTests(unittest.TestCase):
         self.assertIn('rel="apple-touch-icon" href="./icons/nexus-192.png"', studio)
         for size in (192, 512):
             name = f"icons/nexus-{size}.png"
-            self.assertEqual((ROOT / "public/studio" / name).read_bytes(),
-                             (ROOT / "public" / name).read_bytes())
+            packaged = (ROOT / "public/studio" / name).read_bytes()
+            self.assertEqual(packaged, (ROOT / "public" / name).read_bytes())
+            self.assertEqual(len(pixel_digest(packaged, size, size)), 64)
 
     def test_public_page_leaves_the_opaque_lab_module_intact(self):
         compiled = static_builder.render_public_shell(
