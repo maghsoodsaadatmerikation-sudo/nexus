@@ -175,6 +175,16 @@ try{
  checks.push('model-review-not-send-even-on-ctrl-enter');
  await js("document.querySelector('#studio-focus-nav button[data-panel=tools]').click();true");
  assert(await js("NexusStudioFocus.active()==='tools'&&!document.getElementById('studio-focus-tools').hidden&&document.getElementById('conversation-card').hidden"),'tool-chooser-not-focused');
+ assert(await js(`(()=>{
+   const search=document.getElementById('studio-tool-search');
+   const tray=document.getElementById('studio-focus-tools');
+   const choices=()=>[...tray.querySelectorAll('button[data-panel]:not([hidden])')].map(button=>button.dataset.panel);
+   const query=text=>{search.value=text;search.dispatchEvent(new Event('input'))};
+   query('CSV');if(choices().join()!=='data-card')return false;
+   query('ميكس');if(choices().join()!=='orchestra-card')return false;
+   query('xyz-no-such-tool');if(choices().length||tray.querySelector('[role=status]').hidden)return false;
+   query('');return choices().length===12&&tray.querySelector('[role=status]').hidden;
+ })()`),'tool-catalog-search-and-empty-state');
  await js("document.querySelector('#studio-focus-tools button[data-panel=data-card]').click();true");
  assert(await js("NexusStudioFocus.active()==='data-card'&&!document.getElementById('data-card').hidden&&document.getElementById('conversation-card').hidden"),'data-panel-route');
  await js("NexusStudioUI.stageChatContext('SYNTHETIC ANALYSIS','SYNTHETIC HANDOFF')"); 
@@ -187,6 +197,11 @@ try{
  assert(await js("NexusStudioUI.snapshot().projects[0].threads[0].nodes.length===2"),'guide-failed');checks.push('local-guide-works-without-provider');
  await js("document.getElementById('studio-focus-toggle').click();true");
  assert(await js("!NexusStudioFocus.isFocused()&&document.querySelectorAll('section.card[hidden]').length===0&&document.getElementById('studio-focus-nav').hidden"),'full-view-not-restored');
+ await js("document.getElementById('studio-tools-toggle').click();true");
+ assert(await js("NexusStudioFocus.active()==='tools'&&!document.getElementById('studio-focus-tools').hidden&&!document.getElementById('conversation-card').hidden"),'wide-catalog-preserves-workspace');
+ await js("document.querySelector('#studio-focus-tools button[data-panel=canvas-card]').click();true");
+ assert(await js("NexusStudioFocus.active()==='canvas-card'&&document.getElementById('studio-focus-tools').hidden&&document.activeElement.closest('#canvas-card')"),'wide-catalog-focuses-result');
+ checks.push('bilingual-tool-search-and-wide-routing');
  await js("document.getElementById('studio-focus-toggle').click();document.getElementById('message').focus();true");
  await poll(()=>retryJs("NexusStudioFocus.isFocused()&&getComputedStyle(document.getElementById('studio-focus-nav')).display==='none'"),2200,'mobile-keyboard-dock-focus-timing');
  const keyboard=await js("({focused:NexusStudioFocus.isFocused(),typing:document.documentElement.classList.contains('studio-focus-typing'),active:document.activeElement.id,dock:getComputedStyle(document.getElementById('studio-focus-nav')).display})");

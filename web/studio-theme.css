@@ -1,0 +1,164 @@
+:root {
+  --studio-ink: #172e28;
+  --studio-muted: #4e655d;
+  --studio-paper: #f5f7f4;
+  --studio-card: #fff;
+  --studio-line: #d4e0d8;
+  --studio-green: #185e48;
+  --studio-soft: #edf5ef;
+  color: var(--studio-ink);
+  background: var(--studio-paper);
+  font-family: "Inter", "Noto Sans Arabic", system-ui, sans-serif;
+}
+
+main {max-width: 1250px; padding: 24px clamp(14px, 3vw, 36px);}
+h2, h3 {letter-spacing: -.015em;}
+h2 {font-size: 1.22rem; margin-block-start: 0;}
+a {color: #165c45; text-underline-offset: .2em;}
+button {min-height: 42px; border-radius: 10px; font-weight: 650; padding-inline: 13px;}
+button:hover:not(:disabled) {filter: brightness(.93);}
+button:disabled {opacity: .55;}
+button.secondary {background: var(--studio-soft); color: #174d3d;}
+input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+  min-height: 42px;
+  border-color: #bfcec5;
+  border-radius: 10px;
+  background: #fbfcfa;
+  color: var(--studio-ink);
+}
+input[type="checkbox"], progress {accent-color: var(--studio-green);}
+textarea {padding: 12px;}
+input::placeholder, textarea::placeholder {color: #64766d;}
+input[type="file"]::file-selector-button {
+  appearance: none;
+  font: inherit;
+  border: 0;
+  border-radius: 7px;
+  padding: 5px 10px;
+  margin-inline-end: 8px;
+  color: #174d3d;
+  background: var(--studio-soft);
+}
+label.inline {display: flex; align-items: flex-start; gap: 8px;}
+label.inline input {flex: 0 0 auto; margin-block-start: .42em;}
+.help {color: var(--studio-muted);}
+summary {cursor: pointer; padding: 7px 0; font-weight: 600;}
+.card {
+  min-width: 0;
+  border-color: var(--studio-line);
+  border-radius: 18px;
+  padding: clamp(15px, 2.2vw, 24px);
+  box-shadow: 0 7px 24px #233f3110;
+}
+.grid {grid-template-columns: minmax(235px, .34fr) minmax(0, 1fr); gap: 22px;}
+.grid > * {min-width: 0;}
+.message {border-color: var(--studio-line); border-radius: 13px;}
+.message.assistant {background: #f1f7f3;}
+#message {min-height: 108px;}
+#status:empty, #studio-offline-state:empty, #studio-install-state:empty {display: none;}
+#status:not(:empty) {background: var(--studio-soft); border-radius: 10px; padding: 8px 12px;}
+.notice {border: 1px solid #e8d9b6; background: #fcf6e8; color: #553f18;}
+
+.studio-masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: clamp(16px, 3.6vw, 30px);
+  color: #fff;
+  background: linear-gradient(115deg, #123b30, #1c5845);
+  border: 1px solid #134b38;
+  border-radius: 22px;
+  box-shadow: 0 12px 24px #153c3023;
+}
+.studio-brand {display: flex; align-items: center; gap: 14px; min-width: 0;}
+.studio-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 48px;
+  block-size: 48px;
+  border: 1px solid #86ae9a;
+  border-radius: 14px;
+  color: #e6f4eb;
+  font: 700 1.42rem/1 Georgia, serif;
+  background: #ffffff12;
+}
+.studio-brand h1 {font-size: clamp(1.35rem, 4vw, 2.8rem); letter-spacing: -.045em; direction: ltr;}
+.studio-brand h1 span {font-weight: 440; color: #c7e2d4;}
+.studio-brand p {color: #ddeee5; margin: 4px 0 0; font-size: .9rem;}
+.studio-masthead #language {width: auto; min-width: 92px; margin: 0;}
+#studio-install-card {
+  border: 1px solid var(--studio-line);
+  border-radius: 12px;
+  padding: 2px 13px;
+  margin: 12px 0 8px;
+  background: var(--studio-card);
+}
+.studio-install-content {padding-block-end: 10px;}
+.studio-install-content a {display: inline-block; margin-block-start: 6px;}
+.studio-enhanced .tool-nav {display: none;}
+#studio-focus-top {margin-block: 12px 6px; justify-content: flex-start; flex-wrap: wrap;}
+#studio-focus-top button {margin: 0;}
+.studio-focus-mode #studio-focus-top {justify-content: flex-end;}
+.studio-focus-mode #studio-tools-toggle {display: none;}
+#studio-focus-tools {border-radius: 18px; padding: clamp(14px, 2vw, 22px);}
+#studio-tool-search {max-width: 360px; margin: 0 0 15px;}
+.studio-focus-tools-grid {grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 9px;}
+.studio-focus-tools-grid button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 70px;
+  padding: 9px 11px;
+  color: var(--studio-ink);
+  background: #f8faf8;
+  border: 1px solid var(--studio-line);
+  text-align: start;
+}
+.studio-control-label {display: block; min-width: 0; overflow-wrap: anywhere;}
+.studio-control-label small {display: block; color: var(--studio-muted); font-weight: 450; line-height: 1.35;}
+.studio-control-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #e1f0e6;
+  color: #194d3c;
+  font-size: 1.16rem;
+  line-height: 1;
+}
+[data-panel="music-card"] .studio-control-icon,
+[data-panel="orchestra-card"] .studio-control-icon {background: #f4e9d7; color: #714a22;}
+#studio-focus-nav {background: #fdfefa; gap: 5px;}
+#studio-focus-nav button {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-height: 51px;
+  padding: 4px;
+  color: #234e3e;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: .8rem;
+}
+#studio-focus-nav .studio-control-icon {height: auto; background: transparent;}
+#studio-focus-nav button[aria-current="page"] {border: 1px solid #a1c4b0; background: #e7f2ea;}
+#studio-focus-onboarding {background: #eff7f1; padding: 16px; border-radius: 14px;}
+#studio-focus-onboarding button {margin-inline-end: 8px;}
+.studio-focus-mode #studio-compose {border-radius: 14px;}
+.studio-compose-row button.secondary {flex-grow: 0;}
+section h2:focus, #studio-focus-tools-title:focus {outline: none;}
+
+@media (max-width: 780px) {
+  .grid {grid-template-columns: minmax(0, 1fr);}
+  .studio-focus-mode main {padding: 12px 14px;}
+  .studio-focus-tools-grid {grid-template-columns: repeat(2, minmax(0, 1fr));}
+}
+@media (max-width: 470px) {
+  .studio-masthead {align-items: flex-start; flex-wrap: wrap;}
+  .studio-mark {flex-basis: 36px; block-size: 36px; border-radius: 10px;}
+  .studio-brand {gap: 10px;}
+  .studio-compose-row button {flex: 1 1 120px;}
+  .studio-focus-tools-grid button {align-items: flex-start; flex-direction: column; gap: 5px;}
+}

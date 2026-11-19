@@ -40,8 +40,182 @@ html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focu
 #studio-compose-privacy,#studio-compose-storage{margin:7px 0 0}
 .studio-focus-mode #guide,.studio-focus-mode #prepare,.studio-focus-mode #regenerate{display:none}
 @media(max-width:480px){.studio-compose-row label{flex:1 1 100%}.studio-compose-row button{flex:1 1 125px}}
-.music-fa{display:none}html[lang="fa"] .music-en{display:none}html[lang="fa"] .music-fa{display:initial}#music-card progress{accent-color:#185e48}#music-card pre{max-height:360px}.studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style></head><body><main><section class="card" id="studio-install-card">
-<h2 class="studio-en">Install NEXUS Studio</h2><h2 class="studio-fa" lang="fa" dir="rtl">نصب نکسوس استودیو</h2>
+.music-fa{display:none}html[lang="fa"] .music-en{display:none}html[lang="fa"] .music-fa{display:initial}#music-card progress{accent-color:#185e48}#music-card pre{max-height:360px}
+:root {
+  --studio-ink: #172e28;
+  --studio-muted: #4e655d;
+  --studio-paper: #f5f7f4;
+  --studio-card: #fff;
+  --studio-line: #d4e0d8;
+  --studio-green: #185e48;
+  --studio-soft: #edf5ef;
+  color: var(--studio-ink);
+  background: var(--studio-paper);
+  font-family: "Inter", "Noto Sans Arabic", system-ui, sans-serif;
+}
+
+main {max-width: 1250px; padding: 24px clamp(14px, 3vw, 36px);}
+h2, h3 {letter-spacing: -.015em;}
+h2 {font-size: 1.22rem; margin-block-start: 0;}
+a {color: #165c45; text-underline-offset: .2em;}
+button {min-height: 42px; border-radius: 10px; font-weight: 650; padding-inline: 13px;}
+button:hover:not(:disabled) {filter: brightness(.93);}
+button:disabled {opacity: .55;}
+button.secondary {background: var(--studio-soft); color: #174d3d;}
+input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+  min-height: 42px;
+  border-color: #bfcec5;
+  border-radius: 10px;
+  background: #fbfcfa;
+  color: var(--studio-ink);
+}
+input[type="checkbox"], progress {accent-color: var(--studio-green);}
+textarea {padding: 12px;}
+input::placeholder, textarea::placeholder {color: #64766d;}
+input[type="file"]::file-selector-button {
+  appearance: none;
+  font: inherit;
+  border: 0;
+  border-radius: 7px;
+  padding: 5px 10px;
+  margin-inline-end: 8px;
+  color: #174d3d;
+  background: var(--studio-soft);
+}
+label.inline {display: flex; align-items: flex-start; gap: 8px;}
+label.inline input {flex: 0 0 auto; margin-block-start: .42em;}
+.help {color: var(--studio-muted);}
+summary {cursor: pointer; padding: 7px 0; font-weight: 600;}
+.card {
+  min-width: 0;
+  border-color: var(--studio-line);
+  border-radius: 18px;
+  padding: clamp(15px, 2.2vw, 24px);
+  box-shadow: 0 7px 24px #233f3110;
+}
+.grid {grid-template-columns: minmax(235px, .34fr) minmax(0, 1fr); gap: 22px;}
+.grid > * {min-width: 0;}
+.message {border-color: var(--studio-line); border-radius: 13px;}
+.message.assistant {background: #f1f7f3;}
+#message {min-height: 108px;}
+#status:empty, #studio-offline-state:empty, #studio-install-state:empty {display: none;}
+#status:not(:empty) {background: var(--studio-soft); border-radius: 10px; padding: 8px 12px;}
+.notice {border: 1px solid #e8d9b6; background: #fcf6e8; color: #553f18;}
+
+.studio-masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: clamp(16px, 3.6vw, 30px);
+  color: #fff;
+  background: linear-gradient(115deg, #123b30, #1c5845);
+  border: 1px solid #134b38;
+  border-radius: 22px;
+  box-shadow: 0 12px 24px #153c3023;
+}
+.studio-brand {display: flex; align-items: center; gap: 14px; min-width: 0;}
+.studio-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 48px;
+  block-size: 48px;
+  border: 1px solid #86ae9a;
+  border-radius: 14px;
+  color: #e6f4eb;
+  font: 700 1.42rem/1 Georgia, serif;
+  background: #ffffff12;
+}
+.studio-brand h1 {font-size: clamp(1.35rem, 4vw, 2.8rem); letter-spacing: -.045em; direction: ltr;}
+.studio-brand h1 span {font-weight: 440; color: #c7e2d4;}
+.studio-brand p {color: #ddeee5; margin: 4px 0 0; font-size: .9rem;}
+.studio-masthead #language {width: auto; min-width: 92px; margin: 0;}
+#studio-install-card {
+  border: 1px solid var(--studio-line);
+  border-radius: 12px;
+  padding: 2px 13px;
+  margin: 12px 0 8px;
+  background: var(--studio-card);
+}
+.studio-install-content {padding-block-end: 10px;}
+.studio-install-content a {display: inline-block; margin-block-start: 6px;}
+.studio-enhanced .tool-nav {display: none;}
+#studio-focus-top {margin-block: 12px 6px; justify-content: flex-start; flex-wrap: wrap;}
+#studio-focus-top button {margin: 0;}
+.studio-focus-mode #studio-focus-top {justify-content: flex-end;}
+.studio-focus-mode #studio-tools-toggle {display: none;}
+#studio-focus-tools {border-radius: 18px; padding: clamp(14px, 2vw, 22px);}
+#studio-tool-search {max-width: 360px; margin: 0 0 15px;}
+.studio-focus-tools-grid {grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 9px;}
+.studio-focus-tools-grid button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 70px;
+  padding: 9px 11px;
+  color: var(--studio-ink);
+  background: #f8faf8;
+  border: 1px solid var(--studio-line);
+  text-align: start;
+}
+.studio-control-label {display: block; min-width: 0; overflow-wrap: anywhere;}
+.studio-control-label small {display: block; color: var(--studio-muted); font-weight: 450; line-height: 1.35;}
+.studio-control-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #e1f0e6;
+  color: #194d3c;
+  font-size: 1.16rem;
+  line-height: 1;
+}
+[data-panel="music-card"] .studio-control-icon,
+[data-panel="orchestra-card"] .studio-control-icon {background: #f4e9d7; color: #714a22;}
+#studio-focus-nav {background: #fdfefa; gap: 5px;}
+#studio-focus-nav button {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-height: 51px;
+  padding: 4px;
+  color: #234e3e;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: .8rem;
+}
+#studio-focus-nav .studio-control-icon {height: auto; background: transparent;}
+#studio-focus-nav button[aria-current="page"] {border: 1px solid #a1c4b0; background: #e7f2ea;}
+#studio-focus-onboarding {background: #eff7f1; padding: 16px; border-radius: 14px;}
+#studio-focus-onboarding button {margin-inline-end: 8px;}
+.studio-focus-mode #studio-compose {border-radius: 14px;}
+.studio-compose-row button.secondary {flex-grow: 0;}
+section h2:focus, #studio-focus-tools-title:focus {outline: none;}
+
+@media (max-width: 780px) {
+  .grid {grid-template-columns: minmax(0, 1fr);}
+  .studio-focus-mode main {padding: 12px 14px;}
+  .studio-focus-tools-grid {grid-template-columns: repeat(2, minmax(0, 1fr));}
+}
+@media (max-width: 470px) {
+  .studio-masthead {align-items: flex-start; flex-wrap: wrap;}
+  .studio-mark {flex-basis: 36px; block-size: 36px; border-radius: 10px;}
+  .studio-brand {gap: 10px;}
+  .studio-compose-row button {flex: 1 1 120px;}
+  .studio-focus-tools-grid button {align-items: flex-start; flex-direction: column; gap: 5px;}
+}
+
+.studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style></head><body><main>
+<header class="studio-masthead">
+  <div class="studio-brand">
+    <span class="studio-mark" aria-hidden="true">N</span>
+    <div><h1>NEXUS <span>Studio</span></h1><p data-t="subtitle">Your conversations, sources and drafts — under your control.</p></div>
+  </div>
+  <select id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option></select>
+</header><details id="studio-install-card">
+<summary><span class="studio-en">Install or use offline</span><span class="studio-fa" lang="fa" dir="rtl">نصب یا استفادهٔ آفلاین</span></summary>
+<div class="studio-install-content">
 <p class="studio-en">Open the same Studio on the web or from your home screen. Projects and encrypted saves stay in your browser profile.</p>
 <p class="studio-fa" lang="fa" dir="rtl">همین استودیو را از وب یا صفحهٔ اصلی گوشی باز کن. پروژه‌ها و ذخیره‌های رمزگذاری‌شده در پروفایل مرورگرت می‌مانند.</p>
 <button id="studio-offline"><span class="studio-en">Prepare offline use</span><span class="studio-fa">آماده‌سازی آفلاین</span></button>
@@ -52,8 +226,7 @@ html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focu
 <p id="studio-offline-state" role="status" aria-live="polite"></p>
 <p id="studio-install-state" role="status" aria-live="polite"></p>
 <a href="#studio-privacy"><span class="studio-en">Privacy policy</span><span class="studio-fa">سیاست حریم خصوصی</span></a>
-</section>
-<div class="row"><div><h1>NEXUS <span>Studio</span></h1><p class="help" data-t="subtitle">Your conversations, sources and drafts — under your control.</p></div><select id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option></select></div>
+</div></details>
 <details><summary data-t="languagePacks">Interface language packs</summary><p class="help" data-t="languageHelp">Up to eight complete translation packs can be kept in this tab. They contain labels only, not your projects.</p><button id="language-template" class="secondary" data-t="languageTemplate">Download English label template</button><input id="language-file" type="file" accept="application/json" aria-label="Import interface language pack"></details>
 <nav class="tool-nav" aria-label="Studio tools"><a href="#conversation-card" data-t="conversation">Conversation</a><a href="#data-card" data-t="dataTitle">Data analysis</a><a href="#research-card" data-t="research">Research</a><a href="#code-card" data-t="codeLab">Code</a><a href="#tasks-card" data-t="tasks">Tasks</a><a href="#chart-card" data-t="chartLab">Chart</a><a href="#music-card">Music Lab / موسیقی</a><a href="#orchestra-card">Orchestra / آواز</a><a href="#astrology-card" data-t="astroTitle">Astrology</a><a href="#sky-card" data-t="skyTitle">Sky</a><a href="#canvas-card" data-t="canvas">Canvas</a><a href="#vault-card" data-t="archive">Archive</a></nav>
 <details><summary data-t="capabilitiesTitle">Capability status & shortcuts</summary><p class="help" data-t="shortcutsHelp"></p><ul id="capability-status"></ul></details>
@@ -1519,57 +1692,90 @@ const targets=[
   ['vault-card','save','Save','ذخیره']
 ];
 const tools=[
-  ['music-card','Music Lab','موسیقی'],
-  ['orchestra-card','Orchestra & vocal','ارکستر و آواز'],
-  ['data-card','Data analysis','تحلیل داده'],
-  ['research-card','Research','پژوهش'],
-  ['code-card','Code','کدنویسی'],
-  ['tasks-card','Tasks','کارها'],
-  ['chart-card','Charts','نمودارها'],
-  ['canvas-card','Writing','نوشتن'],
-  ['sources-card','Sources','منابع'],
-  ['profile-card','Assistant & memory','دستیار و حافظه'],
-  ['astrology-card','Astrology','اخترشناسی'],
-  ['sky-card','Sky','آسمان']
+  ['canvas-card','Writing','نوشتن','¶','Draft and revisit versions','پیش‌نویس و بازبینی نسخه‌ها'],
+  ['research-card','Research','پژوهش','⌕','Look up public sources','جست‌وجوی منابع عمومی'],
+  ['music-card','Music Lab','موسیقی','♪','Compose and export WAV or MIDI','آهنگ‌سازی و خروجی WAV یا MIDI'],
+  ['orchestra-card','Orchestra & vocal','ارکستر و آواز','♫','Arrange and mix your vocal','تنظیم ارکستر و میکس وکال'],
+  ['data-card','Data analysis','تحلیل داده','∑','Summarize CSV and JSON','خلاصه‌سازی CSV و JSON'],
+  ['chart-card','Charts','نمودارها','▥','Draw charts and export PNG','رسم نمودار و خروجی PNG'],
+  ['sources-card','Sources','منابع','▤','Find text in your files','یافتن متن در فایل‌های پروژه'],
+  ['profile-card','Assistant & memory','دستیار و حافظه','◎','Set project preferences','تنظیم ترجیحات پروژه'],
+  ['code-card','Code','کدنویسی','‹›','Run reviewed JavaScript','اجرای JavaScript بازبینی‌شده'],
+  ['tasks-card','Tasks','کارها','▦','Run a reviewed task plan','اجرای برنامهٔ بازبینی‌شدهٔ کارها'],
+  ['astrology-card','Astrology','اخترشناسی','✧','Explore charts and transits','بررسی چارت و گذرها'],
+  ['sky-card','Sky','آسمان','◐','Inspect local sky calculations','بررسی محاسبات آسمان']
 ];
 const sections=[...targets.map(x=>x[0]),...tools.map(x=>x[0])];
 if(sections.some(id=>!$(id))||!$('language')||!$('conversation-card'))return;
 const main=document.querySelector('body>main');
 const nav=document.createElement('nav');nav.id='studio-focus-nav';nav.setAttribute('aria-label','Primary Studio navigation');
-const bar=document.createElement('div');bar.id='studio-focus-bar';
 const toggle=document.createElement('button');toggle.id='studio-focus-toggle';toggle.type='button';toggle.className='secondary';
-const top=document.createElement('div');top.id='studio-focus-top';top.append(toggle);
+const catalog=document.createElement('button');catalog.id='studio-tools-toggle';catalog.type='button';
+catalog.setAttribute('aria-controls','studio-focus-tools');
+const top=document.createElement('div');top.id='studio-focus-top';top.append(catalog,toggle);
 const toolsTray=document.createElement('div');toolsTray.id='studio-focus-tools';toolsTray.hidden=true;
 toolsTray.setAttribute('role','group');toolsTray.setAttribute('aria-label','Studio tools');
-const toolHeading=document.createElement('strong');toolHeading.id='studio-focus-tools-title';
-const toolsGrid=document.createElement('div');toolsGrid.className='studio-focus-tools-grid';toolsTray.append(toolHeading,toolsGrid);
+const toolHeading=document.createElement('h2');toolHeading.id='studio-focus-tools-title';
+const search=document.createElement('input');search.id='studio-tool-search';search.type='search';
+const noTools=document.createElement('p');noTools.className='help';noTools.hidden=true;noTools.setAttribute('role','status');
+const toolsGrid=document.createElement('div');toolsGrid.className='studio-focus-tools-grid';
+toolsTray.append(toolHeading,search,toolsGrid,noTools);
 const onboarding=document.createElement('div');onboarding.id='studio-focus-onboarding';onboarding.className='studio-focus-onboarding';
 onboarding.setAttribute('role','group');onboarding.setAttribute('aria-label','Getting started');
-const hint=document.createElement('p'),start=document.createElement('button');start.type='button';onboarding.append(hint,start);
+const hint=document.createElement('p'),start=document.createElement('button');start.type='button';
+const tryTools=document.createElement('button');tryTools.type='button';tryTools.className='secondary';
+onboarding.append(hint,start,tryTools);
 $('conversation-card').insertBefore(onboarding,$('conversation-card').children[1]||null);
 const existingNav=document.querySelector('nav.tool-nav');existingNav.before(top,toolsTray);main.append(nav);
+document.documentElement.classList.add('studio-enhanced');
 const labels=[
-  ['conversation-card','Chat','گفتگو'],
-  ['projects-card','Projects','پروژه‌ها'],
-  ['tools','Tools','ابزارها'],
-  ['vault-card','Save','ذخیره']
+  ['conversation-card','Chat','گفتگو','◫'],
+  ['projects-card','Projects','پروژه‌ها','▤'],
+  ['tools','Tools','ابزارها','▦'],
+  ['vault-card','Save','ذخیره','◇']
 ];
-for(const [id,en,fa] of labels){
+const labelsToRefresh=[];
+function labelButton(button,icon,en,fa,descriptionEn='',descriptionFa=''){
+ const symbol=document.createElement('span');symbol.className='studio-control-icon';symbol.textContent=icon;
+ symbol.setAttribute('aria-hidden','true');
+ const label=document.createElement('span');label.className='studio-control-label';
+ const title=document.createElement('span');label.append(title);
+ const detail=document.createElement('small');
+ if(descriptionEn)label.append(detail);
+ button.append(symbol,label);
+ labelsToRefresh.push(()=>{title.textContent=words(en,fa);detail.textContent=words(descriptionEn,descriptionFa)});
+}
+for(const [id,en,fa,icon] of labels){
  const button=document.createElement('button');button.type='button';button.className='studio-focus-tab';
- button.dataset.panel=id;button.dataset.en=en;button.dataset.fa=fa;
+ button.dataset.panel=id;
+ labelButton(button,icon,en,fa);
  button.setAttribute('aria-controls',id==='tools'?'studio-focus-tools':id);
  button.addEventListener('click',()=>id==='tools'?openTools():openPanel(id));
  nav.append(button);
 }
-for(const [id,en,fa] of tools){
+for(const [id,en,fa,icon,descriptionEn,descriptionFa] of tools){
  const button=document.createElement('button');button.type='button';
- button.dataset.panel=id;button.dataset.en=en;button.dataset.fa=fa;
+ button.dataset.panel=id;
+ labelButton(button,icon,en,fa,descriptionEn,descriptionFa);
+ labelsToRefresh.push(()=>button.setAttribute('aria-label',words(en,fa)));
  button.setAttribute('aria-controls',id);
  button.addEventListener('click',()=>openPanel(id));toolsGrid.append(button);
 }
 let selected='conversation-card',focused=media.matches,manual=false,toolsOpen=false;
 const isFa=()=>document.documentElement.lang==='fa';
 const words=(en,fa)=>isFa()?fa:en;
+const normalize=value=>value.toLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ').trim();
+function filterTools(){
+ const query=normalize(search.value).split(/\s+/).filter(Boolean);
+ let results=0;
+ for(const [index,tool] of tools.entries()){
+  const text=normalize([...tool.slice(1,3),...tool.slice(4)].join(' '));
+  const visible=query.every(word=>text.includes(word));
+  toolsGrid.children[index].hidden=!visible;
+  if(visible)results++;
+ }
+ noTools.hidden=results!==0;
+}
 function refreshLabels(){
  toggle.textContent=focused?words('Show all sections','نمایش همهٔ بخش‌ها'):words('Focus on one section','تمرکز بر یک بخش');
  toggle.setAttribute('aria-pressed',String(focused));
@@ -1577,20 +1783,22 @@ function refreshLabels(){
  toolsTray.setAttribute('aria-label',words('Studio tools','ابزارهای نکسوس'));
  onboarding.setAttribute('aria-label',words('Getting started','شروع کار'));
  toolHeading.textContent=words('Choose a tool','انتخاب ابزار');
- for(const button of [...nav.querySelectorAll('button'),...toolsGrid.querySelectorAll('button')])
-  button.textContent=words(button.dataset.en,button.dataset.fa);
+ catalog.textContent=toolsOpen?words('Close tools','بستن ابزارها'):words('Browse tools','دیدن ابزارها');
+ catalog.setAttribute('aria-expanded',String(toolsOpen));
+ search.placeholder=words('Search tools','جست‌وجوی ابزار');
+ search.setAttribute('aria-label',search.placeholder);
+ noTools.textContent=words('No tools match your search.','ابزاری با این جست‌وجو پیدا نشد.');
+ tryTools.textContent=words('Browse tools','دیدن ابزارها');
+ labelsToRefresh.forEach(update=>update());
 }
 function layout(){
  document.documentElement.classList.toggle('studio-focus-mode',focused);
- nav.hidden=!focused;toolsTray.hidden=!focused||!toolsOpen;
+ nav.hidden=!focused;toolsTray.hidden=!toolsOpen;
  for(const id of sections)$(id).hidden=focused&&(toolsOpen||id!==selected);
  const category=toolsOpen||tools.some(x=>x[0]===selected)?'tools':selected;
  for(const button of nav.querySelectorAll('button')){
   const active=focused&&button.dataset.panel===category;
   button.setAttribute('aria-current',active?'page':'false');
- }
- for(const button of toolsGrid.querySelectorAll('button')){
-  button.setAttribute('aria-current',focused&&!toolsOpen&&button.dataset.panel===selected?'page':'false');
  }
  refreshLabels();refreshOnboarding();syncTyping();requestAnimationFrame(syncTyping);
 }
@@ -1600,15 +1808,14 @@ function moveTo(element){
 }
 function openPanel(id){
  if(!sections.includes(id))return false;
- if(!focused){const element=$(id);element.scrollIntoView({block:'start',behavior:'instant'});return true}
- selected=id;toolsOpen=false;layout();moveTo($(id));
+ selected=id;toolsOpen=false;layout();$(id).scrollIntoView({block:'start',behavior:'instant'});
  const heading=$(id).querySelector('h2');if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true})}
  return true;
 }
 function openTools(){
- if(!focused){existingNav.scrollIntoView({block:'start',behavior:'instant'});return}
- toolsOpen=true;layout();moveTo(toolsTray);
- const first=toolsGrid.querySelector('button');first?.focus({preventScroll:true});
+ if(!toolsOpen){search.value='';filterTools()}
+ toolsOpen=true;layout();toolsTray.scrollIntoView({block:'start',behavior:'instant'});
+ toolHeading.tabIndex=-1;toolHeading.focus({preventScroll:true});
 }
 function setFocus(on,explicit=false){
  if(explicit)manual=true;
@@ -1621,7 +1828,7 @@ function refreshOnboarding(){
  const projects=state?.projects||[];
  const selectedProject=projects.find(p=>p.id===$('projects').value);
  const hasThread=selectedProject?.threads?.some(t=>!t.archived);
- const visible=focused&&(!projects.length||!hasThread);
+ const visible=!projects.length||!hasThread;
  onboarding.hidden=!visible;
  if(!visible)return;
  const create=projects.length===0;
@@ -1637,6 +1844,9 @@ function refreshOnboarding(){
  };
 }
 toggle.addEventListener('click',()=>setFocus(!focused,true));
+catalog.addEventListener('click',()=>toolsOpen?openPanel(selected):openTools());
+tryTools.addEventListener('click',openTools);
+search.addEventListener('input',filterTools);
 media.addEventListener('change',()=>{if(!manual)setFocus(media.matches)});
 existingNav.addEventListener('click',event=>{
  if(!focused)return;
@@ -1651,8 +1861,13 @@ observer.observe($('history'),{childList:true});
 $('language').addEventListener('change',()=>queueMicrotask(()=>{refreshLabels();refreshOnboarding()}));
 document.addEventListener('nexus-studio-open-chat',()=>openPanel('conversation-card'));
 document.addEventListener('keydown',event=>{
- if(event.key==='Escape'&&focused&&toolsOpen){event.preventDefault();openPanel('conversation-card')}
+ if(event.key!=='Escape'||!toolsOpen||!toolsTray.contains(document.activeElement))return;
+ event.preventDefault();
+ if(search.value){search.value='';filterTools();return}
+ openPanel(selected);
 });
+function openLinkedPanel(){if(location.hash)openPanel(location.hash.slice(1))}
+window.addEventListener('hashchange',openLinkedPanel);
 const textControls='input:not([type="checkbox"]):not([type="radio"]),textarea,select';
 function syncTyping(){
  const active=document.activeElement;
@@ -1662,6 +1877,7 @@ document.addEventListener('focusin',syncTyping);
 document.addEventListener('focusout',()=>queueMicrotask(syncTyping));
 window.NexusStudioFocus={openPanel,openTools,setFocus,isFocused:()=>focused,active:()=>toolsOpen?'tools':selected};
 layout();
+openLinkedPanel();
 })();
 </script><script>/* NEXUS Studio: honest chat composer and explicit archive shortcut.
  * Presentation only. All executions delegate to the existing reviewed actions.

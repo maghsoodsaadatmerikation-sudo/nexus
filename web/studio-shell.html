@@ -40,8 +40,16 @@ html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focu
 #studio-compose-privacy,#studio-compose-storage{margin:7px 0 0}
 .studio-focus-mode #guide,.studio-focus-mode #prepare,.studio-focus-mode #regenerate{display:none}
 @media(max-width:480px){.studio-compose-row label{flex:1 1 100%}.studio-compose-row button{flex:1 1 125px}}
-.music-fa{display:none}html[lang="fa"] .music-en{display:none}html[lang="fa"] .music-fa{display:initial}#music-card progress{accent-color:#185e48}#music-card pre{max-height:360px}</style></head><body><main>
-<div class="row"><div><h1>NEXUS <span>Studio</span></h1><p class="help" data-t="subtitle">Your conversations, sources and drafts — under your control.</p></div><select id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option></select></div>
+.music-fa{display:none}html[lang="fa"] .music-en{display:none}html[lang="fa"] .music-fa{display:initial}#music-card progress{accent-color:#185e48}#music-card pre{max-height:360px}
+/*STUDIO_THEME*/
+</style></head><body><main>
+<header class="studio-masthead">
+  <div class="studio-brand">
+    <span class="studio-mark" aria-hidden="true">N</span>
+    <div><h1>NEXUS <span>Studio</span></h1><p data-t="subtitle">Your conversations, sources and drafts — under your control.</p></div>
+  </div>
+  <select id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option></select>
+</header>
 <details><summary data-t="languagePacks">Interface language packs</summary><p class="help" data-t="languageHelp">Up to eight complete translation packs can be kept in this tab. They contain labels only, not your projects.</p><button id="language-template" class="secondary" data-t="languageTemplate">Download English label template</button><input id="language-file" type="file" accept="application/json" aria-label="Import interface language pack"></details>
 <nav class="tool-nav" aria-label="Studio tools"><a href="#conversation-card" data-t="conversation">Conversation</a><a href="#data-card" data-t="dataTitle">Data analysis</a><a href="#research-card" data-t="research">Research</a><a href="#code-card" data-t="codeLab">Code</a><a href="#tasks-card" data-t="tasks">Tasks</a><a href="#chart-card" data-t="chartLab">Chart</a><a href="#music-card">Music Lab / موسیقی</a><a href="#orchestra-card">Orchestra / آواز</a><a href="#astrology-card" data-t="astroTitle">Astrology</a><a href="#sky-card" data-t="skyTitle">Sky</a><a href="#canvas-card" data-t="canvas">Canvas</a><a href="#vault-card" data-t="archive">Archive</a></nav>
 <details><summary data-t="capabilitiesTitle">Capability status & shortcuts</summary><p class="help" data-t="shortcutsHelp"></p><ul id="capability-status"></ul></details>

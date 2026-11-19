@@ -8,8 +8,9 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-PANEL = '''<section class="card" id="studio-install-card">
-<h2 class="studio-en">Install NEXUS Studio</h2><h2 class="studio-fa" lang="fa" dir="rtl">نصب نکسوس استودیو</h2>
+PANEL = '''<details id="studio-install-card">
+<summary><span class="studio-en">Install or use offline</span><span class="studio-fa" lang="fa" dir="rtl">نصب یا استفادهٔ آفلاین</span></summary>
+<div class="studio-install-content">
 <p class="studio-en">Open the same Studio on the web or from your home screen. Projects and encrypted saves stay in your browser profile.</p>
 <p class="studio-fa" lang="fa" dir="rtl">همین استودیو را از وب یا صفحهٔ اصلی گوشی باز کن. پروژه‌ها و ذخیره‌های رمزگذاری‌شده در پروفایل مرورگرت می‌مانند.</p>
 <button id="studio-offline"><span class="studio-en">Prepare offline use</span><span class="studio-fa">آماده‌سازی آفلاین</span></button>
@@ -20,7 +21,7 @@ PANEL = '''<section class="card" id="studio-install-card">
 <p id="studio-offline-state" role="status" aria-live="polite"></p>
 <p id="studio-install-state" role="status" aria-live="polite"></p>
 <a href="#studio-privacy"><span class="studio-en">Privacy policy</span><span class="studio-fa">سیاست حریم خصوصی</span></a>
-</section>'''
+</div></details>'''
 PRIVACY = '''<section class="card" id="studio-privacy">
 <div class="studio-en"><h2>NEXUS Studio privacy policy</h2>
 <p>Studio runs in your browser, including when you install it. It requires no Studio account. Chats, drafts, source files, audio and analysis stay on your device during local use. Saving a project creates an encrypted archive in your browser profile. Exporting a backup or other file creates a copy at the location you choose.</p>
@@ -114,7 +115,7 @@ def artifacts():
     source=source.replace("worker-src blob:", "worker-src 'self' blob:").replace("img-src 'none'", "img-src 'self'; manifest-src 'self'")
     source=source.replace('<title>', '<link rel="manifest" href="./manifest.json"><meta name="theme-color" content="#185e48"><title>',1)
     source=source.replace('</style>', '.studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style>',1)
-    source=source.replace('<body><main>','<body><main>'+PANEL,1)
+    source=source.replace('</header>','</header>'+PANEL,1)
     source=source.replace('</main>',PRIVACY+'</main>',1)
     source=source.replace('value="2048"></details>', 'value="2048">'+(ROOT/'web/device/device-panel.html').read_text()+'</details>',1)
     source=source.replace('<label for="gateway"', '<label for="model-engine"><span class="studio-en">Model engine</span><span class="studio-fa">موتور مدل</span></label><select id="model-engine"><option value="gateway">Remote gateway / درگاه سرور</option><option value="device">On-device small model / مدل کوچک روی دستگاه</option></select><label for="gateway"',1)
