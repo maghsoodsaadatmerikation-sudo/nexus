@@ -30,6 +30,7 @@ jobs:
           persist-credentials: false
       - run: python3 scripts/build-studio-static.py --check
       - run: python3 scripts/verify-studio-public.py --self-test
+      - run: node scripts/test-studio-worker.mjs
       - name: Verify opt-in cache, encrypted offline reopen and corrupted-cache rejection
         run: |
           export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"

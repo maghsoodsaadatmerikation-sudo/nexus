@@ -7,6 +7,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+from studio_assets import MAX_ASSET_BYTES, OFFLINE_DEVICE_ASSETS, PUBLIC_ASSETS
+
 ROOT = Path(__file__).resolve().parents[1]
 PANEL = '''<details id="studio-install-card">
 <summary><span class="studio-en">Install or use offline</span><span class="studio-fa" lang="fa" dir="rtl">نصب یا استفادهٔ آفلاین</span></summary>
@@ -84,16 +86,52 @@ const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'__PACKAGE_ID__';
 const ENTRY=new URL('./',self.location.href).href;
 const HTML={url:ENTRY,bytes:__INDEX_BYTES__,sha256:EXPECTED_SHA256,kind:'html'};
 const CODE=__CODE_ASSETS__.map(a=>({...a,url:new URL(a.path,ENTRY).href}));
+const NETWORK_DEADLINE_MS=8000;
 async function verified(response,asset=HTML){
- if(!response||response.status!==200||response.redirected||response.type!=='basic')return false;
+ if(!response||response.status!==200||response.redirected||response.type!=='basic'||!response.body)return false;
  const mime=(response.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
  if(asset.kind==='html'?mime!=='text/html':asset.kind==='json'?!['application/json','application/manifest+json'].includes(mime):!['text/javascript','application/javascript'].includes(mime))return false;
- const bytes=await response.clone().arrayBuffer();if(bytes.byteLength!==asset.bytes)return false;
- const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');return digest===asset.sha256;
+ const reader=response.clone().body.getReader(),bytes=new Uint8Array(asset.bytes);
+ let size=0,finished=false;
+ try{
+  while(true){
+   const {done,value}=await reader.read();
+   if(done){finished=true;break}
+   if(value.byteLength>bytes.byteLength-size)return false;
+   bytes.set(value,size);size+=value.byteLength;
+  }
+  if(size!==asset.bytes)return false;
+  const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
+  return digest===asset.sha256;
+ }finally{
+  // A cloned stream shares its source. Awaiting cancellation here can wait for the other branch.
+  if(!finished)void reader.cancel().catch(()=>{});
+  reader.releaseLock();
+ }
+}
+async function fetchVerified(request,asset,options={}){
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(),NETWORK_DEADLINE_MS);
+ let response;
+ try{
+  response=await fetch(request,{...options,signal:controller.signal});
+  if(await verified(response,asset))return response;
+ }catch{}finally{clearTimeout(timer)}
+ controller.abort();
+ if(response?.body)void response.body.cancel().catch(()=>{});
+ return null;
 }
 async function cacheShell(){
+ const assets=[HTML,...CODE];
+ const responses=await Promise.all(assets.map(asset=>fetchVerified(
+  asset.url,asset,{cache:'no-store',credentials:'omit',redirect:'error'}
+ )));
+ if(responses.some(response=>!response)){
+  for(const response of responses)if(response?.body)void response.body.cancel().catch(()=>{});
+  throw Error('studio-integrity-mismatch');
+ }
  const cache=await caches.open(CACHE);
- for(const asset of [HTML,...CODE]){const response=await fetch(asset.url,{cache:'no-store',credentials:'omit',redirect:'error'});if(!await verified(response,asset))throw Error('studio-integrity-mismatch');await cache.put(asset.url,response)}
+ for(const [index,asset] of assets.entries())await cache.put(asset.url,responses[index]);
 }
 self.addEventListener('install',event=>event.waitUntil((async()=>{await cacheShell();await self.skipWaiting()})()));
 self.addEventListener('message',event=>{if(event.data?.type!=='refresh-public-shell'||!event.ports[0])return;event.waitUntil(cacheShell().then(()=>event.ports[0].postMessage({ok:true}),()=>event.ports[0].postMessage({ok:false})))});
@@ -102,7 +140,7 @@ self.addEventListener('fetch',event=>{
  const request=event.request,url=new URL(request.url),entry=new URL(ENTRY);
  if(request.method!=='GET'||url.origin!==entry.origin||url.search)return;
  const asset=CODE.find(a=>a.url===url.href)||(request.mode==='navigate'&&[entry.pathname,entry.pathname+'index.html'].includes(url.pathname)?HTML:null);if(!asset)return;
- event.respondWith((async()=>{try{const response=await fetch(request);if(await verified(response,asset))return response}catch{}const cache=await caches.open(CACHE),response=await cache.match(asset.url);if(await verified(response,asset))return response;return new Response('Studio offline code is unavailable. Reconnect and retry.',{status:503,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}})})());
+ event.respondWith((async()=>{const online=await fetchVerified(request,asset);if(online)return online;const cache=await caches.open(CACHE),response=await cache.match(asset.url);try{if(await verified(response,asset))return response}catch{}if(response?.body)void response.body.cancel().catch(()=>{});return new Response('Studio offline code is unavailable. Reconnect and retry.',{status:503,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}})})());
 });
 '''
 
@@ -122,11 +160,19 @@ def artifacts():
     source=source.replace('</body>','<script>'+BOOTSTRAP+'</script><script type="module" src="./device/device-ui.js"></script></body>',1)
     html=source.encode()
     manifest={"id":"./", "name":"NEXUS Studio", "short_name":"NEXUS", "start_url":"./", "scope":"./", "display":"standalone", "lang":"en", "dir":"ltr", "background_color":"#f1f5f3", "theme_color":"#185e48", "icons":[{"src":f"./icons/nexus-{size}.png","sizes":f"{size}x{size}","type":"image/png","purpose":"any"} for size in (192,512)]}
-    code=[]
-    for name in ['device-engine.js','device-worker.js','device-ui.js','model-manifest.json']:
-        content=(ROOT/'public/studio/device'/name).read_bytes();code.append({'path':'device/'+name,'bytes':len(content),'sha256':hashlib.sha256(content).hexdigest(),'kind':'json' if name.endswith('.json') else 'javascript'})
-    worker=WORKER.replace('__DIGEST__',hashlib.sha256(html).hexdigest()).replace('__INDEX_BYTES__',str(len(html))).replace('__CODE_ASSETS__',json.dumps(code,separators=(',',':'))).replace('__PACKAGE_ID__',hashlib.sha256(html+json.dumps(code,sort_keys=True).encode()).hexdigest()[:16])
-    return {'index.html':html, 'service-worker.js':worker.encode(), 'manifest.json':(json.dumps(manifest,indent=2)+'\n').encode(), **{f'icons/nexus-{size}.png':(ROOT/f'public/icons/nexus-{size}.png').read_bytes() for size in (192,512)}}
+    code = []
+    for name in OFFLINE_DEVICE_ASSETS:
+        content = (ROOT / 'public/studio' / name).read_bytes()
+        code.append({'path':name,'bytes':len(content),'sha256':hashlib.sha256(content).hexdigest(),'kind':'json' if name.endswith('.json') else 'javascript'})
+    # A worker-only change needs a fresh cache, so a failed update cannot write to the active worker's cache.
+    package = hashlib.sha256(WORKER.encode() + html + json.dumps(code,sort_keys=True).encode()).hexdigest()[:16]
+    worker = WORKER.replace('__DIGEST__',hashlib.sha256(html).hexdigest()).replace('__INDEX_BYTES__',str(len(html))).replace('__CODE_ASSETS__',json.dumps(code,separators=(',',':'))).replace('__PACKAGE_ID__',package)
+    outputs = {'index.html':html, 'service-worker.js':worker.encode(), 'manifest.json':(json.dumps(manifest,indent=2)+'\n').encode(), **{f'icons/nexus-{size}.png':(ROOT/f'public/icons/nexus-{size}.png').read_bytes() for size in (192,512)}}
+    for name in PUBLIC_ASSETS:
+        size = len(outputs[name]) if name in outputs else (ROOT / 'public/studio' / name).stat().st_size
+        if not 0 < size <= MAX_ASSET_BYTES:
+            raise SystemExit(f'Static Studio asset exceeds shared size boundary: {name}')
+    return outputs
 
 
 def main():

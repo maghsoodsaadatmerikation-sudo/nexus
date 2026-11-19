@@ -18,6 +18,11 @@ import urllib.error
 import urllib.request
 import zipfile
 
+from studio_assets import MAX_ARCHIVE_BYTES as MAX_ZIP
+from studio_assets import MAX_ASSET_BYTES as MAX_FILE
+from studio_assets import OBSERVED_ASSETS as OBSERVE
+from studio_assets import PUBLIC_ASSETS as FILES
+
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "public/studio"
 BUNDLE = "nexus-studio-static-site"
@@ -25,28 +30,6 @@ ORIGIN = "https://nexus-studio-merikation.onrender.com/"
 SCHEMA = "nexus.studio.static-release-candidate.v1"
 OBSERVATION_SCHEMA = "nexus.studio.public-release-observation.v1"
 STAMP = (2020, 1, 1, 0, 0, 0)
-FILES = (
-    "index.html",
-    "service-worker.js",
-    "manifest.json",
-    "icons/nexus-192.png",
-    "icons/nexus-512.png",
-    "device/device-engine.js",
-    "device/device-ui.js",
-    "device/device-worker.js",
-    "device/model-manifest.json",
-    "device/vendor/LICENSE-jinja.txt",
-    "device/vendor/LICENSE-onnxruntime.txt",
-    "device/vendor/LICENSE-transformers.txt",
-    "device/vendor/ort-wasm-simd-threaded.asyncify.mjs",
-)
-# A returned MATCH on nine reviewed public assets is not a substitute for
-# production owner-authorized release, nor the real public-origin browser tests.
-OBSERVE = FILES[:9]
-MAX_FILE = 480_000
-MAX_ZIP = 900_000
-
-
 def sha(data):
     return hashlib.sha256(data).hexdigest()
 
