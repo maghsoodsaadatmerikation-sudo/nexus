@@ -25,8 +25,9 @@ class StudioModuleGraphTests(unittest.TestCase):
             shell.replace("/*STUDIO_MUSIC*/", "", 1),
             shell.replace("/*STUDIO_MUSIC*/", "/*STUDIO_MUSIC*//*STUDIO_MUSIC*/", 1),
             shell + "\n/*STUDIO_UNREGISTERED*/",
-            shell.replace("/*STUDIO_MUSIC*/", "/*STUDIO_MUSIC_UI*/", 1).replace(
-                "/*STUDIO_MUSIC_UI*/", "/*STUDIO_MUSIC*/", 1),
+            shell.replace("/*STUDIO_MUSIC*/", "%%TEMP%%", 1).replace(
+                "/*STUDIO_MUSIC_UI*/", "/*STUDIO_MUSIC*/", 1).replace(
+                "%%TEMP%%", "/*STUDIO_MUSIC_UI*/", 1),
         ):
             with self.assertRaises(ValueError):
                 validate_module_graph(bad, ROOT / "web")
