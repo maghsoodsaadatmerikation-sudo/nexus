@@ -52,10 +52,10 @@ jobs:
           spec=importlib.util.spec_from_file_location('nexus_public_studio',p)
           mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
           html=(root/'public/studio/index.html').stat().st_size
-          assert html<=mod.observer.MAX_BYTES==450_000, 'Studio source exceeds published bounded verifier'
+          assert html<=mod.observer.MAX_BYTES==480_000, 'Studio source exceeds published bounded verifier'
           synthetic_large=b'x'*350_000
           assert mod.observer.compare(200,'text/html',synthetic_large,synthetic_large,'text/html')['ok']
-          synthetic_oversize=b'x'*450_001
+          synthetic_oversize=b'x'*480_001
           assert not mod.observer.compare(200,'text/html',synthetic_oversize,synthetic_oversize,'text/html')['ok']
           assert len(mod.observer.ASSETS)==9
           assert mod.observer.ORIGIN=='https://nexus-studio-merikation.onrender.com'

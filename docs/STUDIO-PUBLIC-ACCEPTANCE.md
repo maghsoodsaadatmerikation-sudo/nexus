@@ -6,7 +6,7 @@ The Phase 46 source-only Studio package is green but the public site still serve
 
 ## Changes
 
-- `scripts/verify-studio-public.py` now sets a **Studio-specific 450,000-byte cap**, matching the release package allowlist. It does not raise the Pilot 12 cap or allow arbitrarily large public HTTP responses. CI exercises a synthetic 350KB accepted response and 450001-byte rejected response, so a future smaller Studio HTML won't invalidate the regression.
+- `scripts/verify-studio-public.py` now sets a **Studio-specific 480,000-byte cap**, matching the release package allowlist. It does not raise the Pilot 12 cap or allow arbitrarily large public HTTP responses. CI exercises a synthetic 350KB accepted response and 480001-byte rejected response, so a future smaller Studio HTML won't invalidate the regression.
 - `studio-static-public.yml` has a fast read-only unit/source job and a separate **22-minute post-promotion acceptance** job. On an ordinary PR it runs source/unit checks but **does not** interrogate or claim the public website was promoted. Full public checks require a manually dispatched run or the existing explicit `[verify-studio-public]` marker.
 - Manual dispatch requires the **exact 40-character Git source commit** expected to have been deployed. It blocks when that input disagrees with the checked-out commit; neither the input nor green CI grants deploy authority.
 - Public acceptance first fetches nine exact fixed-origin HTTPS assets and decoded icon pixels. If any source remains stale or unreachable it fails before browser/model testing.

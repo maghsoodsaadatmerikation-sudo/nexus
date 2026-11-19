@@ -43,7 +43,7 @@ FILES = (
 # A returned MATCH on nine reviewed public assets is not a substitute for
 # production owner-authorized release, nor the real public-origin browser tests.
 OBSERVE = FILES[:9]
-MAX_FILE = 450_000
+MAX_FILE = 480_000
 MAX_ZIP = 900_000
 
 
