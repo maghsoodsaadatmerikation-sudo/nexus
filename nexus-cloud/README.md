@@ -78,6 +78,7 @@ the secure upstream through `NEXUS_CORE_URL`.
 
 - `main.py` - non-authoritative FastAPI transport adapter
 - `studio_model.py` - optional consent-gated model bridge
+- `model_configuration.py` - validated immutable model provider configuration
 - `transport_bounds.py` - shared strict Content-Length, body-size and deadline admission
 - `tests/test_admission_shared.py` - cross-edge authorization/framing regressions
 - `tests/test_contract.py` - transport-boundary contract tests
@@ -124,3 +125,7 @@ limit remains 1 MiB / 30 seconds; the Studio input limit remains 96,000 bytes /
 or consent review. See
 [`docs/CLOUD-TRANSPORT-ADMISSION-BOUNDARY-2026-11-17.md`](../docs/CLOUD-TRANSPORT-ADMISSION-BOUNDARY-2026-11-17.md)
 for invariants, tests, and the evidence boundary.
+
+## Reviewed model configuration snapshot
+
+Studio now validates and freezes endpoint, model ID, provider adapter and credentials once per request; rotating environment variables cannot mix model settings mid-request. The review ID also binds the system policy digest, so users must review the configuration once again after this rollout or whenever the server policy changes. See [model snapshot architecture](../docs/CLOUD-MODEL-CONFIGURATION-SNAPSHOT-2026-11-19.md).
