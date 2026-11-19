@@ -78,5 +78,5 @@ ok(()=>assert(!/fetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|Suno|api\.suno/i.
 const shell=await readFile(new URL('../web/studio-shell.html',import.meta.url),'utf8');
 ok(()=>assert(shell.includes('id="music-card"')&&shell.includes('/*STUDIO_MUSIC*/')&&shell.includes('/*STUDIO_MUSIC_UI*/')));
 const focus=await readFile(new URL('../web/studio-focus-ui.js',import.meta.url),'utf8');
-ok(()=>assert(focus.includes("['music-card','Music Lab','موسیقی']")));
+ok(()=>assert.match(focus,/\['music-card','Music Lab','موسیقی'(?:,|\])/));
 console.log(JSON.stringify({status:'PASS',checks,engine:'nexus-native-composition',midi_bytes:midi.length,wav_bytes:wav.length,external_model_used:false,acoustic_instruments_recorded:false}));
