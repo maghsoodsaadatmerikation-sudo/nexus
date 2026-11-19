@@ -243,7 +243,7 @@ function render(){
   for(const thread of [...(project.threads||[])].reverse()){
    if(thread.archived&&!archiveToggle.checked)continue;
    const texts=thread.nodes||[];
-   const preview=(texts.find(x=>x.role==='user')?.text||'').replace(/\\s+/g,' ').trim().slice(0,72);
+   const preview=(texts.find(x=>x.role==='user')?.text||'').replace(/\s+/g,' ').trim().slice(0,72);
    if(q&&![project.title,thread.title].some(x=>x.toLocaleLowerCase().includes(q))&&
       !texts.some(x=>typeof x.text==='string'&&x.text.toLocaleLowerCase().includes(q)))continue;
    const b=make('',preview&&/^(New conversation|گفتگوی جدید)$/i.test(thread.title)?preview:thread.title);
@@ -251,7 +251,8 @@ function render(){
    const detail=document.createElement('small');
    detail.textContent=project.title+(thread.archived?' · '+tr('Archived','آرشیوشده'):'');
    b.append(detail);
-   b.setAttribute('aria-current',thread.id===state?.selectedThread?'page':'false');
+   const selection=window.NexusStudioUI?.selection?.();
+   b.setAttribute('aria-current',thread.id===selection?.threadId&&project.id===selection?.projectId?'page':'false');
    b.addEventListener('click',()=>{
     if(window.NexusStudioUI?.openConversation?.(project.id,thread.id))go('conversation-card');
    });
@@ -269,6 +270,7 @@ function refreshSafety(){
  safety.textContent=unsaved?tr('Unsaved changes','تغییرات ذخیره‌نشده'):
   s.vaultUnlocked?tr('Archive unlocked','آرشیو باز است'):tr('Temporary · not saved','موقت · ذخیره‌نشده');
  safety.dataset.unsaved=String(unsaved);
+ home.setAttribute('aria-label',tr('Back to chat: ','بازگشت به گفتگو: ')+safety.textContent);
 }
 function labels(){
  title.textContent=tr('Conversations','گفتگوها');find.placeholder=tr('Search conversations','جست‌وجوی گفتگوها');find.setAttribute('aria-label',find.placeholder);
@@ -285,7 +287,9 @@ home.addEventListener('click',()=>go('conversation-card'));newChat.addEventListe
 all.addEventListener('click',()=>{dismiss();focus.openTools()});find.addEventListener('input',render);
 archiveToggle.addEventListener('change',render);
 document.addEventListener('nexus-studio-state',()=>{refreshSafety();if(!drawer.hidden)render()});
-document.addEventListener('input',event=>{if(event.target===$('message'))refreshSafety()});
+document.addEventListener('input',refreshSafety);
+document.addEventListener('change',refreshSafety);
+document.addEventListener('nexus-studio-media-state',refreshSafety);
 $('language').addEventListener('change',()=>queueMicrotask(labels));
 document.addEventListener('keydown',event=>{
  if(event.key==='Escape'&&!drawer.hidden){event.preventDefault();dismiss()}
