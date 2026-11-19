@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 from studio_template_contract import replace_exact
+from studio_public_assets import check_public_tree
 
 ROOT = Path(__file__).resolve().parents[1]
 PANEL = '''<details id="studio-install-card">
@@ -27,11 +28,11 @@ PRIVACY = '''<section class="card" id="studio-privacy">
 <div class="studio-en"><h2>NEXUS Studio privacy policy</h2>
 <p>Studio runs in your browser, including when you install it. It requires no Studio account. Chats, drafts, source files, audio and analysis stay on your device during local use. Saving a project creates an encrypted archive in your browser profile. Exporting a backup or other file creates a copy at the location you choose.</p>
 <p>The website host receives connection and request information, such as your IP address, when you load the site. If you request public research, the selected provider receives the approved query. If you approve an online model request, the configured gateway and its model provider process the reviewed content under their own policies. An optional on-device model download contacts its file host, then performs inference on your device. Browser speech and operating-system features are subject to your device and provider settings.</p>
-<p>Use Private archive to erase the browser archive. Remove offline copy clears app code, and the device model panel can remove its downloaded model. You can also clear this site’s data in browser settings. Delete any exported copies separately. For privacy questions, contact the maintainer through the <a href="https://github.com/maghsoodsaadatmerikation-sudo/nexus/issues" target="_blank" rel="noopener noreferrer">NEXUS issue tracker</a> without sharing private content.</p></div>
+<p>Use Private archive to erase the browser archive. Remove offline copy clears app code, and the device model panel can remove its downloaded model. You can also clear this site’s data in browser settings. Delete any exported copies separately. For privacy and security questions, email <a href="mailto:maryamnajafi4991@gmail.com">Maryam Najafi</a> and omit private data.</p></div>
 <div class="studio-fa" lang="fa" dir="rtl"><h2>سیاست حریم خصوصی نکسوس استودیو</h2>
 <p>استودیو در مرورگر اجرا می‌شود، حتی وقتی آن را نصب می‌کنی. برای استفاده به حساب نکسوس نیاز نداری. در استفادهٔ محلی، گفتگوها، پیش‌نویس‌ها، فایل‌ها، صدا و تحلیل روی دستگاه می‌مانند. ذخیرهٔ پروژه یک آرشیو رمزگذاری‌شده در پروفایل مرورگر می‌سازد. با خروجی گرفتن، یک کپی در محل انتخابی خودت ایجاد می‌شود.</p>
 <p>با باز کردن سایت، میزبان اطلاعات اتصال و درخواست، مانند IP، را دریافت می‌کند. در پژوهش عمومی، ارائه‌دهندهٔ انتخابی عبارت تأییدشده را دریافت می‌کند. اگر درخواست مدل آنلاین را تأیید کنی، درگاه انتخابی و ارائه‌دهندهٔ مدل محتوای بازبینی‌شده را طبق سیاست خود پردازش می‌کنند. مدل اختیاری روی دستگاه ابتدا از میزبان فایل دانلود می‌شود و سپس روی دستگاه اجرا می‌شود. امکانات گفتاری مرورگر تابع تنظیمات دستگاه و ارائه‌دهنده‌اند.</p>
-<p>از بخش آرشیو خصوصی می‌توانی آرشیو مرورگر را پاک کنی. حذف نسخهٔ آفلاین، کد برنامه را پاک می‌کند. پنل مدل روی دستگاه امکان حذف فایل مدل را دارد. داده‌های سایت را می‌توانی از تنظیمات مرورگر هم پاک کنی. فایل‌های خروجی را جداگانه حذف کن. برای پرسش‌های حریم خصوصی در <a href="https://github.com/maghsoodsaadatmerikation-sudo/nexus/issues" target="_blank" rel="noopener noreferrer">صفحهٔ مسائل نکسوس</a> پیام بگذار و اطلاعات خصوصی را در آن وارد نکن.</p></div>
+<p>از بخش آرشیو خصوصی می‌توانی آرشیو مرورگر را پاک کنی. حذف نسخهٔ آفلاین، کد برنامه را پاک می‌کند. پنل مدل روی دستگاه امکان حذف فایل مدل را دارد. داده‌های سایت را می‌توانی از تنظیمات مرورگر هم پاک کنی. فایل‌های خروجی را جداگانه حذف کن. برای پرسش‌های حریم خصوصی و امنیت به <a href="mailto:maryamnajafi4991@gmail.com">مریم نجفی</a> ایمیل بزن و اطلاعات خصوصی را حذف کن.</p></div>
 </section>'''
 BOOTSTRAP = r'''
 (()=>{'use strict';
@@ -146,6 +147,8 @@ def artifacts():
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--check',action='store_true');args=parser.parse_args()
+    if args.check:
+        check_public_tree(ROOT / "public/studio")
     for name,content in artifacts().items():
         path=ROOT/'public/studio'/name
         if args.check:

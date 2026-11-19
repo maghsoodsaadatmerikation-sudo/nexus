@@ -1,5 +1,7 @@
 # Publish NEXUS Studio
 
+Created by **Maryam Najafi** · [maryamnajafi4991@gmail.com](mailto:maryamnajafi4991@gmail.com)
+
 The Android app launches the existing public Studio in a Trusted Web Activity. Its features and updates come from the same HTTPS origin as the website and installable PWA. Android delegates browser storage, file pickers, downloads, and web permissions to the selected browser. On the same profile, the app uses that origin’s browser data. For another device or browser, import an encrypted portable backup.
 
 | Surface | Public access | Build or distribution |

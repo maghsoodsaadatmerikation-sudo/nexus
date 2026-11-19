@@ -18,6 +18,8 @@ import urllib.error
 import urllib.request
 import zipfile
 
+from studio_public_assets import FILES, MAX_FILE, check_public_tree
+
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "public/studio"
 BUNDLE = "nexus-studio-static-site"
@@ -25,25 +27,9 @@ ORIGIN = "https://nexus-studio-merikation.onrender.com/"
 SCHEMA = "nexus.studio.static-release-candidate.v1"
 OBSERVATION_SCHEMA = "nexus.studio.public-release-observation.v1"
 STAMP = (2020, 1, 1, 0, 0, 0)
-FILES = (
-    "index.html",
-    "service-worker.js",
-    "manifest.json",
-    "icons/nexus-192.png",
-    "icons/nexus-512.png",
-    "device/device-engine.js",
-    "device/device-ui.js",
-    "device/device-worker.js",
-    "device/model-manifest.json",
-    "device/vendor/LICENSE-jinja.txt",
-    "device/vendor/LICENSE-onnxruntime.txt",
-    "device/vendor/LICENSE-transformers.txt",
-    "device/vendor/ort-wasm-simd-threaded.asyncify.mjs",
-)
 # A returned MATCH on nine reviewed public assets is not a substitute for
 # production owner-authorized release, nor the real public-origin browser tests.
 OBSERVE = FILES[:9]
-MAX_FILE = 450_000
 MAX_ZIP = 900_000
 
 
@@ -55,16 +41,7 @@ def source_assets():
     subprocess.run([sys.executable, str(ROOT / "scripts/build-studio-static.py"), "--check"],
                    check=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                    stderr=subprocess.DEVNULL, timeout=60)
-    actual = sorted(str(path.relative_to(SOURCE)) for path in SOURCE.rglob("*") if path.is_file())
-    if actual != sorted(FILES):
-        raise ValueError("public Studio source allowlist drift")
-    assets = {}
-    for name in FILES:
-        path = SOURCE / name
-        if path.is_symlink() or not stat.S_ISREG(path.lstat().st_mode) or \
-                path.stat().st_nlink != 1 or not (0 < path.stat().st_size <= MAX_FILE):
-            raise ValueError("public asset not regular/linked/size limited")
-        assets[name] = path.read_bytes()
+    assets = {name: path.read_bytes() for name, path in check_public_tree(SOURCE).items()}
     index = assets["index.html"]
     worker = assets["service-worker.js"]
     if b"const EXPECTED_SHA256='" + sha(index).encode() + b"'" not in worker or \

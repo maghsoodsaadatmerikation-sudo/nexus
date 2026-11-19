@@ -7,6 +7,8 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Translucent.NoTitleBar"
         android:usesCleartextTraffic="false">
+        <meta-data android:name="com.merikation.nexus.CREATOR" android:value="Maryam Najafi" />
+        <meta-data android:name="com.merikation.nexus.CREATOR_EMAIL" android:value="maryamnajafi4991@gmail.com" />
         <meta-data android:name="asset_statements" android:resource="@string/asset_statements" />
         <activity
             android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"

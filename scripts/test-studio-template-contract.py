@@ -124,7 +124,8 @@ class StudioMaintenanceTests(unittest.TestCase):
             shutil.copytree(ROOT / dirname, self.repo / dirname)
         (self.repo / "scripts").mkdir()
         for name in ("build-studio.py", "build-device-model.py", "build-studio-static.py",
-                     "studio-maintenance.py", "studio_module_graph.py", "studio_template_contract.py"):
+                     "studio-maintenance.py", "studio_module_graph.py", "studio_template_contract.py",
+                     "studio_public_assets.py"):
             shutil.copy2(HERE / name, self.repo / "scripts" / name)
         self.unrelated = self.repo / "notes.txt"
         self.unrelated.write_text("original notes\n")
@@ -169,6 +170,27 @@ class StudioMaintenanceTests(unittest.TestCase):
         self.assertEqual(worker.read_bytes(), original_worker)
         self.assertEqual(self.unrelated.read_text(), "original notes\n")
         self.assertEqual(self.command("git", "rev-parse", "HEAD"), drift["base_commit"])
+
+    def test_render_build_check_blocks_unreviewed_files_and_links(self):
+        published = self.repo / "public/studio"
+        self.command(sys.executable, "scripts/build-studio-static.py", "--check")
+        extra = published / "unexpected.txt"
+        extra.write_text("synthetic private fixture\n")
+        result = subprocess.run(
+            [sys.executable, "scripts/build-studio-static.py", "--check"],
+            cwd=self.repo, capture_output=True, text=True, timeout=45,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unreviewed or unsupported asset", result.stderr)
+        extra.unlink()
+        extra.symlink_to(self.unrelated)
+        result = subprocess.run(
+            [sys.executable, "scripts/build-studio-static.py", "--check"],
+            cwd=self.repo, capture_output=True, text=True, timeout=45,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unreviewed or unsupported asset", result.stderr)
+        self.assertNotIn("original notes", result.stderr)
 
     def test_verifier_side_effect_is_blocked_before_patch(self):
         (self.repo / ".gitignore").write_text("__pycache__/\n")
