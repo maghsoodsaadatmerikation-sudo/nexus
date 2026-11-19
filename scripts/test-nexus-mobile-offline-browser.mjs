@@ -137,6 +137,44 @@ try{
  assert(await js("navigator.serviceWorker.getRegistration(location.href).then(r=>!r)"),
    'Service Worker auto-registered without explicit consent');
  checks.push('narrow-screen-Motion-editor-no-implicit-offline-install');
+ stage='opt-in-encrypted-storyboard-draft';
+ const slot='nexus.motion.encrypted.storyboard.v1';
+ assert(await js("localStorage.getItem('nexus.motion.encrypted.storyboard.v1')===null"),
+  'Motion created private persistent storage before user consent');
+ await js("document.getElementById('motion-draft-pass').value='synthetic-private-passphrase-2030';"+
+  "document.getElementById('motion-draft-confirm').value='synthetic-private-passphrase-2030';"+
+  "document.getElementById('motion-draft-enable').click();true");
+ await poll(()=>retryJs("document.getElementById('motion-draft-status').textContent.includes('Encrypted storyboard saved')"),
+   20000,'first PBKDF2/AES-GCM checkpoint not saved');
+ const encryptedBefore=await js("localStorage.getItem('nexus.motion.encrypted.storyboard.v1')");
+ assert(encryptedBefore&&encryptedBefore.length>200&&!encryptedBefore.includes('BEFORE THE LIGHT')&&
+  !encryptedBefore.includes('synthetic-private-passphrase'),
+  'Autosave leaked plaintext or did not create ciphertext');
+ await js("document.getElementById('motion-add').click();true");
+ await poll(()=>retryJs("localStorage.getItem('nexus.motion.encrypted.storyboard.v1')!=="+
+  JSON.stringify(encryptedBefore)),20000,'edited storyboard not auto-encrypted');
+ assert(await js("document.querySelectorAll('#motion-scenes .scene').length")===4,
+   'synthetic edit not reflected in Motion editor');
+ await js("document.getElementById('motion-draft-enable').click();true");
+ await rpc('Page.reload',{ignoreCache:true});
+ await poll(()=>retryJs("document.readyState==='complete'&&Boolean(window.NexusMotion)&&"+
+  "document.querySelectorAll('#motion-scenes .scene').length===3"),15000,
+  'fresh Motion page did not reset unsaved memory');
+ assert(await js("document.getElementById('motion-draft-status').textContent.includes('Encrypted draft found')"),
+  'encrypted recovery prompt not displayed after restart');
+ await js("window.confirm=()=>true;document.getElementById('motion-draft-pass').value='wrong-private-password';"+
+  "document.getElementById('motion-draft-restore').click();true");
+ await poll(()=>retryJs("document.getElementById('motion-draft-status').textContent.includes('Restore rejected')"),
+  18000,'wrong passphrase did not fail closed');
+ assert(await js("document.querySelectorAll('#motion-scenes .scene').length")===3,
+  'wrong passphrase modified the storyboard');
+ await js("document.getElementById('motion-draft-pass').value='synthetic-private-passphrase-2030';"+
+  "document.getElementById('motion-draft-restore').click();true");
+ await poll(()=>retryJs("document.getElementById('motion-draft-status').textContent.includes('Restored encrypted storyboard')"),
+  20000,'valid passphrase did not restore storyboard');
+ assert(await js("document.querySelectorAll('#motion-scenes .scene').length")===4,
+  'encrypted checkpoint did not recover exact scene count');
+ checks.push('explicit-aes-gcm-autosave-no-plaintext-wrong-passphrase-fails-reload-restore');
  stage='user-initiated-install';
  await js("document.getElementById('motion-offline-prepare').click();true");
  await poll(()=>retryJs("document.getElementById('motion-offline-status').textContent.includes('prepared for offline opening')"),
@@ -164,6 +202,15 @@ try{
  assert(await js("navigator.serviceWorker.controller?.scriptURL.endsWith('/motion/offline-worker.js')"),
    'Offline Motion page is not controlled by dedicated worker');
  checks.push('real-Chromium-reloaded-Motion-after-server-shutdown');
+ assert(await js("document.getElementById('motion-draft-status').textContent.includes('Encrypted draft found')"),
+  'encrypted draft unavailable in actual offline reopened editor');
+ await js("window.confirm=()=>true;document.getElementById('motion-draft-pass').value='synthetic-private-passphrase-2030';"+
+  "document.getElementById('motion-draft-restore').click();true");
+ await poll(()=>retryJs("document.getElementById('motion-draft-status').textContent.includes('Restored encrypted storyboard')"),
+   20000,'offline recovery could not decrypt local checkpoint');
+ assert(await js("document.querySelectorAll('#motion-scenes .scene').length")===4,
+  'offline restored scene count differs from last saved draft');
+ checks.push('encrypted-draft-survives-server-shutdown-and-offline-worker-reopen');
  const before=await js("document.querySelectorAll('#motion-scenes .scene').length");
  await js("document.getElementById('motion-add').click();true");
  const after=await js("document.querySelectorAll('#motion-scenes .scene').length");
