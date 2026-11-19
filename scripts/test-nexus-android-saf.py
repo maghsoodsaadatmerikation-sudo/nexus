@@ -33,8 +33,9 @@ def matching(needle,exact=False):
     want=needle.casefold()
     out=[]
     for item in nodes():
-        text=(item.attrib.get("text","") or item.attrib.get("content-desc","")).strip().casefold()
-        if not text or (text!=want if exact else want not in text):
+        candidates=[item.attrib.get("text","").strip().casefold(),
+                    item.attrib.get("content-desc","").strip().casefold()]
+        if not any((t==want if exact else want in t) for t in candidates if t):
             continue
         coords=list(map(int,re.findall(r"\d+",item.attrib.get("bounds",""))))
         if len(coords)!=4 or coords[2]<=coords[0] or coords[3]<=coords[1]:
@@ -93,7 +94,15 @@ def disk_bytes():
 
 def launch_import_picker():
     tap("Load storyboard JSON",scroll=16,backward=True)
-    wait_for("Browse",15)
+    deadline=time.monotonic()+20
+    while time.monotonic()<deadline:
+        try:
+            if any(matching(t) for t in ("Recent","Browse","Downloads","Files")):
+                return
+        except (RuntimeError,ET.ParseError):
+            pass
+        time.sleep(.75)
+    raise RuntimeError("Android import DocumentsUI did not open")
 
 def run(report):
     if smoke.adb("shell","getprop","ro.build.version.sdk").strip()!="35":
@@ -123,7 +132,12 @@ def run(report):
                 continue
     tap("Downloads",scroll=3)
     tap("Save",exact=True,scroll=3)
-    smoke.await_true(lambda: bool(disk_bytes()),"Android SAF file written",timeout=25)
+    def is_written():
+        try:
+            return bool(disk_bytes())
+        except RuntimeError:
+            return False
+    smoke.await_true(is_written,"Android SAF file written",timeout=25)
     payload=disk_bytes()
     sha=strict_default_json(payload)
     # Round trip through Android's own file chooser. No direct programmatic
