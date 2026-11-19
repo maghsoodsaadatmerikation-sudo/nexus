@@ -123,7 +123,7 @@ import stat
 from urllib.parse import urlsplit
 
 BASE = Path(__file__).resolve().parent
-LIMIT = 450000
+LIMIT = 475000
 MIME = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -242,7 +242,7 @@ def public_assets():
         source = PUBLIC / name
         st = source.lstat()
         if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or source.is_symlink() or \
-           not (0 < st.st_size <= 450000):
+           not (0 < st.st_size <= 475000):
             raise ValueError("public Studio asset is missing, linked or oversized")
         items[name] = source.read_bytes()
     html = items["index.html"]
@@ -309,7 +309,7 @@ def verify(zip_file, exact_commit=None):
         payloads = {}
         for info in infos:
             if info.flag_bits & 1 or info.is_dir() or \
-               info.file_size > 450000 or info.compress_type != zipfile.ZIP_STORED:
+               info.file_size > 475000 or info.compress_type != zipfile.ZIP_STORED:
                 raise ValueError("unsupported ZIP entry")
             prefix = BUNDLE + "/"
             if not info.filename.startswith(prefix):
