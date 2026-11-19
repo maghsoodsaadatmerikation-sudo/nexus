@@ -3,6 +3,8 @@
 from pathlib import Path
 import argparse
 import hashlib
+import re
+from studio_template_contract import replace_exact
 root = Path(__file__).resolve().parents[1]
 vendor=root/'web/vendor/astronomy-2.1.19.min.js'
 if hashlib.sha256(vendor.read_bytes()).hexdigest()!='f41139a87941ea017ab902b954c9389fa27ea72083d7fab4971756d7769d14e6':
@@ -11,13 +13,16 @@ shell = (root/'web/studio-shell.html').read_text()
 theme = (root/'web/studio-theme.css').read_text()
 if '</style' in theme.lower() or shell.count('/*STUDIO_THEME*/') != 1:
     raise ValueError('invalid Studio theme source')
-shell = shell.replace('/*STUDIO_THEME*/', theme)
+known_markers = {'/*STUDIO_THEME*/', '/*STUDIO_TABLE*/', '/*STUDIO_ASTRONOMY_VENDOR*/', '/*STUDIO_ASTROLOGY*/', '/*STUDIO_SKY*/', '/*STUDIO_CORE*/', '/*STUDIO_LAB*/', '/*STUDIO_TASKS*/', '/*STUDIO_LOCALES*/', '/*STUDIO_APP*/', '/*STUDIO_LAB_UI*/', '/*STUDIO_TASKS_UI*/', '/*STUDIO_ASTROLOGY_UI*/', '/*STUDIO_SKY_UI*/', '/*STUDIO_QUALITY_UI*/', '/*STUDIO_FOCUS_UI*/', '/*STUDIO_COMPOSER_UI*/', '/*STUDIO_MUSIC_AUDIO*/', '/*STUDIO_MUSIC*/', '/*STUDIO_MUSIC_UI*/', '/*STUDIO_ORCHESTRA*/', '/*STUDIO_VOCAL_MIX*/', '/*STUDIO_ORCHESTRA_UI*/'}
+actual_markers = set(re.findall(r'/\*STUDIO_[A-Z_]+\*/', shell))
+if actual_markers != known_markers:
+    raise ValueError('Studio shell contains unexpected or missing substitution markers')
+shell = replace_exact(shell, '/*STUDIO_THEME*/', theme)
 for marker, filename in [('/*STUDIO_TABLE*/','table-core.js'),('/*STUDIO_ASTRONOMY_VENDOR*/','vendor/astronomy-2.1.19.min.js'),('/*STUDIO_ASTROLOGY*/','studio-astrology.js'),('/*STUDIO_SKY*/','studio-sky.js'),('/*STUDIO_CORE*/','studio-core.js'),('/*STUDIO_LAB*/','studio-lab.js'),('/*STUDIO_TASKS*/','studio-tasks.js'),('/*STUDIO_LOCALES*/','studio-locales.js'),('/*STUDIO_APP*/','studio-app.js'),('/*STUDIO_LAB_UI*/','studio-lab-ui.js'),('/*STUDIO_TASKS_UI*/','studio-tasks-ui.js'),('/*STUDIO_ASTROLOGY_UI*/','studio-astrology-ui.js'),('/*STUDIO_SKY_UI*/','studio-sky-ui.js'),('/*STUDIO_QUALITY_UI*/','studio-quality-ui.js'),('/*STUDIO_FOCUS_UI*/','studio-focus-ui.js'),('/*STUDIO_COMPOSER_UI*/','studio-composer-ui.js'),('/*STUDIO_MUSIC_AUDIO*/','studio-music-audio.js'),('/*STUDIO_MUSIC*/','studio-music.js'),('/*STUDIO_MUSIC_UI*/','studio-music-ui.js'),('/*STUDIO_ORCHESTRA*/','studio-orchestra.js'),('/*STUDIO_VOCAL_MIX*/','studio-vocal-mix.js'),('/*STUDIO_ORCHESTRA_UI*/','studio-orchestra-ui.js')]:
     code = (root/'web'/filename).read_text()
     if '</script' in code.lower():
         raise ValueError('script closing sequence is not permitted in bundled sources')
-    assert shell.count(marker)==1
-    shell = shell.replace(marker,code)
+    shell = replace_exact(shell, marker, code)
 cli=argparse.ArgumentParser();cli.add_argument('--check',action='store_true');args=cli.parse_args()
 out=root/'web/studio.html'
 if args.check:
