@@ -10,6 +10,13 @@ The Android app launches the existing public Studio in a Trusted Web Activity. I
 
 Projects and branching chat, writing, local source search, data analysis, charts, the reviewed JavaScript lab, astrology, music, score export, vocal mixing and encrypted backups use the same web implementation. Live research requires connectivity. Device-model inference requires compatible browser hardware and the initial download. Online model replies require a separately configured HTTPS gateway and provider. Browser and OS support affects voice features and downloads. There are no Studio accounts or automatic cross-device synchronization.
 
+The shared Studio interface ships with English, Persian, Arabic, Turkish and Spanish.
+The language selector changes navigation, chat, archive controls and the local
+reflection guide. Arabic and Persian use right-to-left layout. Studio remembers
+the selected built-in language in the browser profile. Imported label packs
+remain tab-local. Some specialized tool panels still fall back to English.
+The interface language does not control the configured model's reply language.
+
 ## Build and verify Android
 
 Use JDK 17 or 21, Gradle 8.13, Android SDK Platform 36 and Build Tools 35.0.0. Set `ANDROID_HOME` to the SDK directory. From the repository root run:

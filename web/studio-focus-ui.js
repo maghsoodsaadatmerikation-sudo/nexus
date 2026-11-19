@@ -77,14 +77,13 @@ for(const [id,en,fa,icon,descriptionEn,descriptionFa] of tools){
  button.addEventListener('click',()=>openPanel(id));toolsGrid.append(button);
 }
 let selected='conversation-card',focused=media.matches,manual=false,toolsOpen=false;
-const isFa=()=>document.documentElement.lang==='fa';
-const words=(en,fa)=>isFa()?fa:en;
-const normalize=value=>value.toLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ').trim();
+const words=window.NexusStudioUI.words;
+const normalize=value=>value.toLocaleLowerCase(document.documentElement.lang).replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ').trim();
 function filterTools(){
  const query=normalize(search.value).split(/\s+/).filter(Boolean);
  let results=0;
  for(const [index,tool] of tools.entries()){
-  const text=normalize([...tool.slice(1,3),...tool.slice(4)].join(' '));
+  const text=normalize([...tool.slice(1,3),...tool.slice(4),words(tool[1],tool[2]),words(tool[4],tool[5])].join(' '));
   const visible=query.every(word=>text.includes(word));
   toolsGrid.children[index].hidden=!visible;
   if(visible)results++;
@@ -173,7 +172,7 @@ existingNav.addEventListener('click',event=>{
 const observer=new MutationObserver(()=>refreshOnboarding());
 observer.observe($('projects'),{childList:true});
 observer.observe($('history'),{childList:true});
-$('language').addEventListener('change',()=>queueMicrotask(()=>{refreshLabels();refreshOnboarding()}));
+document.addEventListener('nexus-studio-language',()=>queueMicrotask(()=>{refreshLabels();refreshOnboarding();filterTools()}));
 document.addEventListener('nexus-studio-open-chat',()=>openPanel('conversation-card'));
 document.addEventListener('keydown',event=>{
  if(event.key!=='Escape'||!toolsOpen||!toolsTray.contains(document.activeElement))return;

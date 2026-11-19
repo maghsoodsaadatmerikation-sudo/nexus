@@ -22,7 +22,14 @@ window.addEventListener('load',async()=>{
  function upload(raw,name='locale.json'){const dt=new DataTransfer();if(raw!==null)dt.items.add(new File([raw],name,{type:'application/json'}));$('language-file').files=dt.files;$('language-file').dispatchEvent(new Event('change'));return tasks.at(-1)}
  function pause(name){let resolve,reject;const delay={entered:false,gate:new Promise((a,b)=>{resolve=a;reject=b})};delays.set(name,delay);return {...delay,ready:()=>delay.entered,resolve,reject}}
  try{
-  window.confirm=()=>true;window.fetch=()=>{throw Error('unexpected-network')};fill('project-title','SYNTHETIC LOCALE PROJECT');$('new-project').click();const original=snapshot();
+  window.confirm=()=>true;window.fetch=()=>{throw Error('unexpected-network')};
+  assert(['en','fa','es','tr','ar'].every(code=>Array.from($('language').options).some(o=>o.value===code)),'five-built-in-languages');
+  change('ar');await Promise.resolve();assert(document.documentElement.dir==='rtl'&&title()==='المحادثة','arabic-rtl-and-labels');
+  assert($('studio-compose-send').textContent==='استخدام الدليل المحلي','arabic-composer-translation');
+  assert(restoreLanguage()==='ar','built-in-preference-restores-from-browser-storage');
+  change('tr');assert(document.documentElement.dir==='ltr'&&title()==='Sohbet','turkish-restores-ltr');
+  change('es');assert(title()==='Conversación','spanish-works-without-custom-import');
+  fill('project-title','SYNTHETIC LOCALE PROJECT');$('new-project').click();const original=snapshot();
   await upload(pack('es','Conversación'));assert(document.documentElement.lang==='es'&&title()==='Conversación','first-pack-applies');
   await upload(pack('he','שיחה','rtl'));assert(document.documentElement.dir==='rtl','rtl-pack-applies');
   change('es');assert(title()==='Conversación','earlier-pack-remains-usable-after-second-import');
@@ -50,15 +57,20 @@ window.addEventListener('load',async()=>{
   const sending=pause('sending.json'),pendingSendImport=upload(pack('es','STALE SEND'),'sending.json');await wait(sending.ready);let sendSignal,finishSend;
   window.fetch=async(url,options)=>{sendSignal=options.signal;return await new Promise(r=>finishSend=r)};$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));$('send-model').click();await wait(()=>finishSend);
   sending.resolve();await pendingSendImport;assert(!sendSignal.aborted&&document.documentElement.lang==='fr','old-language-import-cannot-cancel-approved-generation');
+  change('ar');assert(!sendSignal.aborted&&document.documentElement.dir==='rtl','switching-built-in-language-keeps-approved-request');
   finishSend(new Response(JSON.stringify({text:'Synthetic model draft',origin:'model',model:'synthetic-model',authority:'none'})));await wait(()=>NexusStudioUI.snapshot().projects[0].threads[0].nodes.length===2);
   assert($('messages').textContent.includes('Synthetic model draft'),'approved-generation-still-completes');
+  fill('message','Üç dil');change('tr');$('guide').click();
+  assert($('messages').textContent.includes('Yerel düşünme rehberi.'),
+         'local-guide-replies-in-turkish-without-a-model');
+  change('fr');assert(restoreLanguage()==='tr','custom-pack-does-not-replace-persistent-preference');
 
   const status=$('status').textContent;await upload(null);assert($('status').textContent===status,'cancelled-picker-is-silent');
   await upload('{invalid');assert(document.documentElement.lang==='fr'&&$('status').textContent.includes('Operation failed'),'invalid-pack-does-not-change-language');
   for(const code of ['de','it','pt','nl','ja'])await upload(pack(code,'Label '+code));
-  assert($('language').options.length===10,'eight-custom-packs-are-retained-with-two-builtins');const bounded=snapshot();
+  assert($('language').options.length===12,'five-built-ins-and-seven-distinct-custom-options');const bounded=snapshot();
   await upload(pack('sv','Overflow'));assert(document.documentElement.lang==='ja'&&!Array.from($('language').options).some(o=>o.value==='sv'),'ninth-pack-is-rejected-without-evicting-existing-packs');
-  await upload(pack('es','Conversación actualizada'));assert(title()==='Conversación actualizada'&&$('language').options.length===10,'existing-pack-can-be-updated-at-capacity');
+  await upload(pack('es','Conversación actualizada'));assert(title()==='Conversación actualizada'&&$('language').options.length===12,'existing-pack-can-be-updated-at-capacity');
   change('he');assert(title()==='שיחה'&&document.documentElement.dir==='rtl','capacity-and-updates-preserve-other-packs');assert(snapshot()===bounded,'capacity-errors-and-updates-preserve-projects');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,real_file_inputs_tested:true,real_provider:false,authority:'none'});
  }catch(error){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:error.message,checks})}
