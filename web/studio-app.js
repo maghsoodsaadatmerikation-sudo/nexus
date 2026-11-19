@@ -10,6 +10,26 @@ Object.assign(EN,{archiveDamaged:'The browser archive is damaged or unsupported.
 Object.assign(FA,{archiveDamaged:'آرشیو مرورگر آسیب‌دیده یا ناسازگار است؛ جایگزین نشد. نشست باز برای تهیهٔ پشتیبان رمزگذاری‌شده در دسترس است.'});
 Object.assign(EN,{chatAttachments:'Attach text files to this message',chatAttachmentsHelp:'Up to four TXT, Markdown, CSV, TSV or JSON files, 128 KiB each. Only short, clearly marked excerpts enter the exact reviewed model request. This is not image/PDF understanding. The original files are not stored in chat or archive; filenames are retained with your turn. Nothing is sent until you explicitly approve the model request.',chatAttachedDocument:'Include latest saved writing document as a temporary excerpt',chatClearAttachments:'Clear attachments',chatNoFiles:'No text files attached',chatAttachmentAdded:'Local files added to next reviewed model request.',chatAttachmentInvalid:'Could not read text files; check size, format and capacity.',chatAttachmentRequiresModel:'Attached file excerpts require a configured model request; the local guide cannot read them.',chatAttachedUsed:'One-turn excerpts supplied (not verified):',chatRegenRequiresFiles:'A response grounded in temporary files cannot be regenerated from the filenames alone. Edit the user message to a new branch and attach the files again.',chatFilesNotSaved:'Files are held only in this tab and their bytes are never saved to the chat archive.'});
 Object.assign(FA,{chatAttachments:'پیوست فایل متنی برای همین پیام',chatAttachmentsHelp:'حداکثر چهار فایل TXT، Markdown، CSV، TSV یا JSON، هرکدام تا ۱۲۸ کیبی‌بایت. فقط گزیده‌های کوتاه و مشخص وارد درخواست مدل پس از بازبینی می‌شوند. تصویر و PDF تحلیل نمی‌شوند. محتوای فایل‌ها در تاریخچه یا آرشیو ذخیره نمی‌شود؛ فقط نامشان کنار پیام می‌ماند. تا تأیید صریح شما چیزی فرستاده نمی‌شود.',chatAttachedDocument:'افزودن گزیده‌ای از آخرین نسخهٔ ذخیره‌شدهٔ سند',chatClearAttachments:'پاک‌کردن پیوست‌ها',chatNoFiles:'فایل متنی پیوست نشده است',chatAttachmentAdded:'فایل‌های محلی به درخواست بعدی اضافه شدند؛ قبل از ارسال بازبینی می‌شوند.',chatAttachmentInvalid:'خواندن فایل‌های متنی انجام نشد؛ اندازه، قالب یا ظرفیت را بررسی کن.',chatAttachmentRequiresModel:'گزیدهٔ فایل‌ها فقط در درخواست مدل پیکربندی‌شده استفاده می‌شود؛ راهنمای محلی فایل را نمی‌خواند.',chatAttachedUsed:'گزیده‌های موقت ارائه‌شده (تأییدنشده):',chatRegenRequiresFiles:'پاسخ مبتنی بر فایل موقت را نمی‌توان فقط از نام فایل بازتولید کرد. پیام را در شاخهٔ تازه ویرایش کن و فایل‌ها را دوباره اضافه کن.',chatFilesNotSaved:'محتوای فایل‌ها فقط در همین برگه است و در آرشیو گفتگو ذخیره نمی‌شود.'});
+Object.assign(EN,{
+ storageCenter:'Storage & unsaved work',storageHelp:'Only applied conversations, projects and document versions enter an explicitly saved encrypted browser archive. Draft text, imported files and Music/Orchestra output remain temporary. Export audio and keep an encrypted backup separately.',
+ storageArchive:'Projects and applied conversations',storageChat:'Unsent chat and attachments',storageWriting:'Writing and preferences',storageMedia:'Music and original vocals',
+ storageCurrent:'Encrypted browser archive up to date',storageChanged:'Applied changes not yet saved',storageLocked:'No unlocked archive; current work is tab-only',
+ storageChatDraft:'Unsent message, attachment or pending request in this tab',storageChatNone:'No unsent chat draft',
+ storageWritingDraft:'Unapplied document or preference changes in this tab',storageWritingNone:'No unapplied writing or preference draft',
+ storageMediaDraft:'Temporary score, prompt, WAV or original vocal — export separately',storageMediaNone:'No unsaved Music or Orchestra work',
+ storageRisk:'Leaving or locking now may discard unsaved work',storageSafe:'No unsaved work detected in this tab',
+ storageSummaryRisk:'Unsaved work needs attention',storageSummarySafe:'No unsaved changes detected'
+});
+Object.assign(FA,{
+ storageCenter:'وضعیت ذخیره‌سازی و کارهای ناتمام',storageHelp:'فقط گفتگوها، پروژه‌ها و نسخه‌های اعمال‌شدهٔ سند با ذخیرهٔ صریح وارد آرشیو رمزگذاری‌شدهٔ مرورگر می‌شوند. متن پیش‌نویس، فایل‌های ورودی و خروجی موسیقی یا ارکستر موقت‌اند. صوت را جداگانه خروجی بگیر و از آرشیو پشتیبان رمزگذاری‌شده نگه دار.',
+ storageArchive:'پروژه‌ها و گفتگوهای اعمال‌شده',storageChat:'پیام و پیوست ارسال‌نشده',storageWriting:'نوشته‌ها و ترجیحات',storageMedia:'موسیقی و وکال اصلی',
+ storageCurrent:'آرشیو رمزگذاری‌شدهٔ مرورگر به‌روز است',storageChanged:'تغییرات اعمال‌شده هنوز ذخیره نشده‌اند',storageLocked:'آرشیو باز نیست؛ کار فعلی فقط در این برگه است',
+ storageChatDraft:'پیام، پیوست یا درخواست در انتظار فقط در این برگه است',storageChatNone:'پیش‌نویس ارسال‌نشدهٔ گفتگو وجود ندارد',
+ storageWritingDraft:'سند یا ترجیحات اعمال‌نشده فقط در این برگه است',storageWritingNone:'پیش‌نویس اعمال‌نشدهٔ نوشته یا ترجیحات وجود ندارد',
+ storageMediaDraft:'نت، پرامپت، فایل WAV یا وکال موقت؛ خروجی جداگانه بگیر',storageMediaNone:'کار ذخیره‌نشده در موسیقی یا ارکستر وجود ندارد',
+ storageRisk:'خروج یا قفل اکنون ممکن است کار ذخیره‌نشده را از بین ببرد',storageSafe:'کار ذخیره‌نشده‌ای در این برگه شناسایی نشد',
+ storageSummaryRisk:'کار ذخیره‌نشده نیاز به توجه دارد',storageSummarySafe:'تغییر ذخیره‌نشده‌ای شناسایی نشد'
+});
 const forms=()=>profileDirty||editorDirty||window.NexusAstrologyUI?.hasDraft()===true;
 const t=k=>(localePacks.get(language)?.messages||(language==='fa'?FA:EN))[k]||EN[k]||k,el=(tag,text)=>{const n=document.createElement(tag);n.textContent=text;return n},p=()=>data.projects.find(x=>x.id===projectId),chat=()=>p()?.threads.find(x=>x.id===threadId),doc=()=>p()?.documents.find(x=>x.id===documentId);
 Object.assign(EN,{modelMode:'Provider execution mode (requires a supporting gateway)',modeDefault:'Provider default',modeThinking:'Thinking',modeFast:'Non-thinking',modelBudget:'Maximum generated tokens (1–8192; existing response and time limits still apply)'});
@@ -60,6 +80,36 @@ function unsavedLocalMedia(){
  return window.NexusMusicUI?.hasTransientWork?.()===true||
   window.NexusOrchestraUI?.hasTransientWork?.()===true;
 }
+// Single read-only source for the visible storage center and loss-of-work guards.
+// It deliberately exposes flags only, never prompt text, original vocal bytes or keys.
+function storageSnapshot(){
+ const drafts=Object.freeze({
+  chat:Boolean($('message').value||chatAttachments.length||$('attach-document').checked||pending),
+  writing:Boolean(editorDirty),
+  preferences:Boolean(profileDirty||window.NexusAstrologyUI?.hasDraft?.()===true),
+  music:window.NexusMusicUI?.hasTransientWork?.()===true,
+  orchestra:window.NexusOrchestraUI?.hasTransientWork?.()===true
+ });
+ const risk=dirty||Object.values(drafts).some(Boolean);
+ return Object.freeze({
+  schema:'nexus.studio.storage-status.v1',
+  archive:!vault.unlocked?'tab-only':dirty?'applied-unsaved':'encrypted-current',
+  appliedUnsaved:dirty,
+  drafts,
+  lossRisk:risk
+ });
+}
+function renderStorage(){
+ const state=storageSnapshot();
+ $('storage-summary').textContent=t(state.lossRisk?'storageSummaryRisk':'storageSummarySafe');
+ $('storage-archive-state').textContent=t(state.archive==='tab-only'?'storageLocked':state.archive==='applied-unsaved'?'storageChanged':'storageCurrent');
+ $('storage-chat-state').textContent=t(state.drafts.chat?'storageChatDraft':'storageChatNone');
+ $('storage-writing-state').textContent=t(state.drafts.writing||state.drafts.preferences?'storageWritingDraft':'storageWritingNone');
+ $('storage-media-state').textContent=t(state.drafts.music||state.drafts.orchestra?'storageMediaDraft':'storageMediaNone');
+ $('storage-risk').textContent=t(state.lossRisk?'storageRisk':'storageSafe');
+ $('storage-center').dataset.unsaved=String(state.lossRisk);
+ return state;
+}
 function toolLifecycle(phase){
  let complete=true;
  for(const [name,method] of TOOL_LIFECYCLE[phase]){
@@ -74,7 +124,7 @@ function stop(){languageImport++;toolLifecycle('cancel');revision++;controller?.
 function controls(){for(const id of ['new-project','delete-project','new-thread','rename-thread','archive-thread','delete-thread','guide','prepare','regenerate','apply-profile','new-document','save-version','delete-document','projects','branch','documents','create-vault','unlock','save','backup','restore','erase','language-file'])$(id).disabled=busy;
  $('chat-file').disabled=busy||!chat()||chat().archived;
  $('clear-chat-files').disabled=busy||(!chatAttachments.length&&!$('attach-document').checked);
- $('attach-document').disabled=busy||!chat()||chat().archived||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare','regenerate'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(dirty?'unsaved':(vault.unlocked?'saved':'temporary'));window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
+ $('attach-document').disabled=busy||!chat()||chat().archived||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare','regenerate'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(storageSnapshot().lossRisk?'unsaved':(vault.unlocked?'saved':'temporary'));renderStorage();window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
 function mutate(fn,{undoable=false}={}){if(busy)return false;const before=data,next=S.copy(data),selection={projectId,threadId,documentId};try{fn(next);data=S.state(next);if(undoable)undoSlot.record(before,data,selection);else undoSlot.clear();dirty=true;stop();render();status('apply');return true}catch{status('failed');return false}}
 function projectIn(v){return v.projects.find(x=>x.id===projectId)}
 function option(value,label){const o=el('option',label);o.value=value;return o}
@@ -157,7 +207,7 @@ $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+cha
 $('create-vault').onclick=()=>{const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation((rev,abort)=>vault.create(pass,{signal:abort.signal}))};
 $('unlock').onclick=()=>{if((dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked)&&!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const next=await vault.unlock(pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=next;dirty=false;selectProject(data.projects[0]?.id||null);render()})};
 $('save').onclick=()=>{if(!noForms())return;const snapshot=S.state(data);operation(async(rev,abort)=>{await vault.save(snapshot,{signal:abort.signal});if(rev===revision)dirty=false},'saved')};
-$('lock').onclick=()=>{if((dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked||unsavedLocalMedia())&&!confirm(t('discard')))return;const clean=toolLifecycle('private');undoSlot.clear();stop();clearChatAttachments();modelInfo=null;vault.lock();data=S.empty();projectId=threadId=documentId=null;dirty=profileDirty=editorDirty=false;for(const id of ['passphrase','repeat-passphrase','gateway-token','message','project-title','document-title','instructions','memories','editor','source-query','search'])$(id).value='';$('model-status').textContent='';$('source-results').textContent='';$('request-context').textContent='';$('branch-notice').textContent='';renderVersions();render();if(!clean)location.reload()};
+$('lock').onclick=()=>{if(storageSnapshot().lossRisk&&!confirm(t('discard')))return;const clean=toolLifecycle('private');undoSlot.clear();stop();clearChatAttachments();modelInfo=null;vault.lock();data=S.empty();projectId=threadId=documentId=null;dirty=profileDirty=editorDirty=false;for(const id of ['passphrase','repeat-passphrase','gateway-token','message','project-title','document-title','instructions','memories','editor','source-query','search'])$(id).value='';$('model-status').textContent='';$('source-results').textContent='';$('request-context').textContent='';$('branch-notice').textContent='';renderVersions();render();if(!clean)location.reload()};
 $('backup').onclick=()=>{if(!noForms())return;const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await vault.export(data,pass,{signal:abort.signal});if(rev===revision)download(raw,'nexus-studio.encrypted.json','application/json')})};
 $('restore').onclick=()=>$('restore-file').click();$('restore-file').onchange=event=>{const f=event.target.files[0];event.target.value='';if(!f||f.size>6*1024*1024||!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await f.text();if(rev!==revision||abort.signal.aborted)return;const opened=await S.decrypt(raw,pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=opened.data;dirty=true;selectProject(data.projects[0]?.id||null);render()})};
 $('erase').onclick=()=>{if(confirm(t('discard')))operation(async(rev,abort)=>{
@@ -178,7 +228,11 @@ $('language-file').onchange=async event=>{
  }catch{if(current())status('failed')}
 };
 $('language').onchange=()=>{stop();language=$('language').value;applyLanguage()};
-window.addEventListener('beforeunload',e=>{if(dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked||unsavedLocalMedia()){e.preventDefault();e.returnValue=''}});
-window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',lifecycle_version:TOOL_LIFECYCLE.version,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});applyLanguage();
+window.addEventListener('beforeunload',e=>{if(storageSnapshot().lossRisk){e.preventDefault();e.returnValue=''}});
+// Reflect DOM-only drafts as they are typed and async media completions after they settle.
+document.addEventListener('input',renderStorage);
+document.addEventListener('change',renderStorage);
+document.addEventListener('nexus-studio-media-state',renderStorage);
+window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);

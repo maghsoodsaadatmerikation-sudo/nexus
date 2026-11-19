@@ -36,6 +36,7 @@ function buttons(){
  $('music-render').disabled=working||!score;$('music-midi').disabled=working||!score;
  $('music-score').disabled=working||!score;$('music-wav').disabled=working||!wav;
  $('music-cancel').disabled=!working;
+ document.dispatchEvent(new Event('nexus-studio-media-state'));
 }
 function resetAudio(){
  if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=null;

@@ -54,6 +54,17 @@ html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focu
 <nav class="tool-nav" aria-label="Studio tools"><a href="#conversation-card" data-t="conversation">Conversation</a><a href="#data-card" data-t="dataTitle">Data analysis</a><a href="#research-card" data-t="research">Research</a><a href="#code-card" data-t="codeLab">Code</a><a href="#tasks-card" data-t="tasks">Tasks</a><a href="#chart-card" data-t="chartLab">Chart</a><a href="#music-card">Music Lab / موسیقی</a><a href="#orchestra-card">Orchestra / آواز</a><a href="#astrology-card" data-t="astroTitle">Astrology</a><a href="#sky-card" data-t="skyTitle">Sky</a><a href="#canvas-card" data-t="canvas">Canvas</a><a href="#vault-card" data-t="archive">Archive</a></nav>
 <details><summary data-t="capabilitiesTitle">Capability status & shortcuts</summary><p class="help" data-t="shortcutsHelp"></p><ul id="capability-status"></ul></details>
 <button id="undo-removal" class="secondary" data-t="undoRemoval" disabled>Undo last removal</button><p id="status" role="status" aria-live="polite"></p><p class="notice" id="retention"></p>
+<details class="studio-storage-center" id="storage-center" data-unsaved="false">
+ <summary><span data-t="storageCenter">Storage &amp; unsaved work</span> · <span id="storage-summary">Checking session state</span></summary>
+ <p class="help" data-t="storageHelp">Applied project data is saved only with an explicit encrypted save. Temporary chat text, music scores and WAV files need separate attention.</p>
+ <dl class="studio-storage-grid">
+  <div><dt data-t="storageArchive">Projects and applied conversations</dt><dd id="storage-archive-state"></dd></div>
+  <div><dt data-t="storageChat">Unsent chat and attachments</dt><dd id="storage-chat-state"></dd></div>
+  <div><dt data-t="storageWriting">Writing and preferences</dt><dd id="storage-writing-state"></dd></div>
+  <div><dt data-t="storageMedia">Music and original vocals</dt><dd id="storage-media-state"></dd></div>
+ </dl>
+ <p class="studio-storage-risk" id="storage-risk" role="status" aria-live="polite"></p>
+</details>
 <div class="grid"><aside>
 <section class="card" id="projects-card"><h2 data-t="projects">Projects</h2><select id="projects" aria-label="Project"></select><label for="project-title" data-t="projectName">New project name</label><input id="project-title" maxlength="120"><button id="new-project" data-t="createProject">Create project</button><button id="delete-project" class="secondary" data-t="deleteProject">Delete project</button>
 <h2 data-t="history">Conversation history</h2><input id="search" maxlength="200" data-placeholder="search" aria-label="Search conversations"><label class="inline"><input id="archived" type="checkbox"><span data-t="showArchived">Include archived</span></label><button id="new-thread" data-t="newChat">New conversation</button><div id="history"></div></section>

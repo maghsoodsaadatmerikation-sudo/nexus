@@ -35,6 +35,7 @@ function buttons(){
  $('orchestra-mix').disabled=rendering||!aligned();
  $('orchestra-mix-download').disabled=rendering||!mixWav;
  for(const name of ['orchestra-offset','orchestra-dry-gain','orchestra-backing-gain'])$(name).disabled=rendering;
+ document.dispatchEvent(new Event('nexus-studio-media-state'));
 }
 function clearWav(){
  clearMixed();
