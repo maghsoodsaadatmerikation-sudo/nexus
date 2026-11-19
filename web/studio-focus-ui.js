@@ -148,14 +148,14 @@ function refreshOnboarding(){
  if(!visible)return;
  const create=projects.length===0;
  hint.textContent=create
-  ?words('Step 1 of 2: Create a project. Your work stays in this tab until you explicitly save it to an encrypted archive.',
-         'گام ۱ از ۲: یک پروژه بساز. کارها تا زمانی که صریحاً در آرشیو رمزگذاری‌شده ذخیره نشوند، فقط در همین برگه‌اند.')
-  :words('Step 2 of 2: Start a conversation. The local reflection guide is not a generative AI model.',
-         'گام ۲ از ۲: یک گفتگو آغاز کن. راهنمای محلی مدل هوش مصنوعی مولد نیست.');
- start.textContent=create?words('Create a project','ساخت پروژه'):words('New conversation','گفتگوی جدید');
+  ?words('Write your first message. NEXUS will start a temporary local conversation. Save it explicitly to keep it.',
+         'اولین پیامت را بنویس. نکسوس یک گفتگوی موقت محلی آغاز می‌کند؛ برای نگهداری باید آن را صریحاً ذخیره کنی.')
+  :words('Write a message or start a conversation. The local guide is not a generative AI model.',
+         'پیامت را بنویس یا گفتگو را آغاز کن. راهنمای محلی مدل هوش مصنوعی مولد نیست.');
+ start.textContent=words('Start chatting','شروع گفتگو');
  start.onclick=()=>{
-  if(create){openPanel('projects-card');$('project-title').focus({preventScroll:true})}
-  else{if($('new-thread').disabled)return;$('new-thread').click();openPanel('conversation-card');$('message').focus({preventScroll:true})}
+  if(!window.NexusStudioUI?.startConversation())return;
+  openPanel('conversation-card');$('message').focus({preventScroll:true});
  };
 }
 toggle.addEventListener('click',()=>setFocus(!focused,true));
@@ -205,6 +205,7 @@ const tr=(en,fa)=>document.documentElement.lang==='fa'?fa:en;
 const make=(id,label)=>{const x=document.createElement('button');x.type='button';x.id=id;x.className='secondary';x.textContent=label;return x};
 const bar=document.createElement('div');bar.id='nexus-zen-bar';
 const menu=make('nexus-zen-menu','☰'),home=make('nexus-zen-home','NEXUS'),newChat=make('nexus-zen-new','＋'),all=make('nexus-zen-tools','✦');
+menu.setAttribute('aria-controls','nexus-zen-drawer');menu.setAttribute('aria-expanded','false');
 bar.append(menu,home,newChat,all);$('studio-focus-top').prepend(bar);
 const shade=document.createElement('div'),drawer=document.createElement('aside');
 shade.id='nexus-zen-shade';drawer.id='nexus-zen-drawer';shade.hidden=drawer.hidden=true;
@@ -224,8 +225,9 @@ function dismiss(){if(drawer.hidden)return;drawer.hidden=shade.hidden=true;menu.
 function show(){restore=document.activeElement;drawer.hidden=shade.hidden=false;menu.setAttribute('aria-expanded','true');render();find.focus()}
 function go(id){dismiss();focus.openPanel(id)}
 function start(){
- dismiss();if($('new-thread').disabled){go('projects-card');$('project-title').focus({preventScroll:true})}
- else{$('new-thread').click();go('conversation-card');$('message').focus({preventScroll:true})}
+ dismiss();
+ if(!window.NexusStudioUI?.startConversation(true))return;
+ go('conversation-card');$('message').focus({preventScroll:true});
 }
 function render(){
  history.replaceChildren();const q=find.value.trim().toLocaleLowerCase();

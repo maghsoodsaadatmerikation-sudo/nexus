@@ -176,17 +176,18 @@ try{
  assert(await js("NexusStudioFocus.isFocused()&&NexusStudioFocus.active()==='conversation-card'&&!document.getElementById('conversation-card').hidden&&document.getElementById('projects-card').hidden&&!document.getElementById('studio-focus-onboarding').hidden&&document.getElementById('studio-focus-nav').getAttribute('aria-label')==='Primary Studio navigation'"),'mobile-default-chat-not-focused');checks.push('chat-first-first-project-guidance');
  assert(await js("Boolean(window.NexusStudioCompose)&&NexusStudioCompose.mode()==='guide'&&document.getElementById('studio-compose-send').disabled&&document.getElementById('studio-compose-privacy').textContent.includes('not generative AI')&&document.getElementById('studio-compose-storage').textContent.includes('No encrypted archive')"),'initial-honest-composer');
  checks.push('composer-local-mode-honesty-before-project');
- await js("document.querySelector('#studio-focus-onboarding button').click();true");
- assert(await js("NexusStudioFocus.active()==='projects-card'&&!document.getElementById('projects-card').hidden&&document.activeElement.id==='project-title'"),'onboarding-not-routing-to-project');
- checks.push('guided-first-project-creation');
+ assert(await js("typeof NexusStudioUI.startConversation==='function'&&NexusStudioUI.snapshot().projects.length===0"),'one-step-start-api-missing');
+ checks.push('one-step-onboarding-available-with-no-project');
  assert(await js("navigator.serviceWorker.getRegistration(location.href).then(r=>!r)"),'unapproved-worker');checks.push('no-automatic-worker');
  await poll(()=>retryJs('Boolean(window.NexusDevice)'),10000,'device-controls-not-ready');await js("document.getElementById('device-check').click();true");await poll(()=>retryJs("document.getElementById('device-readiness').textContent.includes('not been verified')"),10000,'readiness-not-rendered');assert(await js("NexusDevice.worker===null&&NexusDevice.report().generation_observed===false"),'readiness-started-model');checks.push('readiness-does-not-load-model-or-claim-execution');
  await js("document.getElementById('check-model').click();true");
  assert(await js("document.getElementById('model-status').textContent.includes('No model hosted here')&&performance.getEntriesByType('resource').every(r=>!r.name.includes('/studio-api/'))"),'static-model-truthfulness');checks.push('no-model-no-api-contact');
- await js("document.getElementById('project-title').value='SYNTHETIC MOBILE PROJECT';document.getElementById('new-project').click();true");
- assert(await js("!document.getElementById('studio-focus-onboarding').hidden&&document.getElementById('studio-focus-onboarding').textContent.includes('Step 2')"),'new-thread-guidance-missing');
+ await js("(()=>{const m=document.getElementById('message');m.value='SYNTHETIC FIRST DRAFT';m.dispatchEvent(new Event('input',{bubbles:true}));return true})()");
+ assert(await js("!document.getElementById('studio-compose-send').disabled&&NexusStudioUI.snapshot().projects.length===0"),'message-first-must-enable-composer');
  await js("document.getElementById('studio-focus-onboarding').querySelector('button').click();true");
- assert(await js("NexusStudioFocus.active()==='conversation-card'&&document.activeElement.id==='message'&&document.getElementById('studio-focus-onboarding').hidden"),'new-thread-focus-route');
+ assert(await js("NexusStudioFocus.active()==='conversation-card'&&document.activeElement.id==='message'&&document.getElementById('studio-focus-onboarding').hidden&&NexusStudioUI.snapshot().projects[0].threads.length===1&&NexusStudioUI.snapshot().projects[0].threads[0].nodes.length===0&&document.getElementById('message').value==='SYNTHETIC FIRST DRAFT'"),'one-click-first-chat-must-preserve-draft');
+ await js("(()=>{const m=document.getElementById('message');m.value='';m.dispatchEvent(new Event('input',{bubbles:true}));return true})()");
+ checks.push('first-chat-creates-local-project-and-thread-without-sending-or-losing-draft');
 
   assert(await js("Boolean(document.getElementById('nexus-zen-menu'))&&Boolean(document.getElementById('nexus-zen-home'))&&getComputedStyle(document.getElementById('studio-focus-nav')).display==='none'"),'zen-home-has-no-tab-clutter');
   await js("document.getElementById('nexus-zen-menu').click();true");
@@ -201,6 +202,11 @@ try{
   await js("document.getElementById('nexus-zen-home').click();document.getElementById('message').value='';document.getElementById('message').dispatchEvent(new Event('input'));true");
   assert(await js("NexusStudioFocus.active()==='conversation-card'&&!document.getElementById('conversation-card').hidden"),'one-tap-back-to-chat');
   checks.push('text-to-tool-is-non-executing-and-reversible');
+  await js("(()=>{const m=document.getElementById('message');m.value='SYNTHETIC KEEP THIS PRIVATE DRAFT';m.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#nexus-zen-suggestions button').click();return true})()");
+  assert(await js("NexusStudioFocus.active()==='music-card'&&document.getElementById('message').value==='SYNTHETIC KEEP THIS PRIVATE DRAFT'"),'quick-capability-chip-must-not-overwrite-draft');
+  await js("document.getElementById('nexus-zen-home').click();document.getElementById('message').value='';document.getElementById('message').dispatchEvent(new Event('input',{bubbles:true}));true");
+  checks.push('quick-capability-navigation-preserves-private-draft');
+
  await js("(()=>{const m=document.getElementById('message');m.value='SYNTHETIC UNSENT MODEL CONTEXT';m.dispatchEvent(new Event('input'));document.getElementById('studio-compose-mode').value='model';document.getElementById('studio-compose-mode').dispatchEvent(new Event('change'));document.getElementById('studio-compose-send').click();return true})()");
  assert(await js("document.getElementById('request-review').hidden&&!document.getElementById('consent').checked&&document.getElementById('message').value==='SYNTHETIC UNSENT MODEL CONTEXT'&&NexusStudioUI.snapshot().projects[0].threads[0].nodes.length===0&&performance.getEntriesByType('resource').every(r=>!r.name.includes('/studio-api/respond'))"),'no-model-quick-action-must-not-send');
  await js("(()=>{const m=document.getElementById('message');m.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true}));return true})()");
@@ -263,7 +269,7 @@ try{
  await poll(()=>retryJs("!window.__beforeOfflineReload&&navigator.onLine===false&&document.readyState==='complete'&&Boolean(window.NexusStudioUI)&&Boolean(document.getElementById('studio-offline'))"),15000,'offline-reload');
  assert(await js("NexusStudioUI.snapshot().projects.length===0"),'automatic-private-reopen');checks.push('true-offline-reload-still-locked');
  await js("document.getElementById('passphrase').value='synthetic secret phrase 123';document.getElementById('unlock').click();true");
- await poll(()=>retryJs("NexusStudioUI.snapshot().projects[0]?.title==='SYNTHETIC MOBILE PROJECT'"),12000,'offline-unlock');checks.push('offline-encrypted-reopen');
+ await poll(()=>retryJs("NexusStudioUI.snapshot().projects[0]?.title==='My conversations'"),12000,'offline-unlock');checks.push('offline-encrypted-reopen');
  await js("document.getElementById('language').value='fa';document.getElementById('language').dispatchEvent(new Event('change'));true");
  assert(await js("document.documentElement.dir==='rtl'&&getComputedStyle(document.querySelector('.studio-en')).display==='none'&&document.querySelector('#studio-focus-nav button[data-panel=conversation-card] .studio-control-label').textContent==='گفتگو'&&document.getElementById('studio-compose-send').textContent==='استفاده از راهنمای محلی'"),'persian-static-panel');checks.push('persian-rtl-navigation-and-installation-panel');
  stage='remove';await setOffline(false);

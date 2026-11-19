@@ -301,6 +301,16 @@ html.studio-focus-mode{
  .studio-focus-mode .studio-compose-row button{flex:1 1 120px}
 }
 
+/* Minimal composer: keep the message label accessible to assistive technology. */
+.studio-focus-mode #conversation-card label[for="message"]{
+ position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+ clip-path:inset(50%);white-space:nowrap;border:0;
+}
+.studio-focus-mode #message{min-height:82px}
+.studio-focus-mode #studio-focus-onboarding{padding:12px 14px;border-radius:13px}
+.studio-focus-mode #studio-focus-onboarding button{min-height:44px}
+.studio-focus-mode #nexus-zen-suggestions button{white-space:nowrap}
+
 .studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style></head><body><main>
 <header class="studio-masthead">
   <div class="studio-brand">
@@ -1656,6 +1666,38 @@ async function operation(fn,success='apply'){
  try{await fn(rev,abort);if(rev===revision)status(success)}catch(error){if(rev===revision)status(error?.message==='archive-damaged'?'archiveDamaged':'failed')}
  finally{if(controller===abort)controller=null;if(rev===revision)busy=false;controls()}
 }
+// Create a local first conversation on the user's explicit action, retaining the typed draft.
+// No model request, archive write, or network activity happens here.
+function startConversation(fresh=false){
+ if(busy)return false;
+ const current=chat();
+ if(current&&!current.archived){
+  if(!fresh)return true;
+  const before=threadId;
+  $('new-thread').click(); // Existing draft-discard confirmation remains authoritative.
+  return Boolean(chat()&&threadId!==before);
+ }
+ const draft=$('message').value;
+ // A new project changes tool context. Never silently throw away unapplied work.
+ if(!p()&&(forms()||hasToolWork())){status('needApply');return false}
+ try{
+  let ok=false;
+  if(!p()){
+   const project=S.project(language==='fa'?'گفتگوهای من':'My conversations');
+   const thread=S.thread(t('newChat'));
+   ok=mutate(v=>{project.threads.push(thread);v.projects.push(project)},{
+    afterCommit:()=>{resetProject(project.id);resetConversation(thread.id);$('message').value=draft}
+   });
+  }else{
+   const thread=S.thread(t('newChat'));
+   ok=mutate(v=>projectIn(v).threads.push(thread),{
+    afterCommit:()=>{resetConversation(thread.id);$('message').value=draft}
+   });
+  }
+  if(ok)$('message').dispatchEvent(new Event('input',{bubbles:true}));
+  return Boolean(ok&&chat()&&!chat().archived);
+ }catch{status('failed');return false}
+}
 function noForms(){if(forms()||hasChatDraft()){status('needApply');return false}return true}
 function candidate(regenerate=false,materials=[]){const c=chat();if(!c||!p()||c.archived)throw Error('select-chat');if(regenerate){const path=S.path(c),last=path.at(-1);if(last?.role!=='assistant')throw Error('no-answer');if(path.at(-2)?.attached_files?.length)throw Error('reattach-required');return {...S.copy(c),head:last.parent}}return S.append(c,'user',$('message').value.trim(),'human',branchBase===undefined?c.head:branchBase,materials.map(x=>x.name))}
 function installThread(next){
@@ -1792,7 +1834,7 @@ window.addEventListener('beforeunload',e=>{if(storageSnapshot().lossRisk){e.prev
 document.addEventListener('input',renderStorage);
 document.addEventListener('change',renderStorage);
 document.addEventListener('nexus-studio-media-state',renderStorage);
-window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});applyLanguage();
+window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
 </script><script>'use strict';
@@ -2138,14 +2180,14 @@ function refreshOnboarding(){
  if(!visible)return;
  const create=projects.length===0;
  hint.textContent=create
-  ?words('Step 1 of 2: Create a project. Your work stays in this tab until you explicitly save it to an encrypted archive.',
-         'گام ۱ از ۲: یک پروژه بساز. کارها تا زمانی که صریحاً در آرشیو رمزگذاری‌شده ذخیره نشوند، فقط در همین برگه‌اند.')
-  :words('Step 2 of 2: Start a conversation. The local reflection guide is not a generative AI model.',
-         'گام ۲ از ۲: یک گفتگو آغاز کن. راهنمای محلی مدل هوش مصنوعی مولد نیست.');
- start.textContent=create?words('Create a project','ساخت پروژه'):words('New conversation','گفتگوی جدید');
+  ?words('Write your first message. NEXUS will start a temporary local conversation. Save it explicitly to keep it.',
+         'اولین پیامت را بنویس. نکسوس یک گفتگوی موقت محلی آغاز می‌کند؛ برای نگهداری باید آن را صریحاً ذخیره کنی.')
+  :words('Write a message or start a conversation. The local guide is not a generative AI model.',
+         'پیامت را بنویس یا گفتگو را آغاز کن. راهنمای محلی مدل هوش مصنوعی مولد نیست.');
+ start.textContent=words('Start chatting','شروع گفتگو');
  start.onclick=()=>{
-  if(create){openPanel('projects-card');$('project-title').focus({preventScroll:true})}
-  else{if($('new-thread').disabled)return;$('new-thread').click();openPanel('conversation-card');$('message').focus({preventScroll:true})}
+  if(!window.NexusStudioUI?.startConversation())return;
+  openPanel('conversation-card');$('message').focus({preventScroll:true});
  };
 }
 toggle.addEventListener('click',()=>setFocus(!focused,true));
@@ -2195,6 +2237,7 @@ const tr=(en,fa)=>document.documentElement.lang==='fa'?fa:en;
 const make=(id,label)=>{const x=document.createElement('button');x.type='button';x.id=id;x.className='secondary';x.textContent=label;return x};
 const bar=document.createElement('div');bar.id='nexus-zen-bar';
 const menu=make('nexus-zen-menu','☰'),home=make('nexus-zen-home','NEXUS'),newChat=make('nexus-zen-new','＋'),all=make('nexus-zen-tools','✦');
+menu.setAttribute('aria-controls','nexus-zen-drawer');menu.setAttribute('aria-expanded','false');
 bar.append(menu,home,newChat,all);$('studio-focus-top').prepend(bar);
 const shade=document.createElement('div'),drawer=document.createElement('aside');
 shade.id='nexus-zen-shade';drawer.id='nexus-zen-drawer';shade.hidden=drawer.hidden=true;
@@ -2214,8 +2257,9 @@ function dismiss(){if(drawer.hidden)return;drawer.hidden=shade.hidden=true;menu.
 function show(){restore=document.activeElement;drawer.hidden=shade.hidden=false;menu.setAttribute('aria-expanded','true');render();find.focus()}
 function go(id){dismiss();focus.openPanel(id)}
 function start(){
- dismiss();if($('new-thread').disabled){go('projects-card');$('project-title').focus({preventScroll:true})}
- else{$('new-thread').click();go('conversation-card');$('message').focus({preventScroll:true})}
+ dismiss();
+ if(!window.NexusStudioUI?.startConversation(true))return;
+ go('conversation-card');$('message').focus({preventScroll:true});
 }
 function render(){
  history.replaceChildren();const q=find.value.trim().toLocaleLowerCase();
@@ -2289,7 +2333,15 @@ $('branch-notice').after(box);
 const suggestions=document.createElement('div');suggestions.id='nexus-zen-suggestions';
 for(const [cmd,en,fa] of [['/music','Music','موسیقی'],['/research','Research','پژوهش'],['/data','Files','فایل‌ها']]){
  const b=document.createElement('button');b.type='button';b.className='secondary';b.dataset.en=en;b.dataset.fa=fa;
- b.addEventListener('click',()=>{$('message').value=cmd+' ';$('message').dispatchEvent(new Event('input',{bubbles:true}));$('message').focus()});
+ b.addEventListener('click',()=>{
+  const message=$('message');
+  if(message.value.trim()){
+   // A quick action must not overwrite an unsent private draft.
+   const target=cmd==='/music'?'music-card':cmd==='/research'?'research-card':'data-card';
+   window.NexusStudioFocus?.openPanel(target);return;
+  }
+  message.value=cmd+' ';message.dispatchEvent(new Event('input',{bubbles:true}));message.focus();
+ });
  suggestions.append(b);
 }
 box.insertBefore(suggestions,privacy);
@@ -2355,7 +2407,8 @@ let running=false;
 function refresh(){
  const state=window.NexusStudioUI.uiStatus();
  if(!state)return;
- const model=select.value==='model',ready=state.threadReady&&!state.archived&&!state.busy;
+ const model=select.value==='model',ready=!state.busy&&(!state.threadReady||!state.archived);
+ $('message').placeholder=words('Ask NEXUS anything…','هرچه می‌خواهی از نکسوس بپرس…');
  heading.textContent=words('Reply using','پاسخ با');
  box.setAttribute('aria-label',words('Conversation actions','گزینه‌های گفتگو'));
  selectLabel.setAttribute('aria-label',words('Choose how to respond','روش پاسخ را انتخاب کن'));
@@ -2388,6 +2441,9 @@ function refresh(){
 function run(){
  if(running||send.disabled)return;
  if(select.value==='guide'&&offerTool($('message').value))return;
+ if(!window.NexusStudioUI.uiStatus().threadReady&&!window.NexusStudioUI.startConversation()){
+  refresh();return;
+ }
  running=true;
  try{
   if(select.value==='model'){
