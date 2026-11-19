@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -88,6 +89,79 @@ class TemplateContractTests(unittest.TestCase):
                 self.assertIn("ValueError", failure.stderr)
             self.assertEqual((root / "web/studio.html").read_bytes(),
                              (ROOT / "web/studio.html").read_bytes())
+
+
+class StudioMaintenanceTests(unittest.TestCase):
+    def setUp(self):
+        scratch = tempfile.TemporaryDirectory(prefix="nexus-studio-maintenance-test-")
+        self.addCleanup(scratch.cleanup)
+        self.repo = Path(scratch.name)
+        for dirname in ("web", "public/studio", "public/icons"):
+            shutil.copytree(ROOT / dirname, self.repo / dirname)
+        (self.repo / "scripts").mkdir()
+        for name in ("build-studio.py", "build-device-model.py", "build-studio-static.py",
+                     "studio-maintenance.py", "studio_module_graph.py", "studio_template_contract.py"):
+            shutil.copy2(HERE / name, self.repo / "scripts" / name)
+        self.unrelated = self.repo / "notes.txt"
+        self.unrelated.write_text("original notes\n")
+        self.command("git", "init", "-q")
+        self.commit("Fixture")
+
+    def command(self, *args, expected=0):
+        result = subprocess.run(args, cwd=self.repo, capture_output=True, text=True, timeout=45)
+        self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+        return result.stdout.strip()
+
+    def commit(self, message):
+        self.command("git", "add", "-A")
+        self.command("git", "-c", "user.name=Maintenance Fixture", "-c",
+                     "user.email=fixture@example.invalid", "commit", "-qm", message)
+
+    def audit(self, *args, expected=0):
+        return json.loads(self.command(sys.executable, "scripts/studio-maintenance.py",
+                                       *args, expected=expected))
+
+    def test_audit_and_repair_stale_and_missing_assets(self):
+        healthy = self.audit()
+        self.assertEqual(healthy["status"], "healthy")
+        standalone = self.repo / "web/studio.html"
+        worker = self.repo / "public/studio/service-worker.js"
+        original_standalone, original_worker = standalone.read_bytes(), worker.read_bytes()
+        standalone.write_text("stale standalone")
+        worker.unlink()
+        self.assertEqual(self.audit("--repair", expected=2)["status"], "blocked")
+
+        self.commit("Introduce generated drift")
+        drift = self.audit(expected=1)
+        self.assertEqual(drift["status"], "drift")
+        self.assertEqual(drift["changed_files"], ["public/studio/service-worker.js", "web/studio.html"])
+        self.assertEqual(standalone.read_text(), "stale standalone")
+        self.assertFalse(worker.exists())
+        self.assertEqual(self.command("git", "status", "--porcelain"), "")
+
+        repair = self.audit("--repair")
+        self.assertEqual(repair, {**drift, "status": "repaired"})
+        self.assertEqual(standalone.read_bytes(), original_standalone)
+        self.assertEqual(worker.read_bytes(), original_worker)
+        self.assertEqual(self.unrelated.read_text(), "original notes\n")
+        self.assertEqual(self.command("git", "rev-parse", "HEAD"), drift["base_commit"])
+
+    def test_verifier_side_effect_is_blocked_before_patch(self):
+        (self.repo / ".gitignore").write_text("__pycache__/\n")
+        standalone = self.repo / "web/studio.html"
+        standalone.write_text("stale")
+        builder = self.repo / "scripts/build-studio-static.py"
+        with builder.open("a") as handle:
+            handle.write("\nif '--check' in sys.argv:\n"
+                         "    (ROOT / 'notes.txt').write_text('verification side effect')\n")
+        self.commit("Introduce drift and an out-of-scope verifier side effect")
+
+        blocked = self.audit("--repair", expected=2)
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertIn("notes.txt", blocked["reason"])
+        self.assertEqual(self.unrelated.read_text(), "original notes\n")
+        self.assertEqual(standalone.read_text(), "stale")
+        self.assertEqual(self.command("git", "status", "--porcelain"), "")
 
 
 if __name__ == "__main__":

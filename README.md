@@ -384,6 +384,15 @@ The verification workflow preserves the rule:
 
 Continuous verification runs on source changes and at 00:00, 08:00, and 16:00 UTC. Scheduled verification may observe, verify, attest, and report; it carries neither release authority nor production-promotion authority.
 
+### Studio maintenance
+
+Run `python3 scripts/studio-maintenance.py` from a clean checkout to audit
+the standalone, device-model and installable Studio packages. It rebuilds
+from the selected commit in a disposable worktree and reports any drift as
+JSON. On a review branch, add `--repair` to apply a verified diff limited to
+generated assets. This command leaves the review and release decisions to the
+existing pull-request and deployment process.
+
 ## Repository map
 
 ```text
