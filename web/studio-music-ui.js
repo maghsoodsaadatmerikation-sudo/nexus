@@ -165,5 +165,6 @@ $('music-lock-motif').checked=true;
 document.addEventListener('nexus-music-clear',()=>{invalidate();$('music-title').value='Untitled journey'});
 window.addEventListener('pagehide',()=>{revision++;resetAudio()});
 out(txt('ready'));buttons();
-window.NexusMusicUI=Object.freeze({clear:invalidate,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav)});
+window.NexusMusicUI=Object.freeze({clear:invalidate,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
+ hasTransientWork:()=>Boolean(score||wav||working)});
 })();
