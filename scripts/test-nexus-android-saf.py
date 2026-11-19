@@ -110,8 +110,11 @@ def run(report):
     model=smoke.adb("shell","getprop","ro.product.model").lower()
     if "sdk" not in model and "emulator" not in model:
         raise RuntimeError("Physical device refused: only disposable emulator approved")
-    # Only delete our exact synthetic fixture (never arbitrary user documents).
-    smoke.adb("shell","rm","-f",SAVED_PATH)
+    # Never delete or overwrite an existing Android document, even in tests.
+    # The CI emulator is disposable: a pre-existing fixture is an error.
+    probe=smoke.adb("shell","ls",SAVED_PATH,check=False)
+    if SAVED_NAME in probe:
+        raise RuntimeError("Synthetic output path already exists; refusing overwrite")
     smoke.adb("logcat","-c")
     smoke.adb("shell","am","force-stop",smoke.PKG)
     smoke.start()
