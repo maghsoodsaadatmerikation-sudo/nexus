@@ -121,6 +121,7 @@ class MobileKitTests(unittest.TestCase):
         self.assertIn('id="motion-draft-enable"', motion)
         self.assertIn('id="motion-draft-restore"', motion)
         self.assertIn('id="motion-draft-clear"', motion)
+        self.assertIn('id="motion-draft-ack"', motion)
         self.assertIn('role="status" aria-live="polite"', motion)
         self.assertIn('href="./motion/"', welcome)
         self.assertIn('href="./"', welcome)
