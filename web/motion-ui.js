@@ -439,8 +439,8 @@ $('motion-draft-restore').addEventListener('click',async()=>{
   if(draftEnabled)throw Error('Pause autosave before restoring');
   const record=readDraft();
   if(!record)throw Error('No encrypted draft found in this origin');
-  if(!window.confirm('Replace current unsaved storyboard with the saved encrypted draft?'))
-   {dStatus('Restore cancelled.');return;}
+  if(!$('motion-draft-ack').checked)throw Error('Check the explicit Restore/Delete confirmation first');
+  $('motion-draft-ack').checked=false;
   const key=await deriveDraft(input.value,record.salt);
   let plain;
   try{plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:record.iv},key,record.data);}
@@ -460,7 +460,10 @@ $('motion-draft-restore').addEventListener('click',async()=>{
  finally{input.value='';confirm.value='';button.disabled=false;}
 });
 $('motion-draft-clear').addEventListener('click',()=>{
- if(!window.confirm('Delete encrypted draft stored in this browser? This cannot be undone.'))return;
+ if(!$('motion-draft-ack').checked){
+  dStatus('Check the explicit Restore/Delete confirmation before deleting.',true);return;
+ }
+ $('motion-draft-ack').checked=false;
  try{localStorage.removeItem(DRAFT_SLOT);stopDraft();
   dStatus('Encrypted local draft deleted; current storyboard remains in memory.');
  }catch(e){dStatus('Could not delete draft: '+e.message,true);}
