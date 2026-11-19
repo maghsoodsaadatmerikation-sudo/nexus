@@ -55,6 +55,11 @@ const TOOL_LIFECYCLE=Object.freeze({
  private:Object.freeze([['NexusDevice','unload'],['NexusTasksUI','clear'],['NexusQualityUI','clear'],
   ['NexusAstrologyUI','clear'],['NexusLabUI','clear'],['NexusMusicUI','clear'],['NexusOrchestraUI','clear']])
 });
+function unsavedLocalMedia(){
+ // Preview buffers, unsaved scores and selected original vocals live outside the vault.
+ return window.NexusMusicUI?.hasTransientWork?.()===true||
+  window.NexusOrchestraUI?.hasTransientWork?.()===true;
+}
 function toolLifecycle(phase){
  let complete=true;
  for(const [name,method] of TOOL_LIFECYCLE[phase]){
@@ -152,7 +157,7 @@ $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+cha
 $('create-vault').onclick=()=>{const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation((rev,abort)=>vault.create(pass,{signal:abort.signal}))};
 $('unlock').onclick=()=>{if((dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked)&&!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const next=await vault.unlock(pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=next;dirty=false;selectProject(data.projects[0]?.id||null);render()})};
 $('save').onclick=()=>{if(!noForms())return;const snapshot=S.state(data);operation(async(rev,abort)=>{await vault.save(snapshot,{signal:abort.signal});if(rev===revision)dirty=false},'saved')};
-$('lock').onclick=()=>{if((dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked)&&!confirm(t('discard')))return;const clean=toolLifecycle('private');undoSlot.clear();stop();clearChatAttachments();modelInfo=null;vault.lock();data=S.empty();projectId=threadId=documentId=null;dirty=profileDirty=editorDirty=false;for(const id of ['passphrase','repeat-passphrase','gateway-token','message','project-title','document-title','instructions','memories','editor','source-query','search'])$(id).value='';$('model-status').textContent='';$('source-results').textContent='';$('request-context').textContent='';$('branch-notice').textContent='';renderVersions();render();if(!clean)location.reload()};
+$('lock').onclick=()=>{if((dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked||unsavedLocalMedia())&&!confirm(t('discard')))return;const clean=toolLifecycle('private');undoSlot.clear();stop();clearChatAttachments();modelInfo=null;vault.lock();data=S.empty();projectId=threadId=documentId=null;dirty=profileDirty=editorDirty=false;for(const id of ['passphrase','repeat-passphrase','gateway-token','message','project-title','document-title','instructions','memories','editor','source-query','search'])$(id).value='';$('model-status').textContent='';$('source-results').textContent='';$('request-context').textContent='';$('branch-notice').textContent='';renderVersions();render();if(!clean)location.reload()};
 $('backup').onclick=()=>{if(!noForms())return;const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await vault.export(data,pass,{signal:abort.signal});if(rev===revision)download(raw,'nexus-studio.encrypted.json','application/json')})};
 $('restore').onclick=()=>$('restore-file').click();$('restore-file').onchange=event=>{const f=event.target.files[0];event.target.value='';if(!f||f.size>6*1024*1024||!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await f.text();if(rev!==revision||abort.signal.aborted)return;const opened=await S.decrypt(raw,pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=opened.data;dirty=true;selectProject(data.projects[0]?.id||null);render()})};
 $('erase').onclick=()=>{if(confirm(t('discard')))operation(async(rev,abort)=>{
@@ -173,7 +178,7 @@ $('language-file').onchange=async event=>{
  }catch{if(current())status('failed')}
 };
 $('language').onchange=()=>{stop();language=$('language').value;applyLanguage()};
-window.addEventListener('beforeunload',e=>{if(dirty||forms()||$('message').value){e.preventDefault();e.returnValue=''}});
-window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',lifecycle_version:TOOL_LIFECYCLE.version,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});applyLanguage();
+window.addEventListener('beforeunload',e=>{if(dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked||unsavedLocalMedia()){e.preventDefault();e.returnValue=''}});
+window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',lifecycle_version:TOOL_LIFECYCLE.version,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
