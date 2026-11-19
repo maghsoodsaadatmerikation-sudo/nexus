@@ -9,17 +9,52 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PANEL = '''<section class="card" id="studio-install-card">
-<p class="studio-en">This static edition runs in your browser. The local guide is not a generative model. Saving your work is explicit and encrypted. A real model requires your separately configured gateway.</p>
-<p class="studio-fa" lang="fa" dir="rtl">این نسخه در مرورگر اجرا می‌شود. راهنمای محلی مدل مولد نیست. ذخیرهٔ کار دستی و رمزگذاری‌شده است. پاسخ مدل واقعی به درگاه جداگانهٔ پیکربندی‌شده نیاز دارد.</p>
+<h2 class="studio-en">Install NEXUS Studio</h2><h2 class="studio-fa" lang="fa" dir="rtl">نصب نکسوس استودیو</h2>
+<p class="studio-en">Open the same Studio on the web or from your home screen. Projects and encrypted saves stay in your browser profile.</p>
+<p class="studio-fa" lang="fa" dir="rtl">همین استودیو را از وب یا صفحهٔ اصلی گوشی باز کن. پروژه‌ها و ذخیره‌های رمزگذاری‌شده در پروفایل مرورگرت می‌مانند.</p>
 <button id="studio-offline"><span class="studio-en">Prepare offline use</span><span class="studio-fa">آماده‌سازی آفلاین</span></button>
+<button id="studio-install" hidden><span class="studio-en">Install app</span><span class="studio-fa">نصب برنامه</span></button>
 <button id="studio-remove-offline" class="secondary"><span class="studio-en">Remove offline copy</span><span class="studio-fa">حذف نسخهٔ آفلاین</span></button>
-<p class="help studio-en">After preparation, use your browser's Install app or Add to Home screen menu. Availability depends on your browser. Offline caching saves public app code only; save your session separately.</p>
-<p class="help studio-fa" lang="fa" dir="rtl">پس از آماده‌سازی از منوی مرورگر «نصب برنامه» یا «افزودن به صفحهٔ اصلی» را انتخاب کن. این امکان به مرورگر بستگی دارد. کش آفلاین فقط کد عمومی برنامه را نگه می‌دارد؛ نشست را جدا ذخیره کن.</p>
-<p id="studio-offline-state" role="status" aria-live="polite"></p></section>'''
+<p class="help studio-en">If the install button is unavailable, use Chrome’s menu on Android or Safari’s Share → Add to Home Screen on iPhone. Offline preparation keeps the app code. Save your projects separately.</p>
+<p class="help studio-fa" lang="fa" dir="rtl">اگر دکمهٔ نصب ظاهر نشد، در اندروید از منوی Chrome و در آیفون از گزینهٔ Share ← Add to Home Screen در Safari استفاده کن. آماده‌سازی آفلاین کد برنامه را نگه می‌دارد. پروژه‌ها را جدا ذخیره کن.</p>
+<p id="studio-offline-state" role="status" aria-live="polite"></p>
+<p id="studio-install-state" role="status" aria-live="polite"></p>
+<a href="#studio-privacy"><span class="studio-en">Privacy policy</span><span class="studio-fa">سیاست حریم خصوصی</span></a>
+</section>'''
+PRIVACY = '''<section class="card" id="studio-privacy">
+<div class="studio-en"><h2>NEXUS Studio privacy policy</h2>
+<p>Studio runs in your browser, including when you install it. It requires no Studio account. Chats, drafts, source files, audio and analysis stay on your device during local use. Saving a project creates an encrypted archive in your browser profile. Exporting a backup or other file creates a copy at the location you choose.</p>
+<p>The website host receives connection and request information, such as your IP address, when you load the site. If you request public research, the selected provider receives the approved query. If you approve an online model request, the configured gateway and its model provider process the reviewed content under their own policies. An optional on-device model download contacts its file host, then performs inference on your device. Browser speech and operating-system features are subject to your device and provider settings.</p>
+<p>Use Private archive to erase the browser archive. Remove offline copy clears app code, and the device model panel can remove its downloaded model. You can also clear this site’s data in browser settings. Delete any exported copies separately. For privacy questions, contact the maintainer through the <a href="https://github.com/maghsoodsaadatmerikation-sudo/nexus/issues" target="_blank" rel="noopener noreferrer">NEXUS issue tracker</a> without sharing private content.</p></div>
+<div class="studio-fa" lang="fa" dir="rtl"><h2>سیاست حریم خصوصی نکسوس استودیو</h2>
+<p>استودیو در مرورگر اجرا می‌شود، حتی وقتی آن را نصب می‌کنی. برای استفاده به حساب نکسوس نیاز نداری. در استفادهٔ محلی، گفتگوها، پیش‌نویس‌ها، فایل‌ها، صدا و تحلیل روی دستگاه می‌مانند. ذخیرهٔ پروژه یک آرشیو رمزگذاری‌شده در پروفایل مرورگر می‌سازد. با خروجی گرفتن، یک کپی در محل انتخابی خودت ایجاد می‌شود.</p>
+<p>با باز کردن سایت، میزبان اطلاعات اتصال و درخواست، مانند IP، را دریافت می‌کند. در پژوهش عمومی، ارائه‌دهندهٔ انتخابی عبارت تأییدشده را دریافت می‌کند. اگر درخواست مدل آنلاین را تأیید کنی، درگاه انتخابی و ارائه‌دهندهٔ مدل محتوای بازبینی‌شده را طبق سیاست خود پردازش می‌کنند. مدل اختیاری روی دستگاه ابتدا از میزبان فایل دانلود می‌شود و سپس روی دستگاه اجرا می‌شود. امکانات گفتاری مرورگر تابع تنظیمات دستگاه و ارائه‌دهنده‌اند.</p>
+<p>از بخش آرشیو خصوصی می‌توانی آرشیو مرورگر را پاک کنی. حذف نسخهٔ آفلاین، کد برنامه را پاک می‌کند. پنل مدل روی دستگاه امکان حذف فایل مدل را دارد. داده‌های سایت را می‌توانی از تنظیمات مرورگر هم پاک کنی. فایل‌های خروجی را جداگانه حذف کن. برای پرسش‌های حریم خصوصی در <a href="https://github.com/maghsoodsaadatmerikation-sudo/nexus/issues" target="_blank" rel="noopener noreferrer">صفحهٔ مسائل نکسوس</a> پیام بگذار و اطلاعات خصوصی را در آن وارد نکن.</p></div>
+</section>'''
 BOOTSTRAP = r'''
 (()=>{'use strict';
 const $=id=>document.getElementById(id),base=new URL('./',location.href),prefix='nexus-studio-shell-v1-';
 const text=(en,fa)=>document.documentElement.lang==='fa'?fa:en;
+const install=$('studio-install'),installState=$('studio-install-state');
+let installPrompt=null;
+window.addEventListener('beforeinstallprompt',event=>{
+ event.preventDefault();
+ installPrompt=event;
+ install.hidden=false;
+});
+window.addEventListener('appinstalled',()=>{
+ installPrompt=null;
+ install.hidden=true;
+ installState.textContent=text('NEXUS Studio is installed.','نکسوس استودیو نصب شد.');
+});
+install.onclick=async()=>{
+ const prompt=installPrompt;
+ if(!prompt)return;
+ installPrompt=null;
+ install.hidden=true;
+ try{await prompt.prompt();await prompt.userChoice}
+ catch{installState.textContent=text('Use your browser menu to install.','برای نصب از منوی مرورگر استفاده کن.')}
+};
 const modelClick=$('check-model').onclick;
 $('check-model').onclick=function(event){if($('model-engine')?.value!=='device'&&!$('gateway').value.trim()){$('model-status').textContent=text('No model hosted here. Local guide is available.','اینجا مدلی میزبانی نمی‌شود؛ راهنمای محلی در دسترس است.');return}return modelClick.call(this,event)};
 let changing=false;
@@ -80,6 +115,7 @@ def artifacts():
     source=source.replace('<title>', '<link rel="manifest" href="./manifest.json"><meta name="theme-color" content="#185e48"><title>',1)
     source=source.replace('</style>', '.studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style>',1)
     source=source.replace('<body><main>','<body><main>'+PANEL,1)
+    source=source.replace('</main>',PRIVACY+'</main>',1)
     source=source.replace('value="2048"></details>', 'value="2048">'+(ROOT/'web/device/device-panel.html').read_text()+'</details>',1)
     source=source.replace('<label for="gateway"', '<label for="model-engine"><span class="studio-en">Model engine</span><span class="studio-fa">موتور مدل</span></label><select id="model-engine"><option value="gateway">Remote gateway / درگاه سرور</option><option value="device">On-device small model / مدل کوچک روی دستگاه</option></select><label for="gateway"',1)
     source=source.replace('</body>','<script>'+BOOTSTRAP+'</script><script type="module" src="./device/device-ui.js"></script></body>',1)

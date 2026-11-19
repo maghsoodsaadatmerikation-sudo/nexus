@@ -1,0 +1,30 @@
+plugins {
+    id 'com.android.application' version '8.13.2'
+}
+
+android {
+    namespace 'com.merikation.nexus.studio'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.merikation.nexus.studio'
+        minSdk 23
+        targetSdk 36
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix '.debug'
+            resValue 'string', 'app_name', 'NEXUS Studio Test'
+        }
+        release {
+            resValue 'string', 'app_name', 'NEXUS Studio'
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.3'
+}

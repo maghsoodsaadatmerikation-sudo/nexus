@@ -1,0 +1,64 @@
+name: NEXUS Studio Android Build
+
+on:
+  pull_request:
+    paths:
+      - 'android/**'
+      - '.github/workflows/studio-android.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/studio-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Set up the build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export ANDROID_HOME="$RUNNER_TEMP/nexus-android-sdk"
+          printf 'JAVA_HOME=%s\nANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\n' "$JAVA_HOME" "$ANDROID_HOME" "$ANDROID_HOME" >> "$GITHUB_ENV"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://services.gradle.org/distributions/gradle-8.13-bin.zip \
+            --output "$RUNNER_TEMP/gradle.zip"
+          printf '20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78  %s\n' "$RUNNER_TEMP/gradle.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip \
+            --output "$RUNNER_TEMP/android-tools.zip"
+          printf '7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee  %s\n' "$RUNNER_TEMP/android-tools.zip" | sha256sum --check
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          unzip -q "$RUNNER_TEMP/android-tools.zip" -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/16.0"
+          sdkmanager="$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager"
+          set +o pipefail
+          yes | "$sdkmanager" --sdk_root="$ANDROID_HOME" --licenses >/dev/null
+          set -o pipefail
+          "$sdkmanager" --sdk_root="$ANDROID_HOME" --install 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Build the test APK and unsigned release bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/gradle-8.13/bin/gradle" --no-daemon --project-dir android :app:lintRelease :app:assembleDebug :app:bundleRelease
+          mkdir -p "$RUNNER_TEMP/android-artifacts"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/android-artifacts/NEXUS-Studio-Test.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab "$RUNNER_TEMP/android-artifacts/NEXUS-Studio-Unsigned.aab"
+          cd "$RUNNER_TEMP/android-artifacts"
+          sha256sum NEXUS-Studio-* > SHA256SUMS
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-studio-android-candidate
+          path: ${{ runner.temp }}/android-artifacts/
+          if-no-files-found: error
