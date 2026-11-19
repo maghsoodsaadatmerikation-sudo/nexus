@@ -26,13 +26,13 @@ jobs:
           ref: ${{ github.sha }}
           path: review
           persist-credentials: false
-      - name: Checkout immutable currently-live Render source snapshot
+      - name: Checkout immutable current live Render source snapshot
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: 560badfa977f6ed1e1298388ee1ce3650ebc9daa
+          ref: e4f24218d7a3882391b593d78641d7a5ff50866d
           path: previous-live
           persist-credentials: false
-      - name: Reject ambient provider credentials and unexpected old Git commit
+      - name: Reject ambient provider credentials and unexpected live Git commit
         shell: bash
         run: |
           set -euo pipefail
@@ -40,16 +40,16 @@ jobs:
           test -z "${RAILWAY_TOKEN:-}"
           test -z "${RAILWAY_API_TOKEN:-}"
           test -z "${NEXUS_MODEL_API_KEY:-}"
-          test "$(git -C previous-live rev-parse HEAD)" = "560badfa977f6ed1e1298388ee1ce3650ebc9daa"
+          test "$(git -C previous-live rev-parse HEAD)" = "e4f24218d7a3882391b593d78641d7a5ff50866d"
           test "$(git -C review rev-parse HEAD)" = "$GITHUB_SHA"
-      - name: Verify synthetic negative cases, archive reproducibility and exact old SHA
+      - name: Verify synthetic negative cases, archive reproducibility and exact live SHA
         working-directory: review
         shell: bash
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/studio-live-source-fallback.py scripts/test-studio-live-source-fallback.py
           python3 scripts/test-studio-live-source-fallback.py
-      - name: Compare currently-live fixed public HTTPS origin to historical commit
+      - name: Compare currently-live fixed public HTTPS origin to pinned Render source
         working-directory: review
         shell: bash
         run: |
