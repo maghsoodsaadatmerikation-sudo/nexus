@@ -96,8 +96,12 @@ $('motion-pause').onclick=()=>{halt();status('Preview paused.')};
 $('motion-seek').oninput=()=>{halt();draw(valid()*Number($('motion-seek').value)/1000)};
 $('motion-import').addEventListener('change',async e=>{
  const file=e.target.files[0];e.target.value='';if(!file||recording)return;
- try{if(file.size>256000)throw Error('Project JSON exceeds 256 KB');setStory(JSON.parse(await file.text()));}
- catch(err){status('Import rejected: '+err.message,true)}
+ try{
+  if(file.size>256000)throw Error('Project JSON exceeds 256 KB');
+  setStory(JSON.parse(await file.text()));
+  status('Imported storyboard JSON: '+story.scenes.length+
+         ' scenes. Reimport the original photos and audio if referenced.');
+ }catch(err){status('Import rejected: '+err.message,true)}
 });
 $('motion-images').addEventListener('change',async e=>{
  const files=[...e.target.files];e.target.value='';if(recording)return;
