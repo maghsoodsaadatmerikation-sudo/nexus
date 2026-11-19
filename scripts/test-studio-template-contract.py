@@ -71,6 +71,7 @@ class TemplateContractTests(unittest.TestCase):
             name = f"icons/nexus-{size}.png"
             packaged = (ROOT / "public/studio" / name).read_bytes()
             self.assertEqual(packaged, (ROOT / "public" / name).read_bytes())
+            self.assertLess(len(packaged), 10_000)  # Legacy offline install gate
             self.assertEqual(len(pixel_digest(packaged, size, size)), 64)
 
     def test_public_page_leaves_the_opaque_lab_module_intact(self):

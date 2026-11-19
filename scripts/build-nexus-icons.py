@@ -41,50 +41,24 @@ def chunk(kind, data):
     return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
 
 
-def png(size, pixels, palette=None):
-    channels = 1 if palette else 3
-    stride = size * channels
-    rows = []
-    for offset in range(0, len(pixels), stride):
-        row = pixels[offset:offset+stride]
-        if palette:
-            rows.append(b"\0" + row)
-        else:
-            deltas = bytes((right - left) & 255 for left, right in zip(row, row[3:]))
-            rows.append(b"\1" + row[:3] + deltas)
-    scan = b"".join(rows)
-    header = struct.pack(">IIBBBBB", size, size, 8, 3 if palette else 2, 0, 0, 0)
-    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) +
-            (chunk(b"PLTE", palette) if palette else b"") +
+def png(size, pixels, palette):
+    scan = b"".join(b"\0" + pixels[i:i+size] for i in range(0, len(pixels), size))
+    header = struct.pack(">IIBBBBB", size, size, 8, 3, 0, 0, 0)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"PLTE", palette) +
             chunk(b"IDAT", zlib.compress(scan, 9)) + chunk(b"IEND", b""))
 
 
-def resized(indices, palette, size):
-    # Center-aligned bilinear resampling with integer weights.
-    edge = 2 * size
-    positions = [divmod(max(0, min((2*i+1)*SIZE-size, (SIZE-1)*edge)), edge) for i in range(size)]
-    rgb = [tuple(palette[index*3:index*3+3]) for index in indices]
-    result = bytearray()
-    for y, dy in positions:
-        bottom = min(y + 1, SIZE - 1)
-        for x, dx in positions:
-            right = min(x + 1, SIZE - 1)
-            upper_left, upper_right = rgb[y*SIZE+x], rgb[y*SIZE+right]
-            lower_left, lower_right = rgb[bottom*SIZE+x], rgb[bottom*SIZE+right]
-            for a, b, c, d in zip(upper_left, upper_right, lower_left, lower_right):
-                top = a*(edge-dx) + b*dx
-                base = c*(edge-dx) + d*dx
-                result.append((top*(edge-dy) + base*dy + edge*edge//2) // (edge*edge))
-    # Limit rounding precision to keep the PNG within the public pixel verifier's
-    # transport bound. Each interpolated channel changes by at most two levels.
-    return bytes(min(255, ((value + 2) // 4) * 4) for value in result)
+def scaled(indices, size):
+    # Keep the approved palette and original pixels in the larger launcher assets.
+    coordinates = [(pixel * SIZE) // size for pixel in range(size)]
+    return bytes(indices[y*SIZE+x] for y in coordinates for x in coordinates)
 
 
 def outputs():
     indices, palette = artwork()
     inline = png(SIZE, indices, palette)
-    icon192 = png(192, resized(indices, palette, 192))
-    icon512 = png(512, resized(indices, palette, 512))
+    icon192 = png(192, scaled(indices, 192), palette)
+    icon512 = png(512, scaled(indices, 512), palette)
     gateway = (ROOT / "web/index.html").read_text()
     uri = base64.b64encode(inline).decode("ascii")
     favicon = f'<link rel="icon" type="image/png" href="data:image/png;base64,{uri}" >'
