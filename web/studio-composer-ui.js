@@ -26,6 +26,73 @@ const storage=document.createElement('p');storage.id='studio-compose-storage';st
 selectLabel.append(select);row.append(selectLabel,send,save,config);
 box.append(heading,row,privacy,storage);
 $('branch-notice').after(box);
+
+/* Discover capability from a typed request; proposal only, never execute. */
+const suggestions=document.createElement('div');suggestions.id='nexus-zen-suggestions';
+for(const [cmd,en,fa] of [['/music','Music','موسیقی'],['/research','Research','پژوهش'],['/data','Files','فایل‌ها']]){
+ const b=document.createElement('button');b.type='button';b.className='secondary';b.dataset.en=en;b.dataset.fa=fa;
+ b.addEventListener('click',()=>{$('message').value=cmd+' ';$('message').dispatchEvent(new Event('input',{bubbles:true}));$('message').focus()});
+ suggestions.append(b);
+}
+box.insertBefore(suggestions,privacy);
+const offer=document.createElement('div');offer.id='nexus-zen-offer';offer.hidden=true;offer.setAttribute('role','status');box.after(offer);
+const routes=[
+ ['orchestra','orchestra-card','Orchestra & vocal','ارکستر و آواز','orchestra-prompt'],
+ ['music','music-card','Music Lab','موسیقی',null],
+ ['research','research-card','Research','پژوهش','research-query'],
+ ['data','data-card','Data analysis','تحلیل داده',null],
+ ['chart','chart-card','Charts','نمودارها',null],
+ ['code','code-card','Code','کدنویسی',null],
+ ['tasks','tasks-card','Tasks','وظایف',null],
+ ['write','canvas-card','Writing','نوشتن',null],
+ ['sources','sources-card','Sources','منابع','source-query'],
+ ['astrology','astrology-card','Astrology','اخترشناسی',null],
+ ['sky','sky-card','Sky','آسمان',null],
+ ['memory','profile-card','Memory','حافظه',null]
+];
+function intent(value){
+ const message=value.trim();
+ const slash=/^\/([a-z-]+)(?:\s|$)/i.exec(message);
+ if(slash){
+  const aliases={song:'music',vocal:'orchestra',analyze:'data',search:'research',task:'tasks'};
+  const kind=aliases[slash[1].toLowerCase()]||slash[1].toLowerCase();
+  const route=routes.find(x=>x[0]===kind);
+  return route?{route,query:message.slice(slash[0].length).trim()}:null;
+ }
+ const s=message.slice(0,340).toLocaleLowerCase();
+ if(!/(بساز|ساخت|تولید|طراحی|بنویس|تنظیم|compose|create|make|generate|write|analy[sz]e|search|find|draw|run|اجرا|بررسی|جستجو|جست‌وجو)/i.test(s))return null;
+ const kind=/(ارکستر|گروه کر|وکال|orchestra|choir|vocal)/i.test(s)?'orchestra':
+  /(آهنگ|اهنگ|موسیقی|ملودی|music|song|melody)/i.test(s)?'music':
+  /(نمودار|chart|graph)/i.test(s)?'chart':
+  /(کدنویسی|برنامه‌نویسی|code|javascript|python)/i.test(s)?'code':
+  /(csv|json|داده|فایل|dataset|spreadsheet)/i.test(s)?'data':
+  /(پژوهش|منبع علمی|research|wikipedia|crossref)/i.test(s)?'research':
+  /(داستان|متن بنویس|essay|story|draft)/i.test(s)?'write':
+  /(وظایف|task|workflow)/i.test(s)?'tasks':
+  /(چارت تولد|طالع|astrology|transit)/i.test(s)?'astrology':null;
+ const route=routes.find(x=>x[0]===kind);return route?{route,query:''}:null;
+}
+function offerTool(message){
+ const result=intent(message);
+ if(!result||!window.NexusStudioFocus?.isFocused())return false;
+ const [kind,panel,en,fa,field]=result.route;
+ offer.replaceChildren();offer.hidden=false;
+ const p=document.createElement('p');
+ p.textContent=words('Suggested: '+en+'. No data was sent and no tool was run. Review inputs before execution.',
+  'پیشنهاد: '+fa+'؛ هیچ اطلاعاتی ارسال و هیچ ابزاری اجرا نشده است. ورودی‌ها را پیش از اجرا بررسی کن.');
+ const open=document.createElement('button');open.type='button';open.textContent=words('Open '+en,'بازکردن '+fa);
+ open.addEventListener('click',()=>{
+  if(field&&result.query){
+   const input=$(field);if(input){input.value=result.query.slice(0,input.maxLength>0?input.maxLength:480);input.dispatchEvent(new Event('input',{bubbles:true}))}
+  }
+  offer.hidden=true;window.NexusStudioFocus.openPanel(panel);
+ });
+ const dismiss=document.createElement('button');dismiss.type='button';dismiss.className='secondary';
+ dismiss.textContent=words('Keep typing','ادامهٔ نوشتن');dismiss.addEventListener('click',()=>{offer.hidden=true;$('message').focus()});
+ offer.append(p,open,dismiss);
+ return true;
+}
+
 let running=false;
 function refresh(){
  const state=window.NexusStudioUI.uiStatus();
@@ -34,6 +101,7 @@ function refresh(){
  heading.textContent=words('Reply using','پاسخ با');
  box.setAttribute('aria-label',words('Conversation actions','گزینه‌های گفتگو'));
  selectLabel.setAttribute('aria-label',words('Choose how to respond','روش پاسخ را انتخاب کن'));
+ for(const b of suggestions.children)b.textContent=words(b.dataset.en,b.dataset.fa);
  for(const opt of select.options)opt.textContent=words(opt.dataset.en,opt.dataset.fa);
  send.textContent=model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
  send.disabled=!ready||!$('message').value.trim();
@@ -61,6 +129,7 @@ function refresh(){
 }
 function run(){
  if(running||send.disabled)return;
+ if(select.value==='guide'&&offerTool($('message').value))return;
  running=true;
  try{
   if(select.value==='model'){
@@ -84,12 +153,13 @@ save.addEventListener('click',()=>{
  refresh();
 });
 config.addEventListener('click',()=>{
+ document.documentElement.classList.add('nexus-chat-options-open');
  const settings=$('studio-model-settings');if(!settings)return;
  settings.open=true;
  settings.scrollIntoView({block:'nearest'});
  settings.querySelector('summary')?.focus({preventScroll:true});
 });
-select.addEventListener('change',refresh);
+select.addEventListener('change',()=>{offer.hidden=true;refresh()});
 $('message').addEventListener('input',refresh);
 $('message').addEventListener('keydown',event=>{
  if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&!event.isComposing&&
