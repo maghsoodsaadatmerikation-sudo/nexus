@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -28,7 +29,10 @@ GENERATED = {
 
 
 def run(cwd, *args, patch=None):
-    result = subprocess.run(args, cwd=cwd, input=patch, capture_output=True, timeout=60)
+    # Keep the builders' assertions enabled and their bytecode out of the patch.
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    env.pop("PYTHONOPTIMIZE", None)
+    result = subprocess.run(args, cwd=cwd, input=patch, capture_output=True, timeout=60, env=env)
     if result.returncode:
         message = (result.stderr or result.stdout).decode(errors="replace").strip()
         raise RuntimeError(f"{' '.join(args)} failed: {message[-1600:]}")
@@ -48,17 +52,26 @@ def require_base(base):
         raise RuntimeError("selected checkout must remain clean and at the audited commit")
 
 
+def require_generated_paths(checkout):
+    for path in GENERATED:
+        target = checkout / path
+        if target.is_symlink() or not target.resolve().is_relative_to(checkout):
+            raise RuntimeError(f"generated path escapes its checkout: {path}")
+
+
 def inspect(base):
     with TemporaryDirectory(prefix="nexus-studio-maintenance-") as tmp:
         checkout = Path(tmp) / "checkout"
         git(ROOT, "worktree", "add", "--quiet", "--detach", str(checkout), base)
         try:
-            for path in GENERATED:
-                target = checkout / path
-                if target.is_symlink() or not target.resolve().is_relative_to(checkout.resolve()):
-                    raise RuntimeError(f"generated path escapes its checkout: {path}")
+            require_generated_paths(checkout.resolve())
             for builder in BUILDERS:
                 run(checkout, sys.executable, f"scripts/{builder}")
+            # The static check also verifies the standalone and device packages.
+            run(checkout, sys.executable, "scripts/build-studio-static.py", "--check")
+            # Scope-check the exact bytes that will enter the patch, including
+            # any side effects from verification.
+            require_generated_paths(checkout.resolve())
             changed = []
             missing = []
             for entry in current_changes(checkout).decode().split("\0"):
@@ -73,8 +86,6 @@ def inspect(base):
                     missing.append(path)
             if missing:
                 git(checkout, "add", "--intent-to-add", "--", *missing)
-            # The static check also verifies the standalone and device packages.
-            run(checkout, sys.executable, "scripts/build-studio-static.py", "--check")
             patch = git(checkout, "diff", "--binary", "--no-ext-diff", "--no-textconv", "--no-renames", "HEAD")
             return sorted(changed), patch
         finally:
