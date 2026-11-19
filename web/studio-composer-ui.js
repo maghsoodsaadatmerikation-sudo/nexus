@@ -31,7 +31,15 @@ $('branch-notice').after(box);
 const suggestions=document.createElement('div');suggestions.id='nexus-zen-suggestions';
 for(const [cmd,en,fa] of [['/music','Music','موسیقی'],['/research','Research','پژوهش'],['/data','Files','فایل‌ها']]){
  const b=document.createElement('button');b.type='button';b.className='secondary';b.dataset.en=en;b.dataset.fa=fa;
- b.addEventListener('click',()=>{$('message').value=cmd+' ';$('message').dispatchEvent(new Event('input',{bubbles:true}));$('message').focus()});
+ b.addEventListener('click',()=>{
+  const message=$('message');
+  if(message.value.trim()){
+   // A quick action must not overwrite an unsent private draft.
+   const target=cmd==='/music'?'music-card':cmd==='/research'?'research-card':'data-card';
+   window.NexusStudioFocus?.openPanel(target);return;
+  }
+  message.value=cmd+' ';message.dispatchEvent(new Event('input',{bubbles:true}));message.focus();
+ });
  suggestions.append(b);
 }
 box.insertBefore(suggestions,privacy);
@@ -97,7 +105,8 @@ let running=false;
 function refresh(){
  const state=window.NexusStudioUI.uiStatus();
  if(!state)return;
- const model=select.value==='model',ready=state.threadReady&&!state.archived&&!state.busy;
+ const model=select.value==='model',ready=!state.busy&&(!state.threadReady||!state.archived);
+ $('message').placeholder=words('Ask NEXUS anything…','هرچه می‌خواهی از نکسوس بپرس…');
  heading.textContent=words('Reply using','پاسخ با');
  box.setAttribute('aria-label',words('Conversation actions','گزینه‌های گفتگو'));
  selectLabel.setAttribute('aria-label',words('Choose how to respond','روش پاسخ را انتخاب کن'));
@@ -130,6 +139,9 @@ function refresh(){
 function run(){
  if(running||send.disabled)return;
  if(select.value==='guide'&&offerTool($('message').value))return;
+ if(!window.NexusStudioUI.uiStatus().threadReady&&!window.NexusStudioUI.startConversation()){
+  refresh();return;
+ }
  running=true;
  try{
   if(select.value==='model'){
