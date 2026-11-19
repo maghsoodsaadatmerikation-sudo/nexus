@@ -178,9 +178,14 @@ def run(report):
     tap(SAVED_NAME,scroll=8)
     def imported():
         evidence=smoke.log_lines()
+        if "/motion/ source_file_selected=false" in evidence:
+            raise RuntimeError("Android picker did not return a document")
         if "/motion/ saf_import_rejected=true" in evidence:
             raise RuntimeError("Android Motion explicitly rejected the selected JSON")
-        return "/motion/ saf_import_ok=true" in evidence
+        if "/motion/ saf_import_unconfirmed=true" in evidence:
+            raise RuntimeError("Android picker returned, but Motion import was never validated")
+        return ("/motion/ source_file_selected=true" in evidence and
+                "/motion/ saf_import_ok=true" in evidence)
     smoke.await_true(imported,"validated WebView import completion",timeout=35)
     checks=[
         "real-Android-35-WebView-Motion-export-click",
