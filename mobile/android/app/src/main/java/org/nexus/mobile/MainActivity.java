@@ -9,6 +9,7 @@ import android.os.Build;
 import android.util.Base64;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
+import android.webkit.ConsoleMessage;
 import android.webkit.SafeBrowsingResponse;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -217,6 +218,30 @@ public final class MainActivity extends Activity {
                         view.evaluateJavascript(witness, value ->
                             Log.i("NEXUS_ANDROID_SMOKE", publicPath + " ready=" + value));
                     }
+                    // DEBUG-ONLY SAF evidence: observe success AFTER Motion itself
+                    // validates the imported file. Log only fixed public flags,
+                    // never JSON, filenames, project text, passphrases, or content.
+                    if ("/motion/".equals(page)) {
+                        String observer="(() => {"+
+                            "const status=document.getElementById('motion-status');"+
+                            "if(!status||window.__nexusSafImportObserved)return;"+
+                            "window.__nexusSafImportObserved=true;"+
+                            "let completed=false;"+
+                            "const check=()=>{if(completed)return;"+
+                            "const s=status.textContent||'';"+
+                            "if(s.startsWith('Imported storyboard JSON: 3 scenes')&&"+
+                            "document.getElementById('motion-title')?.value==='NEXUS — A Journey'&&"+
+                            "document.getElementById('motion-format')?.value==='1920x1080'&&"+
+                            "document.getElementById('motion-fps')?.value==='30'&&"+
+                            "document.querySelectorAll('#motion-scenes .scene').length===3){"+
+                            "completed=true;console.info('NEXUS_TEST_SAF_IMPORT_OK');"+
+                            "}else if(s.startsWith('Import rejected:')){"+
+                            "completed=true;console.info('NEXUS_TEST_SAF_IMPORT_REJECTED');"+
+                            "}};"+
+                            "new MutationObserver(check).observe(status,{childList:true,subtree:true,characterData:true});"+
+                            "})();";
+                        view.evaluateJavascript(observer,null);
+                    }
                 }
                 // The signed, bundled JavaScript adapter is evaluated only on
                 // the trusted local appassets origin; no remote frames exist.
@@ -230,6 +255,26 @@ public final class MainActivity extends Activity {
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
+            @Override public boolean onConsoleMessage(ConsoleMessage message) {
+                // Never forward arbitrary console messages or user-controlled
+                // content into logs. These are debug-build, fixed-signal only.
+                boolean debugging=(getApplicationInfo().flags &
+                    android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0;
+                if (debugging && web!=null && web.getUrl()!=null &&
+                    local(Uri.parse(web.getUrl())) &&
+                    "/motion/".equals(Uri.parse(web.getUrl()).getEncodedPath())) {
+                    String marker=message.message();
+                    if ("NEXUS_TEST_SAF_IMPORT_OK".equals(marker)) {
+                        Log.i("NEXUS_ANDROID_SMOKE","/motion/ saf_import_ok=true");
+                        return true;
+                    }
+                    if ("NEXUS_TEST_SAF_IMPORT_REJECTED".equals(marker)) {
+                        Log.i("NEXUS_ANDROID_SMOKE","/motion/ saf_import_rejected=true");
+                        return true;
+                    }
+                }
+                return super.onConsoleMessage(message);
+            }
             @Override public boolean onShowFileChooser(WebView view,
                     ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (selectedFiles!=null) selectedFiles.onReceiveValue(null);
