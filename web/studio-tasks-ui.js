@@ -7,9 +7,9 @@ function show(){ $('task-report').textContent=report?JSON.stringify(report,null,
 function cancel(){epoch++;runner.cancel();working=false;$('task-consent').checked=false;show()}
 function clear(){cancel();report=null;$('task-plan').value='';$('task-status').textContent='';show()}
 $('task-plan').addEventListener('input',()=>{cancel();report=null;$('task-status').textContent='';show()});
-$('task-sample').onclick=()=>{if($('task-plan').value&&!confirm(t('discard')))return;clear();$('task-plan').value=JSON.stringify({version:1,concurrency:2,jobs:[{id:'sum',input:'[2,3,5]',code:'const data=JSON.parse(input); return JSON.parse(data.input).reduce((a,b)=>a+b,0);'},{id:'count',input:'[2,3,5]',code:'return JSON.parse(JSON.parse(input).input).length;'},{id:'mean',needs:['sum','count'],code:'const d=JSON.parse(input).dependencies; return JSON.parse(d.sum)/JSON.parse(d.count);'}]},null,2)};
+$('task-sample').onclick=()=>{if($('task-plan').value&&!confirm(t('discard')))return;clear();$('task-plan').value=JSON.stringify({version:1,concurrency:2,jobs:[{id:'sum',input:'[2,3,5]',code:'const data=JSON.parse(input); return JSON.parse(data.input).reduce((a,b)=>a+b,0);'},{id:'count',input:'[2,3,5]',code:'return JSON.parse(JSON.parse(input).input).length;'},{id:'mean',needs:['sum','count'],code:'const d=JSON.parse(input).dependencies; return JSON.parse(d.sum)/JSON.parse(d.count);'}]},null,2);renderStorage()};
 $('task-run').onclick=async()=>{if(working||!$('task-consent').checked)return;const scope=++epoch;$('task-consent').checked=false;$('task-status').textContent='';try{const plan=NexusTasks.validate(JSON.parse($('task-plan').value));working=true;await runner.run(plan,{onUpdate:value=>{if(scope===epoch){report=value;show()}}})}catch{if(scope===epoch)$('task-status').textContent=t('tasksFailed')}finally{if(scope===epoch){working=false;show()}}};
 $('task-stop').onclick=()=>{runner.cancel();working=false;$('task-consent').checked=false;show()};
 $('task-export').onclick=()=>{if(report&&!working&&confirm(t('plain')))download(JSON.stringify(report,null,2),'nexus-task-report.json','application/json')};
-window.NexusTasksUI=Object.freeze({clear,cancel,render:show});show();applyLanguage();
+window.NexusTasksUI=Object.freeze({clear,cancel,render:show,hasTransientWork:()=>Boolean($('task-plan').value||report)});show();applyLanguage();
 })();

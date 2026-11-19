@@ -69,6 +69,40 @@ window.addEventListener('load',async()=>{
   await wait(()=>!NexusStudioUI.uiStatus().dirty);
   assert(!snapshot().drafts.writing&&!snapshot().lossRisk,'applied-version-and-save-remove-risk');
 
+  for(const id of ['research-query','code','code-input','chart-json','task-plan']){
+   fill(id,'PRIVATE TOOL DRAFT');
+   assert(snapshot().drafts.tools&&snapshot().lossRisk&&leave()&&
+     $('storage-tools-state').textContent===EN.storageToolsDraft,'tool-input-is-protected-'+id);
+   assert(!display().includes('PRIVATE TOOL DRAFT'),'storage-hides-tool-input-'+id);
+   fill(id,'');
+   assert(!snapshot().drafts.tools&&!leave(),'clearing-last-input-removes-warning-'+id);
+  }
+  $('task-sample').click();
+  assert(snapshot().drafts.tools&&$('storage-tools-state').textContent===EN.storageToolsDraft,
+    'programmatic-task-sample-refreshes-storage');
+  fill('task-plan','');
+  $('code-sample').click();
+  assert(snapshot().drafts.tools&&$('storage-tools-state').textContent===EN.storageToolsDraft,
+    'programmatic-code-sample-refreshes-storage');
+  fill('code','');fill('code-input','');
+
+  const dataset=new DataTransfer();
+  dataset.items.add(new File(['value\n1\n2'],'private-dataset.csv'));
+  $('data-file').files=dataset.files;$('data-file').dispatchEvent(new Event('change',{bubbles:false}));
+  assert(snapshot().drafts.tools&&leave()&&$('storage-tools-state').textContent===EN.storageToolsDraft&&
+    !display().includes('private-dataset.csv'),'temporary-file-warning-does-not-need-a-bubbling-event');
+  const beforeUnlock=confirmCount;allow=false;$('unlock').click();
+  assert(confirmCount===beforeUnlock+1&&snapshot().drafts.tools&&snapshot().archive==='encrypted-current',
+    'declined-archive-reopen-preserves-temporary-tool-work');
+  fill('project-title','Second project');const beforeProject=confirmCount;$('new-project').click();
+  assert(confirmCount===beforeProject+1&&NexusStudioUI.snapshot().projects.length===1&&snapshot().drafts.tools,
+    'declined-project-change-preserves-temporary-tool-work');
+  allow=true;$('new-project').click();
+  assert(NexusStudioUI.snapshot().projects.length===2&&!snapshot().drafts.tools,
+    'approved-project-change-clears-project-tool-work');
+  $('save').click();await wait(()=>!NexusStudioUI.uiStatus().dirty);
+
+  fill('task-plan','PRIVATE TEMPORARY PLAN');
   fill('music-title','PRIVATE MUSIC TITLE');
   assert(snapshot().drafts.music&&!snapshot().drafts.orchestra,'music-draft-appears-independently');
   assert($('storage-media-state').textContent.includes('Temporary'),'creative-work-labelled-tab-only');
@@ -81,11 +115,14 @@ window.addEventListener('load',async()=>{
   assert($('music-title').value==='PRIVATE MUSIC TITLE','declined-lock-keeps-music-draft');
   allow=true;$('lock').click();
   assert(!snapshot().lossRisk&&snapshot().archive==='tab-only','approved-lock-clears-unified-state');
+  assert(!$('task-plan').value&&!snapshot().drafts.tools&&$('storage-tools-state').textContent===EN.storageToolsNone,
+   'approved-lock-clears-tool-work-and-status');
   assert($('storage-media-state').textContent.includes('No unsaved'),'creative-state-cleared-on-lock');
 
   $('language').value='fa';$('language').dispatchEvent(new Event('change',{bubbles:true}));
   assert($('storage-center').textContent.includes('وضعیت ذخیره'),'storage-heading-localized-to-persian');
   assert($('storage-archive-state').textContent.includes('آرشیو'),'storage-detail-localized-to-persian');
+  assert($('storage-tools-state').textContent===FA.storageToolsNone,'tool-status-localized-to-persian');
   assert(document.documentElement.dir==='rtl','central-status-supports-rtl');
   assert(document.documentElement.scrollWidth<=innerWidth+2,'central-status-mobile-without-overflow');
   assert(network===0,'status-and-lock-never-call-network');

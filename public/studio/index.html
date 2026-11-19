@@ -261,6 +261,7 @@ section h2:focus, #studio-focus-tools-title:focus {outline: none;}
   <div><dt data-t="storageArchive">Projects and applied conversations</dt><dd id="storage-archive-state"></dd></div>
   <div><dt data-t="storageChat">Unsent chat and attachments</dt><dd id="storage-chat-state"></dd></div>
   <div><dt data-t="storageWriting">Writing and preferences</dt><dd id="storage-writing-state"></dd></div>
+  <div><dt data-t="storageTools">Research, code, tasks and data</dt><dd id="storage-tools-state"></dd></div>
   <div><dt data-t="storageMedia">Music and original vocals</dt><dd id="storage-media-state"></dd></div>
  </dl>
  <p class="studio-storage-risk" id="storage-risk" role="status" aria-live="polite"></p>
@@ -1350,15 +1351,19 @@ const MAX_BYTES=64000,MAX_PACKS=8,fail=()=>{throw Error('language-pack')};
 class Registry{
  #packs=new Map();
  get(code){return this.#packs.get(code)||null}
- install(raw,defaults){
+ install(raw,defaults,{optionalKeys=[]}={}){
   if(typeof raw!=='string'||new TextEncoder().encode(raw).length>MAX_BYTES)fail();
   const value=JSON.parse(raw);
   if(!value||value.schema!=='nexus.studio.locale.v1'||typeof value.code!=='string')fail();
   const code=Intl.getCanonicalLocales(value.code)[0];
   if(!code||['en','fa'].includes(code)||!['ltr','rtl'].includes(value.dir)||!value.messages||typeof value.messages!=='object'||Array.isArray(value.messages))fail();
-  if(Object.keys(value.messages).sort().join('|')!==Object.keys(defaults).sort().join('|')||Object.values(value.messages).some(s=>typeof s!=='string'||!s.trim()||s.length>1500))fail();
+  // New labels can fall back to defaults while earlier packs retain their translations.
+  const missing=Object.keys(defaults).filter(key=>!Object.hasOwn(value.messages,key));
+  if(missing.some(key=>!optionalKeys.includes(key))||
+     Object.entries(value.messages).some(([key,label])=>!Object.hasOwn(defaults,key)||
+      typeof label!=='string'||!label.trim()||label.length>1500))fail();
   if(!this.#packs.has(code)&&this.#packs.size>=MAX_PACKS)fail();
-  const pack=Object.freeze({code,dir:value.dir,messages:Object.freeze({...value.messages})});
+  const pack=Object.freeze({code,dir:value.dir,messages:Object.freeze({...defaults,...value.messages})});
   this.#packs.set(code,pack);return pack;
  }
 }
@@ -1378,8 +1383,9 @@ Object.assign(FA,{archiveDamaged:'آرشیو مرورگر آسیب‌دیده ی
 Object.assign(EN,{chatAttachments:'Attach text files to this message',chatAttachmentsHelp:'Up to four TXT, Markdown, CSV, TSV or JSON files, 128 KiB each. Only short, clearly marked excerpts enter the exact reviewed model request. This is not image/PDF understanding. The original files are not stored in chat or archive; filenames are retained with your turn. Nothing is sent until you explicitly approve the model request.',chatAttachedDocument:'Include latest saved writing document as a temporary excerpt',chatClearAttachments:'Clear attachments',chatNoFiles:'No text files attached',chatAttachmentAdded:'Local files added to next reviewed model request.',chatAttachmentInvalid:'Could not read text files; check size, format and capacity.',chatAttachmentRequiresModel:'Attached file excerpts require a configured model request; the local guide cannot read them.',chatAttachedUsed:'One-turn excerpts supplied (not verified):',chatRegenRequiresFiles:'A response grounded in temporary files cannot be regenerated from the filenames alone. Edit the user message to a new branch and attach the files again.',chatFilesNotSaved:'Files are held only in this tab and their bytes are never saved to the chat archive.'});
 Object.assign(FA,{chatAttachments:'پیوست فایل متنی برای همین پیام',chatAttachmentsHelp:'حداکثر چهار فایل TXT، Markdown، CSV، TSV یا JSON، هرکدام تا ۱۲۸ کیبی‌بایت. فقط گزیده‌های کوتاه و مشخص وارد درخواست مدل پس از بازبینی می‌شوند. تصویر و PDF تحلیل نمی‌شوند. محتوای فایل‌ها در تاریخچه یا آرشیو ذخیره نمی‌شود؛ فقط نامشان کنار پیام می‌ماند. تا تأیید صریح شما چیزی فرستاده نمی‌شود.',chatAttachedDocument:'افزودن گزیده‌ای از آخرین نسخهٔ ذخیره‌شدهٔ سند',chatClearAttachments:'پاک‌کردن پیوست‌ها',chatNoFiles:'فایل متنی پیوست نشده است',chatAttachmentAdded:'فایل‌های محلی به درخواست بعدی اضافه شدند؛ قبل از ارسال بازبینی می‌شوند.',chatAttachmentInvalid:'خواندن فایل‌های متنی انجام نشد؛ اندازه، قالب یا ظرفیت را بررسی کن.',chatAttachmentRequiresModel:'گزیدهٔ فایل‌ها فقط در درخواست مدل پیکربندی‌شده استفاده می‌شود؛ راهنمای محلی فایل را نمی‌خواند.',chatAttachedUsed:'گزیده‌های موقت ارائه‌شده (تأییدنشده):',chatRegenRequiresFiles:'پاسخ مبتنی بر فایل موقت را نمی‌توان فقط از نام فایل بازتولید کرد. پیام را در شاخهٔ تازه ویرایش کن و فایل‌ها را دوباره اضافه کن.',chatFilesNotSaved:'محتوای فایل‌ها فقط در همین برگه است و در آرشیو گفتگو ذخیره نمی‌شود.'});
 Object.assign(EN,{
- storageCenter:'Storage & unsaved work',storageHelp:'Only applied conversations, projects and document versions enter an explicitly saved encrypted browser archive. Draft text, imported files and Music/Orchestra output remain temporary. Export audio and keep an encrypted backup separately.',
+ storageCenter:'Storage & unsaved work',storageHelp:'Only applied conversations, projects and document versions enter an explicitly saved encrypted browser archive. Draft text, temporary tool work and Music/Orchestra output remain in this tab. Export audio and keep an encrypted backup separately.',
  storageArchive:'Projects and applied conversations',storageChat:'Unsent chat and attachments',storageWriting:'Writing and preferences',storageMedia:'Music and original vocals',
+ storageTools:'Research, code, tasks and data',storageToolsDraft:'Temporary tool inputs or results in this tab',storageToolsNone:'No temporary tool work',
  storageCurrent:'Encrypted browser archive up to date',storageChanged:'Applied changes not yet saved',storageLocked:'No unlocked archive; current work is tab-only',
  storageChatDraft:'Unsent message, attachment or pending request in this tab',storageChatNone:'No unsent chat draft',
  storageWritingDraft:'Unapplied document or preference changes in this tab',storageWritingNone:'No unapplied writing or preference draft',
@@ -1388,8 +1394,9 @@ Object.assign(EN,{
  storageSummaryRisk:'Unsaved work needs attention',storageSummarySafe:'No unsaved changes detected'
 });
 Object.assign(FA,{
- storageCenter:'وضعیت ذخیره‌سازی و کارهای ناتمام',storageHelp:'فقط گفتگوها، پروژه‌ها و نسخه‌های اعمال‌شدهٔ سند با ذخیرهٔ صریح وارد آرشیو رمزگذاری‌شدهٔ مرورگر می‌شوند. متن پیش‌نویس، فایل‌های ورودی و خروجی موسیقی یا ارکستر موقت‌اند. صوت را جداگانه خروجی بگیر و از آرشیو پشتیبان رمزگذاری‌شده نگه دار.',
+ storageCenter:'وضعیت ذخیره‌سازی و کارهای ناتمام',storageHelp:'فقط گفتگوها، پروژه‌ها و نسخه‌های اعمال‌شدهٔ سند با ذخیرهٔ صریح وارد آرشیو رمزگذاری‌شدهٔ مرورگر می‌شوند. پیش‌نویس‌ها، کار موقت ابزارها و خروجی موسیقی یا ارکستر در همین برگه می‌مانند. صوت را جداگانه خروجی بگیر و از آرشیو پشتیبان رمزگذاری‌شده نگه دار.',
  storageArchive:'پروژه‌ها و گفتگوهای اعمال‌شده',storageChat:'پیام و پیوست ارسال‌نشده',storageWriting:'نوشته‌ها و ترجیحات',storageMedia:'موسیقی و وکال اصلی',
+ storageTools:'پژوهش، کد، کارها و داده',storageToolsDraft:'ورودی یا نتیجهٔ موقت ابزارها در این برگه',storageToolsNone:'کار موقتی در ابزارها وجود ندارد',
  storageCurrent:'آرشیو رمزگذاری‌شدهٔ مرورگر به‌روز است',storageChanged:'تغییرات اعمال‌شده هنوز ذخیره نشده‌اند',storageLocked:'آرشیو باز نیست؛ کار فعلی فقط در این برگه است',
  storageChatDraft:'پیام، پیوست یا درخواست در انتظار فقط در این برگه است',storageChatNone:'پیش‌نویس ارسال‌نشدهٔ گفتگو وجود ندارد',
  storageWritingDraft:'سند یا ترجیحات اعمال‌نشده فقط در این برگه است',storageWritingNone:'پیش‌نویس اعمال‌نشدهٔ نوشته یا ترجیحات وجود ندارد',
@@ -1447,6 +1454,11 @@ function unsavedLocalMedia(){
  return window.NexusMusicUI?.hasTransientWork?.()===true||
   window.NexusOrchestraUI?.hasTransientWork?.()===true;
 }
+function hasToolWork(){
+ return window.NexusLabUI?.hasTransientWork?.()===true||
+  window.NexusTasksUI?.hasTransientWork?.()===true||
+  window.NexusQualityUI?.hasTransientWork?.()===true;
+}
 // Single read-only source for the visible storage center and loss-of-work guards.
 // It deliberately exposes flags only, never prompt text, original vocal bytes or keys.
 function storageSnapshot(){
@@ -1454,6 +1466,7 @@ function storageSnapshot(){
   chat:hasChatDraft()||Boolean(pending),
   writing:Boolean(editorDirty),
   preferences:Boolean(profileDirty||window.NexusAstrologyUI?.hasDraft?.()===true),
+  tools:hasToolWork(),
   music:window.NexusMusicUI?.hasTransientWork?.()===true,
   orchestra:window.NexusOrchestraUI?.hasTransientWork?.()===true
  });
@@ -1472,6 +1485,7 @@ function renderStorage(){
  $('storage-archive-state').textContent=t(state.archive==='tab-only'?'storageLocked':state.archive==='applied-unsaved'?'storageChanged':'storageCurrent');
  $('storage-chat-state').textContent=t(state.drafts.chat?'storageChatDraft':'storageChatNone');
  $('storage-writing-state').textContent=t(state.drafts.writing||state.drafts.preferences?'storageWritingDraft':'storageWritingNone');
+ $('storage-tools-state').textContent=t(state.drafts.tools?'storageToolsDraft':'storageToolsNone');
  $('storage-media-state').textContent=t(state.drafts.music||state.drafts.orchestra?'storageMediaDraft':'storageMediaNone');
  $('storage-risk').textContent=t(state.lossRisk?'storageRisk':'storageSafe');
  $('storage-center').dataset.unsaved=String(state.lossRisk);
@@ -1532,7 +1546,7 @@ function render(){
 }
 function hasChatDraft(){return Boolean($('message').value||chatAttachments.length||$('attach-document').checked)}
 function mayReplaceChat(){return !hasChatDraft()||confirm(t('discard'))}
-function mayReplace(){return (!forms()&&!hasChatDraft())||confirm(t('discard'))}
+function mayReplace(){return (!forms()&&!hasChatDraft()&&!hasToolWork())||confirm(t('discard'))}
 function clearChatDraft(){
  clearChatAttachments();$('message').value='';branchBase=undefined;$('branch-notice').textContent='';
 }
@@ -1677,7 +1691,7 @@ $('load-version').onclick=()=>{if(forms()&&!confirm(t('discard')))return;const v
 $('export-document').onclick=()=>{if(doc()&&confirm(t('plain')))download($('editor').value,'nexus-document.md','text/markdown')};
 $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+chat().title+'\n\n'+S.path(chat()).map(n=>'## '+t(n.origin==='human'?'human':n.origin==='model'?'model':'local')+'\n\n'+n.text+(n.attached_files?.length?'\n\n'+t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' — '+t('chatFilesNotSaved'):'')).join('\n\n'),'nexus-conversation.md','text/markdown')};
 $('create-vault').onclick=()=>{const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation((rev,abort)=>vault.create(pass,{signal:abort.signal}))};
-$('unlock').onclick=()=>{if((dirty||forms()||hasChatDraft())&&!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const next=await vault.unlock(pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=next;dirty=false;selectProject(data.projects[0]?.id||null);render()})};
+$('unlock').onclick=()=>{if((dirty||forms()||hasChatDraft()||hasToolWork())&&!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const next=await vault.unlock(pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=next;dirty=false;selectProject(data.projects[0]?.id||null);render()})};
 $('save').onclick=()=>{if(!noForms())return;const snapshot=S.state(data);operation(async(rev,abort)=>{await vault.save(snapshot,{signal:abort.signal});if(rev===revision)dirty=false},'saved')};
 $('lock').onclick=()=>{if(storageSnapshot().lossRisk&&!confirm(t('discard')))return;const clean=toolLifecycle('private');undoSlot.clear();stop({refresh:false});clearChatDraft();modelInfo=null;vault.lock();data=S.empty();projectId=threadId=documentId=null;dirty=profileDirty=editorDirty=false;for(const id of ['passphrase','repeat-passphrase','gateway-token','project-title','document-title','instructions','memories','editor','source-query','search'])$(id).value='';$('model-status').textContent='';$('source-results').textContent='';renderVersions();render();if(!clean)location.reload()};
 $('backup').onclick=()=>{if(!noForms())return;const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await vault.export(data,pass,{signal:abort.signal});if(rev===revision)download(raw,'nexus-studio.encrypted.json','application/json')})};
@@ -1694,7 +1708,7 @@ $('language-file').onchange=async event=>{
  if(!f||busy)return;if(f.size>NexusLocales.MAX_BYTES)return status('failed');
  const current=()=>task===languageImport&&rev===revision&&!busy;
  try{
-  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN);
+  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{optionalKeys:['storageTools','storageToolsDraft','storageToolsNone']});
   if(!$('language').querySelector('option[value="'+pack.code+'"]'))$('language').append(option(pack.code,pack.code));
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}
@@ -1715,7 +1729,9 @@ Object.assign(EN,{research:'Live research desk',researchHelp:'Only the exact que
 Object.assign(FA,{research:'میز پژوهش زنده',researchHelp:'فقط عبارت دقیق زیر مستقیماً به API عمومی انتخاب‌شده فرستاده می‌شود. گفتگو، فایل، حافظه و توکن‌ها اضافه نمی‌شوند. نتیجه‌ها سرنخ منبع‌اند، نه حقیقت تأییدشده یا نتیجه‌گیری خودکار.',researchQuery:'عبارت عمومی — حداکثر ۲۵۰ نویسه',researchProvider:'ارائه‌دهندهٔ منبع',researchLanguage:'زبان ویکی‌پدیا',researchConsent:'این عبارت دقیق را یک بار به این ارائه‌دهنده بفرست.',researchSearch:'جست‌وجوی منابع عمومی',researchStop:'لغو پژوهش',researchAdd:'نگهداری گزیده به‌عنوان منبع پروژه',researchEmpty:'منبع مطابق پیدا نشد.',researchWorking:'در حال دریافت سرنخ‌های منابع عمومی…',researchFailed:'دریافت منبع ناموفق یا مسدود شد. اتصال، دسترس‌پذیری سرویس و عبارت را بررسی کن.',researchNote:'Crossref اطلاعات کتاب‌شناختی می‌دهد، نه یافته یا متن کامل مقاله. گزیده‌های ویکی‌پدیا تابع شرایط انتساب آن هستند.',codeLab:'آزمایشگاه محلی JavaScript',codeHelp:'فقط کد و ورودی نمایش‌داده‌شده در یک Worker مرورگر با مبدأ ایزوله اجرا می‌شوند. به صفحه، آرشیو و شبکهٔ Studio دسترسی ندارد. پس از ۳ ثانیه متوقف می‌شود و خروجی تا ۶۴٬۰۰۰ بایت محدود است. سقف سخت حافظه ندارد؛ محیط Python یا سیستم‌عامل نیست. ورودی و خروجی موقت‌اند؛ برای نگهداری، خروجی را به ویرایشگر نوشته کپی کن.',codeSource:'بدنهٔ تابع JavaScript — از input به‌صورت رشته، console.log و return استفاده کن',codeInput:'فقط همین ورودی به کد داده می‌شود',codeConsent:'این کد و ورودی دقیق را یک بار محلی اجرا کن.',codeSample:'بارگذاری نمونهٔ محاسبه',codeRun:'اجرای محلی',codeStop:'توقف اجرا',codeCopy:'کپی خروجی به ویرایشگر نوشته',codeOutput:'خروجی تأییدنشدهٔ برنامهٔ محلی',codeWorking:'در حال اجرای محلی…',codeFailed:'اجرا ناموفق، لغو یا متوقف شد یا از محدودیت گذشت.',chartLab:'نمودار دادهٔ محلی',chartHelp:'JSON شامل type برابر bar یا line، عنوان title، برچسب‌های labels و مقادیر عددی values بده. حداکثر ۲۰۰ نقطه و عدد متناهی تا ±۱۰¹². رسم نمودار به مدل، ارسال داده یا اجرای کد نیاز ندارد.',chartDraw:'رسم نمودار',chartUse:'استفاده از نتیجهٔ کد',chartExport:'خروجی PNG',chartJson:'دادهٔ JSON نمودار',chartFailed:'دادهٔ نمودار معتبر نیست. نوع، تعداد برابر برچسب و مقدار و محدودیت عددی را بررسی کن.'});
 Object.assign(EN,{researchChat:'Use source excerpt in next chat',codeChat:'Use code result in next chat'});Object.assign(FA,{researchChat:'استفاده از گزیدهٔ منبع در پیام بعدی',codeChat:'استفاده از نتیجهٔ کد در پیام بعدی'});
 function cancel(){epoch++;searchController?.abort();codeController?.abort();searchController=codeController=null;run.cancel();$('research-consent').checked=false;$('code-consent').checked=false;$('research-run').disabled=false;$('code-run').disabled=false;$('research-stop').disabled=true;$('code-stop').disabled=true;$('code-status').textContent='';$('research-status').textContent=''}
-function clear(){cancel();cards=[];result=chartData=null;for(const id of ['research-query','code','code-input','chart-json'])$(id).value='';for(const id of ['research-cards','research-status','code-result','code-console','code-status'])$(id).replaceChildren();$('chart').hidden=true;$('chart').width=1;$('chart').height=1}
+const workFields=['research-query','code','code-input','chart-json'];
+function hasTransientWork(){return workFields.some(id=>$(id).value.length>0)}
+function clear(){cancel();cards=[];result=chartData=null;for(const id of workFields)$(id).value='';for(const id of ['research-cards','research-status','code-result','code-console','code-status'])$(id).replaceChildren();$('chart').hidden=true;$('chart').width=1;$('chart').height=1}
 function renderCards(){
  $('research-cards').replaceChildren();for(const card of cards){const box=el('article','');box.className='message';const link=el('a',card.title);link.href=card.url;link.target='_blank';link.rel='noopener noreferrer';box.append(link,el('p',card.kind+' · '+card.at),el('p',card.excerpt),el('p',card.license));const add=el('button',t('researchAdd'));add.disabled=!p();add.onclick=()=>{if(!p())return;const source={id:S.uid(),name:(card.engine+' · '+card.title).slice(0,160),text:L.sourceText(card)};mutate(v=>projectIn(v).sources.push(source))};const use=el('button',t('researchChat'));use.className='secondary';use.disabled=!p();use.onclick=()=>{if(p())window.NexusStudioUI?.stageChatContext((card.engine+' · '+card.title).slice(0,160),L.sourceText(card))};box.append(add,use);$('research-cards').append(box)}
 }
@@ -1727,7 +1743,7 @@ $('research-run').onclick=async()=>{
 };
 $('research-stop').onclick=cancel;
 for(const id of ['code','code-input'])$(id).addEventListener('input',()=>{cancel();result=null;$('code-result').textContent='';$('code-console').textContent=''});
-$('code-sample').onclick=()=>{if($('code').value&&!confirm(t('discard')))return;cancel();result=null;$('code-result').textContent='';$('code-console').textContent='';$('code-input').value='{"values":[3,5,2]}';$('code').value="const data = JSON.parse(input);\nconst values = data.values;\nconsole.log({count: values.length, sum: values.reduce((a,b)=>a+b, 0)});\nreturn {type:'bar', title:'Local calculation', labels: values.map((_,i)=>String(i+1)), values};"};
+$('code-sample').onclick=()=>{if($('code').value&&!confirm(t('discard')))return;cancel();result=null;$('code-result').textContent='';$('code-console').textContent='';$('code-input').value='{"values":[3,5,2]}';$('code').value="const data = JSON.parse(input);\nconst values = data.values;\nconsole.log({count: values.length, sum: values.reduce((a,b)=>a+b, 0)});\nreturn {type:'bar', title:'Local calculation', labels: values.map((_,i)=>String(i+1)), values};";renderStorage()};
 $('code-run').onclick=async()=>{
  if(!$('code-consent').checked||codeController)return;const scope=epoch,abort=new AbortController();codeController=abort;$('code-consent').checked=false;$('code-run').disabled=true;$('code-stop').disabled=false;$('code-status').textContent=t('codeWorking');$('code-console').textContent='';$('code-result').textContent='';result=null;
  try{const text=await run.run($('code').value,$('code-input').value,{signal:abort.signal,onLog:line=>{if(scope===epoch)$('code-console').textContent+=line+'\n'}});if(scope!==epoch)return;result=text;$('code-result').textContent=text;$('code-status').textContent=''}catch{if(scope===epoch)$('code-status').textContent=t('codeFailed')}finally{if(scope===epoch){codeController=null;$('code-run').disabled=false;$('code-stop').disabled=true}}
@@ -1735,11 +1751,11 @@ $('code-run').onclick=async()=>{
 $('code-stop').onclick=cancel;
 $('code-chat').onclick=()=>{if(result!==null)window.NexusStudioUI?.stageChatContext('Local code result · untrusted',result)};
 $('code-copy').onclick=()=>{if(result===null)return;if($('editor').value&&!confirm(t('discard')))return;$('editor').value=result;editorDirty=true;stop()};
-$('chart-use').onclick=()=>{if(result!==null){$('chart-json').value=result;chartData=null;$('chart').hidden=true}};
+$('chart-use').onclick=()=>{if(result!==null){$('chart-json').value=result;chartData=null;$('chart').hidden=true;renderStorage()}};
 $('chart-json').addEventListener('input',()=>{chartData=null;$('chart').hidden=true});
 $('chart-draw').onclick=()=>{try{chartData=L.draw($('chart'),JSON.parse($('chart-json').value));$('chart').hidden=false;$('chart-status').textContent=''}catch{chartData=null;$('chart').hidden=true;$('chart-status').textContent=t('chartFailed')}};
 $('chart-export').onclick=()=>{if(!chartData||!confirm(t('plain')))return;const scope=epoch,snapshot=chartData;$('chart').toBlob(blob=>{if(!blob||scope!==epoch||snapshot!==chartData)return;const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download='nexus-chart.png';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)},'image/png')};
-window.NexusLabUI=Object.freeze({cancel,clear,render:renderCards,setChart:value=>{const checked=L.chart(value);$('chart-json').value=JSON.stringify(checked);$('chart-draw').click()}});applyLanguage();
+window.NexusLabUI=Object.freeze({cancel,clear,hasTransientWork,render:renderCards,setChart:value=>{const checked=L.chart(value);$('chart-json').value=JSON.stringify(checked);$('chart-draw').click();renderStorage()}});applyLanguage();
 })();
 </script><script>'use strict';
 (function(){
@@ -1750,11 +1766,11 @@ function show(){ $('task-report').textContent=report?JSON.stringify(report,null,
 function cancel(){epoch++;runner.cancel();working=false;$('task-consent').checked=false;show()}
 function clear(){cancel();report=null;$('task-plan').value='';$('task-status').textContent='';show()}
 $('task-plan').addEventListener('input',()=>{cancel();report=null;$('task-status').textContent='';show()});
-$('task-sample').onclick=()=>{if($('task-plan').value&&!confirm(t('discard')))return;clear();$('task-plan').value=JSON.stringify({version:1,concurrency:2,jobs:[{id:'sum',input:'[2,3,5]',code:'const data=JSON.parse(input); return JSON.parse(data.input).reduce((a,b)=>a+b,0);'},{id:'count',input:'[2,3,5]',code:'return JSON.parse(JSON.parse(input).input).length;'},{id:'mean',needs:['sum','count'],code:'const d=JSON.parse(input).dependencies; return JSON.parse(d.sum)/JSON.parse(d.count);'}]},null,2)};
+$('task-sample').onclick=()=>{if($('task-plan').value&&!confirm(t('discard')))return;clear();$('task-plan').value=JSON.stringify({version:1,concurrency:2,jobs:[{id:'sum',input:'[2,3,5]',code:'const data=JSON.parse(input); return JSON.parse(data.input).reduce((a,b)=>a+b,0);'},{id:'count',input:'[2,3,5]',code:'return JSON.parse(JSON.parse(input).input).length;'},{id:'mean',needs:['sum','count'],code:'const d=JSON.parse(input).dependencies; return JSON.parse(d.sum)/JSON.parse(d.count);'}]},null,2);renderStorage()};
 $('task-run').onclick=async()=>{if(working||!$('task-consent').checked)return;const scope=++epoch;$('task-consent').checked=false;$('task-status').textContent='';try{const plan=NexusTasks.validate(JSON.parse($('task-plan').value));working=true;await runner.run(plan,{onUpdate:value=>{if(scope===epoch){report=value;show()}}})}catch{if(scope===epoch)$('task-status').textContent=t('tasksFailed')}finally{if(scope===epoch){working=false;show()}}};
 $('task-stop').onclick=()=>{runner.cancel();working=false;$('task-consent').checked=false;show()};
 $('task-export').onclick=()=>{if(report&&!working&&confirm(t('plain')))download(JSON.stringify(report,null,2),'nexus-task-report.json','application/json')};
-window.NexusTasksUI=Object.freeze({clear,cancel,render:show});show();applyLanguage();
+window.NexusTasksUI=Object.freeze({clear,cancel,render:show,hasTransientWork:()=>Boolean($('task-plan').value||report)});show();applyLanguage();
 })();
 </script><script>'use strict';
 (function() {
@@ -1850,7 +1866,7 @@ Object.assign(EN,{undoRemoval:'Undo last removal',undoDone:'Last removal restore
 Object.assign(FA,{undoRemoval:'بازگردانی آخرین حذف',undoDone:'آخرین حذف در این برگه بازگردانده شد؛ برای نگهداری، خودت ذخیره کن.',sourceNoMatch:'تطبیق واژگانی در منابع پیدا نشد.',sourceLimited:'جست‌وجو پس از ۱۲٬۰۰۰ بخش متنی متوقف شد؛ بخشی از محتوا جست‌وجو نشده است.',capabilitiesTitle:'وضعیت قابلیت‌ها و میان‌برها',shortcutsHelp:'Ctrl/Cmd+Enter در کادر پیام، با مدل پیکربندی‌شده درخواست را آماده می‌کند و در غیر این صورت راهنمای محلی را اجرا می‌کند. Ctrl/Cmd+Shift+S آرشیو باز را ذخیره می‌کند. Escape کار در انتظار را متوقف می‌کند. میان‌بر به‌تنهایی داده‌ای ارسال نمی‌کند.',capLocal:'قابل استفادهٔ محلی: تاریخچه، آرشیو رمزگذاری‌شده، نوشتهٔ نسخه‌دار، تحلیل محدود داده، نمودار، آزمایشگاه کد و محاسبهٔ آسمان.',capRemote:'پژوهش عمومی به درخواست تأییدشده و در دسترس بودن ارائه‌دهنده نیاز دارد.',capModelReady:'پیکربندی مدل بررسی شده؛ هر ارسال همچنان نیاز به بازبینی دارد.',capModelMissing:'مدل مولد فعال یا بررسی نشده است؛ راهنمای محلی مولد نیست. تولید تصویر، صدای زنده، زمان‌بندی پس‌زمینه و اقدام در برنامه‌های متصل جزو این ابزارها نیستند.',dataTitle:'تحلیل یکپارچهٔ محلی داده',dataHelp:'CSV، TSV یا آرایهٔ JSON از اشیای تخت را محلی بخوان؛ تا ۱ میبی‌بایت، ۵٬۰۰۰ ردیف و ۴۰ ستون. خلاصهٔ توصیفی، شمار دادهٔ خالی و نامعتبر، همبستگی پیرسون زوجی و تعداد یا میانگین گروه‌ها ساخته می‌شود. اعداد تقریبی‌اند و نتیجهٔ علّی نیستند. فایل و گزارش خودکار به مدل فرستاده نمی‌شوند. پیش‌نمایش تا ۱۲ گروه را نشان می‌دهد؛ خروجی JSON همهٔ گروه‌ها و نام ستون عددی انتخاب‌شده را شامل می‌شود. رقم‌های شناسه‌های صحیحِ بزرگ JSON حفظ می‌شوند؛ مقادیر ناصفری که به‌علت کوچکی به صفر تبدیل می‌شوند در خلاصهٔ عددی محاسبه نمی‌شوند.',dataFile:'مجموعه‌دادهٔ محلیِ موقت',dataSource:'یا یک منبع اعمال‌شدهٔ پروژه را انتخاب کن',dataRun:'تحلیل دادهٔ انتخاب‌شده',dataGroup:'گروه‌بندی — اختیاری',dataMetric:'ستون عددی — اختیاری',dataChart:'فرستادن دادهٔ گروه‌بندی‌شده به نمودار',dataCopy:'کپی خلاصه در سند نوشتاریِ انتخاب‌شده',dataExport:'خروجی JSON تحلیل',dataNone:'هیچ‌کدام',dataFileOption:'استفاده از فایل محلی موقت',dataWorking:'در حال تحلیل محلی…',dataDuplicateFields:"تحلیل در دسترس نیست: نام فیلدهای JSON تکراری است. در هر شیء، برای هر فیلد نامی یکتا بگذار و دوباره تلاش کن.",dataFailed:'تحلیل در دسترس نیست؛ انتخاب منبع، ساختار تخت CSV یا JSON، محدودیت عدد و نمودار و ظرفیت را بررسی کن.',dataReady:'تحلیل محلی آماده شد؛ هش منبع فقط هویت بایت‌ها را مشخص می‌کند، نه درستی داده را.',dataEmpty:'داده را انتخاب و تحلیل کن؛ فایل ارسال و کدی اجرا نمی‌شود.'});
 Object.assign(EN,{dataChat:'Use analysis summary in next chat'});Object.assign(FA,{dataChat:'استفاده از خلاصهٔ تحلیل در پیام بعدی'});
 function cancel(){epoch++}
-function resetResult(){analysis=sourceStamp=null;summary='';$('data-summary').textContent='';$('data-group').replaceChildren();$('data-metric').replaceChildren();for(const id of ['data-chart','data-copy','data-export','data-chat'])$(id).disabled=true}
+function resetResult(){analysis=sourceStamp=null;summary='';$('data-summary').textContent='';$('data-group').replaceChildren();$('data-metric').replaceChildren();for(const id of ['data-chart','data-copy','data-export','data-chat'])$(id).disabled=true;renderStorage()}
 function clear(){cancel();file=null;$('data-file').value='';$('data-source').value='';resetResult();$('data-status').textContent=''}
 function render(){
  const selected=$('data-source').value,source=p()?.sources.find(s=>s.id===sourceStamp?.id);
@@ -1888,7 +1904,7 @@ $('data-run').onclick=async()=>{
   const report=T.analyseTable(table,{name,sha,size:bytes.length});analysis={table,report};sourceStamp={project,id:source?.id||null,text:source?.text||null};
   $('data-group').replaceChildren(option('-1',t('dataNone')),...table.columns.map((name,i)=>option(String(i),name)));
   $('data-metric').replaceChildren(option('-1',t('dataNone')),...table.columns.flatMap((name,i)=>report.column_stats[i].type==='numeric'?[option(String(i),name)]:[]));
-  show();$('data-status').textContent=t('dataReady');
+  show();$('data-status').textContent=t('dataReady');renderStorage();
  }catch(error){if(scope===epoch){resetResult();$('data-status').textContent=t(error.message==='json-duplicate-key'?'dataDuplicateFields':'dataFailed')}}
 };
 $('data-group').onchange=show;$('data-metric').onchange=show;
@@ -1897,7 +1913,7 @@ $('data-copy').onclick=()=>{if(!analysis||!doc()||busy||summary.length>100000)re
 $('data-chat').onclick=()=>{if(analysis&&!busy)window.NexusStudioUI?.stageChatContext(('Data analysis · '+analysis.report.source.name).slice(0,160),summary)};
 $('data-export').onclick=()=>{if(!analysis||!confirm(t('plain')))return;const group=Number($('data-group').value),metric=Number($('data-metric').value);download(JSON.stringify({...analysis.report,...T.groupReport(analysis.table,group,metric)},null,2),'nexus-analysis.json','application/json')};
 window.addEventListener('keydown',event=>{if(event.key==='Escape'){stop();return}if(!(event.ctrlKey||event.metaKey)||event.altKey)return;if(event.key==='Enter'&&event.target===$('message')){event.preventDefault();if(busy)return;(modelInfo?.configured?$('prepare'):$('guide')).click()}if(event.shiftKey&&event.key.toLowerCase()==='s'){event.preventDefault();if(!$('save').disabled)$('save').click()}});
-window.NexusQualityUI=Object.freeze({cancel,clear,render,refreshStatus:capabilities});applyLanguage();
+window.NexusQualityUI=Object.freeze({cancel,clear,render,refreshStatus:capabilities,hasTransientWork:()=>Boolean(file||analysis)});applyLanguage();
 })();
 </script><script>/* NEXUS Studio: opt-out chat-first mobile navigation; presentation-only. */
 (()=>{'use strict';
