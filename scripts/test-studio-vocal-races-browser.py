@@ -36,6 +36,7 @@ window.addEventListener('load',async()=>{
   !$('orchestra-dry-report').textContent&&
   $('orchestra-dry-file').value===''&&$('orchestra-dry-download').disabled;
  try{
+  assert(Object.isFrozen(NexusOrchestraUI),'orchestra-public-api-frozen');
   File.prototype.arrayBuffer=function(){
    return new Promise((resolve,reject)=>pending.push({resolve,reject}));
   };
