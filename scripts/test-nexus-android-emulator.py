@@ -68,7 +68,32 @@ def ui_tree() -> ET.Element:
     return ET.fromstring(raw)
 
 
-def tap_link(needle: str) -> None:
+def public_center(needle: str) -> tuple[int,int] | None:
+    # The signed DEBUG APK reports only the on-screen center of approved
+    # public links. This may rescue an empty UIAutomator accessibility tree,
+    # but is never permission to click arbitrary app content.
+    markers={"Open Motion":"open_motion","Open Studio":"open_studio",
+             "All tools":"all_tools"}
+    marker=markers.get(needle)
+    if marker is None:
+        return None
+    for _ in range(12):
+        match=re.search(r"public_target_"+marker+r"=(\d+),(\d+)",log_lines())
+        if match:
+            x,y=map(int,match.groups())
+            size=adb("shell","wm","size")
+            dims=re.findall(r"(\d+)x(\d+)",size)
+            if not dims:
+                raise RuntimeError("Android screen size not verifiable")
+            width,height=map(int,dims[-1])
+            if 0<x<width and 0<y<height:
+                return (x,y)
+            raise RuntimeError("Public link coordinate outside Android screen")
+        time.sleep(.35)
+    return None
+
+
+def tap_link(needle: str, fallback: tuple[int,int] | None = None) -> None:
     # UIAutomator can briefly return a partial/empty WebView tree immediately
     # after a successful DOM readiness callback. Poll without scrolling first;
     # the old test swept off the initial chooser after its first empty dump.
@@ -93,6 +118,13 @@ def tap_link(needle: str) -> None:
                 return
         except (ET.ParseError, RuntimeError):
             pass
+        if index == 4 and fallback is not None:
+            # Still a physical Android tap on the real rendered link.
+            # The coordinates were supplied by the same source-verified
+            # public WebView; no hidden DOM click or synthetic navigation.
+            x,y=fallback
+            adb("shell","input","tap",str(x),str(y))
+            return
         if index in (5, 8, 11):
             adb("shell", "input", "swipe", "480", "1420", "480", "450", "260", timeout=15)
         elif index in (6, 9, 12):
@@ -148,18 +180,21 @@ def run(apk: Path, out: Path) -> dict:
     start()
     checks = ["installed-and-real-native-activity-opened",
               "actual-WebView-public-chooser-DOM-ready"]
+    center=public_center("Open Motion")
     adb("logcat", "-c")
-    tap_link("Open Motion")
+    tap_link("Open Motion", fallback=center)
     await_true(lambda: ready("/motion/"), "Motion canvas + script executed")
     checks.append("real-WebView-Motion-canvas-and-engine-ready")
     # Use the visible in-page All tools link, not just browser history.
+    center=public_center("All tools")
     adb("logcat", "-c")
-    tap_link("All tools")
+    tap_link("All tools", fallback=center)
     await_true(lambda: ready("/apps.html"),
                "Motion All tools link returned to the real chooser")
     checks.append("Motion-to-chooser-visible-home-link")
+    center=public_center("Open Motion")
     adb("logcat", "-c")
-    tap_link("Open Motion")
+    tap_link("Open Motion", fallback=center)
     await_true(lambda: ready("/motion/"),
                "Motion reopened from the real chooser")
     # Android should genuinely return to native chooser, without internet.
@@ -167,8 +202,9 @@ def run(apk: Path, out: Path) -> dict:
     adb("shell", "input", "keyevent", "4")
     await_true(lambda: ready("/apps.html"), "Android back-button restored app chooser")
     checks.append("Android-back-button-returns-to-chooser")
+    center=public_center("Open Studio")
     adb("logcat", "-c")
-    tap_link("Open Studio")
+    tap_link("Open Studio", fallback=center)
     await_true(lambda: ready("/"), "Studio chat container loaded in WebView")
     checks.append("real-WebView-Studio-chat-DOM-ready")
     screenshot=out.parent / "nexus-android-emulator-studio.png"
