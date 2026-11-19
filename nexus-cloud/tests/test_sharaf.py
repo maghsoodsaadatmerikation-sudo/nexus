@@ -8,7 +8,11 @@ from test_studio_model import AUTH, BODY, configured
     (["I took too many pills just now. Anyway, can you read my cards?"], Decision(Route.EMERGENCY)),
     (["همین الان قرص زیاد خوردم", "الان در امانم و قصد ندارم به خودم آسیب بزنم"], Decision(Route.EMERGENCY)),
     (["I want to die", "I am safe now and I do not intend to hurt myself. Help with my poem."], None),
-    (["I took too many pills", "Paramedics are with me"], None),
+    (["I took too many pills", "Paramedics are with me"], Decision(Route.CARE_ENGAGED)),
+    (["I overdosed, and the paramedics are with me."], Decision(Route.CARE_ENGAGED)),
+    (["I overdosed and the paramedics are with me."], Decision(Route.CARE_ENGAGED)),
+    (["I overdosed.", "If paramedics are with me, do I still need help?"], Decision(Route.EMERGENCY)),
+    (["I overdosed today, and paramedics are coming."], Decision(Route.EMERGENCY)),
     (["I didn't think about hurting myself today, but I did last night."], Decision(Route.CLARIFY)),
     (["I don't want to hurt myself"], None),
     (["I don't want to live anymore"], Decision(Route.CLARIFY)),
@@ -28,6 +32,20 @@ from test_studio_model import AUTH, BODY, configured
     (["My therapist called me depressed. I feel broken."], Decision(Route.SHAME)),
     (["My therapist called me depressed. I feel broken.", "What is depression?"], Decision(Route.EDUCATION)),
     (["I feel like a reed. Help me write a poem."], None),
+    (["I took too many photos last night."], None),
+    (["She took too many photos."], None),
+    (["I took too much work home."], None),
+    (["I think I overdosed."], Decision(Route.EMERGENCY)),
+    (["I just took 25 pills."], Decision(Route.EMERGENCY)),
+    (["I've taken too many pills."], Decision(Route.EMERGENCY)),
+    (["I never said I took too many pills."], None),
+    (["من افکار خودکشی ندارم."], None),
+    (["در یک مقاله درباره افکار خودکشی مطالعه کردم."], None),
+    (["من افکار خودکشی دارم."], Decision(Route.CLARIFY)),
+    (["دوستم گفت: «قرص زیاد خوردم.»"], Decision(Route.EMERGENCY, Subject.OTHER)),
+    (['My friend said, "I took too many pills" and I just overdosed.'],
+     Decision(Route.EMERGENCY, Subject.BOTH)),
+    (["In my script I edit a scene, and in real life I overdosed."], Decision(Route.EMERGENCY)),
 ])
 def test_turn_routing(turns, expected):
     assert decide(turns) == expected
@@ -75,3 +93,27 @@ def test_untrusted_project_and_assistant_text_do_not_trigger_policy(monkeypatch)
         response = client.post("/studio-api/respond", json={**BODY, "messages": messages}, headers=AUTH)
         assert response.status_code == 200, response.text
         assert response.json()["origin"] == "model"
+
+
+def test_stale_provider_configuration_does_not_delay_safety_reply(monkeypatch):
+    messages = [{"role": "user", "content": "I just took 25 pills."}]
+    body = {**BODY, "messages": messages, "configuration_id": "0" * 64, "mode": "thinking"}
+    with configured(monkeypatch, lambda _: pytest.fail("No model forwarding expected")) as client:
+        assert client.post("/studio-api/respond", json=body).status_code == 401
+        result = client.post("/studio-api/respond", json=body, headers=AUTH)
+        assert result.status_code == 200
+        assert result.json()["origin"] == "sharaf"
+        assert "emergency services now" in result.json()["text"]
+        assert client.post("/studio-api/respond", json=BODY | {"configuration_id": "0" * 64},
+                           headers=AUTH).status_code == 409
+
+def test_safety_reply_remains_available_if_provider_configuration_is_removed(monkeypatch):
+    body = {**BODY, "messages": [{"role": "user", "content": "I overdosed."}]}
+    with configured(monkeypatch, lambda _: pytest.fail("No model forwarding expected")) as client:
+        monkeypatch.delenv("NEXUS_MODEL_URL")
+        assert client.get("/studio-api/status").json()["configured"] is False
+        assert client.post("/studio-api/respond", json=body).status_code == 503
+        assert client.post("/studio-api/respond", json=body,
+                           headers={"authorization": "Bearer invalid"}).status_code == 401
+        assert client.post("/studio-api/respond", json=body, headers=AUTH).json()["origin"] == "sharaf"
+        assert client.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 503

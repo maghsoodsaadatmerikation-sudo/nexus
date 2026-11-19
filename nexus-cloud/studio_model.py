@@ -102,11 +102,12 @@ def register(app):
     @app.post("/studio-api/respond")
     async def respond(request: Request):
         c = config()
-        if c is None:
-            raise HTTPException(503, "No model provider is configured")
+        token = c[2] if c else os.getenv("NEXUS_STUDIO_TOKEN", "").strip()
         authorization_values = request.headers.getlist("authorization")
+        if len(token) < 32 or (c is None and not authorization_values):
+            raise HTTPException(503, "No model provider is configured")
         authorization = authorization_values[0] if len(authorization_values) == 1 else ""
-        if not hmac.compare_digest(authorization.encode(), ("Bearer " + c[2]).encode()):
+        if not hmac.compare_digest(authorization.encode(), ("Bearer " + token).encode()):
             raise HTTPException(401, "Studio authentication required", headers={"WWW-Authenticate": "Bearer"})
         media_values = request.headers.getlist("content-type")
         if len(media_values) != 1 or media_values[0].split(";", 1)[0].strip().lower() != "application/json":
@@ -128,18 +129,23 @@ def register(app):
                 data = Completion.model_validate_json(body)
             except ValidationError:
                 raise HTTPException(422, "Invalid consent or message context") from None
-            if data.configuration_id != configuration_id(c):
-                raise HTTPException(409, "Model configuration changed; review again")
             if data.messages[-1].role != "user":
                 raise HTTPException(422, "Final message must be from the user")
-            if data.mode != "standard" and adapter() != "deepseek":
-                raise HTTPException(422, "Execution mode is unsupported by this adapter")
             user_turns = [message.content for index, message in enumerate(data.messages)
                           if message.role == "user" and not (
                               index == 0 and len(data.messages) > 1
                               and message.content.startswith("Optional project context:\n")
                           )]
             decision = sharaf.decide(user_turns)
+            # Provider configuration controls forwarding. Safety guidance stays
+            # available after authenticated admission even if the review is stale.
+            if decision is None or decision.route not in sharaf.PRIORITY_ROUTES:
+                if c is None:
+                    raise HTTPException(503, "No model provider is configured")
+                if data.configuration_id != configuration_id(c):
+                    raise HTTPException(409, "Model configuration changed; review again")
+                if data.mode != "standard" and adapter() != "deepseek":
+                    raise HTTPException(422, "Execution mode is unsupported by this adapter")
             if decision is not None:
                 return JSONResponse(
                     {"text": sharaf.render(decision, user_turns[-1], data.locale),

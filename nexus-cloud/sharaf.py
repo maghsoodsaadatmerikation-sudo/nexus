@@ -6,12 +6,13 @@ from enum import Enum
 import re
 import unicodedata
 
-VERSION = "sharaf-0.1"
+VERSION = "sharaf-0.2"
 
 
 class Route(Enum):
     EMERGENCY = "emergency"
     CLARIFY = "safety_clarification"
+    CARE_ENGAGED = "emergency_care_engaged"
     GROUND = "grounded_support"
     MEDICATION = "medication_decision"
     ASSESSMENT = "individual_assessment"
@@ -26,6 +27,7 @@ class Route(Enum):
 class Subject(Enum):
     SELF = "self"
     OTHER = "other"
+    BOTH = "both"
 
 
 @dataclass(frozen=True)
@@ -39,25 +41,53 @@ def rule(pattern: str) -> re.Pattern[str]:
 
 
 # Keep clauses separate so a qualifier cannot hide a different current assertion.
-CLAUSE = rule(r"[.!?؟؛;\n]+|\b(?:but|however|اما|ولی)\b")
+CLAUSE = rule(
+    r"[.!?؟؛;\n]+|\b(?:but|however|اما|ولی)\b"
+    r"|(?:[,،]\s*|[\"”»]\s*(?=(?:and|و)\s))(?=(?:and\s+)?(?:i\b|in real life\b|(?:the )?paramedics\b)"
+    r"|(?:و\s+)?(?:من\s|در واقعیت\s|تیم اورژانس\s))"
+    r"|\b(?:and\s+(?=(?:the )?paramedics\b)|و\s+(?=تیم اورژانس\s))"
+)
 HISTORICAL = rule(r"\b(?:years? ago|last year|in the past|when i was a child|used to)\b|سال(?: ها)? پیش|سال گذشته|در گذشته|قبلا")
 FICTION = rule(r"\b(?:my (?:fictional )?character|in (?:my|the) (?:novel|script|story)|fictional character|translate this quote)\b|در (?:داستان|فیلمنامه)|شخصیت داستان")
 FICTION_REQUEST = rule(r"\b(?:edit|rewrite|translate|scene|dialogue)\b|ویرایش|ترجمه|دیالوگ|صحنه")
 NEGATED = rule(r"\b(?:i|he|she|they) (?:don't|do not|doesn't|won't|will not|didn't|did not|never|no longer) (?:want to |plan to |feel like |think about )?(?:kill|hurt|harm|overdose|take|die)\b|(?:نمی خوام|نمی خواهم|قصد ندارم) (?:به خودم آسیب|خودکشی)|قرص زیادی نخوردم")
 UNCERTAIN_INTENT = rule(r"\b(?:i don't know if|i am not sure if|i'm not sure if)\b|نمی (?:دونم|دانم)|مطمئن نیستم|یا نه$")
 NEGATED_INTENT = rule(r"\b(?:i|he|she|they) (?:am |is |are )?(?:not |no longer )going to (?:kill|hurt|harm)\b")
-SELF_EVENT = rule(r"\bi (?:just |already |think i )?(?:overdosed|took too (?:much|many)\b|swallowed too (?:much|many)\b|cut myself and (?:can't stop|am bleeding))|(?:قرص|دارو)(?: های)? (?:خیلی )?(?:زیاد|بیش از حد) (?:خوردم|مصرف کردم)|اوردوز کردم|اور دوز کردم")
-OTHER_EVENT = rule(r"\b(?:he|she|they|my [\w ]{1,30}) (?:just |already )?(?:overdosed|took too (?:much|many)\b|swallowed too (?:much|many)\b)|(?:دوستم|خواهرم|برادرم|همسرم).{0,40}(?:اوردوز کرد|قرص زیاد خورد)")
+MEDICINE_OBJECT = (
+    r"(?:pills?|tablets?|capsules?|meds|(?:of )?(?:my |the )?medication|"
+    r"(?:of )?(?:my |the )?(?:sertraline|lithium|fluoxetine|venlafaxine|clozapine))\b"
+)
+INGESTION = (
+    r"(?:overdosed\b|(?:took|taken|swallowed) (?:too (?:much|many)|[1-9]\d{1,2}) "
+    + MEDICINE_OBJECT + r")"
+)
+SELF_EVENT = rule(
+    r"\bi(?: have |'ve | )(?:just |already |think i |may have )?" + INGESTION
+    + r"|\bi cut myself and (?:can't stop|am bleeding)"
+    r"|(?:قرص|دارو)(?: های)? (?:خیلی )?(?:زیاد|بیش از حد) (?:خوردم|مصرف کردم)"
+    r"|(?:اوردوز|اور دوز) کردم"
+)
+DENIED_REPORT = rule(r"\bi (?:never|didn't|did not) (?:say|said|report|reported) (?:that )?i\b")
+OTHER_EVENT = rule(
+    r"\b(?:he|she|they|my [\w ]{1,30}) (?:just |already |may have )?" + INGESTION
+    + r"|(?:دوستم|خواهرم|برادرم|همسرم).{0,40}(?:اوردوز کرد|قرص زیاد خورد)"
+)
 SELF_IMMEDIATE = rule(r"\bi(?:'m| am) (?:about to|going to) (?:kill myself|end my life|hurt myself)|\bi (?:will|plan to) (?:kill myself|end my life|hurt myself).{0,32}\b(?:now|tonight|today)\b|الان می خوام (?:خودکشی کنم|به خودم آسیب بزنم)|(?:امشب|همین الان) (?:خودکشی می کنم|به خودم آسیب می زنم|خودمو می کشم)")
 OTHER_IMMEDIATE = rule(r"\b(?:he|she|they|my [\w ]{1,30}) (?:is |are )?(?:about to|going to) (?:kill (?:himself|herself|themselves)|end (?:his|her|their) life)|\bi(?:'m| am) about to (?:kill|seriously hurt) (?:him|her|them|someone)|(?:دوستم|خواهرم|برادرم|همسرم).{0,35}(?:الان|همین الان).{0,25}خودکشی")
-SELF_CONCERN = rule(r"\b(?:i want to die|i (?:don't|do not) want to live(?: anymore)?|i wish i (?:were|was) dead|i(?:'m| am| feel) suicidal|i (?:want to|might) (?:kill myself|hurt myself|end my life)|i (?:keep thinking|thought|think) about (?:suicide|killing myself|hurting myself)|i (?:can't|cannot) (?:keep myself safe|go on))\b|دلم می خواد بمیرم|دیگه نمی خوام زنده باشم|کاش (?:مرده بودم|بمیرم)|(?:فکر|افکار) خودکشی|به خودکشی فکر|نمی دونم.{0,80}به خودم آسیب|ممکنه.{0,40}به خودم آسیب")
+SELF_CONCERN = rule(r"\b(?:i want to die|i (?:don't|do not) want to live(?: anymore)?|i wish i (?:were|was) dead|i(?:'m| am| feel) suicidal|i (?:want to|might) (?:kill myself|hurt myself|end my life)|i (?:keep thinking|thought|think) about (?:suicide|killing myself|hurting myself)|i (?:can't|cannot) (?:keep myself safe|go on))\b|دلم می خواد بمیرم|دیگه نمی خوام زنده باشم|کاش (?:مرده بودم|بمیرم)|(?:فکر|افکار) خودکشی (?:دارم|می کنم)|به خودکشی فکر (?:می کنم|کردم)|نمی دونم.{0,80}به خودم آسیب|ممکنه.{0,40}به خودم آسیب")
 OTHER_CONCERN = rule(r"\b(?:he|she|they|my [\w ]{1,30}) (?:said (?:he|she|they) )?(?:wants? to die|feels? suicidal|might kill (?:himself|herself|themselves))|(?:دوستم|خواهرم|برادرم).{0,35}(?:می خواد بمیره|فکر خودکشی)")
-THIRD_PARTY_SPEECH = rule(r"\b(?:my (?:friend|partner|sister|brother)|he|she|they) (?:just )?(?:said|told me)[:, ]+[‘“\"']?(?P<speech>i\b.*)")
+THIRD_PARTY_SPEECH = rule(
+    r"\b(?:my (?:friend|partner|sister|brother)|he|she|they) (?:just )?"
+    r"(?:said|told me)[:, ]+[‘“\"']?(?P<english>i\b.*)"
+    r"|(?:دوستم|همسرم|خواهرم|برادرم|مادرم|پدرم) (?:بهم |به من )?گفت[ :،,«\"“]+(?P<persian>.+)"
+)
 TOOK_THEM = rule(r"^i (?:just |already )?took them\b")
 RECENT_NEGATED_CONCERN = rule(r"\bi (?:didn't|did not) think about (?:hurting myself|killing myself|suicide)\b")
 RECENT_CONTRAST = rule(r"^i did (?:last night|yesterday)\b")
 CURRENT = rule(r"\b(?:now|today|tonight|just now)\b|همین الان|امشب")
 SAFE_NOW = rule(r"\bi am safe now and (?:i )?(?:have no intention|do not intend|don't intend) to (?:hurt|harm) myself\b|الان در امانم و قصد ندارم به خودم آسیب بزنم")
+CARE_PREFIX = rule(r"^(?:and |now |the |و |الان )+")
+PRIORITY_ROUTES = frozenset({Route.EMERGENCY, Route.CLARIFY, Route.CARE_ENGAGED})
 PILLS = rule(r"\b(?:pills|medication|overdose|tablets)\b|(?:قرص|دارو)")
 SELF_CARE = rule(r"\b(?:paramedics|emergency clinicians|emergency doctors) (?:are with me|are treating me)\b|(?:تیم اورژانس|پزشکان اورژانس) (?:کنارم هستند|دارند درمانم می کنند)")
 OTHER_CARE = rule(r"\b(?:paramedics|emergency clinicians|emergency doctors) (?:are with|are treating) (?:them|him|her|my friend)\b|تیم اورژانس کنار دوستم است")
@@ -83,7 +113,9 @@ def decide(turns: list[str]) -> Decision | None:
     """Replay only user-authored turns from the supplied branch; keep no gateway history."""
     open_concerns: dict[Subject, Route] = {}
     recent_pills = False
+    care_engaged = None
     for turn in turns:
+        care_engaged = None
         clauses = [normalize(part) for part in CLAUSE.split(turn)]
         # A fictional frame applies to its own text. Later explicit first-person
         # disclosures in the same message still go through the checks below.
@@ -94,24 +126,26 @@ def decide(turns: list[str]) -> Decision | None:
                 continue
             if fiction_task and part.startswith(('"', '“', '«')):
                 continue
-            if HISTORICAL.search(part) and not CURRENT.search(part):
+            if (HISTORICAL.search(part) and not CURRENT.search(part)) or DENIED_REPORT.search(part):
                 continue
             if SAFE_NOW.search(part) and open_concerns.get(Subject.SELF) is Route.CLARIFY:
                 open_concerns.pop(Subject.SELF)
             report = THIRD_PARTY_SPEECH.search(part)
-            speech = report["speech"] if report else ""
-            if SELF_EVENT.search(speech) or SELF_IMMEDIATE.search(speech) or (
-                recent_pills and TOOK_THEM.search(speech)
-            ):
-                open_concerns[Subject.OTHER] = Route.EMERGENCY
-            elif (SELF_CONCERN.search(speech) and not NEGATED.search(speech)
-                  and open_concerns.get(Subject.OTHER) is not Route.EMERGENCY):
-                open_concerns[Subject.OTHER] = Route.CLARIFY
             if report:
-                part = part[:report.start("speech")]
+                speech = report[report.lastgroup]
+                if (SELF_EVENT.search(speech)
+                    or SELF_IMMEDIATE.search(speech) and not UNCERTAIN_INTENT.search(speech)
+                    or recent_pills and TOOK_THEM.search(speech)):
+                    open_concerns[Subject.OTHER] = Route.EMERGENCY
+                elif ((SELF_CONCERN.search(speech) or SELF_IMMEDIATE.search(speech))
+                      and not NEGATED.search(speech)
+                      and open_concerns.get(Subject.OTHER) is not Route.EMERGENCY):
+                    open_concerns[Subject.OTHER] = Route.CLARIFY
+                part = part[:report.start(report.lastgroup)]
+            care_statement = CARE_PREFIX.sub("", part)
             for subject, pattern in ((Subject.SELF, SELF_CARE), (Subject.OTHER, OTHER_CARE)):
-                if pattern.search(part):
-                    open_concerns.pop(subject, None)
+                if pattern.match(care_statement) and open_concerns.pop(subject, None) is not None:
+                    care_engaged = subject
             recent_contrast = (index > 0 and RECENT_CONTRAST.search(part)
                                and RECENT_NEGATED_CONCERN.search(clauses[index - 1]))
             for subject, event, immediate, concern in (
@@ -126,9 +160,13 @@ def decide(turns: list[str]) -> Decision | None:
                     open_concerns[subject] = Route.CLARIFY
         recent_pills = any(PILLS.search(part) for part in clauses)
     for route in (Route.EMERGENCY, Route.CLARIFY):
-        for subject, concern in open_concerns.items():
-            if concern is route:
-                return Decision(route, subject)
+        subjects = [subject for subject, concern in open_concerns.items() if concern is route]
+        if subjects:
+            if route is Route.EMERGENCY and len(subjects) == 2:
+                return Decision(route, Subject.BOTH)
+            return Decision(route, subjects[0])
+    if care_engaged is not None:
+        return Decision(Route.CARE_ENGAGED, care_engaged)
     current = normalize(turns[-1])
     if FICTION.search(current) and FICTION_REQUEST.search(current):
         return None
@@ -144,6 +182,10 @@ def decide(turns: list[str]) -> Decision | None:
 
 
 REPLIES = {
+    Route.CARE_ENGAGED: (
+        "Help is with you now. Tell the emergency team what happened and follow their instructions.",
+        "تیم اورژانس کنارت است. آنچه اتفاق افتاده را به تیم بگو و راهنمایی آن‌ها را دنبال کن.",
+    ),
     Route.EMERGENCY: (
         "This may be an emergency. Call your local emergency services now or ask someone nearby to call. If you can safely reach a trusted person, ask them to stay with you.",
         "ممکن است وضعیت اورژانسی باشد. همین حالا با اورژانس محل تماس بگیر یا از کسی که نزدیکت است بخواه تماس بگیرد. اگر می‌توانی با فرد امن و قابل اعتمادی تماس بگیری، از او بخواه کنارت بماند.",
@@ -191,6 +233,10 @@ REPLIES = {
 }
 
 OTHER_REPLIES = {
+    Route.CARE_ENGAGED: (
+        "Tell the emergency team what you know about what happened. Follow their instructions and give them room to help.",
+        "آنچه دربارهٔ اتفاق می‌دانی به تیم اورژانس بگو. راهنمایی آن‌ها را دنبال کن و اجازه بده کمک کنند.",
+    ),
     Route.EMERGENCY: (
         "This may be an emergency. Call emergency services where the person is, if you can, and tell them what you know. If someone nearby can safely reach them, alert that person while help is being arranged.",
         "ممکن است وضعیت اورژانسی باشد. اگر می‌توانی با اورژانس محل حضور آن فرد تماس بگیر و آنچه می‌دانی بگو. اگر کسی نزدیک اوست و می‌تواند بدون خطر به او برسد، در حین هماهنگی کمک به آن فرد هم خبر بده.",
@@ -205,5 +251,10 @@ OTHER_REPLIES = {
 def render(decision: Decision, current: str, locale: str | None) -> str:
     if locale is None:
         locale = "fa" if re.search(r"[\u0600-\u06ff]", current) else "en"
+    if decision.subject is Subject.BOTH:
+        return (
+            "Call local emergency services now. Tell them both you and another person may need urgent help and where each of you is, if you know. Ask someone nearby to help you make the call if safe.",
+            "همین حالا با اورژانس محل تماس بگیر. بگو تو و فرد دیگری ممکن است به کمک فوری نیاز داشته باشید و اگر می‌دانی، محل هر دو نفر را بگو. اگر بی‌خطر است، از کسی که نزدیکت است برای تماس کمک بگیر.",
+        )[locale == "fa"]
     table = OTHER_REPLIES if decision.subject is Subject.OTHER else REPLIES
     return table[decision.route][locale == "fa"]

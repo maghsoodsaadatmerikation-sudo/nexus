@@ -33,7 +33,10 @@ return a fixed Persian or English response without sending the transcript to
 the provider. The gateway accepts an optional `locale` of `en` or `fa` and
 otherwise detects Persian script in the latest turn. The client displays a
 policy reply as a guide response. Ordinary chat uses the existing provider
-pipeline.
+pipeline. Authenticated requests that already reach the gateway can receive
+priority safety guidance even if the provider review has become stale or the
+provider configuration disappears. Ordinary forwarding still requires a valid
+review. A client that has not configured a gateway cannot use this path.
 
 The policy replays safety cues from the submitted branch, within the client's
 existing context limits. It excludes assistant messages and Studio's separate
