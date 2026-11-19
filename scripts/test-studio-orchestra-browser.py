@@ -50,10 +50,13 @@ window.addEventListener('load',async()=>{
   v.setUint32(28,44100,true);v.setUint16(32,2,true);
   v.setUint16(34,16,true);put(36,'data');v.setUint32(40,frames*2,true);
   for(let i=0;i<frames;i++)v.setInt16(44+i*2,Math.round(2300*Math.sin(i*.12)),true);
-  const transfer=new DataTransfer();
-  transfer.items.add(new File([bytes],'my-own-voice.wav',{type:'audio/wav'}));
-  $('orchestra-dry-file').files=transfer.files;
-  $('orchestra-dry-file').dispatchEvent(new Event('change',{bubbles:true}));
+  function loadVoice(){
+   const transfer=new DataTransfer();
+   transfer.items.add(new File([bytes],'my-own-voice.wav',{type:'audio/wav'}));
+   $('orchestra-dry-file').files=transfer.files;
+   $('orchestra-dry-file').dispatchEvent(new Event('change',{bubbles:true}));
+  }
+  loadVoice();
   await wait(()=>NexusOrchestraUI.hasOriginalVocal());
   assert($('orchestra-dry-play').src.startsWith('blob:'),'user-own-voice-local-only');
   assert($('orchestra-dry-play').playbackRate===1,'dry-original-playback-normal-rate');
@@ -88,11 +91,28 @@ window.addEventListener('load',async()=>{
   $('orchestra-dry-clear').click();
   assert(!NexusOrchestraUI.hasOriginalVocal(),'clear-removes-voice-from-tab');
   assert($('orchestra-dry-download').disabled,'no-private-voice-export-after-clear');
+  const originalRead=File.prototype.arrayBuffer;
+  let finishRead;
+  File.prototype.arrayBuffer=()=>new Promise(resolve=>{finishRead=resolve});
+  loadVoice();
+  assert(typeof finishRead==='function','pending-vocal-read-started');$('orchestra-dry-clear').click();finishRead(bytes.buffer);
+  await new Promise(resolve=>setTimeout(resolve,80));
+  File.prototype.arrayBuffer=originalRead;
+  assert(!NexusOrchestraUI.hasOriginalVocal(),'late-vocal-read-cannot-restore-cleared-audio');
   $('orchestra-prompt').value='opera rap impossible word';
   $('orchestra-prompt').dispatchEvent(new Event('input',{bubbles:true}));
   $('orchestra-parse').click();
   assert($('orchestra-compose').disabled,'unsupported-instructions-are-not-silently-guessed');
   assert(!NexusOrchestraUI.hasScore(),'editing-prompt-revokes-old-score');
+  loadVoice();
+  await wait(()=>NexusOrchestraUI.hasOriginalVocal());
+  $('music-title').value='Private draft title';$('music-build').click();
+  assert(NexusMusicUI.hasScore(),'music-score-ready-before-lock');
+  $('lock').click();
+  assert(!NexusOrchestraUI.hasOriginalVocal()&&!$('orchestra-prompt').value
+         &&!$('orchestra-dry-play').hasAttribute('src'),'lock-clears-private-orchestra-input');
+  assert(!NexusMusicUI.hasScore()&&$('music-title').value!=='Private draft title',
+         'lock-clears-temporary-music');
   assert(networkCalls===0,'all-actions-offline');
   $('nexus-browser-result').textContent=JSON.stringify({
    status:'PASS',checks,networkCalls,dry_file_untouched:true,source:'offline-orchestra'});

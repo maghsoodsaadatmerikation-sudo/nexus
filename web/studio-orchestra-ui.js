@@ -143,7 +143,7 @@ $('orchestra-exclude-lead').addEventListener('change',()=>{
     'حالت موسیقی همراه تغییر کرد؛ قطعه را دوباره به صدا تبدیل کن.');
 });
 function clearDry(){
- clearMixed();
+ ticket++;clearMixed();
  $('orchestra-play').pause();$('orchestra-dry-play').pause();
  if(dryUrl)URL.revokeObjectURL(dryUrl);dryUrl=null;dryBytes=null;dryInfo=null;
  $('orchestra-dry-play').removeAttribute('src');$('orchestra-dry-play').load();
@@ -158,7 +158,7 @@ $('orchestra-dry-file').addEventListener('change',async()=>{
  if(rendering)return;
  const file=$('orchestra-dry-file').files[0];clearDry();
  if(!file)return;
- const id=++ticket;
+ const id=ticket;
  try{
   if(file.size>20*1024*1024||file.size<48)throw Error('file-size');
   const bytes=new Uint8Array(await file.arrayBuffer());
@@ -184,7 +184,7 @@ $('orchestra-dry-file').addEventListener('change',async()=>{
          'وکال اصلی بدون هیچ دستکاری در همین دستگاه بارگذاری شد.');
   if(wav&&!aligned())status('Sample rates differ. Re-render backing after importing your voice.',
     'نرخ نمونه‌برداری دو صدا متفاوت است؛ موسیقی را پس از وارد کردن وکال دوباره تولید کن.');
- }catch{status('Dry vocal rejected: use a local PCM 16-bit WAV (22.05/44.1 kHz; 20 MiB max).',
+ }catch{if(id!==ticket)return;status('Dry vocal rejected: use a local PCM 16-bit WAV (22.05/44.1 kHz; 20 MiB max).',
      'فایل وکال پذیرفته نشد؛ WAV خام ۱۶ بیتی با نرخ ۲۲ یا ۴۴ کیلوهرتز، حداکثر ۲۰ مگابایت لازم است.')}
  buttons();
 });
@@ -193,14 +193,15 @@ $('orchestra-dry-download').addEventListener('click',()=>{
 });
 $('orchestra-together').addEventListener('click',async()=>{
  if(!wav||!dryBytes||rendering)return;
- const backing=$('orchestra-play'),original=$('orchestra-dry-play');
+ const playback=ticket,backing=$('orchestra-play'),original=$('orchestra-dry-play');
  backing.pause();original.pause();backing.currentTime=0;original.currentTime=0;
  backing.playbackRate=1;original.playbackRate=1;
  try{
   await Promise.all([backing.play(),original.play()]);
+  if(playback!==ticket)return;
   status('Playing original vocal and synthesized backing at normal speed. Timing is approximate.',
    'وکال اصلی و موسیقی همراه با سرعت طبیعی پخش می‌شوند؛ همگام‌سازی تقریبی است.');
- }catch{fail()}
+ }catch{if(playback!==ticket)return;backing.pause();original.pause();fail()}
 });
 for(const id of ['orchestra-offset','orchestra-dry-gain','orchestra-backing-gain']){
  $(id).addEventListener('change',()=>{
@@ -253,11 +254,15 @@ $('orchestra-mix').addEventListener('click',async()=>{
 $('orchestra-mix-download').addEventListener('click',()=>{
  if(mixWav&&!rendering)download(mixWav,'aligned-mix.wav','audio/wav');
 });
-window.addEventListener('pagehide',()=>{ticket++;clearWav();clearDry()});
+function clearSession(){
+ invalidate();clearDry();
+ $('orchestra-prompt').value='';$('orchestra-status').textContent='';
+}
+window.addEventListener('pagehide',()=>{rendering=false;mixing=false;clearWav();clearDry()});
 window.NexusOrchestraUI=Object.freeze({
  hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
  hasOriginalVocal:()=>Boolean(dryBytes),hasMixedWav:()=>Boolean(mixWav),
- getMixReport:()=>mixReport,clear:()=>{invalidate();clearDry()}
+ getMixReport:()=>mixReport,clear:clearSession
 });
 status('Enter a supported prompt and preview the parsed plan.',
   'دستور موسیقی را بنویس و طرح شناسایی‌شده را بازبینی کن.');

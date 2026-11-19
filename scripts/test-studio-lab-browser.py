@@ -24,6 +24,13 @@ window.addEventListener('load',async()=>{
   $('research-cards').querySelector('button').click();assert(snapshot().projects[0].sources[0].text.includes('https://en.wikipedia.org/?curid=42')&&snapshot().projects[0].sources[0].text.includes('Query: explicit public query'),'keeping-source-is-explicit-and-provenanced');
   $('research-consent').checked=true;fill('research-query','new query');assert(!$('research-consent').checked,'query-change-revokes-consent');
   late=true;$('research-consent').checked=true;$('research-run').click();await wait(()=>release);fill('research-query','different query');release();await new Promise(r=>setTimeout(r,40));assert(!$('research-cards').children.length,'late-research-result-discarded');late=false;
+  release=null;late=true;$('research-consent').checked=true;$('research-run').click();await wait(()=>release);
+  fill('code','return 8;');assert(!$('research-stop').disabled,'editing-code-keeps-approved-research-running');
+  release();await wait(()=>$('research-cards').children.length===1);late=false;
+  fill('code','await new Promise(r=>setTimeout(r,120));return 8;');$('code-consent').checked=true;$('code-run').click();
+  fill('research-query','independent new query');
+  await wait(()=>$('code-result').textContent==='8');assert(!$('code-run').disabled,'editing-research-keeps-approved-code-running');
+  fill('code','');
   $('research-provider').value='crossref';$('research-provider').dispatchEvent(new Event('change'));$('research-consent').checked=true;$('research-run').click();await wait(()=>$('research-cards').children.length===1);assert($('research-cards').textContent.includes('bibliographic-metadata-only'),'article-metadata-not-claimed-full-text');
   $('code-sample').click();$('code-run').click();assert(!$('code-result').textContent,'no-code-execution-without-consent');$('code-consent').checked=true;$('code-run').click();await wait(()=>$('code-result').textContent.includes('Local calculation'));assert($('code-console').textContent.includes('sum'),'local-code-really-computes');
   $('chart-use').click();$('chart-draw').click();assert(!$('chart').hidden&&$('chart').width===1200,'code-result-renders-chart');const color=$('chart').getContext('2d').getImageData(600,200,1,1).data;assert(color[1]>color[0]&&color[3]===255,'chart-has-rendered-data-pixels');

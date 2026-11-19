@@ -162,8 +162,9 @@ for(const [key,value] of Object.entries({
  const node=$('music-'+key);if(node.type==='checkbox')node.checked=value;else node.value=String(value)
 }
 $('music-lock-motif').checked=true;
-document.addEventListener('nexus-music-clear',()=>{invalidate();$('music-title').value='Untitled journey'});
-window.addEventListener('pagehide',()=>{revision++;resetAudio()});
+function clearSession(){invalidate();$('music-title').value=sample.title}
+document.addEventListener('nexus-music-clear',clearSession);
+window.addEventListener('pagehide',()=>{revision++;working=false;resetAudio()});
 out(txt('ready'));buttons();
-window.NexusMusicUI=Object.freeze({clear:invalidate,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav)});
+window.NexusMusicUI=Object.freeze({clear:clearSession,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav)});
 })();
