@@ -88,7 +88,8 @@ class MobileKitTests(unittest.TestCase):
         self.assertIn('href="#tools"', page)
         self.assertIn('id="tools" aria-label="NEXUS tools"', page)
         self.assertIn('aria-labelledby="start-title"', page)
-        self.assertIn('role=', page.replace('aria-label=', 'role='))
+        self.assertIn('<details><summary>', page)
+        self.assertIn('class="card primary" href="./"', page)
         for target in ('./', './motion/', './device-check.html'):
             self.assertEqual(page.count('href="' + target + '"'), 1)
         self.assertIn('Open Studio', page)
