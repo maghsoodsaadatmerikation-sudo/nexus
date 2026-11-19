@@ -1,11 +1,12 @@
 /* Reviewed public Studio application code only; model bytes use a separate opt-in cache. */
 'use strict';
-const EXPECTED_SHA256='15b134ad291e7757d00a677677b9053991b2ffbdc3fd0b8dd8541d2f550fe751';
-const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'b1ea00469746b325';
+const EXPECTED_SHA256='9d554365b853ef0f4f98f886dc0285d06926424cf8a8ac2089ade02bcf6cbc5f';
+const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'d2dd0364aa0f3111';
 const ENTRY=new URL('./',self.location.href).href;
-const HTML={url:ENTRY,bytes:459846,sha256:EXPECTED_SHA256,kind:'html'};
+const HTML={url:ENTRY,bytes:460108,sha256:EXPECTED_SHA256,kind:'html'};
 const CODE=[{"path":"device/device-engine.js","bytes":5332,"sha256":"aa7efe4d708f854ca35ff863edb602da7a9fb164d62e427c6521ddbd957e9175","kind":"javascript"},{"path":"device/device-ui.js","bytes":8683,"sha256":"08343f58bb01d1f26d37f55e1d3842e7f2fd22a02b23f8cfa4b7b7a2583192cd","kind":"javascript"},{"path":"device/device-worker.js","bytes":7863,"sha256":"a2b396fb0fe7a4411ba8a4e678b6c4f79bfc0eed673e1712f445baa8a9c60e85","kind":"javascript"},{"path":"device/model-manifest.json","bytes":3196,"sha256":"49353c4a16f7912fd4251b6d048923fd41d2819f9fab2faf5bfbccab9a7e3983","kind":"json"}].map(a=>({...a,url:new URL(a.path,ENTRY).href}));
-const NETWORK_DEADLINE_MS=8000;
+const ASSETS=[HTML,...CODE],NETWORK_DEADLINE_MS=8000;
+let preparing=null,removing=null,discarded=false;
 async function verified(response,asset=HTML){
  if(!response||response.status!==200||response.redirected||response.type!=='basic'||!response.body)return false;
  const mime=(response.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
@@ -37,27 +38,77 @@ async function fetchVerified(request,asset,options={}){
   if(await verified(response,asset))return response;
  }catch{}finally{clearTimeout(timer)}
  controller.abort();
- if(response?.body)void response.body.cancel().catch(()=>{});
+ releaseBody(response);
  return null;
 }
+function releaseBody(response){if(response?.body)void response.body.cancel().catch(()=>{})}
+async function cachedAsset(asset){
+ let response;
+ try{
+  response=await caches.match(asset.url,{cacheName:CACHE});
+  if(await verified(response,asset))return response;
+ }catch{}
+ releaseBody(response);
+ return null;
+}
+async function hasShell(){
+ for(const asset of ASSETS){
+  const response=await cachedAsset(asset);
+  if(!response)return false;
+  releaseBody(response);
+ }
+ return true;
+}
 async function cacheShell(){
- const assets=[HTML,...CODE];
- const responses=await Promise.all(assets.map(asset=>fetchVerified(
+ const responses=await Promise.all(ASSETS.map(asset=>fetchVerified(
   asset.url,asset,{cache:'no-store',credentials:'omit',redirect:'error'}
  )));
- if(responses.some(response=>!response)){
-  for(const response of responses)if(response?.body)void response.body.cancel().catch(()=>{});
+ if(discarded||responses.some(response=>!response)){
+  responses.forEach(releaseBody);
   throw Error('studio-integrity-mismatch');
  }
  const cache=await caches.open(CACHE);
- for(const [index,asset] of assets.entries())await cache.put(asset.url,responses[index]);
+ for(const [index,asset] of ASSETS.entries())await cache.put(asset.url,responses[index]);
 }
-self.addEventListener('install',event=>event.waitUntil((async()=>{await cacheShell();await self.skipWaiting()})()));
-self.addEventListener('message',event=>{if(event.data?.type!=='refresh-public-shell'||!event.ports[0])return;event.waitUntil(cacheShell().then(()=>event.ports[0].postMessage({ok:true}),()=>event.ports[0].postMessage({ok:false})))});
+async function ensureShell(){
+ if(discarded)throw Error('studio-offline-disabled');
+ if(!preparing)preparing=(async()=>{if(!await hasShell())await cacheShell()})().finally(()=>{preparing=null});
+ await preparing;
+ if(discarded)throw Error('studio-offline-disabled');
+}
+async function discardShell(){
+ discarded=true;
+ if(!removing)removing=(async()=>{
+  if(preparing)await preparing.catch(()=>{});
+  await caches.delete(CACHE);
+ })().finally(()=>{removing=null});
+ await removing;
+}
+async function refreshShell(reopen){
+ if(removing)throw Error('studio-removal-in-progress');
+ if(reopen)discarded=false;
+ await ensureShell();
+}
+self.addEventListener('install',event=>event.waitUntil((async()=>{await ensureShell();await self.skipWaiting()})()));
+self.addEventListener('message',event=>{
+ const port=event.ports[0];
+ if(!port)return;
+ const type=event.data?.type;
+ const action=type==='refresh-public-shell'?()=>refreshShell(event.data.reopen===true):type==='discard-public-shell'?discardShell:null;
+ if(action)event.waitUntil(action().then(()=>port.postMessage({ok:true}),()=>port.postMessage({ok:false})));
+});
 self.addEventListener('activate',event=>event.waitUntil((async()=>{await Promise.all((await caches.keys()).filter(n=>n.startsWith(PREFIX)&&n!==CACHE).map(n=>caches.delete(n)));await self.clients.claim()})()));
 self.addEventListener('fetch',event=>{
  const request=event.request,url=new URL(request.url),entry=new URL(ENTRY);
- if(request.method!=='GET'||url.origin!==entry.origin||url.search)return;
- const asset=CODE.find(a=>a.url===url.href)||(request.mode==='navigate'&&[entry.pathname,entry.pathname+'index.html'].includes(url.pathname)?HTML:null);if(!asset)return;
- event.respondWith((async()=>{const online=await fetchVerified(request,asset);if(online)return online;const cache=await caches.open(CACHE),response=await cache.match(asset.url);try{if(await verified(response,asset))return response}catch{}if(response?.body)void response.body.cancel().catch(()=>{});return new Response('Studio offline code is unavailable. Reconnect and retry.',{status:503,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}})})());
+ if(discarded||request.method!=='GET'||url.origin!==entry.origin)return;
+ const isEntry=request.mode==='navigate'&&[entry.pathname,entry.pathname+'index.html'].includes(url.pathname);
+ const asset=isEntry?HTML:!url.search?CODE.find(a=>a.url===url.href):null;
+ if(!asset)return;
+ event.respondWith((async()=>{
+  const online=await fetchVerified(request,asset);
+  if(online)return online;
+  const cached=await cachedAsset(asset);
+  if(cached)return cached;
+  return new Response('Studio offline code is unavailable. Reconnect and retry.',{status:503,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}});
+ })());
 });

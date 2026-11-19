@@ -7,19 +7,24 @@ const worker=await readFile(new URL('../public/studio/service-worker.js',import.
 const html=await readFile(new URL('../public/studio/index.html',import.meta.url));
 const handlers=new Map();
 const cachedResponse=response([html]);
-let nextFetch,cacheOpens=0;
+const cacheEntries=new Map();
+let nextFetch,cacheOpens=0,cacheWrites=0;
 const sandbox={
  self:{location:{href:'https://studio.example/service-worker.js'},addEventListener:(type,handler)=>handlers.set(type,handler)},
- caches:{open:async()=>{cacheOpens++;return {match:async()=>cachedResponse}}},
+ caches:{
+  match:async url=>cacheEntries.get(url),
+  open:async()=>{cacheOpens++;return {put:async(url,value)=>{cacheWrites++;cacheEntries.set(url,value)}}},
+  delete:async()=>{cacheEntries.clear();return true},
+ },
  crypto:webcrypto, URL, Uint8Array, Response, AbortController,
  fetch:(request,options)=>nextFetch(request,options), setTimeout, clearTimeout,
 };
-const {verified,fetchVerified}=runInNewContext(worker+'\n({verified,fetchVerified})',sandbox);
+const {verified,fetchVerified,ensureShell,discardShell}=runInNewContext(worker+'\n({verified,fetchVerified,ensureShell,discardShell})',sandbox);
 
-function response(chunks){
+function response(chunks,type='text/html'){
  const counts={reads:0,readerCancelled:0,bodyCancelled:0};
  return {
-  type:'basic',status:200,redirected:false,headers:new Headers({'content-type':'text/html'}),
+  type:'basic',status:200,redirected:false,headers:new Headers({'content-type':type}),
   body:{cancel:async()=>{counts.bodyCancelled++}},counts,
   clone:()=>({body:{getReader:()=>{
    let index=0;
@@ -48,6 +53,20 @@ handlers.get('install')({waitUntil:value=>{installation=value}});
 await assert.rejects(installation,/studio-integrity-mismatch/);
 assert.equal(cacheOpens,0);
 
+const root='https://studio.example/';
+cacheEntries.set(root,cachedResponse);
+const fetchAssets=new Map([[root,[html,'text/html']]]);
+for(const path of ['device-engine.js','device-ui.js','device-worker.js','model-manifest.json']){
+ const bytes=await readFile(new URL('../public/studio/device/'+path,import.meta.url));
+ const url=root+'device/'+path,type=path.endsWith('.js')?'text/javascript':'application/json';
+ fetchAssets.set(url,[bytes,type]);cacheEntries.set(url,response([bytes],type));
+}
+let network=0;
+nextFetch=async()=>{network++;throw new Error('offline')};
+await ensureShell();
+assert.equal(network,0);
+assert.equal(cacheOpens,0);
+
 let requestedTimeout;
 sandbox.setTimeout=(run,ms)=>{requestedTimeout=ms;queueMicrotask(run);return 0};
 sandbox.clearTimeout=()=>{};
@@ -56,9 +75,52 @@ nextFetch=(_,options)=>new Promise((resolve,reject)=>{
 });
 let delivery;
 handlers.get('fetch')({
- request:{method:'GET',mode:'navigate',url:'https://studio.example/'},
+ request:{method:'GET',mode:'navigate',url:root+'?offline=1'},
  respondWith:value=>{delivery=value},
 });
 assert.equal(await delivery,cachedResponse);
 assert.equal(requestedTimeout,8000);
-console.log('STUDIO WORKER: verified bounded streaming and offline fallback');
+assert.equal(cacheOpens,0);
+cacheEntries.clear();
+delivery=undefined;
+handlers.get('fetch')({
+ request:{method:'GET',mode:'navigate',url:root},
+ respondWith:value=>{delivery=value},
+});
+assert.equal((await delivery).status,503);
+assert.equal(cacheOpens,0);
+
+sandbox.setTimeout=setTimeout;
+sandbox.clearTimeout=clearTimeout;
+let release;
+const pause=new Promise(resolve=>{release=resolve});
+network=0;
+nextFetch=async url=>{
+ network++;
+ await pause;
+ const [bytes,type]=fetchAssets.get(url);
+ return response([bytes],type);
+};
+const preparation=ensureShell(),duplicate=ensureShell();
+while(network<fetchAssets.size)await new Promise(setImmediate);
+const removal=discardShell();
+release();
+const result=await Promise.allSettled([preparation,duplicate,removal]);
+assert.deepEqual(result.map(item=>item.status),['rejected','rejected','fulfilled']);
+assert.equal(network,fetchAssets.size);
+assert.equal(cacheWrites,0);
+assert.equal(cacheOpens,0);
+assert.equal(cacheEntries.size,0);
+await assert.rejects(ensureShell(),/disabled/);
+nextFetch=async url=>{const [bytes,type]=fetchAssets.get(url);return response([bytes],type)};
+let reply,refresh;
+handlers.get('message')({
+ data:{type:'refresh-public-shell',reopen:true},
+ ports:[{postMessage:value=>{reply=value}}],
+ waitUntil:value=>{refresh=value},
+});
+await refresh;
+assert.equal(reply.ok,true);
+assert.equal(cacheWrites,fetchAssets.size);
+assert.equal(cacheEntries.size,fetchAssets.size);
+console.log('STUDIO WORKER: verified bounded downloads, offline recheck, query fallback and safe removal');
