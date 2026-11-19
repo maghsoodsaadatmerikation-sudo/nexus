@@ -1286,7 +1286,7 @@ class Sandbox{
    const abort=()=>finish(Error('cancelled'));
    const receive=event=>{if(event.source!==frame.contentWindow||event.data?.nonce!==nonce||event.origin!=='null')return;const m=event.data;if(m.kind==='ready'){if(started)return;started=true;clearTimeout(timeout);timeout=setTimeout(()=>finish(Error('execution-timeout')),3000);frame.contentWindow.postMessage({kind:'nexus-lab-start',nonce,code,input},'*');return}if(typeof m.text!=='string'||enc.encode(m.text).length>64000)return finish(Error('output-limit'));if(m.kind==='log')onLog(m.text);else if(m.kind==='result')finish(null,m.text);else if(m.kind==='error')finish(Error(m.text))};
    this.current={finish};window.addEventListener('message',receive);signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)return abort();
-   frame.srcdoc='<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;unsafe-inline&#39;; worker-src 'self' blob:; connect-src &#39;none&#39;; child-src &#39;none&#39;; base-uri &#39;none&#39;; form-action &#39;none&#39;"><script>('+frameRuntime.toString()+')('+JSON.stringify(nonce)+')'+'<'+'/script>';
+   frame.srcdoc='<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;unsafe-inline&#39;; worker-src blob:; connect-src &#39;none&#39;; child-src &#39;none&#39;; base-uri &#39;none&#39;; form-action &#39;none&#39;"><script>('+frameRuntime.toString()+')('+JSON.stringify(nonce)+')'+'<'+'/script>';
    timeout=setTimeout(()=>finish(Error('sandbox-start-timeout')),6000);document.body.append(frame);
   });
  }

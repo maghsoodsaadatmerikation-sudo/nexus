@@ -45,7 +45,7 @@ class TemplateContractTests(unittest.TestCase):
     def test_public_shell_fails_closed_if_integration_anchor_is_missing_or_duplicated(self):
         source = (ROOT / "web/studio.html").read_text()
         panel = (ROOT / "web/device/device-panel.html").read_text()
-        for anchor in ("script-src 'unsafe-inline'", "worker-src blob:",
+        for anchor in ("script-src 'unsafe-inline'", "frame-src 'self' blob:; worker-src blob:",
                        "img-src 'none'", "<title>", "</style>", "</header>",
                        "</main>", 'value="2048"></details>',
                        '<label for="gateway"', "</body>"):
@@ -57,6 +57,14 @@ class TemplateContractTests(unittest.TestCase):
                 changed = source + anchor
                 with self.assertRaises(ValueError):
                     static_builder.render_public_shell(changed, panel)
+
+    def test_public_page_leaves_the_opaque_lab_module_intact(self):
+        compiled = static_builder.render_public_shell(
+            (ROOT / "web/studio.html").read_text(),
+            (ROOT / "web/device/device-panel.html").read_text(),
+        )
+        self.assertIn(b"frame-src 'self' blob:; worker-src 'self' blob:", compiled)
+        self.assertIn((ROOT / "web/studio-lab.js").read_bytes(), compiled)
 
     def test_worker_template_tokens_must_remain_unique(self):
         for token in ("__DIGEST__", "__INDEX_BYTES__", "__CODE_ASSETS__", "__PACKAGE_ID__"):

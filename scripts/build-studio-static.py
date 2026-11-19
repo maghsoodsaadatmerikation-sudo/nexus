@@ -111,8 +111,10 @@ self.addEventListener('fetch',event=>{
 def render_public_shell(source: str, device_panel: str) -> bytes:
     """Assemble the public shell; refuse missing or duplicated integration slots."""
     source=replace_exact(source, "script-src 'unsafe-inline'", "script-src 'self' blob: 'unsafe-inline' 'wasm-unsafe-eval'")
-    # Two distinct CSP declarations currently embed worker-src.
-    source=replace_exact(source, "worker-src blob:", "worker-src 'self' blob:", expected=2)
+    # Enable the public device worker in the page policy. The lab's srcdoc
+    # keeps its independent opaque-origin, blob-only worker policy.
+    source=replace_exact(source, "frame-src 'self' blob:; worker-src blob:",
+                         "frame-src 'self' blob:; worker-src 'self' blob:")
     source=replace_exact(source, "img-src 'none'", "img-src 'self'; manifest-src 'self'")
     source=replace_exact(source, '<title>', '<link rel="manifest" href="./manifest.json"><meta name="theme-color" content="#185e48"><title>')
     source=replace_exact(source, '</style>', '.studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style>')
