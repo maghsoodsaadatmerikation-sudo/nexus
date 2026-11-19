@@ -206,6 +206,7 @@ const make=(id,label)=>{const x=document.createElement('button');x.type='button'
 const bar=document.createElement('div');bar.id='nexus-zen-bar';
 const menu=make('nexus-zen-menu','☰'),home=make('nexus-zen-home','NEXUS'),newChat=make('nexus-zen-new','＋'),all=make('nexus-zen-tools','✦');
 menu.setAttribute('aria-controls','nexus-zen-drawer');menu.setAttribute('aria-expanded','false');
+const safety=document.createElement('small');safety.id='nexus-zen-storage-indicator';home.append(safety);
 bar.append(menu,home,newChat,all);$('studio-focus-top').prepend(bar);
 const shade=document.createElement('div'),drawer=document.createElement('aside');
 shade.id='nexus-zen-shade';drawer.id='nexus-zen-drawer';shade.hidden=drawer.hidden=true;
@@ -214,12 +215,15 @@ const header=document.createElement('div');header.className='nexus-zen-drawer-he
 const title=document.createElement('strong'),close=make('nexus-zen-close','×');
 header.append(title,close);
 const find=document.createElement('input');find.type='search';find.maxLength=200;find.id='nexus-zen-find';
+const archiveLabel=document.createElement('label');archiveLabel.className='nexus-zen-archived';
+const archiveToggle=document.createElement('input');archiveToggle.id='nexus-zen-archived';archiveToggle.type='checkbox';
+const archiveWords=document.createElement('span');archiveLabel.append(archiveToggle,archiveWords);
 const history=document.createElement('div');history.id='nexus-zen-history';
 const actions=document.createElement('div');actions.className='nexus-zen-links';
 const nav=[['projects-card','Projects','پروژه‌ها'],['vault-card','Private archive','آرشیو خصوصی'],['profile-card','Preferences & memory','ترجیحات و حافظه']];
 const links=nav.map(([id,en,fa])=>{const b=make('nexus-zen-'+id,'');b.addEventListener('click',()=>go(id));actions.append(b);return [b,en,fa]});
 const full=make('nexus-zen-full','');full.addEventListener('click',()=>{dismiss();focus.setFocus(false,true)});actions.append(full);
-drawer.append(header,find,history,actions);document.body.append(shade,drawer);
+drawer.append(header,find,archiveLabel,history,actions);document.body.append(shade,drawer);
 let restore=null;
 function dismiss(){if(drawer.hidden)return;drawer.hidden=shade.hidden=true;menu.setAttribute('aria-expanded','false');restore?.focus?.({preventScroll:true})}
 function show(){restore=document.activeElement;drawer.hidden=shade.hidden=false;menu.setAttribute('aria-expanded','true');render();find.focus()}
@@ -230,28 +234,58 @@ function start(){
  go('conversation-card');$('message').focus({preventScroll:true});
 }
 function render(){
- history.replaceChildren();const q=find.value.trim().toLocaleLowerCase();
+ history.replaceChildren();
+ const state=window.NexusStudioUI?.snapshot?.(),q=find.value.trim().toLocaleLowerCase();
  let n=0;
- for(const src of $('history').querySelectorAll('button')){
-  const name=src.textContent.trim();if(!name||!name.toLocaleLowerCase().includes(q))continue;
-  const b=make('',name.slice(0,180));b.removeAttribute('id');
-  b.addEventListener('click',()=>{src.click();go('conversation-card')});
-  history.append(b);if(++n>=60)break;
+ // Inspect session state directly. The old hidden history pane may be filtered,
+ // so it must not be the source of truth for the chat drawer.
+ for(const project of [...(state?.projects||[])].reverse()){
+  for(const thread of [...(project.threads||[])].reverse()){
+   if(thread.archived&&!archiveToggle.checked)continue;
+   const texts=thread.nodes||[];
+   const preview=(texts.find(x=>x.role==='user')?.text||'').replace(/\\s+/g,' ').trim().slice(0,72);
+   if(q&&![project.title,thread.title].some(x=>x.toLocaleLowerCase().includes(q))&&
+      !texts.some(x=>typeof x.text==='string'&&x.text.toLocaleLowerCase().includes(q)))continue;
+   const b=make('',preview&&/^(New conversation|گفتگوی جدید)$/i.test(thread.title)?preview:thread.title);
+   b.removeAttribute('id');b.className='nexus-zen-chat-result';
+   const detail=document.createElement('small');
+   detail.textContent=project.title+(thread.archived?' · '+tr('Archived','آرشیوشده'):'');
+   b.append(detail);
+   b.setAttribute('aria-current',thread.id===state?.selectedThread?'page':'false');
+   b.addEventListener('click',()=>{
+    if(window.NexusStudioUI?.openConversation?.(project.id,thread.id))go('conversation-card');
+   });
+   history.append(b);n++;if(n>=80)break;
+  }
+  if(n>=80)break;
  }
- if(!n){const p=document.createElement('p');p.className='help';p.textContent=tr('No matching conversations in this session.','گفتگوی مطابقی در این نشست نیست.');history.append(p)}
+ if(!n){const p=document.createElement('p');p.className='help';p.textContent=tr('No matching conversations in this local session.','گفتگوی مطابقی در این نشست محلی نیست.');history.append(p)}
+ else if(n>=80){const p=document.createElement('p');p.className='help';p.textContent=tr('Showing 80 conversations. Narrow the search to find more.','۸۰ گفتگو نمایش داده شده؛ برای یافتن موارد بیشتر جست‌وجو را دقیق‌تر کن.');history.append(p)}
+}
+function refreshSafety(){
+ const s=window.NexusStudioUI?.uiStatus?.();
+ if(!s)return;
+ const unsaved=Boolean(s.lossRisk||s.dirty||s.unsavedForms||s.unsavedLocalMedia);
+ safety.textContent=unsaved?tr('Unsaved changes','تغییرات ذخیره‌نشده'):
+  s.vaultUnlocked?tr('Archive unlocked','آرشیو باز است'):tr('Temporary · not saved','موقت · ذخیره‌نشده');
+ safety.dataset.unsaved=String(unsaved);
 }
 function labels(){
  title.textContent=tr('Conversations','گفتگوها');find.placeholder=tr('Search conversations','جست‌وجوی گفتگوها');find.setAttribute('aria-label',find.placeholder);
+ archiveWords.textContent=tr('Show archived','نمایش گفتگوهای آرشیوشده');
+ archiveToggle.setAttribute('aria-label',archiveWords.textContent);
  drawer.setAttribute('aria-label',tr('Conversations and settings','گفتگوها و تنظیمات'));
  for(const [b,en,fa] of links)b.textContent=tr(en,fa);
  full.textContent=tr('Advanced workspace','نمایش همهٔ بخش‌ها');
  for(const [b,en,fa] of [[menu,'Menu','منو'],[home,'Back to chat','بازگشت به گفتگو'],[newChat,'New conversation','گفتگوی جدید'],[all,'Capabilities','قابلیت‌ها'],[close,'Close menu','بستن منو']])b.setAttribute('aria-label',tr(en,fa));
- render();
+ render();refreshSafety();
 }
 menu.addEventListener('click',()=>drawer.hidden?show():dismiss());close.addEventListener('click',dismiss);shade.addEventListener('click',dismiss);
 home.addEventListener('click',()=>go('conversation-card'));newChat.addEventListener('click',start);
 all.addEventListener('click',()=>{dismiss();focus.openTools()});find.addEventListener('input',render);
-new MutationObserver(render).observe($('history'),{childList:true,subtree:true,characterData:true});
+archiveToggle.addEventListener('change',render);
+document.addEventListener('nexus-studio-state',()=>{refreshSafety();if(!drawer.hidden)render()});
+document.addEventListener('input',event=>{if(event.target===$('message'))refreshSafety()});
 $('language').addEventListener('change',()=>queueMicrotask(labels));
 document.addEventListener('keydown',event=>{
  if(event.key==='Escape'&&!drawer.hidden){event.preventDefault();dismiss()}
