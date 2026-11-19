@@ -150,9 +150,10 @@ class StudioMaintenanceTests(unittest.TestCase):
         (self.repo / ".gitignore").write_text("__pycache__/\n")
         standalone = self.repo / "web/studio.html"
         standalone.write_text("stale")
-        builder = self.repo / "scripts/build-studio.py"
+        builder = self.repo / "scripts/build-studio-static.py"
         with builder.open("a") as handle:
-            handle.write("\nif args.check: (root / 'notes.txt').write_text('verification side effect')\n")
+            handle.write("\nif '--check' in sys.argv:\n"
+                         "    (ROOT / 'notes.txt').write_text('verification side effect')\n")
         self.commit("Introduce drift and an out-of-scope verifier side effect")
 
         blocked = self.audit("--repair", expected=2)
