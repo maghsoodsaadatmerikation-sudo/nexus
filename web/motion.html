@@ -43,6 +43,19 @@ canvas{width:100%;height:auto;max-height:70vh;object-fit:contain;background:#050
 <button id="motion-remove" class="secondary">Remove last / حذف آخر</button>
 <button id="motion-example" class="secondary">Load example / نمونه</button></div>
 </section>
+<section id="motion-draft-panel" aria-labelledby="motion-draft-heading">
+<h2 id="motion-draft-heading">Encrypted draft recovery / بازیابی پیش‌نویس رمزگذاری‌شده</h2>
+<p class="muted">Optional autosave stores only encrypted storyboard JSON on this device after you enable it. Original photos, audio and the passphrase are never saved. Keep your own project + media ZIP. / عکس و صدا ذخیره نمی‌شوند.</p>
+<div class="row">
+<label>Passphrase (12+ characters) / گذرواژه<input id="motion-draft-pass" type="password" autocomplete="off" minlength="12" maxlength="128"></label>
+<label>Confirm for a new draft / تکرار گذرواژه<input id="motion-draft-confirm" type="password" autocomplete="off" minlength="12" maxlength="128"></label>
+</div>
+<div class="row"><button id="motion-draft-enable" class="secondary" type="button">Enable encrypted autosave</button>
+<button id="motion-draft-restore" class="secondary" type="button">Restore &amp; resume autosave</button>
+<button id="motion-draft-clear" class="secondary" type="button">Delete encrypted draft</button></div>
+<p id="motion-draft-status" role="status" aria-live="polite" class="small muted">Autosave is off. A project + media ZIP remains the only complete backup.</p>
+<p class="small danger">You must remember your passphrase. An immediate exit can lose the last unsaved edit; browser data deletion and a different Android signing certificate can make this draft unavailable.</p>
+</section>
 <section><h2>Preview / پیش‌نمایش</h2>
 <canvas id="motion-canvas" width="960" height="540" aria-label="Local procedural video preview"></canvas>
 <div class="row"><button id="motion-play">Play / پخش</button><button id="motion-pause" class="secondary">Pause / توقف</button>
