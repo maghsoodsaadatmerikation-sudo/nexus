@@ -10,6 +10,9 @@ on:
       - 'scripts/test-studio-public-acceptance.py'
       - 'public/studio/**'
       - 'scripts/build-studio-static.py'
+      - 'scripts/build-studio.py'
+      - 'scripts/studio_template_contract.py'
+      - 'scripts/test-studio-template-contract.py'
       - '.github/workflows/studio-static-source-release.yml'
       - 'docs/STUDIO-STATIC-PROMOTION.md'
   push:
@@ -22,6 +25,9 @@ on:
       - 'scripts/test-studio-public-acceptance.py'
       - 'public/studio/**'
       - 'scripts/build-studio-static.py'
+      - 'scripts/build-studio.py'
+      - 'scripts/studio_template_contract.py'
+      - 'scripts/test-studio-template-contract.py'
       - '.github/workflows/studio-static-source-release.yml'
       - 'docs/STUDIO-STATIC-PROMOTION.md'
   workflow_dispatch:
@@ -55,6 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/studio-static-release-gate.py scripts/test-studio-static-release-gate.py
+          python3 scripts/test-studio-template-contract.py
           python3 scripts/build-studio-static.py --check
           python3 scripts/test-studio-static-release-gate.py
           python3 scripts/verify-studio-public.py --self-test
