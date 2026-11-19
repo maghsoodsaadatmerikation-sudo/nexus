@@ -162,13 +162,16 @@ try{
   'fresh Motion page did not reset unsaved memory');
  assert(await js("document.getElementById('motion-draft-status').textContent.includes('Encrypted draft found')"),
   'encrypted recovery prompt not displayed after restart');
- await js("window.confirm=()=>true;document.getElementById('motion-draft-pass').value='wrong-private-password';"+
+ await js("document.getElementById('motion-draft-ack').checked=true;document.getElementById('motion-draft-pass').value='wrong-private-password';"+
   "document.getElementById('motion-draft-restore').click();true");
  await poll(()=>retryJs("document.getElementById('motion-draft-status').textContent.includes('Restore rejected')"),
   18000,'wrong passphrase did not fail closed');
  assert(await js("document.querySelectorAll('#motion-scenes .scene').length")===3,
   'wrong passphrase modified the storyboard');
- await js("document.getElementById('motion-draft-pass').value='synthetic-private-passphrase-2030';"+
+ assert(await js("document.getElementById('motion-draft-ack').checked===false"),
+  'confirmation checkbox not reset after a failed restore');
+ await js("document.getElementById('motion-draft-ack').checked=true;"+
+  "document.getElementById('motion-draft-pass').value='synthetic-private-passphrase-2030';"+
   "document.getElementById('motion-draft-restore').click();true");
  await poll(()=>retryJs("document.getElementById('motion-draft-status').textContent.includes('Restored encrypted storyboard')"),
   20000,'valid passphrase did not restore storyboard');
@@ -204,7 +207,7 @@ try{
  checks.push('real-Chromium-reloaded-Motion-after-server-shutdown');
  assert(await js("document.getElementById('motion-draft-status').textContent.includes('Encrypted draft found')"),
   'encrypted draft unavailable in actual offline reopened editor');
- await js("window.confirm=()=>true;document.getElementById('motion-draft-pass').value='synthetic-private-passphrase-2030';"+
+ await js("document.getElementById('motion-draft-ack').checked=true;document.getElementById('motion-draft-pass').value='synthetic-private-passphrase-2030';"+
   "document.getElementById('motion-draft-restore').click();true");
  await poll(()=>retryJs("document.getElementById('motion-draft-status').textContent.includes('Restored encrypted storyboard')"),
    20000,'offline recovery could not decrypt local checkpoint');
@@ -216,7 +219,7 @@ try{
  const after=await js("document.querySelectorAll('#motion-scenes .scene').length");
  assert(after===before+1,'Cached offline Motion editor cannot edit local scene');
  checks.push('interactive-offline-scene-edit-after-disconnection');
- await js("window.confirm=()=>true;document.getElementById('motion-draft-clear').click();true");
+ await js("document.getElementById('motion-draft-ack').checked=true;document.getElementById('motion-draft-clear').click();true");
  assert(await js("localStorage.getItem('nexus.motion.encrypted.storyboard.v1')===null"),
   'explicit delete did not remove the encrypted checkpoint');
  await js("document.getElementById('motion-add').click();true");
