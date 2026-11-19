@@ -171,10 +171,17 @@ def run(report):
             except RuntimeError:
                 continue
     tap("Downloads",scroll=3)
+    # Clear only the disposable emulator's debug logs. The production APK
+    # never logs project text. The exact success signal comes from Motion's
+    # own validated import feedback and public default storyboard fields.
+    smoke.adb("logcat","-c")
     tap(SAVED_NAME,scroll=8)
-    # The import status is set only after JSON has been read and validated.
-    # Scroll toward Export status (end of Motion document).
-    tap("Imported storyboard JSON: 3 scenes",scroll=20)
+    def imported():
+        evidence=smoke.log_lines()
+        if "/motion/ saf_import_rejected=true" in evidence:
+            raise RuntimeError("Android Motion explicitly rejected the selected JSON")
+        return "/motion/ saf_import_ok=true" in evidence
+    smoke.await_true(imported,"validated WebView import completion",timeout=35)
     checks=[
         "real-Android-35-WebView-Motion-export-click",
         "user-chosen-ACTION_CREATE_DOCUMENT-Downloads-file-written",
