@@ -1,10 +1,8 @@
 """Opt-in, non-authoritative model bridge. Provider keys never reach the browser."""
 from __future__ import annotations
 import hmac
-import hashlib
 import json
 import os
-from urllib.parse import urlsplit
 from pathlib import Path
 
 import anyio
@@ -14,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from typing import Literal
 import httpx
 from transport_bounds import read_bounded_body
+from model_configuration import ModelConfig, configuration_fingerprint, read_model_config
 
 MAX_INPUT = 96000
 MAX_OUTPUT = 128000
@@ -49,30 +48,22 @@ class Completion(BaseModel):
         return value
 
 
-def config():
-    endpoint = os.getenv("NEXUS_MODEL_URL", "").strip()
-    model = os.getenv("NEXUS_MODEL_ID", "").strip()
-    token = os.getenv("NEXUS_STUDIO_TOKEN", "").strip()
-    try:
-        p = urlsplit(endpoint)
-        _ = p.port
-    except ValueError:
-        return None
-    if (adapter() not in {"generic", "deepseek"} or not model or len(model) > 150 or len(token) < 32 or not p.hostname
-        or p.username is not None or p.password is not None or p.query or p.fragment
-        or any(c.isspace() for c in endpoint)
-        or not (p.scheme == "https" or (p.scheme == "http" and p.hostname in {"127.0.0.1", "::1"}))):
-        return None
-    return endpoint, model, token, p.hostname
+def config() -> ModelConfig | None:
+    return read_model_config()
 
 
-def adapter():
+def adapter() -> str:
+    # Retained for callers computing fingerprints from an endpoint/model tuple.
     return os.getenv("NEXUS_MODEL_ADAPTER", "generic").strip()
 
 
-def configuration_id(c):
-    suffix = "" if adapter() == "generic" else "\nadapter:" + adapter()
-    return hashlib.sha256((c[0]+"\n"+c[1]+suffix).encode()).hexdigest()
+def configuration_id(
+    c: ModelConfig | tuple[str, str], *, policy: str | None = None
+) -> str:
+    reviewed_policy = POLICY if policy is None else policy
+    if isinstance(c, ModelConfig):
+        return configuration_fingerprint(c.endpoint, c.model_id, c.adapter, reviewed_policy)
+    return configuration_fingerprint(c[0], c[1], adapter(), reviewed_policy)
 
 
 def register(app):
@@ -86,9 +77,9 @@ def register(app):
     @app.get("/studio-api/status")
     async def model_status():
         c = config()
-        return JSONResponse({"configured": c is not None, "configuration_id": configuration_id(c) if c else None, "model": c[1] if c else None,
-                             "provider_host": c[3] if c else None, "authority": "none",
-                             **({"modes": ["standard", "thinking", "non-thinking"], "max_output_tokens": 8192} if c and adapter() == "deepseek" else {})},
+        return JSONResponse({"configured": c is not None, "configuration_id": configuration_id(c) if c else None, "model": c.model_id if c else None,
+                             "provider_host": c.provider_host if c else None, "authority": "none",
+                             **({"modes": ["standard", "thinking", "non-thinking"], "max_output_tokens": 8192} if c and c.adapter == "deepseek" else {})},
                             headers={"Cache-Control": "no-store"})
 
     @app.post("/studio-api/respond")
@@ -96,9 +87,10 @@ def register(app):
         c = config()
         if c is None:
             raise HTTPException(503, "No model provider is configured")
+        reviewed_policy = POLICY
         authorization_values = request.headers.getlist("authorization")
         authorization = authorization_values[0] if len(authorization_values) == 1 else ""
-        if not hmac.compare_digest(authorization.encode(), ("Bearer " + c[2]).encode()):
+        if not hmac.compare_digest(authorization.encode(), ("Bearer " + c.studio_token).encode()):
             raise HTTPException(401, "Studio authentication required", headers={"WWW-Authenticate": "Bearer"})
         media_values = request.headers.getlist("content-type")
         if len(media_values) != 1 or media_values[0].split(";", 1)[0].strip().lower() != "application/json":
@@ -120,27 +112,27 @@ def register(app):
                 data = Completion.model_validate_json(body)
             except ValidationError:
                 raise HTTPException(422, "Invalid consent or message context") from None
-            if data.configuration_id != configuration_id(c):
+            if data.configuration_id != configuration_id(c, policy=reviewed_policy):
                 raise HTTPException(409, "Model configuration changed; review again")
             if data.messages[-1].role != "user":
                 raise HTTPException(422, "Final message must be from the user")
-            if data.mode != "standard" and adapter() != "deepseek":
+            if data.mode != "standard" and c.adapter != "deepseek":
                 raise HTTPException(422, "Execution mode is unsupported by this adapter")
-            messages = [{"role": "system", "content": POLICY}]
+            messages = [{"role": "system", "content": reviewed_policy}]
             messages.extend(m.model_dump() for m in data.messages)
             headers = {"accept-encoding": "identity"}
-            key = os.getenv("NEXUS_MODEL_API_KEY", "").strip()
+            key = c.provider_api_key
             if key:
                 headers["authorization"] = "Bearer " + key
-            payload = {"model": c[1], "messages": messages, "stream": False, "store": False}
-            payload["max_tokens" if adapter() == "deepseek" else "max_completion_tokens"] = data.max_output_tokens
+            payload = {"model": c.model_id, "messages": messages, "stream": False, "store": False}
+            payload["max_tokens" if c.adapter == "deepseek" else "max_completion_tokens"] = data.max_output_tokens
             if data.mode != "standard":
                 payload["thinking"] = {"type": "enabled" if data.mode == "thinking" else "disabled"}
             raw = bytearray()
             # Both first-byte and total-response deadlines apply; no redirects.
             with anyio.fail_after(45):
                 async with request.app.state.client.stream(
-                    "POST", c[0], headers=headers, follow_redirects=False,
+                    "POST", c.endpoint, headers=headers, follow_redirects=False,
                     json=payload,
                 ) as upstream:
                     if upstream.status_code != 200:
@@ -163,7 +155,7 @@ def register(app):
                 content.encode("utf-8")
             except (KeyError, IndexError, TypeError, ValueError, RecursionError):
                 raise HTTPException(502, "Invalid text-only model response") from None
-            return JSONResponse({"text": content, "origin": "model", "model": c[1],
+            return JSONResponse({"text": content, "origin": "model", "model": c.model_id,
                                  "mode": data.mode, "max_output_tokens": data.max_output_tokens,
                                  "truncated": choice.get("finish_reason") == "length", "authority": "none"},
                                 headers={"Cache-Control": "no-store"})
