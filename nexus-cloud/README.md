@@ -24,6 +24,33 @@ gateway; tokens are not stored by this adapter. The HTTP client is created with
 `trust_env=False`, so ambient proxy environment variables are not inherited by
 the adapter's upstream client.
 
+## SHARAF in Studio chat
+
+The configured Studio gateway applies a versioned conversational policy to
+approved requests on `/studio-api/respond`. It evaluates the user turns before
+acquiring a provider slot. Recognized safety, grounding, and support requests
+return a fixed Persian or English response without sending the transcript to
+the provider. The gateway accepts an optional `locale` of `en` or `fa` and
+otherwise detects Persian script in the latest turn. The client displays a
+policy reply as a guide response. Ordinary chat uses the existing provider
+pipeline.
+
+The policy replays safety cues from the submitted branch, within the client's
+existing context limits. It excludes assistant messages and Studio's separate
+project-context block. It does not persist a safety profile, monitor sessions,
+contact services, or infer location. Emergency guidance uses generic local
+wording and includes no telephone numbers. This first implementation uses
+bounded language patterns. It cannot recognize every phrasing or determine
+clinical risk. The templates and routing need qualified review before public
+use as a mental health feature. Browser-only guide and device-model paths do
+not call the Studio gateway.
+
+The design follows the distinction between immediate safety needs and
+prediction in [NICE NG225](https://www.nice.org.uk/guidance/NG225/chapter/recommendations#risk-assessment-tools-and-scales).
+For communication guidance and public education see
+[NSW Health](https://www.health.nsw.gov.au/mentalhealth/psychosocial/strategies/Pages/communicating-psychosis.aspx)
+and [NHS mental health conditions](https://www.nhs.uk/mental-health/conditions/).
+
 ## Verification
 
 The adapter has two deliberately separate verification layers:
@@ -78,6 +105,7 @@ the secure upstream through `NEXUS_CORE_URL`.
 
 - `main.py` - non-authoritative FastAPI transport adapter
 - `studio_model.py` - optional consent-gated model bridge
+- `sharaf.py` - versioned Studio response routing and localized templates
 - `transport_bounds.py` - shared strict Content-Length, body-size and deadline admission
 - `tests/test_admission_shared.py` - cross-edge authorization/framing regressions
 - `tests/test_contract.py` - transport-boundary contract tests

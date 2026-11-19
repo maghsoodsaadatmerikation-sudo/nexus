@@ -7,7 +7,7 @@ ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('studio_browser',ROOT/'scripts/test-studio-browser.py')
 module=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
-module.MIN_CHECKS=18
+module.MIN_CHECKS=21
 module.WITNESS=r"""
 window.addEventListener('load',async()=>{
  const $=id=>document.getElementById(id),checks=[];
@@ -24,7 +24,11 @@ window.addEventListener('load',async()=>{
   network++;
   if(String(url).endsWith('/studio-api/status'))return new Response(JSON.stringify({configured:true,model:'test-model',provider_host:'provider.invalid',configuration_id:'a'.repeat(64),authority:'none'}));
   if(String(url).endsWith('/studio-api/respond')){
-   requests.push(JSON.parse(options.body));
+   const request=JSON.parse(options.body);
+   requests.push(request);
+   if(request.messages.at(-1).content==='Synthetic policy check'){
+    return new Response(JSON.stringify({text:'Synthetic local policy response',policy_version:'sharaf-0.1',origin:'sharaf',authority:'none'}));
+   }
    return new Response(JSON.stringify({text:'Reviewed synthetic draft',model:'test-model',origin:'model',authority:'none'}));
   }
   throw Error('unexpected-network');
@@ -76,6 +80,15 @@ window.addEventListener('load',async()=>{
   assert(requests.length===2&&requests[1].messages[0].content.includes('river is wider'),'reviewed-document-excerpt-sent-once');
   assert(thread().nodes[2].attached_files[0].startsWith('Document:'),'document-version-provenance');
 
+  fill('message','Synthetic policy check');
+  $('prepare').click();
+  $('consent').checked=true;$('consent').dispatchEvent(new Event('change'));
+  $('send-model').click();
+  await wait(()=>thread().nodes.length===6);
+  assert(thread().nodes.at(-1).origin==='guide','gateway-policy-saved-as-guide');
+  assert($('messages').textContent.includes('Synthetic local policy response'),'gateway-policy-displayed');
+  assert(!$('messages').lastElementChild.textContent.includes(EN.model),'gateway-policy-not-labeled-model');
+
   fill('message','Draft about another file');
   attach('ignored.pdf','%PDF-1.4-UNSUPPORTED');
   await wait(()=>$('status').textContent===EN.chatAttachmentInvalid);
@@ -90,7 +103,7 @@ window.addEventListener('load',async()=>{
   release(new TextEncoder().encode('never enter restored project').buffer);
   await sleep(100);File.prototype.arrayBuffer=original;
   assert(!NexusStudioUI.snapshot().projects.length&&$('chat-attachment-tray').textContent.includes(EN.chatNoFiles),'late-read-cannot-reopen-after-lock');
-  assert(network===3,'no-background-file-transmission');
+  assert(network===4,'no-background-file-transmission');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,real_model_tested:false});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
 });

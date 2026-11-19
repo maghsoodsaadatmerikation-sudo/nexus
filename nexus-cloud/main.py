@@ -62,6 +62,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         limits=httpx.Limits(max_connections=32, max_keepalive_connections=16),
     ) as client:
         app.state.client = client
+        app.state.studio_ingress_limiter = anyio.CapacityLimiter(8)
         app.state.model_limiter = anyio.CapacityLimiter(4)
         app.state.gateway_limiter = anyio.CapacityLimiter(MAX_DELEGATED_REQUESTS)
         yield
