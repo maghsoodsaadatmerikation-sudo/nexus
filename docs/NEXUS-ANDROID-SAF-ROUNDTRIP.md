@@ -57,6 +57,29 @@ not a new persistence or export capability.
 No production claim is made until the new exact-head GitHub Actions run
 finishes with success. A debug-only signal is not a physical-phone test.
 
+## Intermittent Android accessibility-tree failure
+
+In another exact-head run, Android API35's UIAutomator returned just one
+accessible node per query and could not find the visible public **Open
+Motion** link. The app's static DOM-readiness witness had already succeeded.
+The test must not mistake that accessibility issue for a confirmed export
+failure or for a successful file workflow.
+
+The debug APK now evaluates the actual rendered bounding rectangle of only
+three source-reviewed public links (Open Motion, All tools, Open Studio),
+converts it using the WebView's measured viewport/screen coordinates, and
+logs a fixed numeric point. If the accessibility hierarchy does not expose
+the link, the acceptance test can perform a **real Android input tap** at
+that validated on-screen location. No hidden JavaScript click, simulated
+page event, arbitrary selector, or direct navigation is used. The
+subsequent real page-readiness witness must still pass. Invalid, absent,
+or out-of-screen coordinates fail closed.
+
+This path is debug-build-only and logs no project content, media, secret,
+passphrase, file URI or user message. It is a resilience mechanism for
+emulator UI automation, **not** evidence of physical-phone accessibility,
+and not proof of Android TalkBack usability.
+
 ## Still not proven
 
 - Android physical phone OEM compatibility, removable storage/SD cards,
