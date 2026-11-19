@@ -22,6 +22,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 import org.json.JSONException;
 
 import java.io.ByteArrayInputStream;
@@ -154,6 +155,38 @@ public final class MainActivity extends Activity {
         runOnUiThread(()->Toast.makeText(this,message,Toast.LENGTH_LONG).show());
     }
 
+    /** Report only a reviewed public link's real screen center in debug APKs.
+     * This is a fallback for Android API35 UIAutomator returning a nearly
+     * empty accessibility tree. It still requires a real physical adb tap.
+     * No project text, URLs, credentials or private user data are recorded.
+     */
+    private void reportPublicTapCenter(WebView view, String selector, String name) {
+        if ((getApplicationInfo().flags &
+             android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)==0) return;
+        String source="(() => {const el=document.querySelector("+
+            JSONObject.quote(selector)+");if(!el)return null;"+
+            "const r=el.getBoundingClientRect();"+
+            "if(r.width<24||r.height<24||!innerWidth)return null;"+
+            "return [(r.left+r.right)/2,(r.top+r.bottom)/2,innerWidth];})()";
+        view.evaluateJavascript(source, value -> {
+            try {
+                JSONArray points=new JSONArray(value);
+                if (points.length()!=3) return;
+                double viewport=points.getDouble(2);
+                if (!(viewport>0 && viewport<3000) || view.getWidth()<=0) return;
+                double scale=view.getWidth()/viewport;
+                int[] loc=new int[2];view.getLocationOnScreen(loc);
+                int x=loc[0]+(int)Math.round(points.getDouble(0)*scale);
+                int y=loc[1]+(int)Math.round(points.getDouble(1)*scale);
+                if (x<loc[0] || x>=loc[0]+view.getWidth() ||
+                    y<loc[1] || y>=loc[1]+view.getHeight()) return;
+                Log.i("NEXUS_ANDROID_SMOKE","public_target_"+name+"="+x+","+y);
+            } catch (JSONException | IllegalArgumentException ignored) {
+                // A missing/offscreen target is NOT evidence of UI readiness.
+            }
+        });
+    }
+
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         try { validateAllAssets(); }
@@ -217,6 +250,12 @@ public final class MainActivity extends Activity {
                         final String publicPath = page;
                         view.evaluateJavascript(witness, value ->
                             Log.i("NEXUS_ANDROID_SMOKE", publicPath + " ready=" + value));
+                    }
+                    if ("/apps.html".equals(page)) {
+                        reportPublicTapCenter(view,"a[href=\"./motion/\"]","open_motion");
+                        reportPublicTapCenter(view,"a[href=\"./\"]","open_studio");
+                    } else if ("/motion/".equals(page)) {
+                        reportPublicTapCenter(view,"a[href=\"/apps.html\"]","all_tools");
                     }
                     // DEBUG-ONLY SAF evidence: observe success AFTER Motion itself
                     // validates the imported file. Log only fixed public flags,
