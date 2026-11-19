@@ -8,7 +8,7 @@ if(!O||!$('orchestra-card'))return;
 const fa=()=>document.documentElement.lang==='fa';
 const say=(en,faText)=>fa()?faText:en;
 let plan=null,score=null,wav=null,rendering=false,mixing=false,ticket=0;
-let wavUrl=null,dryUrl=null,dryBytes=null,dryInfo=null;
+let wavUrl=null,dryUrl=null,dryBytes=null,dryInfo=null,dryEpoch=0;
 let mixWav=null,mixUrl=null,mixReport=null;
 function aligned(){return !!(wav&&dryInfo&&wav.byteLength>28&&
  new DataView(wav.buffer,wav.byteOffset,wav.byteLength).getUint32(24,true)===dryInfo.sampleRate)}
@@ -143,6 +143,8 @@ $('orchestra-exclude-lead').addEventListener('change',()=>{
     'حالت موسیقی همراه تغییر کرد؛ قطعه را دوباره به صدا تبدیل کن.');
 });
 function clearDry(){
+ // Independent vocal generation: cancelling a pending read cannot reattach the file.
+ dryEpoch++;
  clearMixed();
  $('orchestra-play').pause();$('orchestra-dry-play').pause();
  if(dryUrl)URL.revokeObjectURL(dryUrl);dryUrl=null;dryBytes=null;dryInfo=null;
@@ -158,16 +160,17 @@ $('orchestra-dry-file').addEventListener('change',async()=>{
  if(rendering)return;
  const file=$('orchestra-dry-file').files[0];clearDry();
  if(!file)return;
- const id=++ticket;
+ const id=++ticket,voiceGeneration=dryEpoch;
+ const current=()=>id===ticket&&voiceGeneration===dryEpoch;
  try{
   if(file.size>20*1024*1024||file.size<48)throw Error('file-size');
   const bytes=new Uint8Array(await file.arrayBuffer());
-  if(id!==ticket)return;
+  if(!current())return;
   const result=O.inspectDryWav(bytes);
   if(!globalThis.crypto?.subtle)throw Error('browser-crypto-unavailable');
   const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),
     n=>n.toString(16).padStart(2,'0')).join('');
-  if(id!==ticket)return;
+  if(!current())return;
   dryBytes=bytes;dryInfo=result;
   dryUrl=URL.createObjectURL(new Blob([bytes],{type:'audio/wav'}));
   $('orchestra-dry-play').src=dryUrl;
@@ -184,9 +187,9 @@ $('orchestra-dry-file').addEventListener('change',async()=>{
          'وکال اصلی بدون هیچ دستکاری در همین دستگاه بارگذاری شد.');
   if(wav&&!aligned())status('Sample rates differ. Re-render backing after importing your voice.',
     'نرخ نمونه‌برداری دو صدا متفاوت است؛ موسیقی را پس از وارد کردن وکال دوباره تولید کن.');
- }catch{status('Dry vocal rejected: use a local PCM 16-bit WAV (22.05/44.1 kHz; 20 MiB max).',
+ }catch{if(current())status('Dry vocal rejected: use a local PCM 16-bit WAV (22.05/44.1 kHz; 20 MiB max).',
      'فایل وکال پذیرفته نشد؛ WAV خام ۱۶ بیتی با نرخ ۲۲ یا ۴۴ کیلوهرتز، حداکثر ۲۰ مگابایت لازم است.')}
- buttons();
+ finally{if(current())buttons()}
 });
 $('orchestra-dry-download').addEventListener('click',()=>{
  if(dryBytes)download(dryBytes,'original-voice-unchanged.wav','audio/wav');
@@ -194,13 +197,15 @@ $('orchestra-dry-download').addEventListener('click',()=>{
 $('orchestra-together').addEventListener('click',async()=>{
  if(!wav||!dryBytes||rendering)return;
  const backing=$('orchestra-play'),original=$('orchestra-dry-play');
+ const renderGeneration=ticket,voiceGeneration=dryEpoch;
  backing.pause();original.pause();backing.currentTime=0;original.currentTime=0;
  backing.playbackRate=1;original.playbackRate=1;
  try{
   await Promise.all([backing.play(),original.play()]);
+  if(renderGeneration!==ticket||voiceGeneration!==dryEpoch)return;
   status('Playing original vocal and synthesized backing at normal speed. Timing is approximate.',
    'وکال اصلی و موسیقی همراه با سرعت طبیعی پخش می‌شوند؛ همگام‌سازی تقریبی است.');
- }catch{fail()}
+ }catch{if(renderGeneration===ticket&&voiceGeneration===dryEpoch)fail()}
 });
 for(const id of ['orchestra-offset','orchestra-dry-gain','orchestra-backing-gain']){
  $(id).addEventListener('change',()=>{
