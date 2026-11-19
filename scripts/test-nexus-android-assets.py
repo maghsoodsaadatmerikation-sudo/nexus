@@ -36,6 +36,15 @@ class PublicAPKAssetsTests(unittest.TestCase):
             self.assertNotIn(forbidden,manifest["assets"])
         self.assertNotIn("by Termux",(self.output/"apps.html").read_text())
 
+    def test_native_apk_motion_navigation_and_save_reminder(self):
+        b.assemble(self.output,COMMIT)
+        motion=(self.output/"motion/index.html").read_text(encoding="utf-8")
+        self.assertIn('href="/apps.html"', motion)
+        self.assertIn('href="/"', motion)
+        self.assertIn('id="motion-save-before-exit"', motion)
+        self.assertIn('Download project + media ZIP', motion)
+        self.assertEqual(b.verify(self.output,COMMIT)["status"],"EXACT_PUBLIC_ASSETS")
+
     def test_refuses_modified_asset_and_user_private_material(self):
         b.assemble(self.output,COMMIT)
         target=self.output/"motion/motion-ui.js"
