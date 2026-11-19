@@ -222,7 +222,8 @@ def source_assets(commit: str) -> dict[str, bytes]:
     save_note = (
         '<p id="motion-save-before-exit" role="note" class="small danger">'
         'Before leaving Motion, select Download project + media ZIP in Export. '
-        'Closing or switching pages does not save your current storyboard. '
+        'Autosave is off by default. Even with encrypted autosave, original ' 
+        'photos and audio are not saved; export the complete ZIP. '
         '/ پیش از خروج، فایل پروژه و رسانه‌ها را ذخیره کنید.'
         '</p>'
     )
