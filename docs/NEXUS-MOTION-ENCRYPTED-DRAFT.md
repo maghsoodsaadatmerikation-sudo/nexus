@@ -10,6 +10,10 @@ encrypted draft**. It is strictly opt-in: before choosing Enable, no draft is
 written to persistent storage. Creation requires a 12–128 character passphrase
 entered twice, and the passphrase fields are cleared after each operation.
 
+Restore and Delete require a visible in-page acknowledgment checkbox; no Android
+WebView JavaScript confirm dialog is required. The checkbox resets after
+each sensitive action.
+
 After Enable, each valid storyboard edit triggers a debounced (750 ms)
 checkpoint; the very first checkpoint is saved immediately. The saved file
 is **AES-256-GCM ciphertext** with fresh 12-byte random IV each write, under
