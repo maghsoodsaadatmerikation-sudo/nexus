@@ -16,25 +16,13 @@ import subprocess
 import sys
 import zipfile
 
+from studio_assets import MAX_ARCHIVE_BYTES, MAX_ASSET_BYTES
+from studio_assets import PUBLIC_ASSETS as SOURCE_NAMES
+
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC = ROOT / "public/studio"
 BUNDLE = "nexus-studio-phone-local"
 STAMP = (2020, 1, 1, 0, 0, 0)
-SOURCE_NAMES = (
-    "index.html",
-    "service-worker.js",
-    "manifest.json",
-    "icons/nexus-192.png",
-    "icons/nexus-512.png",
-    "device/device-engine.js",
-    "device/device-ui.js",
-    "device/device-worker.js",
-    "device/model-manifest.json",
-    "device/vendor/LICENSE-jinja.txt",
-    "device/vendor/LICENSE-onnxruntime.txt",
-    "device/vendor/LICENSE-transformers.txt",
-    "device/vendor/ort-wasm-simd-threaded.asyncify.mjs",
-)
 SCHEMA = "nexus.studio-phone-local-kit.v1"
 CHECK_NAME = "device-check.html"
 CHECK_SOURCE = ROOT / "scripts/studio-phone-fieldcheck.html"
@@ -123,7 +111,7 @@ import stat
 from urllib.parse import urlsplit
 
 BASE = Path(__file__).resolve().parent
-LIMIT = 480000
+LIMIT = __STUDIO_ASSET_LIMIT__
 MIME = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -141,7 +129,7 @@ def load_public():
        manifest.get("private_user_data_included") is not False:
         raise ValueError("untrusted package manifest")
     items = manifest.get("assets")
-    if not isinstance(items, dict) or len(items) != 14:
+    if not isinstance(items, dict) or len(items) != __STUDIO_PHONE_COUNT__:
         raise ValueError("unexpected public asset contract")
     assets = {}
     for name, expected in items.items():
@@ -226,7 +214,9 @@ def main():
 
 if __name__ == "__main__":
     main()
-'''
+'''''.replace("__STUDIO_ASSET_LIMIT__", str(MAX_ASSET_BYTES)).replace(
+    "__STUDIO_PHONE_COUNT__", str(len(SOURCE_NAMES) + 1)
+)
 
 
 def sha(payload):
@@ -242,7 +232,7 @@ def public_assets():
         source = PUBLIC / name
         st = source.lstat()
         if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or source.is_symlink() or \
-           not (0 < st.st_size <= 480000):
+           not (0 < st.st_size <= MAX_ASSET_BYTES):
             raise ValueError("public Studio asset is missing, linked or oversized")
         items[name] = source.read_bytes()
     html = items["index.html"]
@@ -300,7 +290,7 @@ def contents(commit):
 
 
 def verify(zip_file, exact_commit=None):
-    if not zip_file.is_file() or zip_file.is_symlink() or zip_file.stat().st_size > 900000:
+    if not zip_file.is_file() or zip_file.is_symlink() or zip_file.stat().st_size > MAX_ARCHIVE_BYTES:
         raise ValueError("ZIP missing or too large")
     with zipfile.ZipFile(zip_file, "r", allowZip64=False) as archive:
         infos = archive.infolist()
@@ -309,7 +299,7 @@ def verify(zip_file, exact_commit=None):
         payloads = {}
         for info in infos:
             if info.flag_bits & 1 or info.is_dir() or \
-               info.file_size > 480000 or info.compress_type != zipfile.ZIP_STORED:
+               info.file_size > MAX_ASSET_BYTES or info.compress_type != zipfile.ZIP_STORED:
                 raise ValueError("unsupported ZIP entry")
             prefix = BUNDLE + "/"
             if not info.filename.startswith(prefix):

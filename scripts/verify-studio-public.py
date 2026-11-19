@@ -8,22 +8,29 @@ from pathlib import Path
 import subprocess
 import sys
 
+from studio_assets import MAX_ASSET_BYTES, OBSERVED_ASSETS
+
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('public_assets',ROOT/'scripts/verify-public-pwa-assets.py')
 observer=importlib.util.module_from_spec(spec);spec.loader.exec_module(observer)
 observer.ORIGIN='https://nexus-studio-merikation.onrender.com'
 # The shared Pilot 12 observer defaults to 300KB, while current Studio HTML
 # legitimately exceeds that limit. Keep an explicit bounded Studio-only cap,
-# matching the Studio release package limit (480KB).
-observer.MAX_BYTES=480_000
-observer.ASSETS={
-    '/':('public/studio/index.html','text/html'),
-    '/manifest.json':('public/studio/manifest.json','manifest'),
-    '/service-worker.js':('public/studio/service-worker.js','javascript'),
-    '/icons/nexus-192.png':('public/studio/icons/nexus-192.png','image/png'),
-    '/icons/nexus-512.png':('public/studio/icons/nexus-512.png','image/png'),
+# shared with the Studio release package.
+observer.MAX_BYTES=MAX_ASSET_BYTES
+MIME_KINDS = {
+    '.html': 'text/html',
+    '.json': 'application/json',
+    '.js': 'javascript',
+    '.png': 'image/png',
 }
-
+observer.ASSETS = {
+    '/' + ('' if name == 'index.html' else name): (
+        'public/studio/' + name,
+        'manifest' if name == 'manifest.json' else MIME_KINDS[Path(name).suffix],
+    )
+    for name in OBSERVED_ASSETS
+}
 
 def sanity():
     subprocess.run([sys.executable,str(ROOT/'scripts/build-studio-static.py'),'--check'],check=True,stdout=subprocess.DEVNULL)
@@ -38,8 +45,6 @@ def sanity():
     assert {icon['src'] for icon in manifest['icons']}=={'./icons/nexus-192.png','./icons/nexus-512.png'}
 
 
-for name in ['device-engine.js','device-worker.js','device-ui.js','model-manifest.json']:
-    observer.ASSETS['/device/'+name]=('public/studio/device/'+name,'application/json' if name.endswith('.json') else 'javascript')
 observer.source_sanity=sanity
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--self-test',action='store_true');parser.add_argument('--attempts',type=int,default=1);args=parser.parse_args()
