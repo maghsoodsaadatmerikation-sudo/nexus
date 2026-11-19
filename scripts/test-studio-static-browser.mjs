@@ -202,7 +202,7 @@ try{
  await js("document.querySelector('#studio-focus-tools button[data-panel=canvas-card]').click();true");
  assert(await js("NexusStudioFocus.active()==='canvas-card'&&document.getElementById('studio-focus-tools').hidden&&document.activeElement.closest('#canvas-card')"),'wide-catalog-focuses-result');
  checks.push('bilingual-tool-search-and-wide-routing');
- await js("document.getElementById('studio-focus-toggle').click();document.getElementById('message').focus();true");
+ await js("NexusStudioFocus.openPanel('conversation-card');document.getElementById('studio-focus-toggle').click();document.getElementById('message').focus();true");
  await poll(()=>retryJs("NexusStudioFocus.isFocused()&&getComputedStyle(document.getElementById('studio-focus-nav')).display==='none'"),2200,'mobile-keyboard-dock-focus-timing');
  const keyboard=await js("({focused:NexusStudioFocus.isFocused(),typing:document.documentElement.classList.contains('studio-focus-typing'),active:document.activeElement.id,dock:getComputedStyle(document.getElementById('studio-focus-nav')).display})");
  assert(keyboard.focused&&keyboard.dock==='none','mobile-keyboard-should-not-be-obscured-'+JSON.stringify(keyboard));
