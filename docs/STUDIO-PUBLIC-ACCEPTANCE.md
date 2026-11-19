@@ -2,7 +2,32 @@
 
 ## Why this exists
 
-The Phase 46 source-only Studio package is green but the public site still serves different HTML, service-worker and two device-control files. No public promotion has occurred. Before one is attempted, the existing `studio-static-public.yml` acceptance had two structural problems: it inherited the older Pilot 12 observer's **300,000-byte cap**, below the current reviewed Studio HTML size, and it had a **5-minute job timeout** even though the model's own real-weight load and offline generation can legitimately take longer.
+At the time of the original Phase 47 design, the source-only Studio package was green but the public site served older HTML, service-worker and device-control files. The historical pre-promotion drift described below no longer represents the current provider state. Before one is attempted, the existing `studio-static-public.yml` acceptance had two structural problems: it inherited the older Pilot 12 observer's **300,000-byte cap**, below the current reviewed Studio HTML size, and it had a **5-minute job timeout** even though the model's own real-weight load and offline generation can legitimately take longer.
+
+## Post-deployment read-only witness — 19 November 2026
+
+The connected Render workspace `tea-dabhioe10ojc73acbs8g` confirms the **existing**
+static service `srv-dbrjurc9v7es73cqe0v0` has a new **live** deploy,
+`dep-dbvkuonf3r2c73cj3930`, from Git commit
+`9e05b840fc2d36d7bc268aede2693ab4d6fb08e3`. The previous successful
+live deploy was `dep-dbvgqotg1s2s73f6ghtg`, source
+`e4f24218d7a3882391b593d78641d7a5ff50866d`. AutoDeploy remains disabled.
+
+The owner's continuation was approved in chat; this document change is
+**read-only verification only**, not additional deployment authorization.
+The separate prior-live source fallback witness for the previous build
+passed on nine public HTTPS assets and retained a source-only ZIP and its SHA
+sidecar in GitHub Actions run `44597628585`. **That does not independently
+confirm Render's retained rollback build artifact.**
+
+The GitHub PR titled `[verify-studio-public]` triggers an independent
+public-origin test against exactly the same `public/studio/` assets.
+The document is the only source change in that PR: a PASS confirms bytes,
+separate browser sessions and opt-in local model execution **only when the
+public-browser job itself succeeds**. Its source branch has a different commit
+ID because of the documentation change; the tested public asset bytes are
+otherwise the ones from the deployed Git commit above. The provider deploy
+ID must still be verified in Render independently.
 
 ## Changes
 
