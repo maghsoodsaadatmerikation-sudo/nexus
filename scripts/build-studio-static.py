@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+from studio_template_contract import replace_exact
 
 ROOT = Path(__file__).resolve().parents[1]
 PANEL = '''<details id="studio-install-card">
@@ -107,25 +108,37 @@ self.addEventListener('fetch',event=>{
 '''
 
 
+def render_public_shell(source: str, device_panel: str) -> bytes:
+    """Assemble the public shell; refuse missing or duplicated integration slots."""
+    source=replace_exact(source, "script-src 'unsafe-inline'", "script-src 'self' blob: 'unsafe-inline' 'wasm-unsafe-eval'")
+    # Two distinct CSP declarations currently embed worker-src.
+    source=replace_exact(source, "worker-src blob:", "worker-src 'self' blob:", expected=2)
+    source=replace_exact(source, "img-src 'none'", "img-src 'self'; manifest-src 'self'")
+    source=replace_exact(source, '<title>', '<link rel="manifest" href="./manifest.json"><meta name="theme-color" content="#185e48"><title>')
+    source=replace_exact(source, '</style>', '.studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style>')
+    source=replace_exact(source, '</header>', '</header>'+PANEL)
+    source=replace_exact(source, '</main>', PRIVACY+'</main>')
+    source=replace_exact(source, 'value="2048"></details>', 'value="2048">'+device_panel+'</details>')
+    source=replace_exact(source, '<label for="gateway"', '<label for="model-engine"><span class="studio-en">Model engine</span><span class="studio-fa">موتور مدل</span></label><select id="model-engine"><option value="gateway">Remote gateway / درگاه سرور</option><option value="device">On-device small model / مدل کوچک روی دستگاه</option></select><label for="gateway"')
+    source=replace_exact(source, '</body>', '<script>'+BOOTSTRAP+'</script><script type="module" src="./device/device-ui.js"></script></body>')
+    return source.encode()
+
+
 def artifacts():
     subprocess.run([sys.executable, str(ROOT/'scripts/build-studio.py'), '--check'], check=True)
     subprocess.run([sys.executable, str(ROOT/'scripts/build-device-model.py'), '--check'], check=True)
-    source=(ROOT/'web/studio.html').read_text()
-    source=source.replace("script-src 'unsafe-inline'", "script-src 'self' blob: 'unsafe-inline' 'wasm-unsafe-eval'")
-    source=source.replace("worker-src blob:", "worker-src 'self' blob:").replace("img-src 'none'", "img-src 'self'; manifest-src 'self'")
-    source=source.replace('<title>', '<link rel="manifest" href="./manifest.json"><meta name="theme-color" content="#185e48"><title>',1)
-    source=source.replace('</style>', '.studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style>',1)
-    source=source.replace('</header>','</header>'+PANEL,1)
-    source=source.replace('</main>',PRIVACY+'</main>',1)
-    source=source.replace('value="2048"></details>', 'value="2048">'+(ROOT/'web/device/device-panel.html').read_text()+'</details>',1)
-    source=source.replace('<label for="gateway"', '<label for="model-engine"><span class="studio-en">Model engine</span><span class="studio-fa">موتور مدل</span></label><select id="model-engine"><option value="gateway">Remote gateway / درگاه سرور</option><option value="device">On-device small model / مدل کوچک روی دستگاه</option></select><label for="gateway"',1)
-    source=source.replace('</body>','<script>'+BOOTSTRAP+'</script><script type="module" src="./device/device-ui.js"></script></body>',1)
-    html=source.encode()
+    html=render_public_shell(
+        (ROOT/'web/studio.html').read_text(),
+        (ROOT/'web/device/device-panel.html').read_text(),
+    )
     manifest={"id":"./", "name":"NEXUS Studio", "short_name":"NEXUS", "start_url":"./", "scope":"./", "display":"standalone", "lang":"en", "dir":"ltr", "background_color":"#f1f5f3", "theme_color":"#185e48", "icons":[{"src":f"./icons/nexus-{size}.png","sizes":f"{size}x{size}","type":"image/png","purpose":"any"} for size in (192,512)]}
     code=[]
     for name in ['device-engine.js','device-worker.js','device-ui.js','model-manifest.json']:
         content=(ROOT/'public/studio/device'/name).read_bytes();code.append({'path':'device/'+name,'bytes':len(content),'sha256':hashlib.sha256(content).hexdigest(),'kind':'json' if name.endswith('.json') else 'javascript'})
-    worker=WORKER.replace('__DIGEST__',hashlib.sha256(html).hexdigest()).replace('__INDEX_BYTES__',str(len(html))).replace('__CODE_ASSETS__',json.dumps(code,separators=(',',':'))).replace('__PACKAGE_ID__',hashlib.sha256(html+json.dumps(code,sort_keys=True).encode()).hexdigest()[:16])
+    worker=replace_exact(WORKER, '__DIGEST__', hashlib.sha256(html).hexdigest())
+    worker=replace_exact(worker, '__INDEX_BYTES__', str(len(html)))
+    worker=replace_exact(worker, '__CODE_ASSETS__', json.dumps(code,separators=(',',':')))
+    worker=replace_exact(worker, '__PACKAGE_ID__', hashlib.sha256(html+json.dumps(code,sort_keys=True).encode()).hexdigest()[:16])
     return {'index.html':html, 'service-worker.js':worker.encode(), 'manifest.json':(json.dumps(manifest,indent=2)+'\n').encode(), **{f'icons/nexus-{size}.png':(ROOT/f'public/icons/nexus-{size}.png').read_bytes() for size in (192,512)}}
 
 
