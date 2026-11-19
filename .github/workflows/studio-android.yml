@@ -27,13 +27,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf 'JAVA_HOME=%s\n' "$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export ANDROID_HOME="$RUNNER_TEMP/nexus-android-sdk"
+          printf 'JAVA_HOME=%s\nANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\n' "$JAVA_HOME" "$ANDROID_HOME" "$ANDROID_HOME" >> "$GITHUB_ENV"
           curl --fail --silent --show-error --location --retry 3 \
             https://services.gradle.org/distributions/gradle-8.13-bin.zip \
             --output "$RUNNER_TEMP/gradle.zip"
           printf '20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78  %s\n' "$RUNNER_TEMP/gradle.zip" | sha256sum --check
           unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
-          sdkmanager --install 'platforms;android-36' 'build-tools;35.0.0'
+          curl --fail --silent --show-error --location --retry 3 \
+            https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip \
+            --output "$RUNNER_TEMP/android-tools.zip"
+          printf '7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee  %s\n' "$RUNNER_TEMP/android-tools.zip" | sha256sum --check
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          unzip -q "$RUNNER_TEMP/android-tools.zip" -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/16.0"
+          sdkmanager="$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager"
+          set +o pipefail
+          yes | "$sdkmanager" --sdk_root="$ANDROID_HOME" --licenses >/dev/null
+          set -o pipefail
+          "$sdkmanager" --sdk_root="$ANDROID_HOME" --install 'platforms;android-36' 'build-tools;35.0.0'
       - name: Build the test APK and unsigned release bundle
         shell: bash
         run: |
