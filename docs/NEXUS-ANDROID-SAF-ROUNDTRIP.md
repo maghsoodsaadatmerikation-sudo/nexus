@@ -80,6 +80,22 @@ passphrase, file URI or user message. It is a resilience mechanism for
 emulator UI automation, **not** evidence of physical-phone accessibility,
 and not proof of Android TalkBack usability.
 
+## Explicit real-picker completion signal
+
+An additional debug-only native readback begins **only** after Android
+`onActivityResult(PICK_SOURCE)` returns from the real file picker. It logs
+the fixed Boolean `source_file_selected=true/false` but never the actual
+Uri, file name, contents or path. For a returned document, a bounded sequence
+of WebView evaluations inspects the exact known synthetic project's public
+UI state and the import success/rejection message. It emits only one of
+`saf_import_ok=true`, `saf_import_rejected=true`, or
+`saf_import_unconfirmed=true`. A successful acceptance now requires both
+**real file selection** and **validated import**, rejecting any unconfirmed
+or cancelled result. This also avoids assuming that Android WebView emits a
+console event for a non-interactive status update. The script never
+mutates an actual user's files, and the debug readback is absent in
+non-debuggable builds.
+
 ## Still not proven
 
 - Android physical phone OEM compatibility, removable storage/SD cards,
