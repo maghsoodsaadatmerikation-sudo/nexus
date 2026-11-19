@@ -29,7 +29,7 @@ jobs:
       - name: Checkout immutable current live Render source snapshot
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: e4f24218d7a3882391b593d78641d7a5ff50866d
+          ref: 9e05b840fc2d36d7bc268aede2693ab4d6fb08e3
           path: previous-live
           persist-credentials: false
       - name: Reject ambient provider credentials and unexpected live Git commit
@@ -40,7 +40,7 @@ jobs:
           test -z "${RAILWAY_TOKEN:-}"
           test -z "${RAILWAY_API_TOKEN:-}"
           test -z "${NEXUS_MODEL_API_KEY:-}"
-          test "$(git -C previous-live rev-parse HEAD)" = "e4f24218d7a3882391b593d78641d7a5ff50866d"
+          test "$(git -C previous-live rev-parse HEAD)" = "9e05b840fc2d36d7bc268aede2693ab4d6fb08e3"
           test "$(git -C review rev-parse HEAD)" = "$GITHUB_SHA"
       - name: Verify synthetic negative cases, archive reproducibility and exact live SHA
         working-directory: review
