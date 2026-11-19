@@ -106,6 +106,13 @@ class SourceFallbackTests(unittest.TestCase):
             ("production_deploy_executed", True),
             ("rollback_render_build_artifact_confirmed", True),
             ("source_commit", "f"*40),
+            ("live_service_id_at_snapshot", "srv-wrong-service"),
+            ("render_workspace_id_at_snapshot", "tea-wrong-workspace"),
+            ("current_live_deploy_at_snapshot", "dep-obsolete-live"),
+            ("rollback_action_available_in_connector", True),
+            ("real_user_archive_recovered", True),
+            ("no_new_service_or_cost", False),
+            ("data_included", "source_plus_private"),
             ("archive_sha256", "0"*64),
         ):
             with self.subTest(key=key):
