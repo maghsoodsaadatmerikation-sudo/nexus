@@ -1384,7 +1384,25 @@ function renderChatAttachments(){
  if(!latest?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS)$('attach-document').checked=false;
  $('clear-chat-files').disabled=busy||(!chatAttachments.length&&!$('attach-document').checked);
 }
-function stop(){languageImport++;window.NexusQualityUI?.cancel();window.NexusAstrologyUI?.cancel();window.NexusLabUI?.cancel();revision++;controller?.abort();controller=null;busy=false;pending=null;$('request-review').hidden=true;$('request-context').textContent='';$('consent').checked=false;try{speechSynthesis.cancel()}catch{}controls()}
+// v1 lifecycle contract: workspace tools are separate from private tab-only audio.
+const TOOL_LIFECYCLE=Object.freeze({
+ version:'nexus.studio.tool-lifecycle.v1',
+ cancel:Object.freeze([['NexusQualityUI','cancel'],['NexusAstrologyUI','cancel'],['NexusLabUI','cancel']]),
+ project:Object.freeze([['NexusTasksUI','clear'],['NexusQualityUI','clear'],['NexusAstrologyUI','clear'],['NexusLabUI','clear']]),
+ private:Object.freeze([['NexusDevice','unload'],['NexusTasksUI','clear'],['NexusQualityUI','clear'],
+  ['NexusAstrologyUI','clear'],['NexusLabUI','clear'],['NexusMusicUI','clear'],['NexusOrchestraUI','clear']])
+});
+function toolLifecycle(phase){
+ let complete=true;
+ for(const [name,method] of TOOL_LIFECYCLE[phase]){
+  const api=window[name];
+  if(api==null)continue; // An optional device API may not be loaded.
+  try{if(typeof api[method]!=='function')throw Error('unsupported-lifecycle');api[method]()}
+  catch{complete=false} // Continue clearing independent tools even if one fails.
+ }
+ return complete;
+}
+function stop(){languageImport++;toolLifecycle('cancel');revision++;controller?.abort();controller=null;busy=false;pending=null;$('request-review').hidden=true;$('request-context').textContent='';$('consent').checked=false;try{speechSynthesis.cancel()}catch{}controls()}
 function controls(){for(const id of ['new-project','delete-project','new-thread','rename-thread','archive-thread','delete-thread','guide','prepare','regenerate','apply-profile','new-document','save-version','delete-document','projects','branch','documents','create-vault','unlock','save','backup','restore','erase','language-file'])$(id).disabled=busy;
  $('chat-file').disabled=busy||!chat()||chat().archived;
  $('clear-chat-files').disabled=busy||(!chatAttachments.length&&!$('attach-document').checked);
@@ -1405,7 +1423,7 @@ function render(){
  $('documents').replaceChildren(...(p()?.documents||[]).map(d=>option(d.id,d.title)));$('documents').value=documentId||'';window.NexusLabUI?.render();window.NexusAstrologyUI?.render();window.NexusQualityUI?.render();renderChatAttachments();controls();
 }
 function mayReplace(){return (!forms()&&!$('message').value&&!chatAttachments.length&&!$('attach-document').checked)||confirm(t('discard'))}
-function selectProject(id){window.NexusTasksUI?.clear();window.NexusQualityUI?.clear();window.NexusAstrologyUI?.clear();window.NexusLabUI?.clear();stop();clearChatAttachments();projectId=id;threadId=p()?.threads.find(x=>!x.archived)?.id||null;documentId=p()?.documents[0]?.id||null;branchBase=undefined;profileDirty=editorDirty=false;$('message').value='';$('use-memory').checked=false;$('use-sources').checked=false;$('source-results').textContent='';$('branch-notice').textContent='';fillProfile();fillDoc()}
+function selectProject(id){toolLifecycle('project');stop();clearChatAttachments();projectId=id;threadId=p()?.threads.find(x=>!x.archived)?.id||null;documentId=p()?.documents[0]?.id||null;branchBase=undefined;profileDirty=editorDirty=false;$('message').value='';$('use-memory').checked=false;$('use-sources').checked=false;$('source-results').textContent='';$('branch-notice').textContent='';fillProfile();fillDoc()}
 function applyLanguage(){document.documentElement.lang=language;document.documentElement.dir=localePacks.get(language)?.dir||(language==='fa'?'rtl':'ltr');document.querySelectorAll('[data-t]').forEach(n=>n.textContent=t(n.dataset.t));document.querySelectorAll('[data-placeholder]').forEach(n=>n.placeholder=t(n.dataset.placeholder));render();if(branchBase!==undefined)$('branch-notice').textContent=t('branching')}
 function download(text,name,type='text/plain'){const u=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
 async function operation(fn,success='apply'){
@@ -1471,13 +1489,13 @@ $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+cha
 $('create-vault').onclick=()=>{const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation((rev,abort)=>vault.create(pass,{signal:abort.signal}))};
 $('unlock').onclick=()=>{if((dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked)&&!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const next=await vault.unlock(pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=next;dirty=false;selectProject(data.projects[0]?.id||null);render()})};
 $('save').onclick=()=>{if(!noForms())return;const snapshot=S.state(data);operation(async(rev,abort)=>{await vault.save(snapshot,{signal:abort.signal});if(rev===revision)dirty=false},'saved')};
-$('lock').onclick=()=>{if((dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked)&&!confirm(t('discard')))return;window.NexusDevice?.unload();window.NexusTasksUI?.clear();window.NexusQualityUI?.clear();window.NexusAstrologyUI?.clear();window.NexusLabUI?.clear();undoSlot.clear();stop();clearChatAttachments();modelInfo=null;vault.lock();data=S.empty();projectId=threadId=documentId=null;dirty=profileDirty=editorDirty=false;for(const id of ['passphrase','repeat-passphrase','gateway-token','message','project-title','document-title','instructions','memories','editor','source-query','search'])$(id).value='';$('model-status').textContent='';$('source-results').textContent='';$('request-context').textContent='';$('branch-notice').textContent='';renderVersions();render()};
+$('lock').onclick=()=>{if((dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked)&&!confirm(t('discard')))return;const clean=toolLifecycle('private');undoSlot.clear();stop();clearChatAttachments();modelInfo=null;vault.lock();data=S.empty();projectId=threadId=documentId=null;dirty=profileDirty=editorDirty=false;for(const id of ['passphrase','repeat-passphrase','gateway-token','message','project-title','document-title','instructions','memories','editor','source-query','search'])$(id).value='';$('model-status').textContent='';$('source-results').textContent='';$('request-context').textContent='';$('branch-notice').textContent='';renderVersions();render();if(!clean)location.reload()};
 $('backup').onclick=()=>{if(!noForms())return;const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await vault.export(data,pass,{signal:abort.signal});if(rev===revision)download(raw,'nexus-studio.encrypted.json','application/json')})};
 $('restore').onclick=()=>$('restore-file').click();$('restore-file').onchange=event=>{const f=event.target.files[0];event.target.value='';if(!f||f.size>6*1024*1024||!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await f.text();if(rev!==revision||abort.signal.aborted)return;const opened=await S.decrypt(raw,pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=opened.data;dirty=true;selectProject(data.projects[0]?.id||null);render()})};
 $('erase').onclick=()=>{if(confirm(t('discard')))operation(async(rev,abort)=>{
   window.NexusDevice?.unload();await vault.erase({signal:abort.signal});
   if(rev!==revision){if(!vault.unlocked&&data.projects.length)dirty=true;return}
-  undoSlot.clear();window.NexusQualityUI?.clear();modelInfo=null;for(const id of ['gateway-token','source-query','search','project-title','document-title'])$(id).value='';data=S.empty();selectProject(null);dirty=false;render();
+  const clean=toolLifecycle('private');undoSlot.clear();modelInfo=null;for(const id of ['gateway-token','source-query','search','project-title','document-title'])$(id).value='';data=S.empty();selectProject(null);dirty=false;render();if(!clean)location.reload();
 })};
 function readAloud(text){try{speechSynthesis.cancel();const voices=speechSynthesis.getVoices().filter(v=>v.localService&&v.lang.startsWith(language));if(!voices.length)return status('failed');const u=new SpeechSynthesisUtterance(text.slice(0,6000));u.voice=voices[0];speechSynthesis.speak(u)}catch{status('failed')}}
 $('language-template').onclick=()=>download(JSON.stringify({schema:'nexus.studio.locale.v1',code:'en',dir:'ltr',messages:EN},null,2),'nexus-studio-english-labels.json','application/json');
@@ -1493,7 +1511,7 @@ $('language-file').onchange=async event=>{
 };
 $('language').onchange=()=>{stop();language=$('language').value;applyLanguage()};
 window.addEventListener('beforeunload',e=>{if(dirty||forms()||$('message').value){e.preventDefault();e.returnValue=''}});
-window.NexusStudioUI={snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}};applyLanguage();
+window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',lifecycle_version:TOOL_LIFECYCLE.version,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
 </script><script>'use strict';

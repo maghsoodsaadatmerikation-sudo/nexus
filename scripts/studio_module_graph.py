@@ -38,7 +38,7 @@ MODULES = (
     Module("/*STUDIO_LOCALES*/", "studio-locales.js", "NexusLocales"),
     Module("/*STUDIO_APP*/", "studio-app.js", "NexusStudioUI",
            ("NexusStudio", "NexusLocales", "NexusAstrology"),
-           ("NexusLabUI", "NexusTasksUI", "NexusAstrologyUI", "NexusQualityUI", "NexusDevice")),
+           ("NexusLabUI", "NexusTasksUI", "NexusAstrologyUI", "NexusQualityUI", "NexusDevice", "NexusMusicUI", "NexusOrchestraUI")),
     Module("/*STUDIO_LAB_UI*/", "studio-lab-ui.js", "NexusLabUI", ("NexusLab", "NexusStudioUI")),
     Module("/*STUDIO_TASKS_UI*/", "studio-tasks-ui.js", "NexusTasksUI", ("NexusTasks",)),
     Module("/*STUDIO_ASTROLOGY_UI*/", "studio-astrology-ui.js", "NexusAstrologyUI",
