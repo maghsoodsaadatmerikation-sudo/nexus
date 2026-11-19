@@ -46,7 +46,20 @@ def await_true(predicate, label: str, timeout: float = WAIT_SECONDS) -> None:
 
 
 def log_lines() -> str:
-    return adb("logcat", "-d", "-s", TAG + ":I", "*:S", timeout=15)
+    # Android emulator ADB occasionally returns exit 255 while its transport
+    # restarts. Retry ONLY read-only logcat retrieval, never install, remove,
+    # write, UI actions, or evidence assertions. Fail if transport stays down.
+    last_error=None
+    for attempt in range(6):
+        try:
+            return adb("logcat", "-d", "-s", TAG + ":I", "*:S", timeout=15)
+        except RuntimeError as exc:
+            if "exit 255" not in str(exc):
+                raise
+            last_error=exc
+            time.sleep(.7)
+    raise RuntimeError("Emulator logcat remained unavailable after bounded retries: "+
+                       str(last_error))
 
 
 def ready(page: str) -> bool:
