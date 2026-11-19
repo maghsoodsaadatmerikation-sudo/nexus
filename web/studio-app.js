@@ -84,7 +84,7 @@ function unsavedLocalMedia(){
 // It deliberately exposes flags only, never prompt text, original vocal bytes or keys.
 function storageSnapshot(){
  const drafts=Object.freeze({
-  chat:Boolean($('message').value||chatAttachments.length||$('attach-document').checked||pending),
+  chat:hasChatDraft()||Boolean(pending),
   writing:Boolean(editorDirty),
   preferences:Boolean(profileDirty||window.NexusAstrologyUI?.hasDraft?.()===true),
   music:window.NexusMusicUI?.hasTransientWork?.()===true,
@@ -151,28 +151,50 @@ function fillDoc(){$('editor').value=doc()?.versions.at(-1)?.text||'';renderVers
 function renderVersions(){const d=doc();$('versions').replaceChildren(...(d?.versions||[]).map((v,i)=>option(v.id,(i+1)+' · '+v.at)));$('versions').value=d?.versions.at(-1)?.id||'';$('version-diff').textContent=''}
 function render(){
  $('projects').replaceChildren(...data.projects.map(x=>option(x.id,x.title)));$('projects').value=projectId||'';
- $('history').replaceChildren();for(const h of S.search(data,$('search').value,$('archived').checked)){const b=el('button',h.project_title+' · '+h.title+(h.archived?' ◇':''));b.className=h.thread===threadId?'active':'secondary';b.disabled=busy;b.onclick=()=>{if(!mayReplace())return;selectProject(h.project);threadId=h.thread;render()};$('history').append(b)}
+ $('history').replaceChildren();
+ for(const h of S.search(data,$('search').value,$('archived').checked)){
+  const b=el('button',h.project_title+' · '+h.title+(h.archived?' ◇':''));
+  b.className=h.project===projectId&&h.thread===threadId?'active':'secondary';
+  b.disabled=busy;b.onclick=()=>openHistoryThread(h);$('history').append(b);
+ }
  const stamp=projectId+':'+(p()?.sources||[]).map(s=>s.id).join(',');if(stamp!==sourceViewStamp){$('source-results').textContent='';sourceViewStamp=stamp}
- const c=chat();$('messages').replaceChildren();if(c){for(const n of S.path(c)){const item=el('article','');item.className='message '+n.role;item.append(el('strong',t(n.origin==='human'?'human':n.origin==='model'?'model':'local')));const body=el('div',n.text);body.className='body';body.dir='auto';item.append(body);if(n.role==='user'){if(n.attached_files?.length){const info=el('small',t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' · '+t('chatFilesNotSaved'));item.append(info)}const edit=el('button',t('edit'));edit.disabled=busy;edit.onclick=()=>{if(!mayReplace())return;clearChatDraft();branchBase=n.parent;$('message').value=n.text;$('branch-notice').textContent=t('branching');stop()};item.append(edit)}else{const canvas=el('button',t('toCanvas'));canvas.disabled=busy;canvas.onclick=()=>{if($('editor').value&&!confirm(t('discard')))return;$('editor').value=n.text;editorDirty=true;stop()};const speak=el('button',t('speak'));speak.onclick=()=>readAloud(n.text);item.append(canvas,speak)}$('messages').append(item)}}else $('messages').append(el('p',t('empty')));
+ const c=chat();$('messages').replaceChildren();if(c){for(const n of S.path(c)){const item=el('article','');item.className='message '+n.role;item.append(el('strong',t(n.origin==='human'?'human':n.origin==='model'?'model':'local')));const body=el('div',n.text);body.className='body';body.dir='auto';item.append(body);if(n.role==='user'){if(n.attached_files?.length){const info=el('small',t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' · '+t('chatFilesNotSaved'));item.append(info)}const edit=el('button',t('edit'));edit.disabled=busy;edit.onclick=()=>{if(!mayReplaceChat())return;clearChatDraft();branchBase=n.parent;$('message').value=n.text;$('branch-notice').textContent=t('branching');stop()};item.append(edit)}else{const canvas=el('button',t('toCanvas'));canvas.disabled=busy;canvas.onclick=()=>{if($('editor').value&&!confirm(t('discard')))return;$('editor').value=n.text;editorDirty=true;stop()};const speak=el('button',t('speak'));speak.onclick=()=>readAloud(n.text);item.append(canvas,speak)}$('messages').append(item)}}else $('messages').append(el('p',t('empty')));
  const parents=new Set(c?.nodes.map(n=>n.parent));const leaves=c?.nodes.filter(n=>!parents.has(n.id))||[];$('branch').replaceChildren(...leaves.map((n,i)=>option(n.id,(i+1)+' · '+n.text.slice(0,60))));$('branch').value=c?.head||'';
  $('source-list').replaceChildren();for(const s of p()?.sources||[]){const row=el('div',s.name+' · '+s.text.length);const b=el('button','×');b.disabled=busy;b.setAttribute('aria-label',language==='fa'?'حذف منبع':'Remove source');b.onclick=()=>mutate(v=>{const q=projectIn(v);q.sources=q.sources.filter(x=>x.id!==s.id)},{undoable:true});row.append(b);$('source-list').append(row)}
  $('documents').replaceChildren(...(p()?.documents||[]).map(d=>option(d.id,d.title)));$('documents').value=documentId||'';window.NexusLabUI?.render();window.NexusAstrologyUI?.render();window.NexusQualityUI?.render();renderChatAttachments();controls();
 }
-function mayReplace(){return (!forms()&&!$('message').value&&!chatAttachments.length&&!$('attach-document').checked)||confirm(t('discard'))}
+function hasChatDraft(){return Boolean($('message').value||chatAttachments.length||$('attach-document').checked)}
+function mayReplaceChat(){return !hasChatDraft()||confirm(t('discard'))}
+function mayReplace(){return (!forms()&&!hasChatDraft())||confirm(t('discard'))}
 function clearChatDraft(){
  clearChatAttachments();$('message').value='';branchBase=undefined;$('branch-notice').textContent='';
 }
 function selectDocument(id){
  documentId=id;editorDirty=false;$('attach-document').checked=false;fillDoc();
 }
+function resetConversation(id){
+ threadId=id;clearChatDraft();
+ for(const key of ['use-memory','use-sources','use-astrology','astro-historical'])$(key).checked=false;
+}
 function resetProject(id){
  toolLifecycle('project');
- projectId=id;threadId=p()?.threads.find(x=>!x.archived)?.id||null;
- selectDocument(p()?.documents[0]?.id||null);clearChatDraft();
- profileDirty=false;$('use-memory').checked=false;$('use-sources').checked=false;
- $('source-results').textContent='';fillProfile();
+ projectId=id;selectDocument(p()?.documents[0]?.id||null);
+ resetConversation(p()?.threads.find(x=>!x.archived)?.id||null);
+ profileDirty=false;$('source-results').textContent='';fillProfile();
 }
 function selectProject(id){resetProject(id);stop({refresh:false})}
+function openHistoryThread(entry){
+ if(busy)return;
+ if(entry.project===projectId){
+  if(entry.thread===threadId||!mayReplaceChat())return;
+  resetConversation(entry.thread);
+  clearModelReview();
+ }else{
+  if(!mayReplace())return;
+  selectProject(entry.project);threadId=entry.thread;
+ }
+ render();
+}
 function applyLanguage(){document.documentElement.lang=language;document.documentElement.dir=localePacks.get(language)?.dir||(language==='fa'?'rtl':'ltr');document.querySelectorAll('[data-t]').forEach(n=>n.textContent=t(n.dataset.t));document.querySelectorAll('[data-placeholder]').forEach(n=>n.placeholder=t(n.dataset.placeholder));render();if(branchBase!==undefined)$('branch-notice').textContent=t('branching')}
 function download(text,name,type='text/plain'){const u=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
 async function operation(fn,success='apply'){
@@ -180,7 +202,7 @@ async function operation(fn,success='apply'){
  try{await fn(rev,abort);if(rev===revision)status(success)}catch(error){if(rev===revision)status(error?.message==='archive-damaged'?'archiveDamaged':'failed')}
  finally{if(controller===abort)controller=null;if(rev===revision)busy=false;controls()}
 }
-function noForms(){if(forms()||$('message').value||chatAttachments.length||$('attach-document').checked){status('needApply');return false}return true}
+function noForms(){if(forms()||hasChatDraft()){status('needApply');return false}return true}
 function candidate(regenerate=false,materials=[]){const c=chat();if(!c||!p()||c.archived)throw Error('select-chat');if(regenerate){const path=S.path(c),last=path.at(-1);if(last?.role!=='assistant')throw Error('no-answer');if(path.at(-2)?.attached_files?.length)throw Error('reattach-required');return {...S.copy(c),head:last.parent}}return S.append(c,'user',$('message').value.trim(),'human',branchBase===undefined?c.head:branchBase,materials.map(x=>x.name))}
 function installThread(next){
  return mutate(v=>{const q=projectIn(v);q.threads[q.threads.findIndex(x=>x.id===next.id)]=next},{afterCommit:clearChatDraft});
@@ -198,29 +220,36 @@ $('new-project').onclick=()=>{
   mutate(v=>v.projects.push(q),{afterCommit:()=>{resetProject(q.id);$('project-title').value=''}});
  }catch{status('failed')}
 };
-$('projects').onchange=()=>{if(!mayReplace()){render();return}selectProject($('projects').value);render()};
+$('projects').onchange=()=>{
+ const id=$('projects').value;
+ if(id===projectId)return;
+ if(!mayReplace()){$('projects').value=projectId||'';return}
+ selectProject(id);render();
+};
 $('delete-project').onclick=()=>{
  if(!p()||!confirm(t('discard')))return;
  mutate(v=>v.projects=v.projects.filter(x=>x.id!==projectId),
   {undoable:true,afterCommit:()=>resetProject(data.projects[0]?.id||null)});
 };
 $('new-thread').onclick=()=>{
- if(!p()||!mayReplace())return;
+ if(!p()||!mayReplaceChat())return;
  const c=S.thread(t('newChat'));
- mutate(v=>projectIn(v).threads.push(c),{afterCommit:()=>{threadId=c.id;clearChatDraft()}});
+ mutate(v=>projectIn(v).threads.push(c),{afterCommit:()=>resetConversation(c.id)});
 };
 $('rename-thread').onclick=()=>{if(!chat())return;const name=prompt(t('rename'),chat().title);if(name?.trim())mutate(v=>projectIn(v).threads.find(x=>x.id===threadId).title=name.trim())};
 $('archive-thread').onclick=()=>{if(!chat())return;mutate(v=>{const c=projectIn(v).threads.find(x=>x.id===threadId);c.archived=!c.archived})};
 $('delete-thread').onclick=()=>{
  if(!chat()||!confirm(t('discard')))return;
  mutate(v=>{const q=projectIn(v);q.threads=q.threads.filter(x=>x.id!==threadId)},
-  {undoable:true,afterCommit:()=>{threadId=null;clearChatDraft()}});
+  {undoable:true,afterCommit:()=>resetConversation(null)});
 };
 $('search').oninput=render;$('archived').onchange=render;
 $('branch').onchange=()=>{
- if(!chat())return;
- if(!mayReplace()){render();return}
+ const current=chat();
+ if(!current)return;
  const head=$('branch').value;
+ if(head===current.head)return;
+ if(!mayReplaceChat()){$('branch').value=current.head||'';return}
  if(!mutate(v=>projectIn(v).threads.find(x=>x.id===threadId).head=head,{afterCommit:clearChatDraft}))render();
 };
 $('guide').onclick=()=>{if(chatAttachments.length||$('attach-document').checked)return status('chatAttachmentRequiresModel');if($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())return status('needApply');try{const c=candidate();installThread(S.append(c,'assistant',S.guide(S.path(c).at(-1).text,language==='fa',{skyTone:$('sky-tone').checked})+($('use-astrology').checked?'\n\n'+NexusAstrology.reflection(p().astrology,language==='fa',{historical:$('astro-historical').checked}):''),'guide'))}catch{status('failed')}};
@@ -281,7 +310,7 @@ $('load-version').onclick=()=>{if(forms()&&!confirm(t('discard')))return;const v
 $('export-document').onclick=()=>{if(doc()&&confirm(t('plain')))download($('editor').value,'nexus-document.md','text/markdown')};
 $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+chat().title+'\n\n'+S.path(chat()).map(n=>'## '+t(n.origin==='human'?'human':n.origin==='model'?'model':'local')+'\n\n'+n.text+(n.attached_files?.length?'\n\n'+t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' — '+t('chatFilesNotSaved'):'')).join('\n\n'),'nexus-conversation.md','text/markdown')};
 $('create-vault').onclick=()=>{const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation((rev,abort)=>vault.create(pass,{signal:abort.signal}))};
-$('unlock').onclick=()=>{if((dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked)&&!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const next=await vault.unlock(pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=next;dirty=false;selectProject(data.projects[0]?.id||null);render()})};
+$('unlock').onclick=()=>{if((dirty||forms()||hasChatDraft())&&!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const next=await vault.unlock(pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=next;dirty=false;selectProject(data.projects[0]?.id||null);render()})};
 $('save').onclick=()=>{if(!noForms())return;const snapshot=S.state(data);operation(async(rev,abort)=>{await vault.save(snapshot,{signal:abort.signal});if(rev===revision)dirty=false},'saved')};
 $('lock').onclick=()=>{if(storageSnapshot().lossRisk&&!confirm(t('discard')))return;const clean=toolLifecycle('private');undoSlot.clear();stop({refresh:false});clearChatDraft();modelInfo=null;vault.lock();data=S.empty();projectId=threadId=documentId=null;dirty=profileDirty=editorDirty=false;for(const id of ['passphrase','repeat-passphrase','gateway-token','project-title','document-title','instructions','memories','editor','source-query','search'])$(id).value='';$('model-status').textContent='';$('source-results').textContent='';renderVersions();render();if(!clean)location.reload()};
 $('backup').onclick=()=>{if(!noForms())return;const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await vault.export(data,pass,{signal:abort.signal});if(rev===revision)download(raw,'nexus-studio.encrypted.json','application/json')})};

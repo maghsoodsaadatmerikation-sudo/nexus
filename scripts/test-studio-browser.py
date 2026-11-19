@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import tempfile
 
-MIN_CHECKS=30
+MIN_CHECKS=48
 
 WITNESS=r"""
 window.addEventListener('load',async()=>{
@@ -56,6 +56,41 @@ window.addEventListener('load',async()=>{
   const count=network;$('send-model').click();assert(network===count,'unapproved-send-does-not-connect');$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));$('send-model').click();await wait(()=>current().threads[0].nodes.at(-1)?.origin==='model');assert(posted.consent===true&&posted.configuration_id==='a'.repeat(64),'approved-request-binds-configuration');assert(!JSON.stringify(posted).includes('TRANSIENT ACCESS TOKEN'),'gateway-token-excluded-from-context');
   $('regenerate').click();assert(!$('request-review').hidden,'regenerate-prepares-another-branch');$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));$('send-model').click();await wait(()=>$('request-review').hidden);assert($('branch').options.length>=3,'regenerate-keeps-original-answer');
   late=true;fill('message','STALE REQUEST');$('prepare').click();$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));const before=current().threads[0].nodes.length;$('send-model').click();await wait(()=>delayResponse!==null);$('stop').click();delayResponse();await sleep(50);assert(current().threads[0].nodes.length===before,'stop-discards-late-model-answer');fill('message','');late=false;
+  const historyButton=title=>[...$('history').children].find(b=>b.textContent.endsWith(' · '+title));
+  const canvasId=$('documents').value;
+  fill('editor','Preserve the current canvas draft');
+  fill('task-plan','Preserve the project task draft');
+  let confirmations=0;
+  window.confirm=()=>{confirmations++;return false};
+  $('new-thread').click();
+  assert(confirmations===0&&current().threads.length===2&&$('editor').value==='Preserve the current canvas draft',
+   'new-chat-keeps-unrelated-draft-without-confirmation');
+  assert(!$('use-memory').checked&&!$('use-sources').checked,'new-chat-resets-context-opt-ins');
+  fill('message','Keep the composer draft on the active chat');
+  $('use-memory').checked=true;$('use-sources').checked=true;
+  const draftFiles=new DataTransfer();draftFiles.items.add(new File(['draft text'],'switch.txt'));
+  $('chat-file').files=draftFiles.files;$('chat-file').dispatchEvent(new Event('change'));
+  await wait(()=>$('chat-attachment-tray').textContent.includes('switch.txt'));
+  $('prepare').click();$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));
+  historyButton(EN.newChat).click();
+  assert(confirmations===0&&!$('request-review').hidden&&$('consent').checked,'reselecting-active-chat-keeps-draft-and-review');
+  historyButton('Renamed conversation').click();
+  assert(confirmations===1&&!$('request-review').hidden&&$('message').value.includes('Keep the composer'),
+   'declining-chat-switch-keeps-review-and-draft');
+  window.confirm=()=>{confirmations++;return true};
+  historyButton('Renamed conversation').click();
+  assert(confirmations===2&&$('request-review').hidden&&!$('request-context').textContent&&!$('consent').checked&&
+   !$('message').value&&!$('use-memory').checked&&!$('use-sources').checked&&$('chat-attachment-tray').textContent.includes(EN.chatNoFiles),
+   'accepted-chat-switch-clears-only-chat-context-and-review');
+  assert($('documents').value===canvasId&&$('editor').value==='Preserve the current canvas draft'&&
+   $('task-plan').value==='Preserve the project task draft'&&$('source-results').textContent.includes('notes.txt:1'),
+   'same-project-chat-switch-keeps-canvas-tools-and-search-results');
+  fill('instructions','Preserve unapplied project preferences');
+  confirmations=0;window.confirm=()=>{confirmations++;return false};
+  historyButton(EN.newChat).click();historyButton('Renamed conversation').click();
+  assert(confirmations===0&&$('instructions').value==='Preserve unapplied project preferences'&&NexusStudioUI.storageStatus().drafts.preferences,
+   'same-project-history-preserves-unapplied-preferences-without-warning');
+  window.confirm=()=>true;$('apply-profile').click();$('save-version').click();
   fill('passphrase','long private password 123');fill('repeat-passphrase','long private password 123');$('create-vault').click();await wait(()=>!$('save').disabled);$('save').click();await wait(()=>$('status').textContent.includes('session saved'));
   const store=new NexusStudio.IndexedStore(),raw=await store.read();assert(raw&&!raw.includes('PRIVATE PROJECT')&&!raw.includes('REVIEWED SECRET MEMORY'),'indexeddb-contains-ciphertext-only');assert(!raw.includes('TRANSIENT ACCESS TOKEN'),'credentials-not-in-encrypted-state');
   fill('editor','UNSAVED CANVAS');fill('instructions','CHANGED PREFERENCE');$('apply-profile').click();$('save').click();assert($('status').textContent.includes('save document versions'),'profile-apply-does-not-hide-canvas-draft');$('save-version').click();$('save').click();await wait(()=>$('status').textContent.includes('session saved'));
@@ -64,6 +99,14 @@ window.addEventListener('load',async()=>{
   fill('passphrase','long private password 123');$('unlock').click();await wait(()=>snapshot().projects.length===1);assert(current().id===projectId&&current().documents[0].versions.at(-1).text==='UNSAVED CANVAS','encrypted-reopen-restores-chats-memory-and-canvas');
   const unchangedDraftState=JSON.stringify(snapshot());fill('message','UNSENT PRIVATE DRAFT');fill('passphrase','long private password 123');window.confirm=()=>false;$('unlock').click();await sleep(30);assert($('message').value==='UNSENT PRIVATE DRAFT'&&JSON.stringify(snapshot())===unchangedDraftState&&$('passphrase').value==='long private password 123','unlock-requires-confirmation-for-unsent-draft');window.confirm=()=>true;fill('message','');fill('passphrase','');
   const oldId=current().id;fill('project-title','SECOND PROJECT');$('new-project').click();$('new-thread').click();assert(current().id!==oldId&&current().memories.length===0&&!$('use-memory').checked,'new-project-isolates-memory-and-context');
+  fill('task-plan','Second project only');
+  fill('instructions','Unapplied second-project preferences');
+  const secondId=current().id;
+  window.confirm=()=>false;historyButton('Renamed conversation').click();
+  assert(current().id===secondId&&$('task-plan').value==='Second project only','declined-cross-project-history-keeps-current-work');
+  window.confirm=()=>true;historyButton('Renamed conversation').click();
+  assert(current().id===oldId&&!$('task-plan').value&&$('instructions').value==='CHANGED PREFERENCE',
+   'accepted-cross-project-history-clears-project-scoped-work');
   change('language','fa');assert(document.documentElement.dir==='rtl'&&$('guide').textContent.includes('محلی'),'persian-rtl-interface');
   const unchanged=JSON.stringify(snapshot());
   const labels={};document.querySelectorAll('[data-t]').forEach(n=>labels[n.dataset.t]=n.textContent);
