@@ -133,6 +133,23 @@ try{
   await poll(()=>retryJs("document.readyState==='complete'&&Boolean(window.NexusStudioUI)&&Boolean(document.getElementById('studio-offline'))"),15000,'studio-after-fieldcheck-not-rendered');
  }
  assert(await js("document.documentElement.scrollWidth<=innerWidth+2"),'mobile-overflow');checks.push('responsive-studio-renders');
+ stage='web-app-install';
+ assert(await js(`(async()=>{
+   const install=document.getElementById('studio-install');
+   const privacy=document.querySelector('a[href="#studio-privacy"]');
+   if(!install.hidden||!privacy||!document.getElementById('studio-privacy'))return false;
+   let prompted=0;
+   const event=new Event('beforeinstallprompt',{cancelable:true});
+   event.prompt=async()=>{prompted++};
+   event.userChoice=Promise.resolve({outcome:'accepted'});
+   if(window.dispatchEvent(event)||install.hidden)return false;
+   install.click();
+   install.click();
+   await event.userChoice;
+   window.dispatchEvent(new Event('appinstalled'));
+   return install.hidden&&prompted===1&&document.getElementById('studio-install-state').textContent.includes('installed');
+ })()`),'install-prompt-privacy-or-single-use-flow');
+ checks.push('install-prompt-single-use-and-privacy-link');
  assert(await js("NexusStudioFocus.isFocused()&&NexusStudioFocus.active()==='conversation-card'&&!document.getElementById('conversation-card').hidden&&document.getElementById('projects-card').hidden&&!document.getElementById('studio-focus-onboarding').hidden&&document.getElementById('studio-focus-nav').getAttribute('aria-label')==='Primary Studio navigation'"),'mobile-default-chat-not-focused');checks.push('chat-first-first-project-guidance');
  assert(await js("Boolean(window.NexusStudioCompose)&&NexusStudioCompose.mode()==='guide'&&document.getElementById('studio-compose-send').disabled&&document.getElementById('studio-compose-privacy').textContent.includes('not generative AI')&&document.getElementById('studio-compose-storage').textContent.includes('No encrypted archive')"),'initial-honest-composer');
  checks.push('composer-local-mode-honesty-before-project');

@@ -36,6 +36,7 @@ optional, explicitly downloaded small model can draft short English replies
 from supplied facts on the device, without an API key. The initial download is
 about 167 MB; accuracy and context capacity are limited. [Device model setup](docs/DEVICE-MODEL.md).
 [Mobile setup, deployment identity and public verification](docs/STUDIO-STATIC.md).
+[Android package, signing and public distribution](android/README.md).
 
 **New mobile usability:** the latest source offers an opt-out, chat-first focus view with
 four bottom navigation choices (Chat / Projects / Tools / Save), first-project
