@@ -51,6 +51,10 @@ async function readSources(files,{signal}={}){
  current();return sources;
 }
 function path(t,head=t.head){const map=new Map(t.nodes.map(n=>[n.id,n])),out=[],seen=new Set();while(head!==null){const n=map.get(head);if(!n||seen.has(head))fail('invalid-parent');seen.add(head);out.unshift(copy(n));head=n.parent}return out}
+function fork(t,head,title){
+ id(head);
+ return {...thread(title),head,nodes:path(t,head)};
+}
 function append(t,role,body,origin,parent=t.head,attachedFiles=[]){
  const labels=array(attachedFiles,MAX_CHAT_ATTACHMENTS).map(label=>text(label,160,true));
  if(role!=='user'&&labels.length)fail('attached-files-role');
@@ -206,5 +210,5 @@ class Vault{
   check();if(signal?.aborted)Object.assign(this,{key:null,salt:null,raw:null,data:null});else this.lock();
  },{signal})}
 }
-root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,empty,project,thread,readSources,path,append,context,search,retrieve,guide,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
+root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,empty,project,thread,readSources,path,fork,append,context,search,retrieve,guide,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
 })(globalThis);

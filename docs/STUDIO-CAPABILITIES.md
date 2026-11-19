@@ -71,6 +71,22 @@ model-send approval. See [the operating contract](STUDIO-CHAT-TOOL-HANDOFF.md).
 This is user-directed data flow; **not autonomous model tool calling,
 open-ended research, tool-execution authority, or a trained model**.
 
+## Independent chat branches and selection review
+
+Use **Branch into new conversation** on a visible message to copy that path
+through the selected turn into a separate conversation in the current project.
+Other branches and later turns stay in the original. A user-message fork
+opens a draft that can be reviewed and submitted using the existing composer.
+Only temporary attachment labels are retained with copied messages. Attach the
+files again to include them in a new request.
+
+In the writing canvas, select up to 8,000 characters and choose **Review
+selection in chat**. The composer receives a draft containing the selection.
+Preparing the model request still shows the exact payload before separate
+approval. To use an answer in the canvas, choose **Insert reply in canvas**.
+It inserts at the cursor or replaces the current selection after confirmation.
+Save a new version to persist the changes.
+
 ## Remaining gaps and their actual prerequisites
 
 | ChatGPT capability | NEXUS boundary after this change | Required next dependency |
@@ -85,7 +101,7 @@ open-ended research, tool-execution authority, or a trained model**.
 | Third-party app actions/MCP | Constitutional capability types are not authenticated connectors | Per-service OAuth, scoped tokens, concrete tools, revocation and action review |
 | Shared projects and live collaboration | Single browser owner only | User accounts, tenancy, encrypted sync, access control and conflict resolution |
 | Cross-device automatic history sync | Portable encrypted file only | An authenticated sync service and account recovery design |
-| All-language reviewed localization | English/Persian bundled; other interface languages accept complete local packs | Reviewed bundled translation packs and accessibility testing for additional languages |
+| All-language reviewed localization | English, Persian, Arabic, Turkish and Spanish bundled for key workflows; additional languages accept complete local packs | Reviewed bundled translation packs and accessibility testing for additional languages |
 | Native Android release | Existing Stage 27 test APK is separate | Maintained native source, stable signing identity, real emulator/device acceptance and publishing |
 
 ## Privacy and persistence

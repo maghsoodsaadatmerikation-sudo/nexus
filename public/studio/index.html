@@ -210,6 +210,8 @@ section h2:focus, #studio-focus-tools-title:focus {outline: none;}
   #conversation-card > .row:first-child button {flex: 1 1 calc(50% - 12px); white-space: normal;}
 }
 
+.message-actions{display:flex;flex-wrap:wrap;gap:.35rem;margin-block-start:.5rem}.message-actions button{margin:0;min-height:44px}
+
 .studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style></head><body><main>
 <header class="studio-masthead">
   <div class="studio-brand">
@@ -356,7 +358,7 @@ section h2:focus, #studio-focus-tools-title:focus {outline: none;}
 <p class="help music-en">This version creates synthetic vowel phrases only; it does not pronounce text or imitate anyone's voice. Piano, strings, brass, woodwinds and animal-inspired effects are electronic approximations. You decide what to publish; no external service is called.</p>
 <p class="help music-fa" lang="fa" dir="rtl">در این نسخه آواز مصنوعی با واکه‌های ساده تولید می‌شود و متن را نمی‌خواند یا صدای کسی را تقلید نمی‌کند. سازهای غربی و افکت‌های حیوانات الکترونیکی و تقریبی‌اند؛ هیچ انتشار یا اتصال خودکاری وجود ندارد.</p>
 </section>
-<section class="card" id="canvas-card"><h2 data-t="canvas">Versioned writing canvas</h2><select id="documents" aria-label="Document"></select><input id="document-title" maxlength="120" data-placeholder="documentTitle" aria-label="Document title"><button id="new-document" data-t="newDocument">New document</button><textarea id="editor" maxlength="100000" dir="auto"></textarea><div class="row"><button id="save-version" data-t="saveVersion">Save new version</button><button id="export-document" data-t="exportDocument">Export Markdown</button><button id="delete-document" data-t="deleteDocument">Delete document</button></div><select id="versions" aria-label="Saved document version"></select><button id="load-version" class="secondary" data-t="loadVersion">Load version into editor</button><pre id="version-diff"></pre><p class="help" data-t="canvasHelp">Every saved version remains available, up to 30 per document. Text and code are edited as inert text and never executed.</p></section>
+<section class="card" id="canvas-card"><h2 data-t="canvas">Versioned writing canvas</h2><select id="documents" aria-label="Document"></select><input id="document-title" maxlength="120" data-placeholder="documentTitle" aria-label="Document title"><button id="new-document" data-t="newDocument">New document</button><textarea id="editor" maxlength="100000" dir="auto"></textarea><button id="canvas-review" class="secondary" data-t="canvasReview">Review selection in chat</button><p class="help" data-t="canvasReviewHelp"></p><div class="row"><button id="save-version" data-t="saveVersion">Save new version</button><button id="export-document" data-t="exportDocument">Export Markdown</button><button id="delete-document" data-t="deleteDocument">Delete document</button></div><select id="versions" aria-label="Saved document version"></select><button id="load-version" class="secondary" data-t="loadVersion">Load version into editor</button><pre id="version-diff"></pre><p class="help" data-t="canvasHelp">Every saved version remains available, up to 30 per document. Text and code are edited as inert text and never executed.</p></section>
 </div></div><p class="help" data-t="boundary">NEXUS assists judgment. It cannot make a human decision or take external actions from a conversation.</p>
 <section class="card" id="studio-privacy">
 <div class="studio-en"><h2>NEXUS Studio privacy policy</h2>
@@ -1015,6 +1017,10 @@ async function readSources(files,{signal}={}){
  current();return sources;
 }
 function path(t,head=t.head){const map=new Map(t.nodes.map(n=>[n.id,n])),out=[],seen=new Set();while(head!==null){const n=map.get(head);if(!n||seen.has(head))fail('invalid-parent');seen.add(head);out.unshift(copy(n));head=n.parent}return out}
+function fork(t,head,title){
+ id(head);
+ return {...thread(title),head,nodes:path(t,head)};
+}
 function append(t,role,body,origin,parent=t.head,attachedFiles=[]){
  const labels=array(attachedFiles,MAX_CHAT_ATTACHMENTS).map(label=>text(label,160,true));
  if(role!=='user'&&labels.length)fail('attached-files-role');
@@ -1170,7 +1176,7 @@ class Vault{
   check();if(signal?.aborted)Object.assign(this,{key:null,salt:null,raw:null,data:null});else this.lock();
  },{signal})}
 }
-root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,empty,project,thread,readSources,path,append,context,search,retrieve,guide,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
+root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,empty,project,thread,readSources,path,fork,append,context,search,retrieve,guide,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
 })(globalThis);
 </script><script>/* Explicit public research, isolated local JavaScript, and inert chart data. */
 (function(root){'use strict';
@@ -1369,6 +1375,17 @@ const labels={
  restore:['Abrir archivo cifrado','Şifreli dosyayı aç','فتح ملف مشفر'],
  erase:['Borrar archivo','Arşivi sil','حذف الأرشيف'],
  conversation:['Conversación','Sohbet','المحادثة'],
+ forkChat:['Crear conversación desde aquí','Buradan yeni sohbet başlat','إنشاء محادثة من هنا'],
+ forkTitle:['Rama de','Sohbet dalı','فرع من'],
+ forkCreated:['Se abrió una conversación separada desde este mensaje.','Bu mesajdan ayrı bir sohbet açıldı.','فُتحت محادثة مستقلة من هذه الرسالة.'],
+ canvasReview:['Revisar selección en el chat','Seçimi sohbette incele','مراجعة النص المحدد في المحادثة'],
+ canvasReviewHelp:['Selecciona hasta 8.000 caracteres. Solo la selección pasa al borrador del chat. Revísala antes de enviarla.','En fazla 8.000 karakter seçin. Yalnızca seçili metin sohbet taslağına alınır. Göndermeden önce inceleyin.','حدد ما يصل إلى ٨٠٠٠ حرف. يظهر النص المحدد وحده في مسودة المحادثة. يمكنك مراجعته قبل الإرسال.'],
+ canvasSelect:['Selecciona primero texto en el editor.','Önce yazı alanında metin seçin.','حدد نصاً في المحرر أولاً.'],
+ canvasSelectionLong:['Selecciona 8.000 caracteres o menos.','En fazla 8.000 karakter seçin.','حدد ٨٠٠٠ حرف أو أقل.'],
+ canvasPrompt:['Revisa el pasaje seleccionado. Sugiere cambios concretos que conserven su sentido y su voz.','Seçili bölümü incele. Anlamı ve üslubu koruyan somut düzenlemeler öner.','راجع المقطع المحدد واقترح تعديلات تحافظ على معناه وأسلوبه.'],
+ canvasReplace:['¿Sustituir la selección actual del editor por esta respuesta?','Yazı alanındaki seçili metin bu yanıtla değiştirilsin mi?','هل تريد استبدال النص المحدد في المحرر بهذا الرد؟'],
+ canvasInsert:['Insertar respuesta en el editor','Yanıtı yazı alanına ekle','إدراج الرد في المحرر'],
+ canvasInserted:['Respuesta insertada en el borrador. Guarda una nueva versión para conservarla.','Yanıt taslağa eklendi. Saklamak için yeni bir sürüm kaydedin.','أُدرج الرد في المسودة. احفظ إصداراً جديداً للاحتفاظ به.'],
  rename:['Cambiar nombre','Yeniden adlandır','إعادة التسمية'],
  archiveChat:['Archivar o reabrir','Arşivle veya yeniden aç','أرشفة أو إعادة فتح المحادثة'],
  deleteChat:['Eliminar conversación','Sohbeti sil','حذف المحادثة'],
@@ -1559,6 +1576,22 @@ Object.assign(FA,{archiveDamaged:'آرشیو مرورگر آسیب‌دیده ی
 Object.assign(EN,{chatAttachments:'Attach text files to this message',chatAttachmentsHelp:'Up to four TXT, Markdown, CSV, TSV or JSON files, 128 KiB each. Only short, clearly marked excerpts enter the exact reviewed model request. This is not image/PDF understanding. The original files are not stored in chat or archive; filenames are retained with your turn. Nothing is sent until you explicitly approve the model request.',chatAttachedDocument:'Include latest saved writing document as a temporary excerpt',chatClearAttachments:'Clear attachments',chatNoFiles:'No text files attached',chatAttachmentAdded:'Local files added to next reviewed model request.',chatAttachmentInvalid:'Could not read text files; check size, format and capacity.',chatAttachmentRequiresModel:'Attached file excerpts require a configured model request; the local guide cannot read them.',chatAttachedUsed:'One-turn excerpts supplied (not verified):',chatRegenRequiresFiles:'A response grounded in temporary files cannot be regenerated from the filenames alone. Edit the user message to a new branch and attach the files again.',chatFilesNotSaved:'Files are held only in this tab and their bytes are never saved to the chat archive.'});
 Object.assign(FA,{chatAttachments:'پیوست فایل متنی برای همین پیام',chatAttachmentsHelp:'حداکثر چهار فایل TXT، Markdown، CSV، TSV یا JSON، هرکدام تا ۱۲۸ کیبی‌بایت. فقط گزیده‌های کوتاه و مشخص وارد درخواست مدل پس از بازبینی می‌شوند. تصویر و PDF تحلیل نمی‌شوند. محتوای فایل‌ها در تاریخچه یا آرشیو ذخیره نمی‌شود؛ فقط نامشان کنار پیام می‌ماند. تا تأیید صریح شما چیزی فرستاده نمی‌شود.',chatAttachedDocument:'افزودن گزیده‌ای از آخرین نسخهٔ ذخیره‌شدهٔ سند',chatClearAttachments:'پاک‌کردن پیوست‌ها',chatNoFiles:'فایل متنی پیوست نشده است',chatAttachmentAdded:'فایل‌های محلی به درخواست بعدی اضافه شدند؛ قبل از ارسال بازبینی می‌شوند.',chatAttachmentInvalid:'خواندن فایل‌های متنی انجام نشد؛ اندازه، قالب یا ظرفیت را بررسی کن.',chatAttachmentRequiresModel:'گزیدهٔ فایل‌ها فقط در درخواست مدل پیکربندی‌شده استفاده می‌شود؛ راهنمای محلی فایل را نمی‌خواند.',chatAttachedUsed:'گزیده‌های موقت ارائه‌شده (تأییدنشده):',chatRegenRequiresFiles:'پاسخ مبتنی بر فایل موقت را نمی‌توان فقط از نام فایل بازتولید کرد. پیام را در شاخهٔ تازه ویرایش کن و فایل‌ها را دوباره اضافه کن.',chatFilesNotSaved:'محتوای فایل‌ها فقط در همین برگه است و در آرشیو گفتگو ذخیره نمی‌شود.'});
 const forms=()=>profileDirty||editorDirty||window.NexusAstrologyUI?.hasDraft()===true;
+Object.assign(EN,{
+ forkChat:'Branch into new conversation',forkTitle:'Branch of',forkCreated:'Opened a separate conversation from this message.',
+ canvasReview:'Review selection in chat',canvasReviewHelp:'Select up to 8,000 characters. Only selected text goes into the chat draft. You can review it before sending.',
+ canvasSelect:'Select text in the writing canvas first.',canvasSelectionLong:'Select 8,000 characters or fewer.',
+ canvasPrompt:'Review the selected passage below. Suggest targeted edits while preserving its meaning and voice.',
+ canvasReplace:'Replace the current selection in the writing canvas with this reply?',
+ canvasInsert:'Insert reply in canvas',canvasInserted:'Reply inserted into the canvas draft. Save a new version to keep it.'
+});
+Object.assign(FA,{
+ forkChat:'شاخه در گفتگوی تازه',forkTitle:'شاخهٔ',forkCreated:'از این پیام یک گفتگوی مستقل باز شد.',
+ canvasReview:'بازبینی بخش انتخاب‌شده در گفتگو',canvasReviewHelp:'تا ۸۰۰۰ نویسه انتخاب کن. فقط متن انتخاب‌شده وارد پیش‌نویس گفتگو می‌شود و پیش از ارسال قابل بازبینی است.',
+ canvasSelect:'ابتدا بخشی از متن را در ویرایشگر انتخاب کن.',canvasSelectionLong:'حداکثر ۸۰۰۰ نویسه انتخاب کن.',
+ canvasPrompt:'بخش انتخاب‌شدهٔ زیر را بازبینی کن. با حفظ معنا و لحن، اصلاح‌های مشخص پیشنهاد بده.',
+ canvasReplace:'بخش انتخاب‌شده در ویرایشگر با این پاسخ جایگزین شود؟',
+ canvasInsert:'درج پاسخ در ویرایشگر',canvasInserted:'پاسخ در پیش‌نویس ویرایشگر درج شد. برای نگهداری، نسخهٔ تازه ذخیره کن.'
+});
 const builtIn=()=>builtInLanguages.get(language);
 const t=k=>localePacks.get(language)?.messages[k]??builtIn()?.messages[k]??(language==='fa'?FA:EN)[k]??EN[k]??k;
 const uiWords=(en,fa)=>language==='fa'?fa:(builtIn()?.controls[en]??en);
@@ -1599,7 +1632,10 @@ function renderChatAttachments(){
  $('clear-chat-files').disabled=busy||(!chatAttachments.length&&!$('attach-document').checked);
 }
 function stop(){languageImport++;window.NexusQualityUI?.cancel();window.NexusAstrologyUI?.cancel();window.NexusLabUI?.cancel();revision++;controller?.abort();controller=null;busy=false;pending=null;$('request-review').hidden=true;$('request-context').textContent='';$('consent').checked=false;try{speechSynthesis.cancel()}catch{}controls()}
-function controls(){for(const id of ['new-project','delete-project','new-thread','rename-thread','archive-thread','delete-thread','guide','prepare','regenerate','apply-profile','new-document','save-version','delete-document','projects','branch','documents','create-vault','unlock','save','backup','restore','erase','language-file'])$(id).disabled=busy;
+function controls(){
+ $('canvas-review').disabled=busy||!doc()||!chat()||chat().archived;
+ for(const button of $('messages').querySelectorAll('[data-action="fork-conversation"],[data-action="canvas-insert"]'))button.disabled=busy||(button.dataset.action==='canvas-insert'&&!doc());
+for(const id of ['new-project','delete-project','new-thread','rename-thread','archive-thread','delete-thread','guide','prepare','regenerate','apply-profile','new-document','save-version','delete-document','projects','branch','documents','create-vault','unlock','save','backup','restore','erase','language-file'])$(id).disabled=busy;
  $('chat-file').disabled=busy||!chat()||chat().archived;
  $('clear-chat-files').disabled=busy||(!chatAttachments.length&&!$('attach-document').checked);
  $('attach-document').disabled=busy||!chat()||chat().archived||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare','regenerate'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(dirty?'unsaved':(vault.unlocked?'saved':'temporary'));window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
@@ -1613,12 +1649,66 @@ function render(){
  $('projects').replaceChildren(...data.projects.map(x=>option(x.id,x.title)));$('projects').value=projectId||'';
  $('history').replaceChildren();for(const h of S.search(data,$('search').value,$('archived').checked)){const b=el('button',h.project_title+' · '+h.title+(h.archived?' ◇':''));b.className=h.thread===threadId?'active':'secondary';b.disabled=busy;b.onclick=()=>{if(!mayReplace())return;selectProject(h.project);threadId=h.thread;render()};$('history').append(b)}
  const stamp=projectId+':'+(p()?.sources||[]).map(s=>s.id).join(',');if(stamp!==sourceViewStamp){$('source-results').textContent='';sourceViewStamp=stamp}
- const c=chat();$('messages').replaceChildren();if(c){for(const n of S.path(c)){const item=el('article','');item.className='message '+n.role;item.append(el('strong',t(n.origin==='human'?'human':n.origin==='model'?'model':'local')));const body=el('div',n.text);body.className='body';body.dir='auto';item.append(body);if(n.role==='user'){if(n.attached_files?.length){const info=el('small',t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' · '+t('chatFilesNotSaved'));item.append(info)}const edit=el('button',t('edit'));edit.disabled=busy;edit.onclick=()=>{if(!mayReplace())return;stop();clearChatAttachments();branchBase=n.parent;$('message').value=n.text;$('branch-notice').textContent=t('branching')};item.append(edit)}else{const canvas=el('button',t('toCanvas'));canvas.disabled=busy;canvas.onclick=()=>{if($('editor').value&&!confirm(t('discard')))return;$('editor').value=n.text;editorDirty=true;stop()};const speak=el('button',t('speak'));speak.onclick=()=>readAloud(n.text);item.append(canvas,speak)}$('messages').append(item)}}else $('messages').append(el('p',t('empty')));
+ const c=chat();$('messages').replaceChildren();
+ if(c)for(const n of S.path(c)){
+  const item=el('article','');item.className='message '+n.role;
+  item.append(el('strong',t(n.origin==='human'?'human':n.origin==='model'?'model':'local')));
+  const body=el('div',n.text);body.className='body';body.dir='auto';item.append(body);
+  const actions=el('div','');actions.className='message-actions';
+  if(n.role==='user'){
+   if(n.attached_files?.length)item.append(el('small',t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' · '+t('chatFilesNotSaved')));
+   const edit=el('button',t('edit'));edit.disabled=busy;
+   edit.onclick=()=>{if(busy||!mayReplace())return;stop();clearChatAttachments();branchBase=n.parent;$('message').value=n.text;$('branch-notice').textContent=t('branching')};
+   actions.append(edit);
+  }else{
+   const canvas=el('button',t('toCanvas'));canvas.disabled=busy;
+   canvas.onclick=()=>{if(busy||($('editor').value&&!confirm(t('discard'))))return;$('editor').value=n.text;editorDirty=true;stop();window.NexusStudioFocus?.openPanel('canvas-card')};
+   const insert=el('button',t('canvasInsert'));insert.dataset.action='canvas-insert';insert.disabled=busy||!doc();
+   insert.onclick=()=>insertReply(n.text);
+   const speak=el('button',t('speak'));speak.onclick=()=>readAloud(n.text);
+   actions.append(canvas,insert,speak);
+  }
+  const fork=el('button',t('forkChat'));fork.className='secondary';fork.dataset.action='fork-conversation';fork.disabled=busy;
+  fork.onclick=()=>forkConversation(c,n);
+  actions.append(fork);item.append(actions);$('messages').append(item);
+ }else $('messages').append(el('p',t('empty')));
  const parents=new Set(c?.nodes.map(n=>n.parent));const leaves=c?.nodes.filter(n=>!parents.has(n.id))||[];$('branch').replaceChildren(...leaves.map((n,i)=>option(n.id,(i+1)+' · '+n.text.slice(0,60))));$('branch').value=c?.head||'';
  $('source-list').replaceChildren();for(const s of p()?.sources||[]){const row=el('div',s.name+' · '+s.text.length);const b=el('button','×');b.disabled=busy;b.setAttribute('aria-label',language==='fa'?'حذف منبع':'Remove source');b.onclick=()=>mutate(v=>{const q=projectIn(v);q.sources=q.sources.filter(x=>x.id!==s.id)},{undoable:true});row.append(b);$('source-list').append(row)}
  $('documents').replaceChildren(...(p()?.documents||[]).map(d=>option(d.id,d.title)));$('documents').value=documentId||'';window.NexusLabUI?.render();window.NexusAstrologyUI?.render();window.NexusQualityUI?.render();renderChatAttachments();controls();
 }
 function mayReplace(){return (!forms()&&!$('message').value&&!chatAttachments.length&&!$('attach-document').checked)||confirm(t('discard'))}
+function forkConversation(current,node){
+ if(busy||chat()?.id!==current.id)return;
+ if(($('message').value||chatAttachments.length||$('attach-document').checked)&&!confirm(t('discard')))return;
+ const next=S.fork(current,node.id,(t('forkTitle')+' '+current.title).slice(0,120));
+ if(!mutate(v=>projectIn(v).threads.push(next)))return;
+ threadId=next.id;clearChatAttachments();
+ // A user message can be reviewed again without putting two user turns in a row.
+ branchBase=node.role==='user'?node.parent:undefined;
+ $('message').value=node.role==='user'?node.text:'';
+ $('branch-notice').textContent=branchBase===undefined?'':t('branching');
+ render();document.dispatchEvent(new CustomEvent('nexus-studio-open-chat'));
+ status(node.attached_files?.length?'chatRegenRequiresFiles':'forkCreated');
+}
+function insertReply(reply){
+ if(busy||!doc())return;
+ const editor=$('editor'),from=editor.selectionStart,to=editor.selectionEnd;
+ if(editor.value.length-(to-from)+reply.length>editor.maxLength)return status('failed');
+ if(from!==to&&!confirm(t('canvasReplace')))return;
+ editor.setRangeText(reply,from,to,'select');editorDirty=true;stop();
+ window.NexusStudioFocus?.openPanel('canvas-card');editor.focus();
+ status('canvasInserted');
+}
+$('canvas-review').onclick=()=>{
+ if(busy||!doc()||!chat()||chat().archived)return;
+ const editor=$('editor'),selection=editor.value.slice(editor.selectionStart,editor.selectionEnd);
+ if(!selection.trim())return status('canvasSelect');
+ if(selection.length>8000)return status('canvasSelectionLong');
+ if(($('message').value||chatAttachments.length||$('attach-document').checked)&&!confirm(t('discard')))return;
+ stop();clearChatAttachments();branchBase=undefined;$('branch-notice').textContent='';
+ $('message').value=t('canvasPrompt')+'\n\n'+selection;
+ document.dispatchEvent(new CustomEvent('nexus-studio-open-chat'));controls();$('message').focus();
+};
 function selectProject(id){window.NexusTasksUI?.clear();window.NexusQualityUI?.clear();window.NexusAstrologyUI?.clear();window.NexusLabUI?.clear();stop();clearChatAttachments();projectId=id;threadId=p()?.threads.find(x=>!x.archived)?.id||null;documentId=p()?.documents[0]?.id||null;branchBase=undefined;profileDirty=editorDirty=false;$('message').value='';$('use-memory').checked=false;$('use-sources').checked=false;$('source-results').textContent='';$('branch-notice').textContent='';fillProfile();fillDoc()}
 for(const pack of builtInLanguages.values()){
  const choice=option(pack.code,pack.name);choice.lang=pack.code;choice.dir=pack.dir;$('language').append(choice);

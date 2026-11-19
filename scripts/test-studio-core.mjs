@@ -4,6 +4,16 @@ const S=globalThis.NexusStudio;let checks=0;
 const ok=(f)=>{f();checks++},reject=async(f)=>{await assert.rejects(f);checks++};
 const p=S.project('Project'),initial=S.thread('Thread');p.threads=[initial];let c=S.append(initial,'user','original question','human');c=S.append(c,'assistant','original draft','model');const original=S.copy(c);const edited=S.append(c,'user','edited question','human',null);const branch=S.append(edited,'assistant','alternative answer','model');
 ok(()=>assert.deepEqual(c,original));ok(()=>assert.equal(S.path(branch).length,2));ok(()=>assert.equal(branch.nodes.length,4));ok(()=>assert.equal(S.path(branch,original.head)[1].text,'original draft'));
+const detached=S.fork(branch,original.head,'Separate thread');
+ok(()=>assert.notEqual(detached.id,branch.id));
+ok(()=>assert.deepEqual(detached.nodes,c.nodes));
+ok(()=>assert.equal(S.path(detached).at(-1).text,'original draft'));
+ok(()=>assert.throws(()=>S.fork(branch,'missing','Unknown message')));
+const attachment=S.append(S.thread('Files'),'user','file context','human',null,['source.txt']);
+const attachedFork=S.fork(attachment,attachment.head,'File thread');
+ok(()=>assert.deepEqual(attachedFork.nodes[0].attached_files,['source.txt']));
+attachedFork.nodes[0].attached_files.push('fork-only.txt');
+ok(()=>assert.deepEqual(attachment.nodes[0].attached_files,['source.txt']));
 ok(()=>assert.throws(()=>S.append(initial,'assistant','forged','human')));ok(()=>assert.throws(()=>S.append(initial,'assistant','orphan','model')));ok(()=>assert.throws(()=>S.append(c,'user','bad','human','missing')));
 p.threads=[branch];let v={schema:S.SCHEMA,projects:[p]};ok(()=>assert.deepEqual(S.state(v),v));
 for(const change of [x=>x.schema='future',x=>x.projects[0].threads[0].nodes[0].parent=x.projects[0].threads[0].nodes[0].id,x=>x.projects[0].threads.push(x.projects[0].threads[0]),x=>x.projects[0].threads[0].nodes[1].origin='human']){const b=S.copy(v);change(b);ok(()=>assert.throws(()=>S.state(b)))}
