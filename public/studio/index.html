@@ -226,6 +226,81 @@ section h2:focus, #studio-focus-tools-title:focus {outline: none;}
   #conversation-card > .row:first-child button {flex: 1 1 calc(50% - 12px); white-space: normal;}
 }
 
+
+/* Unified Zen Chat — the legacy full workspace stays available on demand. */
+html.studio-focus-mode{
+ --studio-ink:#edf4f0;--studio-muted:#a9b9b3;--studio-paper:#0c0e13;
+ --studio-card:#151920;--studio-line:#343946;--studio-green:#51c5a4;
+ --studio-soft:#242a32;color-scheme:dark;background:#0c0e13;
+}
+.studio-focus-mode body{background:#0c0e13;color:#edf4f0;padding-bottom:env(safe-area-inset-bottom)}
+.studio-focus-mode main{max-width:1100px;padding:12px clamp(12px,3vw,30px)}
+.studio-focus-mode .grid{display:block}
+.studio-focus-mode .grid>aside,.studio-focus-mode .grid>div{display:contents}
+.studio-focus-mode .card{background:#151920;color:#edf4f0;border:1px solid #343946;box-shadow:none}
+.studio-focus-mode .studio-masthead{background:transparent;border:0;box-shadow:none;border-radius:0;padding:8px 2px;min-height:50px}
+.studio-focus-mode .studio-brand h1{font-size:1.13rem;letter-spacing:.04em}
+.studio-focus-mode .studio-brand h1 span,.studio-focus-mode .studio-brand p{display:none}
+.studio-focus-mode .studio-mark{width:36px;height:36px;flex-basis:36px}
+.studio-focus-mode #language{background:#242832;color:#edf4f0;border-color:#414656}
+.studio-focus-mode main>details:not(#storage-center),.studio-focus-mode #storage-center,
+.studio-focus-mode #retention,.studio-focus-mode #undo-removal,
+.studio-focus-mode #nexus-creator,.studio-focus-mode main>.help:last-of-type{display:none}
+.studio-focus-mode #studio-focus-top{max-width:920px;margin:8px auto;display:block}
+.studio-focus-mode #studio-focus-toggle,.studio-focus-mode #studio-tools-toggle,
+.studio-focus-mode #studio-focus-nav{display:none!important}
+#nexus-zen-bar{display:flex;align-items:center;gap:8px;min-height:48px}
+#nexus-zen-bar button{min-width:45px;min-height:45px;margin:0;border:1px solid #343946;background:#20242e;color:#ecf3ef;border-radius:13px}
+#nexus-zen-bar #nexus-zen-home{flex:1;text-align:center;letter-spacing:.16em;font-weight:700;background:transparent;border:0}
+#nexus-zen-bar #nexus-zen-tools{color:#bbabff}
+.studio-enhanced:not(.studio-focus-mode) #nexus-zen-bar{display:none}
+#nexus-zen-shade{position:fixed;inset:0;background:#0009;z-index:95}
+#nexus-zen-drawer{position:fixed;inset:0 auto 0 0;width:min(370px,calc(100vw - 36px));z-index:96;overflow:auto;padding:22px 16px;background:#171b23;color:#edf4f0;box-shadow:10px 0 35px #0007;border-inline-end:1px solid #343946}
+[dir="rtl"] #nexus-zen-drawer{inset:0 0 0 auto;border-inline-end:0;border-inline-start:1px solid #343946}
+.nexus-zen-drawer-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+#nexus-zen-close{font-size:1.5rem;padding:3px 12px}
+#nexus-zen-find{width:100%;margin:15px 0}
+#nexus-zen-history{max-height:48vh;overflow:auto}
+#nexus-zen-history button,#nexus-zen-drawer .nexus-zen-links button{display:block;text-align:start;width:100%;margin:4px 0;padding:10px 13px;background:#252a33;color:#edf4f0;border:1px solid #38404b;border-radius:10px}
+#nexus-zen-drawer .nexus-zen-links{margin-top:20px;padding-top:10px;border-top:1px solid #343946}
+.studio-focus-mode #conversation-card{max-width:920px;margin:9px auto;padding:clamp(15px,2.5vw,28px);border-radius:23px}
+.studio-focus-mode #conversation-card>.row:first-child{justify-content:space-between}
+.studio-focus-mode #conversation-card>.row:first-child h2{flex:1 1 auto;font-size:1rem;margin:0}
+.studio-focus-mode:not(.nexus-chat-options-open) #conversation-card>.row:first-child button:not(#nexus-zen-more){display:none}
+.studio-focus-mode #nexus-zen-more{flex:0 0 45px;background:#242632;color:#f0ebfb;border:1px solid #414050}
+.studio-focus-mode:not(.nexus-chat-options-open) #conversation-card label:has(#use-memory),
+.studio-focus-mode:not(.nexus-chat-options-open) #conversation-card label:has(#use-sources),
+.studio-focus-mode:not(.nexus-chat-options-open) #studio-model-settings{display:none}
+.studio-focus-mode #messages{min-height:min(38vh,330px);max-height:min(52vh,650px);overflow:auto;scrollbar-color:#4d5561 transparent}
+.studio-focus-mode .message{border:1px solid #333c49;background:#1b2029;color:#edf4f1;max-width:94%;border-radius:17px}
+.studio-focus-mode .message.assistant{background:#20302d;border-color:#35514a}
+.studio-focus-mode #message{border:1px solid #595369;border-radius:17px;background:#1a1e27;color:#f1f6f4;min-height:95px;resize:vertical}
+.studio-focus-mode input:not([type="checkbox"]):not([type="radio"]),
+.studio-focus-mode textarea,.studio-focus-mode select{background:#1b2029;color:#edf4f1;border-color:#404650}
+.studio-focus-mode #studio-compose{background:#1d1e29;border:1px solid #48405d;padding:13px;border-radius:18px}
+.studio-focus-mode #studio-compose-heading{font-size:.85rem;color:#c6baf1}
+.studio-focus-mode #studio-compose-send{background:#6555a4;color:#fff;border-color:#7464b4}
+.studio-focus-mode .studio-compose-row button.secondary,.studio-focus-mode button.secondary{background:#242a33;color:#e2ede6;border-color:#404955}
+.studio-focus-mode #studio-compose-privacy,.studio-focus-mode #studio-compose-storage{font-size:.76rem;line-height:1.45}
+.studio-focus-mode #status:not(:empty){background:#23322f;color:#d3f1e1}
+.studio-focus-mode #studio-focus-onboarding{background:#232637;border:1px solid #4a4262;color:#e8e8f6}
+.studio-focus-mode #studio-focus-tools{max-width:920px;margin:12px auto;background:#161a22;color:#f2f6f2;border:1px solid #3b4350}
+.studio-focus-mode .studio-focus-tools-grid button{background:#232731;color:#e9f2ee;border-color:#38404e}
+.studio-focus-mode .studio-control-icon{background:#302b49;color:#d8c8ff}
+#nexus-zen-offer{background:#252537;border:1px solid #514967;border-radius:13px;padding:12px;margin:10px 0;color:#f2eef8}
+#nexus-zen-offer p{margin:0 0 8px}
+#nexus-zen-offer button{margin-inline-end:8px}
+#nexus-zen-suggestions{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0}
+#nexus-zen-suggestions button{min-height:34px;font-size:.82rem;padding:5px 9px;border-radius:99px;margin:0}
+.studio-enhanced:not(.studio-focus-mode) #nexus-zen-suggestions,
+.studio-enhanced:not(.studio-focus-mode) #nexus-zen-offer{display:none}
+@media(max-width:600px){
+ .studio-focus-mode main{padding:8px 11px}
+ .studio-focus-mode #conversation-card{padding:13px;border-radius:17px}
+ .studio-focus-mode #messages{min-height:23vh;max-height:45vh}
+ .studio-focus-mode .studio-compose-row button{flex:1 1 120px}
+}
+
 .studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style></head><body><main>
 <header class="studio-masthead">
   <div class="studio-brand">
@@ -1991,7 +2066,7 @@ for(const [id,en,fa,icon,descriptionEn,descriptionFa] of tools){
  button.setAttribute('aria-controls',id);
  button.addEventListener('click',()=>openPanel(id));toolsGrid.append(button);
 }
-let selected='conversation-card',focused=media.matches,manual=false,toolsOpen=false;
+let selected='conversation-card',focused=true,manual=false,toolsOpen=false;
 const isFa=()=>document.documentElement.lang==='fa';
 const words=(en,fa)=>isFa()?fa:en;
 const normalize=value=>value.toLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ').trim();
@@ -2077,7 +2152,7 @@ toggle.addEventListener('click',()=>setFocus(!focused,true));
 catalog.addEventListener('click',()=>toolsOpen?openPanel(selected):openTools());
 tryTools.addEventListener('click',openTools);
 search.addEventListener('input',filterTools);
-media.addEventListener('change',()=>{if(!manual)setFocus(media.matches)});
+media.addEventListener('change',()=>{if(!manual)setFocus(true)});
 existingNav.addEventListener('click',event=>{
  if(!focused)return;
  const anchor=event.target.closest('a[href^="#"]');
@@ -2109,6 +2184,78 @@ window.NexusStudioFocus={openPanel,openTools,setFocus,isFocused:()=>focused,acti
 layout();
 openLinkedPanel();
 })();
+
+
+/* NEXUS Zen: conversation is the home on every screen. */
+(()=>{'use strict';
+const $=id=>document.getElementById(id),focus=window.NexusStudioFocus;
+if(!focus||!$('studio-focus-top'))return;
+document.documentElement.classList.add('nexus-zen-active');
+const tr=(en,fa)=>document.documentElement.lang==='fa'?fa:en;
+const make=(id,label)=>{const x=document.createElement('button');x.type='button';x.id=id;x.className='secondary';x.textContent=label;return x};
+const bar=document.createElement('div');bar.id='nexus-zen-bar';
+const menu=make('nexus-zen-menu','☰'),home=make('nexus-zen-home','NEXUS'),newChat=make('nexus-zen-new','＋'),all=make('nexus-zen-tools','✦');
+bar.append(menu,home,newChat,all);$('studio-focus-top').prepend(bar);
+const shade=document.createElement('div'),drawer=document.createElement('aside');
+shade.id='nexus-zen-shade';drawer.id='nexus-zen-drawer';shade.hidden=drawer.hidden=true;
+drawer.setAttribute('role','dialog');drawer.setAttribute('aria-modal','true');
+const header=document.createElement('div');header.className='nexus-zen-drawer-head';
+const title=document.createElement('strong'),close=make('nexus-zen-close','×');
+header.append(title,close);
+const find=document.createElement('input');find.type='search';find.maxLength=200;find.id='nexus-zen-find';
+const history=document.createElement('div');history.id='nexus-zen-history';
+const actions=document.createElement('div');actions.className='nexus-zen-links';
+const nav=[['projects-card','Projects','پروژه‌ها'],['vault-card','Private archive','آرشیو خصوصی'],['profile-card','Preferences & memory','ترجیحات و حافظه']];
+const links=nav.map(([id,en,fa])=>{const b=make('nexus-zen-'+id,'');b.addEventListener('click',()=>go(id));actions.append(b);return [b,en,fa]});
+const full=make('nexus-zen-full','');full.addEventListener('click',()=>{dismiss();focus.setFocus(false,true)});actions.append(full);
+drawer.append(header,find,history,actions);document.body.append(shade,drawer);
+let restore=null;
+function dismiss(){if(drawer.hidden)return;drawer.hidden=shade.hidden=true;menu.setAttribute('aria-expanded','false');restore?.focus?.({preventScroll:true})}
+function show(){restore=document.activeElement;drawer.hidden=shade.hidden=false;menu.setAttribute('aria-expanded','true');render();find.focus()}
+function go(id){dismiss();focus.openPanel(id)}
+function start(){
+ dismiss();if($('new-thread').disabled){go('projects-card');$('project-title').focus({preventScroll:true})}
+ else{$('new-thread').click();go('conversation-card');$('message').focus({preventScroll:true})}
+}
+function render(){
+ history.replaceChildren();const q=find.value.trim().toLocaleLowerCase();
+ let n=0;
+ for(const src of $('history').querySelectorAll('button')){
+  const name=src.textContent.trim();if(!name||!name.toLocaleLowerCase().includes(q))continue;
+  const b=make('',name.slice(0,180));b.removeAttribute('id');
+  b.addEventListener('click',()=>{src.click();go('conversation-card')});
+  history.append(b);if(++n>=60)break;
+ }
+ if(!n){const p=document.createElement('p');p.className='help';p.textContent=tr('No matching conversations in this session.','گفتگوی مطابقی در این نشست نیست.');history.append(p)}
+}
+function labels(){
+ title.textContent=tr('Conversations','گفتگوها');find.placeholder=tr('Search conversations','جست‌وجوی گفتگوها');find.setAttribute('aria-label',find.placeholder);
+ drawer.setAttribute('aria-label',tr('Conversations and settings','گفتگوها و تنظیمات'));
+ for(const [b,en,fa] of links)b.textContent=tr(en,fa);
+ full.textContent=tr('Advanced workspace','نمایش همهٔ بخش‌ها');
+ for(const [b,en,fa] of [[menu,'Menu','منو'],[home,'Back to chat','بازگشت به گفتگو'],[newChat,'New conversation','گفتگوی جدید'],[all,'Capabilities','قابلیت‌ها'],[close,'Close menu','بستن منو']])b.setAttribute('aria-label',tr(en,fa));
+ render();
+}
+menu.addEventListener('click',()=>drawer.hidden?show():dismiss());close.addEventListener('click',dismiss);shade.addEventListener('click',dismiss);
+home.addEventListener('click',()=>go('conversation-card'));newChat.addEventListener('click',start);
+all.addEventListener('click',()=>{dismiss();focus.openTools()});find.addEventListener('input',render);
+new MutationObserver(render).observe($('history'),{childList:true,subtree:true,characterData:true});
+$('language').addEventListener('change',()=>queueMicrotask(labels));
+document.addEventListener('keydown',event=>{
+ if(event.key==='Escape'&&!drawer.hidden){event.preventDefault();dismiss()}
+ if(drawer.hidden||event.key!=='Tab')return;
+ const a=[...drawer.querySelectorAll('button,input')].filter(x=>!x.disabled);
+ if(event.shiftKey&&document.activeElement===a[0]){event.preventDefault();a.at(-1).focus()}
+ else if(!event.shiftKey&&document.activeElement===a.at(-1)){event.preventDefault();a[0].focus()}
+});
+const more=make('nexus-zen-more','···');$('conversation-card').querySelector('.row').append(more);
+more.setAttribute('aria-expanded','false');
+more.addEventListener('click',()=>{
+ const open=document.documentElement.classList.toggle('nexus-chat-options-open');
+ more.setAttribute('aria-expanded',String(open));more.textContent=open?'×':'···';
+});
+labels();
+})();
 </script><script>/* NEXUS Studio: honest chat composer and explicit archive shortcut.
  * Presentation only. All executions delegate to the existing reviewed actions.
  */
@@ -2137,6 +2284,73 @@ const storage=document.createElement('p');storage.id='studio-compose-storage';st
 selectLabel.append(select);row.append(selectLabel,send,save,config);
 box.append(heading,row,privacy,storage);
 $('branch-notice').after(box);
+
+/* Discover capability from a typed request; proposal only, never execute. */
+const suggestions=document.createElement('div');suggestions.id='nexus-zen-suggestions';
+for(const [cmd,en,fa] of [['/music','Music','موسیقی'],['/research','Research','پژوهش'],['/data','Files','فایل‌ها']]){
+ const b=document.createElement('button');b.type='button';b.className='secondary';b.dataset.en=en;b.dataset.fa=fa;
+ b.addEventListener('click',()=>{$('message').value=cmd+' ';$('message').dispatchEvent(new Event('input',{bubbles:true}));$('message').focus()});
+ suggestions.append(b);
+}
+box.insertBefore(suggestions,privacy);
+const offer=document.createElement('div');offer.id='nexus-zen-offer';offer.hidden=true;offer.setAttribute('role','status');box.after(offer);
+const routes=[
+ ['orchestra','orchestra-card','Orchestra & vocal','ارکستر و آواز','orchestra-prompt'],
+ ['music','music-card','Music Lab','موسیقی',null],
+ ['research','research-card','Research','پژوهش','research-query'],
+ ['data','data-card','Data analysis','تحلیل داده',null],
+ ['chart','chart-card','Charts','نمودارها',null],
+ ['code','code-card','Code','کدنویسی',null],
+ ['tasks','tasks-card','Tasks','وظایف',null],
+ ['write','canvas-card','Writing','نوشتن',null],
+ ['sources','sources-card','Sources','منابع','source-query'],
+ ['astrology','astrology-card','Astrology','اخترشناسی',null],
+ ['sky','sky-card','Sky','آسمان',null],
+ ['memory','profile-card','Memory','حافظه',null]
+];
+function intent(value){
+ const message=value.trim();
+ const slash=/^\/([a-z-]+)(?:\s|$)/i.exec(message);
+ if(slash){
+  const aliases={song:'music',vocal:'orchestra',analyze:'data',search:'research',task:'tasks'};
+  const kind=aliases[slash[1].toLowerCase()]||slash[1].toLowerCase();
+  const route=routes.find(x=>x[0]===kind);
+  return route?{route,query:message.slice(slash[0].length).trim()}:null;
+ }
+ const s=message.slice(0,340).toLocaleLowerCase();
+ if(!/(بساز|ساخت|تولید|طراحی|بنویس|تنظیم|compose|create|make|generate|write|analy[sz]e|search|find|draw|run|اجرا|بررسی|جستجو|جست‌وجو)/i.test(s))return null;
+ const kind=/(ارکستر|گروه کر|وکال|orchestra|choir|vocal)/i.test(s)?'orchestra':
+  /(آهنگ|اهنگ|موسیقی|ملودی|music|song|melody)/i.test(s)?'music':
+  /(نمودار|chart|graph)/i.test(s)?'chart':
+  /(کدنویسی|برنامه‌نویسی|code|javascript|python)/i.test(s)?'code':
+  /(csv|json|داده|فایل|dataset|spreadsheet)/i.test(s)?'data':
+  /(پژوهش|منبع علمی|research|wikipedia|crossref)/i.test(s)?'research':
+  /(داستان|متن بنویس|essay|story|draft)/i.test(s)?'write':
+  /(وظایف|task|workflow)/i.test(s)?'tasks':
+  /(چارت تولد|طالع|astrology|transit)/i.test(s)?'astrology':null;
+ const route=routes.find(x=>x[0]===kind);return route?{route,query:''}:null;
+}
+function offerTool(message){
+ const result=intent(message);
+ if(!result||!window.NexusStudioFocus?.isFocused())return false;
+ const [kind,panel,en,fa,field]=result.route;
+ offer.replaceChildren();offer.hidden=false;
+ const p=document.createElement('p');
+ p.textContent=words('Suggested: '+en+'. No data was sent and no tool was run. Review inputs before execution.',
+  'پیشنهاد: '+fa+'؛ هیچ اطلاعاتی ارسال و هیچ ابزاری اجرا نشده است. ورودی‌ها را پیش از اجرا بررسی کن.');
+ const open=document.createElement('button');open.type='button';open.textContent=words('Open '+en,'بازکردن '+fa);
+ open.addEventListener('click',()=>{
+  if(field&&result.query){
+   const input=$(field);if(input){input.value=result.query.slice(0,input.maxLength>0?input.maxLength:480);input.dispatchEvent(new Event('input',{bubbles:true}))}
+  }
+  offer.hidden=true;window.NexusStudioFocus.openPanel(panel);
+ });
+ const dismiss=document.createElement('button');dismiss.type='button';dismiss.className='secondary';
+ dismiss.textContent=words('Keep typing','ادامهٔ نوشتن');dismiss.addEventListener('click',()=>{offer.hidden=true;$('message').focus()});
+ offer.append(p,open,dismiss);
+ return true;
+}
+
 let running=false;
 function refresh(){
  const state=window.NexusStudioUI.uiStatus();
@@ -2145,6 +2359,7 @@ function refresh(){
  heading.textContent=words('Reply using','پاسخ با');
  box.setAttribute('aria-label',words('Conversation actions','گزینه‌های گفتگو'));
  selectLabel.setAttribute('aria-label',words('Choose how to respond','روش پاسخ را انتخاب کن'));
+ for(const b of suggestions.children)b.textContent=words(b.dataset.en,b.dataset.fa);
  for(const opt of select.options)opt.textContent=words(opt.dataset.en,opt.dataset.fa);
  send.textContent=model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
  send.disabled=!ready||!$('message').value.trim();
@@ -2172,6 +2387,7 @@ function refresh(){
 }
 function run(){
  if(running||send.disabled)return;
+ if(select.value==='guide'&&offerTool($('message').value))return;
  running=true;
  try{
   if(select.value==='model'){
@@ -2195,12 +2411,13 @@ save.addEventListener('click',()=>{
  refresh();
 });
 config.addEventListener('click',()=>{
+ document.documentElement.classList.add('nexus-chat-options-open');
  const settings=$('studio-model-settings');if(!settings)return;
  settings.open=true;
  settings.scrollIntoView({block:'nearest'});
  settings.querySelector('summary')?.focus({preventScroll:true});
 });
-select.addEventListener('change',refresh);
+select.addEventListener('change',()=>{offer.hidden=true;refresh()});
 $('message').addEventListener('input',refresh);
 $('message').addEventListener('keydown',event=>{
  if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&!event.isComposing&&

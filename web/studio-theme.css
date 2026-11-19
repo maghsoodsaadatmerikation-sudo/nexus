@@ -182,3 +182,78 @@ section h2:focus, #studio-focus-tools-title:focus {outline: none;}
   .studio-focus-tools-grid button {align-items: flex-start; flex-direction: column; gap: 5px;}
   #conversation-card > .row:first-child button {flex: 1 1 calc(50% - 12px); white-space: normal;}
 }
+
+
+/* Unified Zen Chat — the legacy full workspace stays available on demand. */
+html.studio-focus-mode{
+ --studio-ink:#edf4f0;--studio-muted:#a9b9b3;--studio-paper:#0c0e13;
+ --studio-card:#151920;--studio-line:#343946;--studio-green:#51c5a4;
+ --studio-soft:#242a32;color-scheme:dark;background:#0c0e13;
+}
+.studio-focus-mode body{background:#0c0e13;color:#edf4f0;padding-bottom:env(safe-area-inset-bottom)}
+.studio-focus-mode main{max-width:1100px;padding:12px clamp(12px,3vw,30px)}
+.studio-focus-mode .grid{display:block}
+.studio-focus-mode .grid>aside,.studio-focus-mode .grid>div{display:contents}
+.studio-focus-mode .card{background:#151920;color:#edf4f0;border:1px solid #343946;box-shadow:none}
+.studio-focus-mode .studio-masthead{background:transparent;border:0;box-shadow:none;border-radius:0;padding:8px 2px;min-height:50px}
+.studio-focus-mode .studio-brand h1{font-size:1.13rem;letter-spacing:.04em}
+.studio-focus-mode .studio-brand h1 span,.studio-focus-mode .studio-brand p{display:none}
+.studio-focus-mode .studio-mark{width:36px;height:36px;flex-basis:36px}
+.studio-focus-mode #language{background:#242832;color:#edf4f0;border-color:#414656}
+.studio-focus-mode main>details:not(#storage-center),.studio-focus-mode #storage-center,
+.studio-focus-mode #retention,.studio-focus-mode #undo-removal,
+.studio-focus-mode #nexus-creator,.studio-focus-mode main>.help:last-of-type{display:none}
+.studio-focus-mode #studio-focus-top{max-width:920px;margin:8px auto;display:block}
+.studio-focus-mode #studio-focus-toggle,.studio-focus-mode #studio-tools-toggle,
+.studio-focus-mode #studio-focus-nav{display:none!important}
+#nexus-zen-bar{display:flex;align-items:center;gap:8px;min-height:48px}
+#nexus-zen-bar button{min-width:45px;min-height:45px;margin:0;border:1px solid #343946;background:#20242e;color:#ecf3ef;border-radius:13px}
+#nexus-zen-bar #nexus-zen-home{flex:1;text-align:center;letter-spacing:.16em;font-weight:700;background:transparent;border:0}
+#nexus-zen-bar #nexus-zen-tools{color:#bbabff}
+.studio-enhanced:not(.studio-focus-mode) #nexus-zen-bar{display:none}
+#nexus-zen-shade{position:fixed;inset:0;background:#0009;z-index:95}
+#nexus-zen-drawer{position:fixed;inset:0 auto 0 0;width:min(370px,calc(100vw - 36px));z-index:96;overflow:auto;padding:22px 16px;background:#171b23;color:#edf4f0;box-shadow:10px 0 35px #0007;border-inline-end:1px solid #343946}
+[dir="rtl"] #nexus-zen-drawer{inset:0 0 0 auto;border-inline-end:0;border-inline-start:1px solid #343946}
+.nexus-zen-drawer-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+#nexus-zen-close{font-size:1.5rem;padding:3px 12px}
+#nexus-zen-find{width:100%;margin:15px 0}
+#nexus-zen-history{max-height:48vh;overflow:auto}
+#nexus-zen-history button,#nexus-zen-drawer .nexus-zen-links button{display:block;text-align:start;width:100%;margin:4px 0;padding:10px 13px;background:#252a33;color:#edf4f0;border:1px solid #38404b;border-radius:10px}
+#nexus-zen-drawer .nexus-zen-links{margin-top:20px;padding-top:10px;border-top:1px solid #343946}
+.studio-focus-mode #conversation-card{max-width:920px;margin:9px auto;padding:clamp(15px,2.5vw,28px);border-radius:23px}
+.studio-focus-mode #conversation-card>.row:first-child{justify-content:space-between}
+.studio-focus-mode #conversation-card>.row:first-child h2{flex:1 1 auto;font-size:1rem;margin:0}
+.studio-focus-mode:not(.nexus-chat-options-open) #conversation-card>.row:first-child button:not(#nexus-zen-more){display:none}
+.studio-focus-mode #nexus-zen-more{flex:0 0 45px;background:#242632;color:#f0ebfb;border:1px solid #414050}
+.studio-focus-mode:not(.nexus-chat-options-open) #conversation-card label:has(#use-memory),
+.studio-focus-mode:not(.nexus-chat-options-open) #conversation-card label:has(#use-sources),
+.studio-focus-mode:not(.nexus-chat-options-open) #studio-model-settings{display:none}
+.studio-focus-mode #messages{min-height:min(38vh,330px);max-height:min(52vh,650px);overflow:auto;scrollbar-color:#4d5561 transparent}
+.studio-focus-mode .message{border:1px solid #333c49;background:#1b2029;color:#edf4f1;max-width:94%;border-radius:17px}
+.studio-focus-mode .message.assistant{background:#20302d;border-color:#35514a}
+.studio-focus-mode #message{border:1px solid #595369;border-radius:17px;background:#1a1e27;color:#f1f6f4;min-height:95px;resize:vertical}
+.studio-focus-mode input:not([type="checkbox"]):not([type="radio"]),
+.studio-focus-mode textarea,.studio-focus-mode select{background:#1b2029;color:#edf4f1;border-color:#404650}
+.studio-focus-mode #studio-compose{background:#1d1e29;border:1px solid #48405d;padding:13px;border-radius:18px}
+.studio-focus-mode #studio-compose-heading{font-size:.85rem;color:#c6baf1}
+.studio-focus-mode #studio-compose-send{background:#6555a4;color:#fff;border-color:#7464b4}
+.studio-focus-mode .studio-compose-row button.secondary,.studio-focus-mode button.secondary{background:#242a33;color:#e2ede6;border-color:#404955}
+.studio-focus-mode #studio-compose-privacy,.studio-focus-mode #studio-compose-storage{font-size:.76rem;line-height:1.45}
+.studio-focus-mode #status:not(:empty){background:#23322f;color:#d3f1e1}
+.studio-focus-mode #studio-focus-onboarding{background:#232637;border:1px solid #4a4262;color:#e8e8f6}
+.studio-focus-mode #studio-focus-tools{max-width:920px;margin:12px auto;background:#161a22;color:#f2f6f2;border:1px solid #3b4350}
+.studio-focus-mode .studio-focus-tools-grid button{background:#232731;color:#e9f2ee;border-color:#38404e}
+.studio-focus-mode .studio-control-icon{background:#302b49;color:#d8c8ff}
+#nexus-zen-offer{background:#252537;border:1px solid #514967;border-radius:13px;padding:12px;margin:10px 0;color:#f2eef8}
+#nexus-zen-offer p{margin:0 0 8px}
+#nexus-zen-offer button{margin-inline-end:8px}
+#nexus-zen-suggestions{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0}
+#nexus-zen-suggestions button{min-height:34px;font-size:.82rem;padding:5px 9px;border-radius:99px;margin:0}
+.studio-enhanced:not(.studio-focus-mode) #nexus-zen-suggestions,
+.studio-enhanced:not(.studio-focus-mode) #nexus-zen-offer{display:none}
+@media(max-width:600px){
+ .studio-focus-mode main{padding:8px 11px}
+ .studio-focus-mode #conversation-card{padding:13px;border-radius:17px}
+ .studio-focus-mode #messages{min-height:23vh;max-height:45vh}
+ .studio-focus-mode .studio-compose-row button{flex:1 1 120px}
+}
