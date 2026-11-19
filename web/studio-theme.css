@@ -76,15 +76,12 @@ main:has(#studio-focus-onboarding:not([hidden])) #retention {display: none;}
 }
 .studio-brand {display: flex; align-items: center; gap: 14px; min-width: 0;}
 .studio-mark {
-  display: grid;
-  place-items: center;
   flex: 0 0 48px;
   block-size: 48px;
-  border: 1px solid #86ae9a;
+  inline-size: 48px;
+  object-fit: contain;
   border-radius: 14px;
-  color: #e6f4eb;
-  font: 700 1.42rem/1 Georgia, serif;
-  background: #ffffff12;
+  background: #000;
 }
 .studio-brand h1 {font-size: clamp(1.35rem, 4vw, 2.8rem); letter-spacing: -.045em; direction: ltr;}
 .studio-brand h1 span {font-weight: 440; color: #c7e2d4;}
@@ -179,7 +176,7 @@ section h2:focus, #studio-focus-tools-title:focus {outline: none;}
 }
 @media (max-width: 470px) {
   .studio-masthead {align-items: flex-start; flex-wrap: wrap;}
-  .studio-mark {flex-basis: 36px; block-size: 36px; border-radius: 10px;}
+  .studio-mark {flex-basis: 36px; block-size: 36px; inline-size: 36px; border-radius: 10px;}
   .studio-brand {gap: 10px;}
   .studio-compose-row button {flex: 1 1 120px;}
   .studio-focus-tools-grid button {align-items: flex-start; flex-direction: column; gap: 5px;}

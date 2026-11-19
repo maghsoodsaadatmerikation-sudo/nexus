@@ -115,8 +115,8 @@ def render_public_shell(source: str, device_panel: str) -> bytes:
     # keeps its independent opaque-origin, blob-only worker policy.
     source=replace_exact(source, "frame-src 'self' blob:; worker-src blob:",
                          "frame-src 'self' blob:; worker-src 'self' blob:")
-    source=replace_exact(source, "img-src 'none'", "img-src 'self'; manifest-src 'self'")
-    source=replace_exact(source, '<title>', '<link rel="manifest" href="./manifest.json"><meta name="theme-color" content="#185e48"><title>')
+    source=replace_exact(source, "img-src data:", "img-src 'self' data:; manifest-src 'self'")
+    source=replace_exact(source, '<title>', '<link rel="manifest" href="./manifest.json"><link rel="icon" type="image/png" href="./icons/nexus-192.png"><link rel="apple-touch-icon" href="./icons/nexus-192.png"><meta property="og:image" content="https://nexus-studio-merikation.onrender.com/icons/nexus-512.png"><meta name="theme-color" content="#185e48"><title>')
     source=replace_exact(source, '</style>', '.studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style>')
     source=replace_exact(source, '</header>', '</header>'+PANEL)
     source=replace_exact(source, '</main>', PRIVACY+'</main>')
