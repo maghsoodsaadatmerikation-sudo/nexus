@@ -259,13 +259,28 @@ $('orchestra-mix').addEventListener('click',async()=>{
 $('orchestra-mix-download').addEventListener('click',()=>{
  if(mixWav&&!rendering)download(mixWav,'aligned-mix.wav','audio/wav');
 });
+// Only shipped defaults are retained; privately typed prompts are not snapshotted.
+const baseline=[...$('orchestra-card').querySelectorAll('input,select,textarea')].map(node=>({node,value:node.value,checked:node.checked}));
+function isFormChanged(){return baseline.some(({node,value,checked})=>
+ (node.type==='checkbox'||node.type==='radio')?node.checked!==checked:node.value!==value)}
+function resetPrivateDraft(){
+ // Invalidate all outstanding rendering, file-read and playback completions.
+ invalidate();clearDry();
+ for(const {node,value,checked} of baseline){
+  if(node.type==='checkbox'||node.type==='radio')node.checked=checked;
+  else node.value=value;
+ }
+ status('Enter a supported prompt and preview the parsed plan.',
+  'دستور موسیقی را بنویس و طرح شناسایی‌شده را بازبینی کن.');
+ buttons();
+}
 window.addEventListener('pagehide',()=>{ticket++;clearWav();clearDry()});
 window.NexusOrchestraUI=Object.freeze({
  hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
  hasOriginalVocal:()=>Boolean(dryBytes),hasMixedWav:()=>Boolean(mixWav),
  getMixReport:()=>mixReport,
- hasTransientWork:()=>Boolean(plan||score||wav||dryBytes||mixWav||dryPending||rendering||mixing),
- clear:()=>{invalidate();clearDry()}
+ hasTransientWork:()=>Boolean(plan||score||wav||dryBytes||mixWav||dryPending||rendering||mixing||isFormChanged()),
+ clear:resetPrivateDraft
 });
 status('Enter a supported prompt and preview the parsed plan.',
   'دستور موسیقی را بنویس و طرح شناسایی‌شده را بازبینی کن.');

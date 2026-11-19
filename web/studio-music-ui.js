@@ -162,9 +162,21 @@ for(const [key,value] of Object.entries({
  const node=$('music-'+key);if(node.type==='checkbox')node.checked=value;else node.value=String(value)
 }
 $('music-lock-motif').checked=true;
+// Snapshot only shipped form defaults, never user audio or private draft text.
+const baseline=[...$('music-card').querySelectorAll('input,select,textarea')].map(node=>({node,value:node.value,checked:node.checked}));
+function isFormChanged(){return baseline.some(({node,value,checked})=>
+ (node.type==='checkbox'||node.type==='radio')?node.checked!==checked:node.value!==value)}
+function resetPrivateDraft(){
+ // Clear locally typed titles, seeds and selections as well as WAV and score.
+ for(const {node,value,checked} of baseline){
+  if(node.type==='checkbox'||node.type==='radio')node.checked=checked;
+  else node.value=value;
+ }
+ invalidate();
+}
 document.addEventListener('nexus-music-clear',()=>{invalidate();$('music-title').value='Untitled journey'});
 window.addEventListener('pagehide',()=>{revision++;resetAudio()});
 out(txt('ready'));buttons();
-window.NexusMusicUI=Object.freeze({clear:invalidate,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
- hasTransientWork:()=>Boolean(score||wav||working)});
+window.NexusMusicUI=Object.freeze({clear:resetPrivateDraft,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
+ hasTransientWork:()=>Boolean(score||wav||working||isFormChanged())});
 })();
