@@ -47,6 +47,7 @@ class PublicAPKAssetsTests(unittest.TestCase):
         self.assertIn('id="motion-draft-enable"', motion)
         self.assertIn('id="motion-draft-restore"', motion)
         self.assertIn('id="motion-draft-clear"', motion)
+        self.assertIn('id="motion-draft-ack"', motion)
         script=(self.output/"motion/motion-ui.js").read_text()
         self.assertIn("AES-GCM",script)
         self.assertIn("PBKDF2",script)
