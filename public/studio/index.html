@@ -1487,12 +1487,30 @@ function toolLifecycle(phase){
  }
  return complete;
 }
-function stop(){languageImport++;toolLifecycle('cancel');revision++;controller?.abort();controller=null;busy=false;pending=null;$('request-review').hidden=true;$('request-context').textContent='';$('consent').checked=false;try{speechSynthesis.cancel()}catch{}controls()}
+function clearModelReview(){
+ pending=null;$('request-review').hidden=true;$('request-context').textContent='';$('consent').checked=false;
+}
+function stop({refresh=true}={}){
+ languageImport++;toolLifecycle('cancel');revision++;controller?.abort();controller=null;busy=false;
+ clearModelReview();try{speechSynthesis.cancel()}catch{}if(refresh)controls();
+}
 function controls(){for(const id of ['new-project','delete-project','new-thread','rename-thread','archive-thread','delete-thread','guide','prepare','regenerate','apply-profile','new-document','save-version','delete-document','projects','branch','documents','create-vault','unlock','save','backup','restore','erase','language-file'])$(id).disabled=busy;
  $('chat-file').disabled=busy||!chat()||chat().archived;
  $('clear-chat-files').disabled=busy||(!chatAttachments.length&&!$('attach-document').checked);
  $('attach-document').disabled=busy||!chat()||chat().archived||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare','regenerate'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(storageSnapshot().lossRisk?'unsaved':(vault.unlocked?'saved':'temporary'));renderStorage();window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
-function mutate(fn,{undoable=false}={}){if(busy)return false;const before=data,next=S.copy(data),selection={projectId,threadId,documentId};try{fn(next);data=S.state(next);if(undoable)undoSlot.record(before,data,selection);else undoSlot.clear();dirty=true;stop();render();status('apply');return true}catch{status('failed');return false}}
+function mutate(fn,{undoable=false,afterCommit}={}){
+ if(busy)return false;
+ const before=data,next=S.copy(data),selection={projectId,threadId,documentId};
+ try{
+  fn(next);
+  const validated=S.state(next);
+  if(undoable)undoSlot.record(before,validated,selection);else undoSlot.clear();
+  data=validated;
+ }catch{status('failed');return false}
+ dirty=true;
+ afterCommit?.();
+ stop({refresh:false});render();status('apply');return true;
+}
 function projectIn(v){return v.projects.find(x=>x.id===projectId)}
 function option(value,label){const o=el('option',label);o.value=value;return o}
 function fillProfile(){$('instructions').value=p()?.instructions||'';$('memories').value=p()?.memories.join('\n')||''}
@@ -1502,13 +1520,26 @@ function render(){
  $('projects').replaceChildren(...data.projects.map(x=>option(x.id,x.title)));$('projects').value=projectId||'';
  $('history').replaceChildren();for(const h of S.search(data,$('search').value,$('archived').checked)){const b=el('button',h.project_title+' · '+h.title+(h.archived?' ◇':''));b.className=h.thread===threadId?'active':'secondary';b.disabled=busy;b.onclick=()=>{if(!mayReplace())return;selectProject(h.project);threadId=h.thread;render()};$('history').append(b)}
  const stamp=projectId+':'+(p()?.sources||[]).map(s=>s.id).join(',');if(stamp!==sourceViewStamp){$('source-results').textContent='';sourceViewStamp=stamp}
- const c=chat();$('messages').replaceChildren();if(c){for(const n of S.path(c)){const item=el('article','');item.className='message '+n.role;item.append(el('strong',t(n.origin==='human'?'human':n.origin==='model'?'model':'local')));const body=el('div',n.text);body.className='body';body.dir='auto';item.append(body);if(n.role==='user'){if(n.attached_files?.length){const info=el('small',t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' · '+t('chatFilesNotSaved'));item.append(info)}const edit=el('button',t('edit'));edit.disabled=busy;edit.onclick=()=>{if(!mayReplace())return;stop();clearChatAttachments();branchBase=n.parent;$('message').value=n.text;$('branch-notice').textContent=t('branching')};item.append(edit)}else{const canvas=el('button',t('toCanvas'));canvas.disabled=busy;canvas.onclick=()=>{if($('editor').value&&!confirm(t('discard')))return;$('editor').value=n.text;editorDirty=true;stop()};const speak=el('button',t('speak'));speak.onclick=()=>readAloud(n.text);item.append(canvas,speak)}$('messages').append(item)}}else $('messages').append(el('p',t('empty')));
+ const c=chat();$('messages').replaceChildren();if(c){for(const n of S.path(c)){const item=el('article','');item.className='message '+n.role;item.append(el('strong',t(n.origin==='human'?'human':n.origin==='model'?'model':'local')));const body=el('div',n.text);body.className='body';body.dir='auto';item.append(body);if(n.role==='user'){if(n.attached_files?.length){const info=el('small',t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' · '+t('chatFilesNotSaved'));item.append(info)}const edit=el('button',t('edit'));edit.disabled=busy;edit.onclick=()=>{if(!mayReplace())return;clearChatDraft();branchBase=n.parent;$('message').value=n.text;$('branch-notice').textContent=t('branching');stop()};item.append(edit)}else{const canvas=el('button',t('toCanvas'));canvas.disabled=busy;canvas.onclick=()=>{if($('editor').value&&!confirm(t('discard')))return;$('editor').value=n.text;editorDirty=true;stop()};const speak=el('button',t('speak'));speak.onclick=()=>readAloud(n.text);item.append(canvas,speak)}$('messages').append(item)}}else $('messages').append(el('p',t('empty')));
  const parents=new Set(c?.nodes.map(n=>n.parent));const leaves=c?.nodes.filter(n=>!parents.has(n.id))||[];$('branch').replaceChildren(...leaves.map((n,i)=>option(n.id,(i+1)+' · '+n.text.slice(0,60))));$('branch').value=c?.head||'';
  $('source-list').replaceChildren();for(const s of p()?.sources||[]){const row=el('div',s.name+' · '+s.text.length);const b=el('button','×');b.disabled=busy;b.setAttribute('aria-label',language==='fa'?'حذف منبع':'Remove source');b.onclick=()=>mutate(v=>{const q=projectIn(v);q.sources=q.sources.filter(x=>x.id!==s.id)},{undoable:true});row.append(b);$('source-list').append(row)}
  $('documents').replaceChildren(...(p()?.documents||[]).map(d=>option(d.id,d.title)));$('documents').value=documentId||'';window.NexusLabUI?.render();window.NexusAstrologyUI?.render();window.NexusQualityUI?.render();renderChatAttachments();controls();
 }
 function mayReplace(){return (!forms()&&!$('message').value&&!chatAttachments.length&&!$('attach-document').checked)||confirm(t('discard'))}
-function selectProject(id){toolLifecycle('project');stop();clearChatAttachments();projectId=id;threadId=p()?.threads.find(x=>!x.archived)?.id||null;documentId=p()?.documents[0]?.id||null;branchBase=undefined;profileDirty=editorDirty=false;$('message').value='';$('use-memory').checked=false;$('use-sources').checked=false;$('source-results').textContent='';$('branch-notice').textContent='';fillProfile();fillDoc()}
+function clearChatDraft(){
+ clearChatAttachments();$('message').value='';branchBase=undefined;$('branch-notice').textContent='';
+}
+function selectDocument(id){
+ documentId=id;editorDirty=false;$('attach-document').checked=false;fillDoc();
+}
+function resetProject(id){
+ toolLifecycle('project');
+ projectId=id;threadId=p()?.threads.find(x=>!x.archived)?.id||null;
+ selectDocument(p()?.documents[0]?.id||null);clearChatDraft();
+ profileDirty=false;$('use-memory').checked=false;$('use-sources').checked=false;
+ $('source-results').textContent='';fillProfile();
+}
+function selectProject(id){resetProject(id);stop({refresh:false})}
 function applyLanguage(){document.documentElement.lang=language;document.documentElement.dir=localePacks.get(language)?.dir||(language==='fa'?'rtl':'ltr');document.querySelectorAll('[data-t]').forEach(n=>n.textContent=t(n.dataset.t));document.querySelectorAll('[data-placeholder]').forEach(n=>n.placeholder=t(n.dataset.placeholder));render();if(branchBase!==undefined)$('branch-notice').textContent=t('branching')}
 function download(text,name,type='text/plain'){const u=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
 async function operation(fn,success='apply'){
@@ -1518,23 +1549,49 @@ async function operation(fn,success='apply'){
 }
 function noForms(){if(forms()||$('message').value||chatAttachments.length||$('attach-document').checked){status('needApply');return false}return true}
 function candidate(regenerate=false,materials=[]){const c=chat();if(!c||!p()||c.archived)throw Error('select-chat');if(regenerate){const path=S.path(c),last=path.at(-1);if(last?.role!=='assistant')throw Error('no-answer');if(path.at(-2)?.attached_files?.length)throw Error('reattach-required');return {...S.copy(c),head:last.parent}}return S.append(c,'user',$('message').value.trim(),'human',branchBase===undefined?c.head:branchBase,materials.map(x=>x.name))}
-function installThread(next){const ok=mutate(v=>{const q=projectIn(v);q.threads[q.threads.findIndex(x=>x.id===next.id)]=next});if(!ok)return false;clearChatAttachments();$('message').value='';branchBase=undefined;$('branch-notice').textContent='';render()}
+function installThread(next){
+ return mutate(v=>{const q=projectIn(v);q.threads[q.threads.findIndex(x=>x.id===next.id)]=next},{afterCommit:clearChatDraft});
+}
 function selectedModelEngine(){return document.getElementById('model-engine')?.value==='device'?'device':'gateway'}
 function prepare(regenerate=false){if(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft()))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked});if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');pending={destination,thread:c,body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,provider_host:modelInfo.provider_host,mode,max_output_tokens:budget,omitted_earlier_messages:ctx.omitted_messages,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);$('request-review').hidden=false;controls()}catch(error){status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
 function gateway(){const value=$('gateway').value.trim();const u=new URL(value||location.origin);if((u.protocol!=='https:'&&!(u.protocol==='http:'&&['127.0.0.1','[::1]'].includes(u.hostname)))||u.username||u.password||u.search||u.hash||!['','/'].includes(u.pathname))throw Error('gateway-url');return u.origin}
 async function boundedJson(response,max=128000){if(!response.ok)throw Error('gateway-status-'+response.status);if(!response.body)throw Error('empty-response');const reader=response.body.getReader(),chunks=[];let size=0;try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>max)throw Error('response-capacity');chunks.push(value)}const bytes=new Uint8Array(size);let offset=0;for(const c of chunks){bytes.set(c,offset);offset+=c.length}return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes))}finally{await reader.cancel().catch(()=>{})}}
 $('undo-removal').onclick=()=>{if(busy||!undoSlot.available||!mayReplace())return;try{const restored=undoSlot.take(data);data=restored.data;dirty=true;selectProject(restored.selection.projectId);threadId=p()?.threads.some(x=>x.id===restored.selection.threadId)?restored.selection.threadId:threadId;documentId=p()?.documents.some(x=>x.id===restored.selection.documentId)?restored.selection.documentId:documentId;fillDoc();render();status('undoDone')}catch{status('failed')}};
-$('new-project').onclick=()=>{if(!mayReplace())return;const name=$('project-title').value.trim();if(!name)return;const q=S.project(name);mutate(v=>v.projects.push(q));if(data.projects.some(x=>x.id===q.id)){selectProject(q.id);$('project-title').value='';render()}};
+$('new-project').onclick=()=>{
+ const name=$('project-title').value.trim();
+ if(!name||!mayReplace())return;
+ try{
+  const q=S.project(name);
+  mutate(v=>v.projects.push(q),{afterCommit:()=>{resetProject(q.id);$('project-title').value=''}});
+ }catch{status('failed')}
+};
 $('projects').onchange=()=>{if(!mayReplace()){render();return}selectProject($('projects').value);render()};
-$('delete-project').onclick=()=>{if(!p()||!confirm(t('discard')))return;mutate(v=>v.projects=v.projects.filter(x=>x.id!==projectId),{undoable:true});selectProject(data.projects[0]?.id||null);render()};
-$('new-thread').onclick=()=>{if(!p()||!mayReplace())return;const c=S.thread(t('newChat'));if(!mutate(v=>projectIn(v).threads.push(c)))return;clearChatAttachments();threadId=c.id;branchBase=undefined;$('message').value='';render()};
+$('delete-project').onclick=()=>{
+ if(!p()||!confirm(t('discard')))return;
+ mutate(v=>v.projects=v.projects.filter(x=>x.id!==projectId),
+  {undoable:true,afterCommit:()=>resetProject(data.projects[0]?.id||null)});
+};
+$('new-thread').onclick=()=>{
+ if(!p()||!mayReplace())return;
+ const c=S.thread(t('newChat'));
+ mutate(v=>projectIn(v).threads.push(c),{afterCommit:()=>{threadId=c.id;clearChatDraft()}});
+};
 $('rename-thread').onclick=()=>{if(!chat())return;const name=prompt(t('rename'),chat().title);if(name?.trim())mutate(v=>projectIn(v).threads.find(x=>x.id===threadId).title=name.trim())};
 $('archive-thread').onclick=()=>{if(!chat())return;mutate(v=>{const c=projectIn(v).threads.find(x=>x.id===threadId);c.archived=!c.archived})};
-$('delete-thread').onclick=()=>{if(!chat()||!confirm(t('discard')))return;mutate(v=>{const q=projectIn(v);q.threads=q.threads.filter(x=>x.id!==threadId)},{undoable:true});clearChatAttachments();threadId=null;render()};
+$('delete-thread').onclick=()=>{
+ if(!chat()||!confirm(t('discard')))return;
+ mutate(v=>{const q=projectIn(v);q.threads=q.threads.filter(x=>x.id!==threadId)},
+  {undoable:true,afterCommit:()=>{threadId=null;clearChatDraft()}});
+};
 $('search').oninput=render;$('archived').onchange=render;
-$('branch').onchange=()=>{if(!chat())return;if(!mayReplace()){render();return}const head=$('branch').value;mutate(v=>projectIn(v).threads.find(x=>x.id===threadId).head=head);clearChatAttachments();branchBase=undefined;$('message').value=''};
+$('branch').onchange=()=>{
+ if(!chat())return;
+ if(!mayReplace()){render();return}
+ const head=$('branch').value;
+ if(!mutate(v=>projectIn(v).threads.find(x=>x.id===threadId).head=head,{afterCommit:clearChatDraft}))render();
+};
 $('guide').onclick=()=>{if(chatAttachments.length||$('attach-document').checked)return status('chatAttachmentRequiresModel');if($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())return status('needApply');try{const c=candidate();installThread(S.append(c,'assistant',S.guide(S.path(c).at(-1).text,language==='fa',{skyTone:$('sky-tone').checked})+($('use-astrology').checked?'\n\n'+NexusAstrology.reflection(p().astrology,language==='fa',{historical:$('astro-historical').checked}):''),'guide'))}catch{status('failed')}};
-$('prepare').onclick=()=>prepare();$('regenerate').onclick=()=>prepare(true);$('consent').onchange=controls;$('stop').onclick=()=>{stop();render()};
+$('prepare').onclick=()=>prepare();$('regenerate').onclick=()=>prepare(true);$('consent').onchange=controls;$('stop').onclick=()=>{stop({refresh:false});render()};
 $('chat-file').onchange=async event=>{
  const files=Array.from(event.target.files);event.target.value='';
  if(!files.length||busy||!p()||!chat())return;
@@ -1548,11 +1605,11 @@ $('chat-file').onchange=async event=>{
  }catch{if(epoch===attachmentEpoch)status('chatAttachmentInvalid')}
 };
 $('attach-document').onchange=()=>{stop();renderChatAttachments()};
-$('clear-chat-files').onclick=()=>{if(busy)return;stop();clearChatAttachments()};
+$('clear-chat-files').onclick=()=>{if(busy)return;clearChatAttachments();stop()};
 for(const id of ['message','gateway','gateway-token','use-memory','use-sources','use-astrology','astro-historical','sky-tone'])$(id).addEventListener('input',stop);
-$('send-model').onclick=async()=>{if(!pending||!$('consent').checked||busy)return;languageImport++;const request=pending,rev=revision;const abort=new AbortController();controller=abort;const timer=setTimeout(()=>abort.abort(),request.destination==='device'?120000:50000);busy=true;controls();try{let out;if(request.destination==='device'){out=await window.NexusDevice.generate(request.body,abort.signal)}else{const response=await fetch(gateway()+'/studio-api/respond',{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',redirect:'error',headers:{'content-type':'application/json','authorization':'Bearer '+$('gateway-token').value},body:JSON.stringify(request.body),signal:abort.signal});out=await boundedJson(response)}if(rev!==revision||request.projectId!==projectId||request.threadId!==threadId)return;if(out.origin!=='model'||out.authority!=='none'||typeof out.text!=='string'||out.model!==modelInfo?.model)throw Error('model-response');busy=false;installThread(S.append(request.thread,'assistant',(request.destination==='device'?'[On-device draft · SmolLM2-135M · English / limited]\n\n':'')+out.text,'model'));if(out.truncated)$('status').textContent=language==='fa'?'پاسخ به سقف طول رسیده است.':'The response reached its length limit.'}catch{if(rev===revision)status('failed')}finally{clearTimeout(timer);if(rev===revision){busy=false;pending=null;$('request-review').hidden=true;$('consent').checked=false;controller=null;controls()}}};
+$('send-model').onclick=async()=>{if(!pending||!$('consent').checked||busy)return;languageImport++;const request=pending,rev=revision;const abort=new AbortController();controller=abort;const timer=setTimeout(()=>abort.abort(),request.destination==='device'?120000:50000);busy=true;controls();try{let out;if(request.destination==='device'){out=await window.NexusDevice.generate(request.body,abort.signal)}else{const response=await fetch(gateway()+'/studio-api/respond',{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',redirect:'error',headers:{'content-type':'application/json','authorization':'Bearer '+$('gateway-token').value},body:JSON.stringify(request.body),signal:abort.signal});out=await boundedJson(response)}if(rev!==revision||request.projectId!==projectId||request.threadId!==threadId)return;if(out.origin!=='model'||out.authority!=='none'||typeof out.text!=='string'||out.model!==modelInfo?.model)throw Error('model-response');busy=false;const installed=installThread(S.append(request.thread,'assistant',(request.destination==='device'?'[On-device draft · SmolLM2-135M · English / limited]\n\n':'')+out.text,'model'));if(installed&&out.truncated)$('status').textContent=language==='fa'?'پاسخ به سقف طول رسیده است.':'The response reached its length limit.'}catch{if(rev===revision)status('failed')}finally{clearTimeout(timer);if(rev===revision){busy=false;clearModelReview();controller=null;controls()}}};
 $('check-model').onclick=()=>operation(async(rev,abort)=>{if(selectedModelEngine()==='device'){const info=window.NexusDevice?.info();modelInfo=info?{...info,configured:true,gateway:'device',provider_host:'this device'}:null;$('model-status').textContent=info?info.model+' · on-device · max 64 output tokens':t('noModel');return}const timer=setTimeout(()=>abort.abort(),10000);try{const out=await boundedJson(await fetch(gateway()+'/studio-api/status',{credentials:'omit',cache:'no-store',redirect:'error',signal:abort.signal}),8000);if(rev===revision){if(out.configured&&(typeof out.model!=='string'||typeof out.provider_host!=='string'||! /^[a-f0-9]{64}$/.test(out.configuration_id)))throw Error('configuration');modelInfo={...out,gateway:gateway()};$('model-status').textContent=out.configured?t('configured')+': '+out.model+' · '+out.provider_host:t('noModel')} }finally{clearTimeout(timer)}});
-$('apply-profile').onclick=()=>{if(!p())return;const instructions=$('instructions').value,memories=$('memories').value.split('\n').map(x=>x.trim()).filter(Boolean);if(mutate(v=>Object.assign(projectIn(v),{instructions,memories})))profileDirty=false};
+$('apply-profile').onclick=()=>{if(!p())return;const instructions=$('instructions').value,memories=$('memories').value.split('\n').map(x=>x.trim()).filter(Boolean);mutate(v=>Object.assign(projectIn(v),{instructions,memories}),{afterCommit:()=>{profileDirty=false}})};
 for(const id of ['instructions','memories'])$(id).addEventListener('input',()=>{profileDirty=true;stop()});$('editor').addEventListener('input',()=>{editorDirty=true;stop()});
 $('source-file').onchange=event=>{
  const files=Array.from(event.target.files);event.target.value='';if(!files.length||!p()||busy)return;
@@ -1563,10 +1620,29 @@ $('source-file').onchange=event=>{
  });
 };
 $('search-sources').onclick=()=>{if(!p())return;const hits=S.retrieve(p(),$('source-query').value);$('source-results').textContent=(hits.length?hits.map(h=>h.name+':'+h.line+':'+h.offset+'\n'+h.text).join('\n\n'):t('sourceNoMatch'))+(hits.truncated?'\n'+t('sourceLimited'):'')};
-$('new-document').onclick=()=>{if(!p()||!mayReplace())return;const title=$('document-title').value.trim();if(!title)return;const d={id:S.uid(),title,versions:[]};mutate(v=>projectIn(v).documents.push(d));if(p().documents.some(x=>x.id===d.id)){documentId=d.id;editorDirty=false;$('document-title').value='';fillDoc();render()}};
-$('documents').onchange=()=>{if(!mayReplace()){render();return}clearChatAttachments();documentId=$('documents').value;editorDirty=false;fillDoc();render()};
-$('save-version').onclick=()=>{if(!doc())return;const text=$('editor').value,at=new Date().toISOString();if(mutate(v=>projectIn(v).documents.find(d=>d.id===documentId).versions.push({id:S.uid(),text,at}))){editorDirty=false;renderVersions()}};
-$('delete-document').onclick=()=>{if(!doc()||!confirm(t('discard')))return;mutate(v=>{const q=projectIn(v);q.documents=q.documents.filter(d=>d.id!==documentId)},{undoable:true});documentId=null;editorDirty=false;fillDoc();render()};
+$('new-document').onclick=()=>{
+ const title=$('document-title').value.trim();
+ if(!p()||!title||(editorDirty&&!confirm(t('discard'))))return;
+ const d={id:S.uid(),title,versions:[]};
+ mutate(v=>projectIn(v).documents.push(d),{afterCommit:()=>{selectDocument(d.id);$('document-title').value=''}});
+};
+$('documents').onchange=()=>{
+ const id=$('documents').value;
+ if(id===documentId)return;
+ if(editorDirty&&!confirm(t('discard'))){$('documents').value=documentId||'';return}
+ selectDocument(id);stop({refresh:false});render();
+};
+$('save-version').onclick=()=>{
+ if(!doc())return;
+ const text=$('editor').value,at=new Date().toISOString();
+ mutate(v=>projectIn(v).documents.find(d=>d.id===documentId).versions.push({id:S.uid(),text,at}),
+  {afterCommit:()=>{editorDirty=false;renderVersions()}});
+};
+$('delete-document').onclick=()=>{
+ if(!doc()||!confirm(t('discard')))return;
+ mutate(v=>{const q=projectIn(v);q.documents=q.documents.filter(d=>d.id!==documentId)},
+  {undoable:true,afterCommit:()=>selectDocument(null)});
+};
 $('versions').onchange=()=>{const a=doc()?.versions.find(x=>x.id===$('versions').value)?.text||'',b=doc()?.versions.at(-1)?.text||'';const left=a.split('\n'),right=b.split('\n');$('version-diff').textContent=Array.from({length:Math.max(left.length,right.length)},(_,i)=>left[i]===right[i]?null:(i+1)+':\n− '+(left[i]??'')+'\n+ '+(right[i]??'')).filter(Boolean).slice(0,200).join('\n')};
 $('load-version').onclick=()=>{if(forms()&&!confirm(t('discard')))return;const v=doc()?.versions.find(x=>x.id===$('versions').value);if(v){$('editor').value=v.text;editorDirty=true;stop()}};
 $('export-document').onclick=()=>{if(doc()&&confirm(t('plain')))download($('editor').value,'nexus-document.md','text/markdown')};
@@ -1574,7 +1650,7 @@ $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+cha
 $('create-vault').onclick=()=>{const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation((rev,abort)=>vault.create(pass,{signal:abort.signal}))};
 $('unlock').onclick=()=>{if((dirty||forms()||$('message').value||chatAttachments.length||$('attach-document').checked)&&!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const next=await vault.unlock(pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=next;dirty=false;selectProject(data.projects[0]?.id||null);render()})};
 $('save').onclick=()=>{if(!noForms())return;const snapshot=S.state(data);operation(async(rev,abort)=>{await vault.save(snapshot,{signal:abort.signal});if(rev===revision)dirty=false},'saved')};
-$('lock').onclick=()=>{if(storageSnapshot().lossRisk&&!confirm(t('discard')))return;const clean=toolLifecycle('private');undoSlot.clear();stop();clearChatAttachments();modelInfo=null;vault.lock();data=S.empty();projectId=threadId=documentId=null;dirty=profileDirty=editorDirty=false;for(const id of ['passphrase','repeat-passphrase','gateway-token','message','project-title','document-title','instructions','memories','editor','source-query','search'])$(id).value='';$('model-status').textContent='';$('source-results').textContent='';$('request-context').textContent='';$('branch-notice').textContent='';renderVersions();render();if(!clean)location.reload()};
+$('lock').onclick=()=>{if(storageSnapshot().lossRisk&&!confirm(t('discard')))return;const clean=toolLifecycle('private');undoSlot.clear();stop({refresh:false});clearChatDraft();modelInfo=null;vault.lock();data=S.empty();projectId=threadId=documentId=null;dirty=profileDirty=editorDirty=false;for(const id of ['passphrase','repeat-passphrase','gateway-token','project-title','document-title','instructions','memories','editor','source-query','search'])$(id).value='';$('model-status').textContent='';$('source-results').textContent='';renderVersions();render();if(!clean)location.reload()};
 $('backup').onclick=()=>{if(!noForms())return;const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await vault.export(data,pass,{signal:abort.signal});if(rev===revision)download(raw,'nexus-studio.encrypted.json','application/json')})};
 $('restore').onclick=()=>$('restore-file').click();$('restore-file').onchange=event=>{const f=event.target.files[0];event.target.value='';if(!f||f.size>6*1024*1024||!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await f.text();if(rev!==revision||abort.signal.aborted)return;const opened=await S.decrypt(raw,pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=opened.data;dirty=true;selectProject(data.projects[0]?.id||null);render()})};
 $('erase').onclick=()=>{if(confirm(t('discard')))operation(async(rev,abort)=>{
@@ -1711,7 +1787,7 @@ function prepare(kind){
 }
 for(const kind of ['natal','transit'])$('astro-local-'+kind).onclick=()=>{if(!p()||busy)return;try{stop();if(kind==='natal'&&!$('astro-known').checked)throw Error('known-time');const at=A.instant($(kind==='natal'?'astro-birth':'astro-transit').value.trim());accept(kind,NexusSky.snapshot(at))}catch{$('astro-status').textContent=t('astroFailed')}};
 $('astro-prepare-natal').onclick=()=>prepare('natal');$('astro-prepare-transit').onclick=()=>prepare('transit');
-function accept(kind,value){const old=current();draft=A.profile({schema:'nexus.astrology.v1',orb:Number($('astro-orb').value),natal:kind==='natal'?value:old?.natal,transit:kind==='natal'?null:value});$('use-astrology').checked=false;render();$('astro-status').textContent=t('astroRetrieved')}
+function accept(kind,value){const old=current();draft=A.profile({schema:'nexus.astrology.v1',orb:Number($('astro-orb').value),natal:kind==='natal'?value:old?.natal,transit:kind==='natal'?null:value});$('use-astrology').checked=false;render();renderStorage();$('astro-status').textContent=t('astroRetrieved')}
 $('astro-fetch').onclick=async()=>{
  if(!prepared||!$('astro-network-consent').checked||abort||busy)return;
  const task=prepared,scope=epoch,controller=new AbortController();abort=controller;$('astro-network-consent').checked=false;$('astro-fetch').disabled=true;$('astro-status').textContent=t('astroWorking');const timer=setTimeout(()=>controller.abort(),20000);
@@ -1720,9 +1796,9 @@ $('astro-fetch').onclick=async()=>{
 $('astro-cancel').onclick=()=>{cancel();$('astro-status').textContent=''};
 $('astro-save').onclick=()=>{
  if(!p()||busy)return;
- try{const value=A.profile({...current(),orb:Number($('astro-orb').value)});if(!$('astro-known').checked||A.instant($('astro-birth').value.trim())!==value.natal.at)throw Error('birth-draft');if(value.transit&&A.instant($('astro-transit').value.trim())!==value.transit.at)throw Error('transit-draft');if(mutate(v=>projectIn(v).astrology=value)){draft=null;$('use-astrology').checked=false;render()}}catch{$('astro-status').textContent=t('astroFailed')}
+ try{const value=A.profile({...current(),orb:Number($('astro-orb').value)});if(!$('astro-known').checked||A.instant($('astro-birth').value.trim())!==value.natal.at)throw Error('birth-draft');if(value.transit&&A.instant($('astro-transit').value.trim())!==value.transit.at)throw Error('transit-draft');mutate(v=>projectIn(v).astrology=value,{afterCommit:()=>{draft=null;$('use-astrology').checked=false}})}catch{$('astro-status').textContent=t('astroFailed')}
 };
-$('astro-delete').onclick=()=>{if(!p()?.astrology||!confirm(t('discard')))return;clear();mutate(v=>{delete projectIn(v).astrology},{undoable:true});render()};
+$('astro-delete').onclick=()=>{if(!p()?.astrology||!confirm(t('discard')))return;mutate(v=>{delete projectIn(v).astrology},{undoable:true,afterCommit:clear})};
 for(const kind of ['natal','transit'])$('astro-import-'+kind).onclick=()=>{if(!p()||busy)return;importTarget={kind,project:projectId,epoch};$('astro-import-file').click()};
 $('astro-import-file').onchange=async event=>{
  const file=event.target.files[0],task=importTarget;event.target.value='';importTarget=null;

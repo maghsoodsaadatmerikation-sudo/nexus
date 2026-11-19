@@ -76,6 +76,36 @@ window.addEventListener('load',async()=>{
   assert(requests.length===2&&requests[1].messages[0].content.includes('river is wider'),'reviewed-document-excerpt-sent-once');
   assert(thread().nodes[2].attached_files[0].startsWith('Document:'),'document-version-provenance');
 
+  const firstDocument=project().documents[0].id;
+  fill('document-title','Second document');$('new-document').click();
+  const secondDocument=project().documents[1].id;
+  fill('editor','Second saved document.');$('save-version').click();
+  fill('message','Preserve this composer draft');
+  attach('keep.txt','Preserve this independent attachment');
+  await wait(()=>$('chat-attachment-tray').textContent.includes('keep.txt'));
+  $('attach-document').checked=true;$('attach-document').dispatchEvent(new Event('change'));
+  $('prepare').click();$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));
+  let confirmations=0;window.confirm=()=>{confirmations++;return false};
+  const select=id=>{$('documents').value=id;$('documents').dispatchEvent(new Event('change'))};
+  select(firstDocument);
+  assert(confirmations===0&&$('documents').value===firstDocument&&$('message').value==='Preserve this composer draft'&&
+    $('chat-attachment-tray').textContent.includes('keep.txt'),'document-navigation-preserves-independent-composer-work');
+  assert($('request-review').hidden&&!$('request-context').textContent&&!$('consent').checked&&!$('attach-document').checked,
+    'document-navigation-revokes-old-review-and-document-opt-in');
+  fill('editor','Unsaved editor work');select(secondDocument);
+  assert(confirmations===1&&$('documents').value===firstDocument&&$('editor').value==='Unsaved editor work',
+    'declining-document-switch-preserves-editor-and-selection');
+  window.confirm=()=>true;select(secondDocument);
+  assert($('editor').value==='Second saved document.'&&$('chat-attachment-tray').textContent.includes('keep.txt'),
+    'confirmed-document-switch-only-discards-editor-draft');
+  const normalFetch=window.fetch;
+  window.fetch=async()=>new Response('',{status:503});
+  $('prepare').click();$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));$('send-model').click();
+  await wait(()=>$('request-review').hidden);
+  assert(!$('request-context').textContent&&!$('consent').checked&&$('message').value==='Preserve this composer draft'&&
+    $('chat-attachment-tray').textContent.includes('keep.txt'),'failed-send-clears-reviewed-text-and-keeps-retryable-draft');
+  window.fetch=normalFetch;$('clear-chat-files').click();
+
   fill('message','Draft about another file');
   attach('ignored.pdf','%PDF-1.4-UNSUPPORTED');
   await wait(()=>$('status').textContent===EN.chatAttachmentInvalid);

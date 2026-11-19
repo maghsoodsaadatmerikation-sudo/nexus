@@ -58,7 +58,7 @@ function prepare(kind){
 }
 for(const kind of ['natal','transit'])$('astro-local-'+kind).onclick=()=>{if(!p()||busy)return;try{stop();if(kind==='natal'&&!$('astro-known').checked)throw Error('known-time');const at=A.instant($(kind==='natal'?'astro-birth':'astro-transit').value.trim());accept(kind,NexusSky.snapshot(at))}catch{$('astro-status').textContent=t('astroFailed')}};
 $('astro-prepare-natal').onclick=()=>prepare('natal');$('astro-prepare-transit').onclick=()=>prepare('transit');
-function accept(kind,value){const old=current();draft=A.profile({schema:'nexus.astrology.v1',orb:Number($('astro-orb').value),natal:kind==='natal'?value:old?.natal,transit:kind==='natal'?null:value});$('use-astrology').checked=false;render();$('astro-status').textContent=t('astroRetrieved')}
+function accept(kind,value){const old=current();draft=A.profile({schema:'nexus.astrology.v1',orb:Number($('astro-orb').value),natal:kind==='natal'?value:old?.natal,transit:kind==='natal'?null:value});$('use-astrology').checked=false;render();renderStorage();$('astro-status').textContent=t('astroRetrieved')}
 $('astro-fetch').onclick=async()=>{
  if(!prepared||!$('astro-network-consent').checked||abort||busy)return;
  const task=prepared,scope=epoch,controller=new AbortController();abort=controller;$('astro-network-consent').checked=false;$('astro-fetch').disabled=true;$('astro-status').textContent=t('astroWorking');const timer=setTimeout(()=>controller.abort(),20000);
@@ -67,9 +67,9 @@ $('astro-fetch').onclick=async()=>{
 $('astro-cancel').onclick=()=>{cancel();$('astro-status').textContent=''};
 $('astro-save').onclick=()=>{
  if(!p()||busy)return;
- try{const value=A.profile({...current(),orb:Number($('astro-orb').value)});if(!$('astro-known').checked||A.instant($('astro-birth').value.trim())!==value.natal.at)throw Error('birth-draft');if(value.transit&&A.instant($('astro-transit').value.trim())!==value.transit.at)throw Error('transit-draft');if(mutate(v=>projectIn(v).astrology=value)){draft=null;$('use-astrology').checked=false;render()}}catch{$('astro-status').textContent=t('astroFailed')}
+ try{const value=A.profile({...current(),orb:Number($('astro-orb').value)});if(!$('astro-known').checked||A.instant($('astro-birth').value.trim())!==value.natal.at)throw Error('birth-draft');if(value.transit&&A.instant($('astro-transit').value.trim())!==value.transit.at)throw Error('transit-draft');mutate(v=>projectIn(v).astrology=value,{afterCommit:()=>{draft=null;$('use-astrology').checked=false}})}catch{$('astro-status').textContent=t('astroFailed')}
 };
-$('astro-delete').onclick=()=>{if(!p()?.astrology||!confirm(t('discard')))return;clear();mutate(v=>{delete projectIn(v).astrology},{undoable:true});render()};
+$('astro-delete').onclick=()=>{if(!p()?.astrology||!confirm(t('discard')))return;mutate(v=>{delete projectIn(v).astrology},{undoable:true,afterCommit:clear})};
 for(const kind of ['natal','transit'])$('astro-import-'+kind).onclick=()=>{if(!p()||busy)return;importTarget={kind,project:projectId,epoch};$('astro-import-file').click()};
 $('astro-import-file').onchange=async event=>{
  const file=event.target.files[0],task=importTarget;event.target.value='';importTarget=null;

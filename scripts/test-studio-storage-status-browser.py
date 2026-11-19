@@ -56,7 +56,16 @@ window.addEventListener('load',async()=>{
   assert(snapshot().drafts.writing&&snapshot().appliedUnsaved,'writing-and-applied-delta-are-distinct');
   assert($('storage-writing-state').textContent.includes('Unapplied'),'writing-draft-visible');
   assert(!display().includes('PRIVATE UNSAVED DOCUMENT TEXT'),'status-does-not-leak-document');
-  $('save-version').click();$('save').click();
+  $('save-version').click();
+  assert(!snapshot().drafts.writing&&$('storage-writing-state').textContent===EN.storageWritingNone,
+    'saving-a-version-refreshes-visible-draft-status-immediately');
+  fill('instructions','x'.repeat(2001));$('apply-profile').click();
+  assert(snapshot().drafts.preferences&&$('instructions').value.length===2001,
+    'rejected-preferences-remain-editable');
+  fill('instructions','Applied preferences');$('apply-profile').click();
+  assert(!snapshot().drafts.preferences&&$('storage-writing-state').textContent===EN.storageWritingNone,
+    'applying-preferences-refreshes-visible-draft-status-immediately');
+  $('save').click();
   await wait(()=>!NexusStudioUI.uiStatus().dirty);
   assert(!snapshot().drafts.writing&&!snapshot().lossRisk,'applied-version-and-save-remove-risk');
 

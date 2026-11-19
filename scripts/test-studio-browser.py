@@ -34,6 +34,11 @@ window.addEventListener('load',async()=>{
   assert(current().threads[0].nodes.length===4&&$('branch').options.length===2,'editing-preserves-two-branches');
   change('branch',firstHead);assert($('messages').textContent.includes('ORIGINAL QUESTION')&&!$('messages').textContent.includes('BRANCHED QUESTION'),'branch-selector-restores-original');
   fill('message','KEEP THIS DRAFT');window.confirm=()=>false;change('branch',current().threads[0].nodes.at(-1).id);assert($('branch').value===firstHead&&current().threads[0].head===firstHead&&$('message').value==='KEEP THIS DRAFT','declined-branch-change-restores-selection-and-draft');window.confirm=()=>true;fill('message','');
+  $('messages').querySelector('button').click();
+  assert($('request-review').hidden&&$('storage-center').dataset.unsaved==='true'&&$('branch-notice').textContent===EN.branching,'edit-branch-refreshes-draft-status');
+  change('branch',current().threads[0].nodes.at(-1).id);
+  assert(!$('message').value&&!$('branch-notice').textContent&&$('storage-chat-state').textContent===EN.storageChatNone,'accepted-branch-switch-clears-draft-before-render');
+  change('branch',firstHead);
   $('rename-thread').click();assert(current().threads[0].title==='Renamed conversation','rename-chat');
   fill('search','BRANCHED');assert($('history').children.length===1,'search-includes-other-branches');
   fill('search','');$('archive-thread').click();assert($('history').children.length===0,'archive-hides-thread');
