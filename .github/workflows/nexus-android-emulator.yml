@@ -6,6 +6,7 @@ on:
       - '.github/workflows/nexus-android-emulator.yml'
       - 'mobile/android/**'
       - 'scripts/test-nexus-android-emulator.py'
+      - 'scripts/test-nexus-android-saf.py'
       - 'scripts/build-nexus-android-assets.py'
       - 'scripts/build-nexus-mobile-local.py'
       - 'web/motion*'
@@ -66,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/build-studio-static.py --check
-          python3 -m py_compile scripts/test-nexus-android-emulator.py scripts/build-nexus-android-assets.py
+          python3 -m py_compile scripts/test-nexus-android-emulator.py scripts/test-nexus-android-saf.py scripts/build-nexus-android-assets.py
           python3 scripts/test-nexus-android-assets.py
           mkdir -p mobile/android/app/src/main/assets
           python3 scripts/build-nexus-android-assets.py \
@@ -138,6 +139,8 @@ jobs:
           python3 scripts/test-nexus-android-emulator.py \
             mobile/android/app/build/outputs/apk/debug/app-debug.apk \
             --report "$RUNNER_TEMP/nexus-android-emulator-acceptance.json"
+          python3 scripts/test-nexus-android-saf.py \
+            --report "$RUNNER_TEMP/nexus-android-saf-roundtrip.json"
           python3 - <<'PY'
           from pathlib import Path
           import json,os
@@ -148,6 +151,13 @@ jobs:
           assert data['upgrade_same_signature_data_preserved'] is True
           assert data['upgrade_different_signature_tested'] is False
           assert len(data['checks'])>=8
+          saf=json.loads((Path(os.environ['RUNNER_TEMP'])/'nexus-android-saf-roundtrip.json').read_text())
+          assert saf['status']=='ANDROID_SAF_ROUNDTRIP_PASS'
+          assert saf['real_emulator'] is True
+          assert saf['physical_device_tested'] is False
+          assert saf['synthetic_public_storyboard_only'] is True
+          assert saf['private_user_files_read'] is False
+          assert len(saf['checks'])>=5
           print('Verified real Android emulator test:',len(data['checks']),'checks')
           PY
 
@@ -170,6 +180,7 @@ jobs:
             ${{ runner.temp }}/nexus-mobile-emulator-tested-debug.apk
             ${{ runner.temp }}/nexus-mobile-emulator-tested-debug.apk.sha256
             ${{ runner.temp }}/nexus-android-emulator-acceptance.json
+            ${{ runner.temp }}/nexus-android-saf-roundtrip.json
             ${{ runner.temp }}/nexus-android-emulator-studio.png
             ${{ runner.temp }}/nexus-android-emu-permissions.txt
           if-no-files-found: error
