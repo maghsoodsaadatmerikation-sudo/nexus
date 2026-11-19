@@ -236,6 +236,18 @@ try{
  assert(await js("document.getElementById('request-review').hidden&&!document.getElementById('consent').checked"),'local-guide-must-not-stage-or-send-provider-content');
  checks.push('focused-tools-save-and-reviewed-handoff');
  assert(await js("NexusStudioUI.snapshot().projects[0].threads[0].nodes.length===2"),'guide-failed');checks.push('local-guide-works-without-provider');
+ assert(await js("document.getElementById('nexus-zen-storage-indicator').textContent.includes('Unsaved changes')"),'temporary-work-must-be-labeled-unsaved');
+ await js("(()=>{window.__zenOriginal=NexusStudioUI.snapshot().projects[0].threads[0].id;NexusStudioUI.startConversation(true);const search=document.getElementById('search');search.value='NO_LEGACY_MATCH';search.dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('nexus-zen-menu').click();const find=document.getElementById('nexus-zen-find');find.value='SYNTHETIC PRIVATE QUESTION';find.dispatchEvent(new Event('input',{bubbles:true}));return true})()");
+ assert(await js("document.getElementById('history').querySelectorAll('button').length===0&&document.querySelectorAll('#nexus-zen-history button').length===1&&document.querySelector('#nexus-zen-history button').textContent.includes('SYNTHETIC PRIVATE QUESTION')"),'drawer-history-must-ignore-legacy-filter');
+ await js("document.querySelector('#nexus-zen-history button').click();true");
+ assert(await js("NexusStudioUI.selection().threadId===window.__zenOriginal&&document.getElementById('nexus-zen-drawer').hidden&&document.getElementById('messages').textContent.includes('SYNTHETIC PRIVATE QUESTION')"),'direct-session-history-routing-missing');
+ await js("document.getElementById('archive-thread').click();document.getElementById('nexus-zen-menu').click();true");
+ assert(await js("document.querySelectorAll('#nexus-zen-history button').length===0"),'archived-chats-should-be-hidden-by-default');
+ await js("document.getElementById('nexus-zen-archived').click();true");
+ assert(await js("document.querySelectorAll('#nexus-zen-history button').length===1&&document.querySelector('#nexus-zen-history button').textContent.includes('Archived')"),'archived-conversation-search-not-discoverable');
+ await js("document.querySelector('#nexus-zen-history button').click();document.getElementById('archive-thread').click();document.getElementById('search').value='';document.getElementById('search').dispatchEvent(new Event('input',{bubbles:true}));true");
+ assert(await js("!NexusStudioUI.snapshot().projects[0].threads[0].archived&&document.getElementById('nexus-zen-drawer').hidden"),'archive-restore-not-preserved');
+ checks.push('full-session-search-and-archived-toggle-independent-of-legacy-pane');
  await js("document.getElementById('studio-focus-toggle').click();true");
  assert(await js("!NexusStudioFocus.isFocused()&&document.querySelectorAll('section.card[hidden]').length===0&&document.getElementById('studio-focus-nav').hidden"),'full-view-not-restored');
  await js("document.getElementById('studio-tools-toggle').click();true");
@@ -254,6 +266,7 @@ try{
  await js("document.getElementById('passphrase').value='synthetic secret phrase 123';document.getElementById('repeat-passphrase').value='synthetic secret phrase 123';document.getElementById('create-vault').click();true");
  await poll(()=>retryJs("!document.getElementById('save').disabled"),12000,'archive-create');
  await js("document.querySelector('#studio-focus-nav button[data-panel=conversation-card]').click();document.getElementById('studio-compose-save').click();true");await poll(()=>retryJs("document.getElementById('status').textContent.includes('session saved')"),12000,'archive-save');
+ assert(await js("document.getElementById('nexus-zen-storage-indicator').textContent.includes('Archive unlocked')"),'post-save-status-must-not-show-unsaved');checks.push('truthful-header-save-state-before-and-after-explicit-encryption');
  await js("(()=>{const m=document.getElementById('message');m.value='SYNTHETIC UNSAVED DRAFT';m.dispatchEvent(new Event('input'));return true})()");
  assert(await js("document.getElementById('studio-compose-save').disabled&&document.getElementById('studio-compose-storage').textContent.includes('not fully saved')"),'draft-save-blocked-no-false-success');
  await js("(()=>{const m=document.getElementById('message');m.value='';m.dispatchEvent(new Event('input'));return true})()");
