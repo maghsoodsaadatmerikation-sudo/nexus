@@ -79,6 +79,30 @@ class MobileKitTests(unittest.TestCase):
             self.assertIn(b"LOCAL PUBLIC PACKAGE VERIFICATION BLOCKED", launcher)
             self.assertNotIn(b"requests.post", launcher)
 
+    def test_guided_mobile_home_is_readable_accessible_and_offline_only(self):
+        self.build()
+        with zipfile.ZipFile(self.bundle) as archive:
+            page = archive.read(kit.BUNDLE + "/apps.html").decode("utf-8")
+        self.assertIn('<html lang="en">', page)
+        self.assertIn('name="viewport"', page)
+        self.assertIn('href="#tools"', page)
+        self.assertIn('id="tools" aria-label="NEXUS tools"', page)
+        self.assertIn('aria-labelledby="start-title"', page)
+        self.assertIn('role=', page.replace('aria-label=', 'role='))
+        for target in ('./', './motion/', './device-check.html'):
+            self.assertEqual(page.count('href="' + target + '"'), 1)
+        self.assertIn('Open Studio', page)
+        self.assertIn('Open Motion', page)
+        self.assertIn(':focus-visible', page)
+        self.assertIn('min-height:48px', page)
+        self.assertIn('prefers-reduced-motion', page)
+        self.assertIn('lang="fa"', page)
+        self.assertIn("default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'", page)
+        self.assertNotIn('<script', page.lower())
+        self.assertNotIn('<iframe', page.lower())
+        self.assertNotIn('https://', page.lower())
+        self.assertNotIn('http://', page.lower())
+
     def test_source_revisions_or_existing_user_output_denied(self):
         for candidate in ("main", "A" * 40, "b" * 39, ""):
             with self.subTest(candidate=candidate), self.assertRaises(ValueError):
