@@ -83,6 +83,8 @@ jobs:
         run: python3 scripts/test-studio-vault-cancellation-browser.py
       - name: Exercise Studio in disposable narrow and wide Chromium
         run: python3 scripts/test-studio-browser.py
+      - name: Verify storage status separates encrypted archive, unsaved drafts and local media in Chromium
+        run: python3 scripts/test-studio-storage-status-browser.py
       - name: Confirm private music prompts and form-only drafts are cleared after user consent in Chromium
         run: python3 scripts/test-studio-private-draft-forms-browser.py
       - name: Verify unsaved local Music and Orchestra work is protected by user consent in Chromium
