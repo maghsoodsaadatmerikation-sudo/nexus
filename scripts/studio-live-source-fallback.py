@@ -178,6 +178,12 @@ def verify(zip_path, manifest_path):
         raise ValueError("BLOCKED: invalid fallback files")
     manifest = json.loads(manifest_path.read_text())
     if manifest.get("schema") != SCHEMA or manifest.get("source_commit") != LIVE_COMMIT or \
+            manifest.get("live_service_id_at_snapshot") != SERVICE or \
+            manifest.get("render_workspace_id_at_snapshot") != WORKSPACE or \
+            manifest.get("data_included") != "public_static_source_only" or \
+            manifest.get("rollback_action_available_in_connector") is not False or \
+            manifest.get("real_user_archive_recovered") is not False or \
+            manifest.get("no_new_service_or_cost") is not True or \
             manifest.get("origin") != gate.ORIGIN or \
             manifest.get("origin_matches_pinned_live_source") is not True or \
             manifest.get("current_live_deploy_at_snapshot") != LIVE_DEPLOY or \
