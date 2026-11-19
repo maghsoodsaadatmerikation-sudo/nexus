@@ -267,3 +267,19 @@ html.studio-focus-mode{
 .studio-focus-mode #studio-focus-onboarding{padding:12px 14px;border-radius:13px}
 .studio-focus-mode #studio-focus-onboarding button{min-height:44px}
 .studio-focus-mode #nexus-zen-suggestions button{white-space:nowrap}
+
+/* Zen navigation v2: discoverable session-wide history and honest save state. */
+#nexus-zen-bar #nexus-zen-home{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:0;min-width:0;line-height:1.2}
+#nexus-zen-storage-indicator{display:block;color:#b8c3cc;font-size:.7rem;letter-spacing:0;font-weight:500;margin-top:3px}
+#nexus-zen-storage-indicator[data-unsaved="true"]{color:#f2c995}
+#nexus-zen-drawer .nexus-zen-archived{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:.82rem;color:#c8d3d0;cursor:pointer}
+#nexus-zen-drawer #nexus-zen-archived{width:18px;height:18px;min-width:18px;min-height:18px;margin:0;accent-color:#8674d4}
+#nexus-zen-history .nexus-zen-chat-result{line-height:1.35;white-space:normal;overflow-wrap:anywhere}
+#nexus-zen-history .nexus-zen-chat-result small{display:block;margin-top:5px;color:#b3c3bd;font-size:.72rem;font-weight:400}
+#nexus-zen-history .nexus-zen-chat-result[aria-current="page"]{border-color:#8c76d8;background:#302a46}
+@media(max-width:600px){
+ #nexus-zen-bar{gap:4px}
+ #nexus-zen-bar button{min-width:42px;min-height:44px}
+ #nexus-zen-bar #nexus-zen-home{font-size:.9rem;letter-spacing:.08em}
+ #nexus-zen-storage-indicator{font-size:.67rem}
+}
