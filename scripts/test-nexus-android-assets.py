@@ -43,6 +43,18 @@ class PublicAPKAssetsTests(unittest.TestCase):
         self.assertIn('href="/"', motion)
         self.assertIn('id="motion-save-before-exit"', motion)
         self.assertIn('Download project + media ZIP', motion)
+        self.assertIn('id="motion-draft-panel"', motion)
+        self.assertIn('id="motion-draft-enable"', motion)
+        self.assertIn('id="motion-draft-restore"', motion)
+        self.assertIn('id="motion-draft-clear"', motion)
+        self.assertIn('id="motion-draft-ack"', motion)
+        script=(self.output/"motion/motion-ui.js").read_text()
+        self.assertIn("AES-GCM",script)
+        self.assertIn("PBKDF2",script)
+        self.assertIn("240000",script)
+        self.assertIn("localStorage.setItem(DRAFT_SLOT",script)
+        self.assertNotIn("fetch(",script)
+
         self.assertEqual(b.verify(self.output,COMMIT)["status"],"EXACT_PUBLIC_ASSETS")
 
     def test_refuses_modified_asset_and_user_private_material(self):

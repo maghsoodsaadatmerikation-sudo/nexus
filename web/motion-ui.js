@@ -4,6 +4,7 @@ const M=globalThis.NexusMotion, $=id=>document.getElementById(id);
 if(!M||!$('motion-canvas'))return;
 let story=M.DEFAULT(),images={},photoFiles=new Map(),audioFile=null,audioUrl=null;
 let running=false,tick=0,startClock=0,position=0,recording=false,cancelRecord=false,recorder=null;
+let draftKey=null,draftSalt=null,draftEnabled=false,draftEpoch=0,draftTimer=null;
 const canvas=$('motion-canvas'),ctx=canvas.getContext('2d',{alpha:false});
 const status=(msg,error=false)=>{const p=$('motion-status');p.textContent=msg;p.style.color=error?'#ffc5b4':'#b6e9de'};
 const secs=t=>{const n=Math.floor(Math.max(0,t));return String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0')};
@@ -77,6 +78,7 @@ function setStory(next){
  M.validate(next);halt();story=JSON.parse(JSON.stringify(next));$('motion-title').value=story.title;
  $('motion-format').value=story.width+'x'+story.height;$('motion-fps').value=story.fps;
  drawable();position=0;renderScenes();draw();status('Storyboard ready. All media stays on this device.');
+ queueDraftSave();
 }
 $('motion-title').addEventListener('change',()=>{const old=story.title;story.title=$('motion-title').value;
  try{valid();draw();}catch(e){story.title=old;$('motion-title').value=old;status(e.message,true)}});
@@ -123,6 +125,7 @@ $('motion-sound').addEventListener('change',e=>{
   return status('Audio rejected (max 128 MiB; simple filename and supported format).',true);
  if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=URL.createObjectURL(file);
  audioFile=file;story.soundtrack='assets/'+file.name;updateBudget();status('Original audio selected; no voice transformation or remote upload.');
+ queueDraftSave();
 });
 function download(blob,name){
  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);
@@ -344,6 +347,135 @@ async function compareSelected(three){
 }
 currentButton.onclick=()=>compareSelected(false);
 samplesButton.onclick=()=>compareSelected(true);
+
+
+// Opt-in, encrypted STORYBOARD-only checkpoints. Neither media nor passphrase
+// enters storage; the derived AES key exists only until this page is closed.
+const DRAFT_SLOT='nexus.motion.encrypted.storyboard.v1',DRAFT_MAX=240000;
+const dStatus=(value,error=false)=>{const n=$('motion-draft-status');
+ n.textContent=value;n.style.color=error?'#ffc5b4':'#b6e9de';};
+function b64(bytes){let s='';for(let i=0;i<bytes.length;i+=8192)
+ s+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(s);}
+function unb64(value,max){
+ if(typeof value!=='string'||value.length>max*2||!/^[A-Za-z0-9+/]+={0,2}$/.test(value))
+  throw Error('Invalid draft encoding');
+ const bytes=Uint8Array.from(atob(value),c=>c.charCodeAt(0));
+ if(!bytes.length||bytes.length>max)throw Error('Invalid draft size');
+ return bytes;
+}
+function readDraft(){
+ const value=localStorage.getItem(DRAFT_SLOT);
+ if(value===null)return null;
+ if(value.length>400000)throw Error('Draft size exceeds safe limit');
+ const obj=JSON.parse(value);
+ if(!obj||obj.v!==1||Object.keys(obj).sort().join(',')!=='data,iv,salt,v')
+  throw Error('Unsupported draft format');
+ const salt=unb64(obj.salt,16),iv=unb64(obj.iv,12),data=unb64(obj.data,DRAFT_MAX+32);
+ if(salt.length!==16||iv.length!==12)throw Error('Invalid encryption parameters');
+ return {salt,iv,data};
+}
+function cryptoReady(){
+ if(!globalThis.crypto?.subtle||typeof globalThis.crypto.getRandomValues!=='function')
+  throw Error('Secure on-device cryptography unavailable');
+}
+async function deriveDraft(pass,salt){
+ cryptoReady();
+ if(pass.length<12||pass.length>128)throw Error('Passphrase must be 12–128 characters');
+ const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(pass),
+                                      'PBKDF2',false,['deriveKey']);
+ return crypto.subtle.deriveKey(
+  {name:'PBKDF2',salt,hash:'SHA-256',iterations:240000},key,
+  {name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+function stopDraft(){
+ draftEnabled=false;draftKey=null;draftSalt=null;draftEpoch++;
+ if(draftTimer!==null)clearTimeout(draftTimer);
+ draftTimer=null;$('motion-draft-enable').textContent='Enable encrypted autosave';
+}
+async function saveDraft(ticket){
+ if(!draftEnabled||!draftKey)return;
+ try{
+  M.validate(story);
+  const payload=new TextEncoder().encode(JSON.stringify(story));
+  if(payload.length>DRAFT_MAX)throw Error('Storyboard exceeds draft limit');
+  cryptoReady();
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const data=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},draftKey,payload));
+  if(!draftEnabled||ticket!==draftEpoch)return;
+  localStorage.setItem(DRAFT_SLOT,JSON.stringify({v:1,
+   salt:b64(draftSalt),iv:b64(iv),data:b64(data)}));
+  dStatus('Encrypted storyboard saved locally. Original media is NOT included.');
+ }catch(e){
+  stopDraft();dStatus('Autosave stopped: '+e.message+'. Export project + media ZIP.',true);
+ }
+}
+function queueDraftSave(){
+ if(!draftEnabled)return;
+ if(draftTimer!==null)clearTimeout(draftTimer);
+ const ticket=++draftEpoch;
+ draftTimer=setTimeout(()=>{draftTimer=null;void saveDraft(ticket);},750);
+}
+$('motion-draft-enable').addEventListener('click',async()=>{
+ const button=$('motion-draft-enable'),input=$('motion-draft-pass'),confirm=$('motion-draft-confirm');
+ if(draftEnabled){stopDraft();dStatus('Autosave paused; last encrypted checkpoint remains.');return;}
+ button.disabled=true;
+ try{
+  if(readDraft())throw Error('Draft already exists. Restore or delete it first');
+  if(input.value!==confirm.value)throw Error('Passphrases do not match');
+  cryptoReady();
+  const salt=crypto.getRandomValues(new Uint8Array(16));
+  const key=await deriveDraft(input.value,salt);
+  draftKey=key;draftSalt=salt;draftEnabled=true;
+  button.textContent='Pause encrypted autosave';
+  await saveDraft(++draftEpoch);
+ }catch(e){stopDraft();dStatus('Autosave not enabled: '+e.message,true);}
+ finally{input.value='';confirm.value='';button.disabled=false;}
+});
+$('motion-draft-restore').addEventListener('click',async()=>{
+ const input=$('motion-draft-pass'),confirm=$('motion-draft-confirm'),
+  button=$('motion-draft-restore');
+ button.disabled=true;
+ try{
+  if(draftEnabled)throw Error('Pause autosave before restoring');
+  const record=readDraft();
+  if(!record)throw Error('No encrypted draft found in this origin');
+  if(!$('motion-draft-ack').checked)throw Error('Check the explicit Restore/Delete confirmation first');
+  $('motion-draft-ack').checked=false;
+  const key=await deriveDraft(input.value,record.salt);
+  let plain;
+  try{plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:record.iv},key,record.data);}
+  catch{throw Error('Wrong passphrase or corrupted encrypted draft');}
+  if(plain.byteLength>DRAFT_MAX)throw Error('Restored draft too large');
+  const recovered=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(plain));
+  M.validate(recovered);
+  for(const image of Object.values(images))
+   if(image?.src?.startsWith('blob:'))URL.revokeObjectURL(image.src);
+  if(audioUrl)URL.revokeObjectURL(audioUrl);
+  photoFiles.clear();images={};audioFile=null;audioUrl=null;
+  setStory(recovered);
+  draftKey=key;draftSalt=record.salt;draftEnabled=true;draftEpoch++;
+  $('motion-draft-enable').textContent='Pause encrypted autosave';
+  dStatus('Restored encrypted storyboard. Autosave resumed. Re-import original photos and audio.');
+ }catch(e){dStatus('Restore rejected: '+e.message,true);}
+ finally{input.value='';confirm.value='';button.disabled=false;}
+});
+$('motion-draft-clear').addEventListener('click',()=>{
+ if(!$('motion-draft-ack').checked){
+  dStatus('Check the explicit Restore/Delete confirmation before deleting.',true);return;
+ }
+ $('motion-draft-ack').checked=false;
+ try{localStorage.removeItem(DRAFT_SLOT);stopDraft();
+  dStatus('Encrypted local draft deleted; current storyboard remains in memory.');
+ }catch(e){dStatus('Could not delete draft: '+e.message,true);}
+});
+$('motion-scenes').addEventListener('change',queueDraftSave);
+for(const id of ['motion-title','motion-format','motion-fps'])
+ $(id).addEventListener('change',queueDraftSave);
+for(const id of ['motion-add','motion-remove','motion-example'])
+ $(id).addEventListener('click',queueDraftSave);
+try{dStatus(readDraft()?'Encrypted draft found. Enter passphrase and Restore & resume autosave.':
+ 'Autosave off. Enable with passphrase or export project + media ZIP.');}
+catch(e){dStatus('Stored draft unavailable: '+e.message+'; delete explicitly if needed.',true);}
 
 setStory(M.DEFAULT());
 })();

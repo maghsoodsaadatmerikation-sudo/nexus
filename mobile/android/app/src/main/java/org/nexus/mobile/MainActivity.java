@@ -203,7 +203,11 @@ public final class MainActivity extends Activity {
                         witness = "(document.title.includes('NEXUS Motion') && " +
                                   "typeof window.NexusMotion === 'object' && " +
                                   "!!document.getElementById('motion-canvas') && " +
-                                  "!!document.getElementById('motion-add'))";
+                                  "!!document.getElementById('motion-add') && " +
+                                  "!!document.getElementById('motion-draft-pass') && " +
+                                  "!!document.getElementById('motion-draft-restore') && " +
+                                  "!!window.crypto && !!window.crypto.subtle && " +
+                                  "typeof window.crypto.subtle.encrypt === 'function')";
                     } else if ("/".equals(page)) {
                         witness = "(document.title === 'NEXUS Studio' && " +
                                   "!!document.getElementById('messages'))";
