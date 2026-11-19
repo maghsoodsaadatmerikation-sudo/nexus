@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from typing import Literal
 import httpx
+import sharaf
 from transport_bounds import read_bounded_body
 
 MAX_INPUT = 96000
@@ -25,6 +26,12 @@ POLICY = (
     "stays with the human. When optional astrology data is supplied, distinguish its "
     "numerical positions from symbolic interpretations, not established causal facts "
     "or diagnoses. Do not substitute astrology for evidence-based health decisions. "
+    "For mental health, acknowledge feelings while remaining uncertain about unverified "
+    "explanations. Never affirm that a belief, sign or chart proves a mission, threat, "
+    "diagnosis or fate. Do not recommend individualized medication changes. In an "
+    "immediate safety emergency, prioritize contacting local emergency services. "
+    "Never invent contact numbers or claim you contacted anyone. Creative reflection "
+    "requires a user request and must yield to immediate safety. "
     "You have no tools and cannot execute external actions."
 )
 
@@ -38,6 +45,7 @@ class Completion(BaseModel):
     consent: Literal[True]
     configuration_id: str = Field(pattern=r"^[a-f0-9]{64}$")
     messages: list[Message] = Field(min_length=1, max_length=42)
+    locale: Literal["en", "fa"] | None = None
     mode: Literal["standard", "thinking", "non-thinking"] = "standard"
     max_output_tokens: int = Field(default=2048, ge=1, le=8192)
 
@@ -94,19 +102,20 @@ def register(app):
     @app.post("/studio-api/respond")
     async def respond(request: Request):
         c = config()
-        if c is None:
-            raise HTTPException(503, "No model provider is configured")
+        token = c[2] if c else os.getenv("NEXUS_STUDIO_TOKEN", "").strip()
         authorization_values = request.headers.getlist("authorization")
+        if len(token) < 32 or (c is None and not authorization_values):
+            raise HTTPException(503, "No model provider is configured")
         authorization = authorization_values[0] if len(authorization_values) == 1 else ""
-        if not hmac.compare_digest(authorization.encode(), ("Bearer " + c[2]).encode()):
+        if not hmac.compare_digest(authorization.encode(), ("Bearer " + token).encode()):
             raise HTTPException(401, "Studio authentication required", headers={"WWW-Authenticate": "Bearer"})
         media_values = request.headers.getlist("content-type")
         if len(media_values) != 1 or media_values[0].split(";", 1)[0].strip().lower() != "application/json":
             raise HTTPException(415, "JSON required")
         try:
-            request.app.state.model_limiter.acquire_nowait()
+            request.app.state.studio_ingress_limiter.acquire_nowait()
         except anyio.WouldBlock:
-            raise HTTPException(429, "Model capacity is busy", headers={"Retry-After": "5"}) from None
+            raise HTTPException(429, "Studio request capacity is busy", headers={"Retry-After": "5"}) from None
         try:
             body = await read_bounded_body(
                 request,
@@ -120,12 +129,37 @@ def register(app):
                 data = Completion.model_validate_json(body)
             except ValidationError:
                 raise HTTPException(422, "Invalid consent or message context") from None
-            if data.configuration_id != configuration_id(c):
-                raise HTTPException(409, "Model configuration changed; review again")
             if data.messages[-1].role != "user":
                 raise HTTPException(422, "Final message must be from the user")
-            if data.mode != "standard" and adapter() != "deepseek":
-                raise HTTPException(422, "Execution mode is unsupported by this adapter")
+            user_turns = [message.content for index, message in enumerate(data.messages)
+                          if message.role == "user" and not (
+                              index == 0 and len(data.messages) > 1
+                              and message.content.startswith("Optional project context:\n")
+                          )]
+            decision = sharaf.decide(user_turns)
+            # Provider configuration controls forwarding. Safety guidance stays
+            # available after authenticated admission even if the review is stale.
+            if decision is None or decision.route not in sharaf.PRIORITY_ROUTES:
+                if c is None:
+                    raise HTTPException(503, "No model provider is configured")
+                if data.configuration_id != configuration_id(c):
+                    raise HTTPException(409, "Model configuration changed; review again")
+                if data.mode != "standard" and adapter() != "deepseek":
+                    raise HTTPException(422, "Execution mode is unsupported by this adapter")
+            if decision is not None:
+                return JSONResponse(
+                    {"text": sharaf.render(decision, user_turns[-1], data.locale),
+                     "origin": "sharaf", "policy_version": sharaf.VERSION, "authority": "none"},
+                    headers={"Cache-Control": "no-store"},
+                )
+        finally:
+            request.app.state.studio_ingress_limiter.release()
+
+        try:
+            request.app.state.model_limiter.acquire_nowait()
+        except anyio.WouldBlock:
+            raise HTTPException(429, "Model capacity is busy", headers={"Retry-After": "5"}) from None
+        try:
             messages = [{"role": "system", "content": POLICY}]
             messages.extend(m.model_dump() for m in data.messages)
             headers = {"accept-encoding": "identity"}
