@@ -9,6 +9,7 @@ import android.os.Build;
 import android.util.Base64;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
+import android.webkit.ConsoleMessage;
 import android.webkit.SafeBrowsingResponse;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -21,6 +22,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 import org.json.JSONException;
 
 import java.io.ByteArrayInputStream;
@@ -153,6 +155,38 @@ public final class MainActivity extends Activity {
         runOnUiThread(()->Toast.makeText(this,message,Toast.LENGTH_LONG).show());
     }
 
+    /** Report only a reviewed public link's real screen center in debug APKs.
+     * This is a fallback for Android API35 UIAutomator returning a nearly
+     * empty accessibility tree. It still requires a real physical adb tap.
+     * No project text, URLs, credentials or private user data are recorded.
+     */
+    private void reportPublicTapCenter(WebView view, String selector, String name) {
+        if ((getApplicationInfo().flags &
+             android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)==0) return;
+        String source="(() => {const el=document.querySelector("+
+            JSONObject.quote(selector)+");if(!el)return null;"+
+            "const r=el.getBoundingClientRect();"+
+            "if(r.width<24||r.height<24||!innerWidth)return null;"+
+            "return [(r.left+r.right)/2,(r.top+r.bottom)/2,innerWidth];})()";
+        view.evaluateJavascript(source, value -> {
+            try {
+                JSONArray points=new JSONArray(value);
+                if (points.length()!=3) return;
+                double viewport=points.getDouble(2);
+                if (!(viewport>0 && viewport<3000) || view.getWidth()<=0) return;
+                double scale=view.getWidth()/viewport;
+                int[] loc=new int[2];view.getLocationOnScreen(loc);
+                int x=loc[0]+(int)Math.round(points.getDouble(0)*scale);
+                int y=loc[1]+(int)Math.round(points.getDouble(1)*scale);
+                if (x<loc[0] || x>=loc[0]+view.getWidth() ||
+                    y<loc[1] || y>=loc[1]+view.getHeight()) return;
+                Log.i("NEXUS_ANDROID_SMOKE","public_target_"+name+"="+x+","+y);
+            } catch (JSONException | IllegalArgumentException ignored) {
+                // A missing/offscreen target is NOT evidence of UI readiness.
+            }
+        });
+    }
+
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         try { validateAllAssets(); }
@@ -217,6 +251,36 @@ public final class MainActivity extends Activity {
                         view.evaluateJavascript(witness, value ->
                             Log.i("NEXUS_ANDROID_SMOKE", publicPath + " ready=" + value));
                     }
+                    if ("/apps.html".equals(page)) {
+                        reportPublicTapCenter(view,"a[href=\"./motion/\"]","open_motion");
+                        reportPublicTapCenter(view,"a[href=\"./\"]","open_studio");
+                    } else if ("/motion/".equals(page)) {
+                        reportPublicTapCenter(view,"a[href=\"/apps.html\"]","all_tools");
+                    }
+                    // DEBUG-ONLY SAF evidence: observe success AFTER Motion itself
+                    // validates the imported file. Log only fixed public flags,
+                    // never JSON, filenames, project text, passphrases, or content.
+                    if ("/motion/".equals(page)) {
+                        String observer="(() => {"+
+                            "const status=document.getElementById('motion-status');"+
+                            "if(!status||window.__nexusSafImportObserved)return;"+
+                            "window.__nexusSafImportObserved=true;"+
+                            "let completed=false;"+
+                            "const check=()=>{if(completed)return;"+
+                            "const s=status.textContent||'';"+
+                            "if(s.startsWith('Imported storyboard JSON: 3 scenes')&&"+
+                            "document.getElementById('motion-title')?.value==='NEXUS — A Journey'&&"+
+                            "document.getElementById('motion-format')?.value==='1920x1080'&&"+
+                            "document.getElementById('motion-fps')?.value==='30'&&"+
+                            "document.querySelectorAll('#motion-scenes .scene').length===3){"+
+                            "completed=true;console.info('NEXUS_TEST_SAF_IMPORT_OK');"+
+                            "}else if(s.startsWith('Import rejected:')){"+
+                            "completed=true;console.info('NEXUS_TEST_SAF_IMPORT_REJECTED');"+
+                            "}};"+
+                            "new MutationObserver(check).observe(status,{childList:true,subtree:true,characterData:true});"+
+                            "})();";
+                        view.evaluateJavascript(observer,null);
+                    }
                 }
                 // The signed, bundled JavaScript adapter is evaluated only on
                 // the trusted local appassets origin; no remote frames exist.
@@ -230,6 +294,26 @@ public final class MainActivity extends Activity {
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
+            @Override public boolean onConsoleMessage(ConsoleMessage message) {
+                // Never forward arbitrary console messages or user-controlled
+                // content into logs. These are debug-build, fixed-signal only.
+                boolean debugging=(getApplicationInfo().flags &
+                    android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0;
+                if (debugging && web!=null && web.getUrl()!=null &&
+                    local(Uri.parse(web.getUrl())) &&
+                    "/motion/".equals(Uri.parse(web.getUrl()).getEncodedPath())) {
+                    String marker=message.message();
+                    if ("NEXUS_TEST_SAF_IMPORT_OK".equals(marker)) {
+                        Log.i("NEXUS_ANDROID_SMOKE","/motion/ saf_import_ok=true");
+                        return true;
+                    }
+                    if ("NEXUS_TEST_SAF_IMPORT_REJECTED".equals(marker)) {
+                        Log.i("NEXUS_ANDROID_SMOKE","/motion/ saf_import_rejected=true");
+                        return true;
+                    }
+                }
+                return super.onConsoleMessage(message);
+            }
             @Override public boolean onShowFileChooser(WebView view,
                     ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (selectedFiles!=null) selectedFiles.onReceiveValue(null);
@@ -250,12 +334,55 @@ public final class MainActivity extends Activity {
         web.loadUrl(ROOT+"apps.html");
     }
 
+    /** Debug-only bounded native readback AFTER Android's real picker returns.
+     * The JavaScript result is just 1 / 0 / -1, never source bytes or text.
+     * No callbacks or permissions are exposed to user-controlled scripts.
+     */
+    private void debugReadbackOfImportedStoryboard(int remaining) {
+        if (remaining<=0 || web==null || web.getUrl()==null ||
+            (getApplicationInfo().flags &
+             android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)==0 ||
+            !local(Uri.parse(web.getUrl())) ||
+            !"/motion/".equals(Uri.parse(web.getUrl()).getEncodedPath())) return;
+        String check="(() => {const n=document.getElementById('motion-status');"+
+            "if(!n)return 0;const s=n.textContent||'';"+
+            "if(s.startsWith('Import rejected:'))return -1;"+
+            "return (s.startsWith('Imported storyboard JSON: 3 scenes')&&"+
+            "document.getElementById('motion-title')?.value==='NEXUS — A Journey'&&"+
+            "document.getElementById('motion-format')?.value==='1920x1080'&&"+
+            "document.getElementById('motion-fps')?.value==='30'&&"+
+            "document.querySelectorAll('#motion-scenes .scene').length===3)?1:0;"+
+            "})()";
+        web.evaluateJavascript(check,result -> {
+            if ("1".equals(result)) {
+                Log.i("NEXUS_ANDROID_SMOKE","/motion/ saf_import_ok=true");
+            } else if ("-1".equals(result)) {
+                Log.i("NEXUS_ANDROID_SMOKE","/motion/ saf_import_rejected=true");
+            } else if (remaining>1) {
+                web.postDelayed(() -> debugReadbackOfImportedStoryboard(remaining-1),450);
+            } else {
+                Log.i("NEXUS_ANDROID_SMOKE","/motion/ saf_import_unconfirmed=true");
+            }
+        });
+    }
+
     @Override protected void onActivityResult(int request,int result,Intent data) {
         super.onActivityResult(request,result,data);
         if (request==PICK_SOURCE && selectedFiles!=null) {
             Uri[] files=WebChromeClient.FileChooserParams.parseResult(result,data);
             selectedFiles.onReceiveValue(files);
             selectedFiles=null;
+            if (web!=null && web.getUrl()!=null &&
+                (getApplicationInfo().flags &
+                 android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0 &&
+                local(Uri.parse(web.getUrl())) &&
+                "/motion/".equals(Uri.parse(web.getUrl()).getEncodedPath())) {
+                // No filenames, Uris, file contents or user messages in logs.
+                boolean chosen=files!=null && files.length>0;
+                Log.i("NEXUS_ANDROID_SMOKE","/motion/ source_file_selected="+chosen);
+                if (chosen)
+                    web.postDelayed(() -> debugReadbackOfImportedStoryboard(32),450);
+            }
         } else if (request==PICK_EXPORT) {
             exporter.complete(result==RESULT_OK && data!=null ? data.getData() : null);
         }

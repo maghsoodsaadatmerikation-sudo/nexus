@@ -95,6 +95,28 @@ class PublicAPKAssetsTests(unittest.TestCase):
         self.assertNotIn('setWebContentsDebuggingEnabled(true)',java)
         self.assertNotIn('http://',java)
 
+    def test_android_import_witness_logs_fixed_debug_flags_only(self):
+        java=(ROOT/"mobile/android/app/src/main/java/org/nexus/mobile/MainActivity.java").read_text()
+        self.assertIn("android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE",java)
+        self.assertIn("new MutationObserver(check).observe(status",java)
+        self.assertIn("NEXUS_TEST_SAF_IMPORT_OK",java)
+        self.assertIn("reportPublicTapCenter(view",java)
+        self.assertIn('public_target_"+name+"="',java)
+        self.assertIn('JSONObject.quote(selector)',java)
+        self.assertIn('android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE',java)
+        self.assertIn("NEXUS_TEST_SAF_IMPORT_REJECTED",java)
+        self.assertIn("debugReadbackOfImportedStoryboard(32)",java)
+        self.assertIn('"/motion/ source_file_selected="+chosen',java)
+        self.assertIn('"/motion/ saf_import_unconfirmed=true"',java)
+        self.assertIn('"/motion/ saf_import_ok=true"',java)
+        self.assertIn("web.evaluateJavascript(check,result ->",java)
+        self.assertIn('"/motion/ saf_import_ok=true"',java)
+        self.assertIn('"/motion/ saf_import_rejected=true"',java)
+        self.assertIn("NEXUS — A Journey",java)
+        self.assertIn("document.querySelectorAll('#motion-scenes .scene').length===3",java)
+        self.assertNotIn("Log.i(\"NEXUS_ANDROID_SMOKE\", status",java)
+        self.assertNotIn("Log.i(\"NEXUS_ANDROID_SMOKE\", message.message()",java)
+
     def test_native_export_is_bounded_and_user_chosen_only(self):
         js=(ROOT/"mobile/android/android-export.js").read_text()
         java=(ROOT/"mobile/android/app/src/main/java/org/nexus/mobile/MainActivity.java").read_text()

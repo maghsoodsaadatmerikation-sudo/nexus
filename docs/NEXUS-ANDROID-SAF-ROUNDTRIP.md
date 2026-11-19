@@ -25,18 +25,76 @@ WebView smoke test by `.github/workflows/nexus-android-emulator.yml`.
    title and exactly three scenes with durations 4, 5 and 4 seconds.
 6. Add a synthetic new scene in the editor, then tap **Load storyboard JSON**;
    select the exported document with Android's real file chooser.
-7. Require the editor's accessible confirmation of **Imported storyboard JSON:
-   3 scenes**. This feedback is emitted only after the existing storyboard
-   validation and `setStory` path succeeds.
+7. Require the actual WebView's **validated import completion witness**:
+   the editor must emit its `Imported storyboard JSON: 3 scenes` feedback
+   after `setStory` validates the selected file, and the current title,
+   size, fps, and three scene cards must match the source-controlled fixture.
+   A debug-build-only observer logs exactly `/motion/ saf_import_ok=true`,
+   or a fixed failure flag, rather than trying to tap a non-interactive status
+   paragraph. This is not a shortcut around Android's real file picker.
 8. Publish an acceptance JSON with boolean gate results, export length and
    SHA-256 of **only the public source-controlled default fixture**.
 
 The test refuses hardware other than an Android 35 emulator and uses no
-personal content, credentials, private photos or media. The only filesystem
-cleanup permitted is the one fixed synthetic output name in the disposable
-test emulator. A missing UI action, inaccessible DocumentsUI, incorrect
+personal content, credentials, private photos or media. The fixture name is
+fixed and the test refuses to overwrite an existing file, even in the
+disposable emulator. A missing UI action, inaccessible DocumentsUI, incorrect
 content, or failed import means **the test fails**. It must not be reported
 as passing unless the exact-head workflow completes.
+
+
+## Diagnosed failure and containment
+
+The preceding exact-head emulator run proved the file was correctly written
+and source-validated, but the last stage failed because the test attempted
+to **tap** a non-interactive status message instead of observing a completed
+import. The new instrumentation observes only the known test success/failure
+states inside the trusted local Motion WebView. It is only active on
+**debuggable** builds and writes no user filenames, JSON, messages,
+passphrases or imported media into Android logs. This is a test witness,
+not a new persistence or export capability.
+
+No production claim is made until the new exact-head GitHub Actions run
+finishes with success. A debug-only signal is not a physical-phone test.
+
+## Intermittent Android accessibility-tree failure
+
+In another exact-head run, Android API35's UIAutomator returned just one
+accessible node per query and could not find the visible public **Open
+Motion** link. The app's static DOM-readiness witness had already succeeded.
+The test must not mistake that accessibility issue for a confirmed export
+failure or for a successful file workflow.
+
+The debug APK now evaluates the actual rendered bounding rectangle of only
+three source-reviewed public links (Open Motion, All tools, Open Studio),
+converts it using the WebView's measured viewport/screen coordinates, and
+logs a fixed numeric point. If the accessibility hierarchy does not expose
+the link, the acceptance test can perform a **real Android input tap** at
+that validated on-screen location. No hidden JavaScript click, simulated
+page event, arbitrary selector, or direct navigation is used. The
+subsequent real page-readiness witness must still pass. Invalid, absent,
+or out-of-screen coordinates fail closed.
+
+This path is debug-build-only and logs no project content, media, secret,
+passphrase, file URI or user message. It is a resilience mechanism for
+emulator UI automation, **not** evidence of physical-phone accessibility,
+and not proof of Android TalkBack usability.
+
+## Explicit real-picker completion signal
+
+An additional debug-only native readback begins **only** after Android
+`onActivityResult(PICK_SOURCE)` returns from the real file picker. It logs
+the fixed Boolean `source_file_selected=true/false` but never the actual
+Uri, file name, contents or path. For a returned document, a bounded sequence
+of WebView evaluations inspects the exact known synthetic project's public
+UI state and the import success/rejection message. It emits only one of
+`saf_import_ok=true`, `saf_import_rejected=true`, or
+`saf_import_unconfirmed=true`. A successful acceptance now requires both
+**real file selection** and **validated import**, rejecting any unconfirmed
+or cancelled result. This also avoids assuming that Android WebView emits a
+console event for a non-interactive status update. The script never
+mutates an actual user's files, and the debug readback is absent in
+non-debuggable builds.
 
 ## Still not proven
 
