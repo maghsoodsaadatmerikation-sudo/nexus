@@ -104,6 +104,21 @@ class MobileKitTests(unittest.TestCase):
         self.assertNotIn('https://', page.lower())
         self.assertNotIn('http://', page.lower())
 
+    def test_motion_has_clear_return_to_tool_chooser_and_unsaved_work_notice(self):
+        self.build()
+        with zipfile.ZipFile(self.bundle) as archive:
+            motion = archive.read(kit.BUNDLE + "/motion/index.html").decode("utf-8")
+            welcome = archive.read(kit.BUNDLE + "/apps.html").decode("utf-8")
+        self.assertEqual(motion.count('href="/apps.html"'), 1)
+        self.assertEqual(motion.count('href="/"'), 1)
+        self.assertNotIn('<a href="/">NEXUS</a>', motion)
+        self.assertIn('id="motion-save-before-exit" role="note"', motion)
+        self.assertIn('Download project + media ZIP', motion)
+        self.assertIn('Closing or switching pages does not save', motion)
+        self.assertIn('href="./motion/"', welcome)
+        self.assertIn('href="./"', welcome)
+        self.assertNotIn('https://', motion.split('</header>')[1].split('</p>')[0])
+
     def test_source_revisions_or_existing_user_output_denied(self):
         for candidate in ("main", "A" * 40, "b" * 39, ""):
             with self.subTest(candidate=candidate), self.assertRaises(ValueError):
