@@ -226,7 +226,7 @@ window.addEventListener('load',async()=>{
   // A single frozen catalog drives quick buttons, slash routing and the
   // opt-in palette. Browsing a tool never requests credentials or executes it.
   const catalog=NexusStudioCompose.catalog();
-  assert(Object.isFrozen(catalog)&&catalog.length===15&&catalog.every(Object.isFrozen),
+  assert(Object.isFrozen(catalog)&&catalog.length===16&&catalog.every(Object.isFrozen),
    'capability-catalog-is-read-only-and-complete');
   assert(new Set(catalog.map(x=>x.command)).size===catalog.length,
    'capability-commands-unique');
@@ -248,7 +248,7 @@ window.addEventListener('load',async()=>{
   fill('message','/tools');
   assert(chatSend.textContent.includes('Capabilities'),'tools-command-discovered');
   chatSend.click();
-  assert(!palette.hidden&&palette.querySelector('div').children.length===15,
+  assert(!palette.hidden&&palette.querySelector('div').children.length===16,
    'capability-palette-shows-all-reviewable-tools');
   assert(JSON.stringify({catalogCalls,connectionActions,providerCalls,searchCalls})===
    JSON.stringify(networkBefore),'capability-browser-has-no-network-effects');
@@ -391,6 +391,33 @@ window.addEventListener('load',async()=>{
    'provider-failure-preserves-other-provider-results');
 
 
+
+  $('nexus-zen-home').click();
+  fill('message','/remind Review the next mix');
+  const reminderState=JSON.stringify(snapshot());
+  const beforeReminderCalls=providerCalls;
+  $('studio-compose-send').click();
+  assert(!$('nexus-zen-offer').hidden&&!$('reminder-title').value&&providerCalls===beforeReminderCalls,
+   'reminder-command-suggests-tool-without-exporting');
+  $('nexus-zen-offer').querySelector('button').click();
+  assert(NexusStudioFocus.active()==='reminders-card'&&$('reminder-title').value==='Review the next mix',
+   'reminder-command-prefills-reviewed-title');
+  fill('reminder-start','2030-01-04T10:30');
+  fill('reminder-repeat','daily');
+  fill('reminder-advance','5');
+  const originalObjectURL=URL.createObjectURL;
+  let reminderBlob;
+  URL.createObjectURL=blob=>{reminderBlob=blob;return originalObjectURL(blob)};
+  $('reminder-download').click();
+  URL.createObjectURL=originalObjectURL;
+  const calendarText=await reminderBlob?.text();
+  assert(reminderBlob.type.startsWith('text/calendar')&&calendarText.includes('DTSTART:20300104T103000')&&
+   calendarText.includes('RRULE:FREQ=DAILY')&&calendarText.includes('TRIGGER:-PT5M'),
+   'explicit-download-produces-calendar-event-and-alarm');
+  assert(JSON.stringify(snapshot())===reminderState&&providerCalls===beforeReminderCalls,
+   'reminder-export-leaves-chat-and-model-untouched');
+  $('lock').click();
+  assert(!$('reminder-title').value&&!$('reminder-start').value,'lock-clears-reminder-form');
 
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,real_model_tested:false});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}

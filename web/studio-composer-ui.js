@@ -41,6 +41,7 @@ const routes=Object.freeze([
  ['data','data-card','Data analysis','تحلیل داده',null,'analyze'],
  ['chart','chart-card','Charts','نمودارها',null,''],
  ['code','code-card','Code','کدنویسی',null,''],
+ ['remind','reminders-card','Reminders','یادآورها','reminder-title','reminders'],
  ['tasks','tasks-card','Tasks','وظایف',null,'task'],
  ['write','canvas-card','Writing','نوشتن',null,''],
  ['sources','sources-card','Sources','منابع',null,''],
@@ -115,6 +116,8 @@ function intent(value){
   const route=routes.find(x=>x[0]===command||(x[5]||'').split(' ').includes(command));
   return route?{route,query:message.slice(slash[0].length).trim()}:null;
  }
+ const reminder=/^(?:remind me (?:to )?|set (?:a )?reminder(?: for)?\s+|یادآوری کن\s+)(.+)$/i.exec(message);
+ if(reminder)return {route:routes.find(row=>row[0]==='remind'),query:reminder[1]};
  const s=message.slice(0,340).toLocaleLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ');
  if(!/(بساز|ساخت|تولید|طراحی|بنویس|تنظیم|compose|create|make|generate|write|analy[sz]e|search|find|draw|run|open|list|show|check|اجرا|بررسی|تحلیل|نمایش|نشان\s*بده|وضعیت|جست\s*و\s*جو)/i.test(s))return null;
  const kind=/(github|گیت\s*هاب|گیتهاب|pull requests?|درخواست(?:‌|\s)*ادغام)/i.test(s)?'github':

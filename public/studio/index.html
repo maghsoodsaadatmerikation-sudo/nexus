@@ -427,6 +427,15 @@ html.studio-focus-mode{
 <details><summary data-t="astroImportHelp"></summary><button id="astro-import-natal" class="secondary" data-t="astroImportNatal"></button><button id="astro-import-transit" class="secondary" data-t="astroImportTransit"></button><input id="astro-import-file" type="file" accept="application/json" hidden></details>
 <pre id="astro-summary"></pre><label class="inline"><input id="use-astrology" type="checkbox"><span data-t="astroUse"></span></label><label class="inline"><input id="astro-historical" type="checkbox"><span data-t="astroHistorical"></span></label><p class="help" data-t="astroPrivacy"></p></section>
 <section class="card" id="research-card"><h2 data-t="research">Live research desk</h2><p class="help" data-t="researchHelp"></p><label for="research-query" data-t="researchQuery"></label><input id="research-query" maxlength="250" dir="auto"><div class="row"><div><label for="research-provider" data-t="researchProvider"></label><select id="research-provider"><option value="wikipedia">Wikipedia</option><option value="crossref">Crossref</option><option value="both" data-t="researchBoth">Wikipedia and Crossref</option></select></div><div><label for="research-language" data-t="researchLanguage"></label><select id="research-language"><option value="en" selected>English</option><option value="fa">فارسی</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="ar">العربية</option></select></div></div><label class="inline"><input id="research-consent" type="checkbox"><span data-t="researchConsent"></span></label><button id="research-run" data-t="researchSearch"></button><button id="research-stop" data-t="researchStop" disabled></button><p id="research-status" role="status"></p><p class="help" data-t="researchNote"></p><div id="research-cards"></div><section id="research-brief" hidden><h3 data-t="researchBrief">Research brief</h3><pre id="research-brief-text"></pre><button id="research-brief-chat" class="secondary" data-t="researchBriefChat"></button><button id="research-brief-export" class="secondary" data-t="researchBriefExport"></button></section></section>
+<section class="card" id="reminders-card"><h2 data-t="reminderTitle">Reminders</h2>
+<p class="help" data-t="reminderHelp">Download an .ics file and import it into your calendar. The receiving calendar interprets the local time and manages alerts.</p>
+<form id="reminder-form">
+<label for="reminder-title" data-t="reminderName">Reminder</label><input id="reminder-title" required maxlength="160" dir="auto">
+<label for="reminder-start" data-t="reminderStart">Local date and time</label><input id="reminder-start" type="datetime-local" required>
+<label for="reminder-repeat" data-t="reminderRepeat">Repeat</label><select id="reminder-repeat"><option value="once" data-t="reminderOnce">Once</option><option value="daily" data-t="reminderDaily">Daily</option><option value="weekly" data-t="reminderWeekly">Weekly</option></select>
+<label for="reminder-advance" data-t="reminderAlert">Alert</label><select id="reminder-advance"><option value="0" data-t="reminderAtStart">At the event time</option><option value="5" data-t="reminderFive">5 minutes before</option><option value="15" data-t="reminderFifteen">15 minutes before</option><option value="60" data-t="reminderHour">1 hour before</option></select>
+<button id="reminder-download" type="submit" data-t="reminderExport">Download calendar file</button>
+</form><p id="reminder-status" role="status"></p></section>
 <section class="card" id="tasks-card"><h2 data-t="tasks"></h2><p class="help" data-t="tasksHelp"></p><button id="task-sample" class="secondary" data-t="tasksSample"></button><label for="task-plan" data-t="tasksPlan"></label><textarea id="task-plan" maxlength="524288" spellcheck="false" dir="ltr"></textarea><label class="inline"><input id="task-consent" type="checkbox"><span data-t="tasksConsent"></span></label><button id="task-run" data-t="tasksRun"></button><button id="task-stop" data-t="tasksStop" disabled></button><p id="task-status" role="status"></p><pre id="task-report" role="log" aria-live="polite"></pre><button id="task-export" data-t="tasksExport" disabled></button></section>
 <section class="card" id="code-card"><h2 data-t="codeLab"></h2><p class="help" data-t="codeHelp"></p><button id="code-sample" class="secondary" data-t="codeSample"></button><label for="code" data-t="codeSource"></label><textarea id="code" maxlength="100000" spellcheck="false" dir="ltr"></textarea><label for="code-input" data-t="codeInput"></label><textarea id="code-input" maxlength="262144" dir="auto"></textarea><label class="inline"><input id="code-consent" type="checkbox"><span data-t="codeConsent"></span></label><button id="code-run" data-t="codeRun"></button><button id="code-stop" data-t="codeStop" disabled></button><p id="code-status" role="status"></p><h3 data-t="codeOutput"></h3><pre id="code-console"></pre><pre id="code-result"></pre><button id="code-copy" class="secondary" data-t="codeCopy"></button><button id="code-chat" class="secondary" data-t="codeChat">Use code result in next chat</button></section>
 <section class="card" id="data-card"><h2 data-t="dataTitle"></h2><p class="help" data-t="dataHelp"></p><label for="data-file" data-t="dataFile"></label><input id="data-file" type="file" accept=".csv,.tsv,.json"><label for="data-source" data-t="dataSource"></label><select id="data-source"></select><button id="data-run" data-t="dataRun"></button><p id="data-status" role="status"></p><div class="row"><div><label for="data-group" data-t="dataGroup"></label><select id="data-group"></select></div><div><label for="data-metric" data-t="dataMetric"></label><select id="data-metric"></select></div></div><pre id="data-summary"></pre><button id="data-chart" data-t="dataChart" disabled></button><button id="data-copy" data-t="dataCopy" disabled></button><button id="data-chat" class="secondary" data-t="dataChat" disabled>Use analysis summary in next chat</button><button id="data-export" data-t="dataExport" disabled></button></section>
@@ -1563,6 +1572,18 @@ const forms=()=>profileDirty||editorDirty||window.NexusAstrologyUI?.hasDraft()==
 const t=k=>(localePacks.get(language)?.messages||(language==='fa'?FA:EN))[k]||EN[k]||k,el=(tag,text)=>{const n=document.createElement(tag);n.textContent=text;return n},p=()=>data.projects.find(x=>x.id===projectId),chat=()=>p()?.threads.find(x=>x.id===threadId),doc=()=>p()?.documents.find(x=>x.id===documentId);
 Object.assign(EN,{studyMode:'Study mode',modelMode:'Provider execution mode (requires a supporting gateway)',modeDefault:'Provider default',modeThinking:'Thinking',modeFast:'Non-thinking',modelBudget:'Maximum generated tokens (1–8192; existing response and time limits still apply)'});
 Object.assign(FA,{studyMode:'حالت مطالعه',modelMode:'حالت اجرای مدل — نیازمند درگاه پشتیبان',modeDefault:'پیش‌فرض ارائه‌دهنده',modeThinking:'تفکر',modeFast:'بدون تفکر',modelBudget:'حداکثر توکن تولیدی — ۱ تا ۸۱۹۲؛ محدودیت زمان و حجم پاسخ همچنان برقرار است'});
+Object.assign(EN,{
+ reminderTitle:'Reminders',reminderHelp:'Download an .ics file and import it into your calendar. The receiving calendar interprets the local time and manages alerts.',
+ reminderName:'Reminder',reminderStart:'Local date and time',reminderRepeat:'Repeat',reminderOnce:'Once',reminderDaily:'Daily',reminderWeekly:'Weekly',
+ reminderAlert:'Alert',reminderAtStart:'At the event time',reminderFive:'5 minutes before',reminderFifteen:'15 minutes before',reminderHour:'1 hour before',
+ reminderExport:'Download calendar file',reminderDownloaded:'Calendar file ready. Import it into your calendar and check its alert.',reminderInvalid:'Enter a reminder and a valid local date and time.'
+});
+Object.assign(FA,{
+ reminderTitle:'یادآورها',reminderHelp:'فایل .ics را بگیر و در تقویمت وارد کن. تقویم مقصد ساعت محلی را تفسیر می‌کند و اعلان‌ها را مدیریت می‌کند.',
+ reminderName:'یادآور',reminderStart:'تاریخ و ساعت محلی',reminderRepeat:'تکرار',reminderOnce:'یک‌بار',reminderDaily:'روزانه',reminderWeekly:'هفتگی',
+ reminderAlert:'اعلان',reminderAtStart:'در زمان رویداد',reminderFive:'۵ دقیقه قبل',reminderFifteen:'۱۵ دقیقه قبل',reminderHour:'یک ساعت قبل',
+ reminderExport:'دریافت فایل تقویم',reminderDownloaded:'فایل آماده است. آن را در تقویمت وارد و اعلان را بررسی کن.',reminderInvalid:'عنوان یادآور و تاریخ و ساعت معتبر وارد کن.'
+});
 function status(k){$('status').textContent=t(k)}
 function selectedAttachments(){
  const saved=$('attach-document').checked&&doc()?.versions.at(-1)?.text?.trim();
@@ -1601,8 +1622,8 @@ function renderChatAttachments(){
 const TOOL_LIFECYCLE=Object.freeze({
  version:'nexus.studio.tool-lifecycle.v1',
  cancel:Object.freeze([['NexusQualityUI','cancel'],['NexusAstrologyUI','cancel'],['NexusLabUI','cancel']]),
- project:Object.freeze([['NexusTasksUI','clear'],['NexusQualityUI','clear'],['NexusAstrologyUI','clear'],['NexusLabUI','clear']]),
- private:Object.freeze([['NexusDevice','unload'],['NexusTasksUI','clear'],['NexusQualityUI','clear'],
+ project:Object.freeze([['NexusCalendar','clear'],['NexusTasksUI','clear'],['NexusQualityUI','clear'],['NexusAstrologyUI','clear'],['NexusLabUI','clear']]),
+ private:Object.freeze([['NexusDevice','unload'],['NexusCalendar','clear'],['NexusTasksUI','clear'],['NexusQualityUI','clear'],
   ['NexusAstrologyUI','clear'],['NexusLabUI','clear'],['NexusMusicUI','clear'],['NexusOrchestraUI','clear']])
 });
 function unsavedLocalMedia(){
@@ -1611,7 +1632,8 @@ function unsavedLocalMedia(){
   window.NexusOrchestraUI?.hasTransientWork?.()===true;
 }
 function hasToolWork(){
- return window.NexusLabUI?.hasTransientWork?.()===true||
+ return window.NexusCalendar?.hasTransientWork?.()===true||
+  window.NexusLabUI?.hasTransientWork?.()===true||
   window.NexusTasksUI?.hasTransientWork?.()===true||
   window.NexusQualityUI?.hasTransientWork?.()===true;
 }
@@ -1917,7 +1939,7 @@ $('language-file').onchange=async event=>{
  if(!f||busy)return;if(f.size>NexusLocales.MAX_BYTES)return status('failed');
  const current=()=>task===languageImport&&rev===revision&&!busy;
  try{
-  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{optionalKeys:['storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport']});
+  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{optionalKeys:['storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport',...Object.keys(EN).filter(key=>key.startsWith('reminder'))]});
   if(!$('language').querySelector('option[value="'+pack.code+'"]'))$('language').append(option(pack.code,pack.code));
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}
@@ -2174,6 +2196,7 @@ const tools=[
   ['sources-card','Sources','منابع','▤','Find text in your files','یافتن متن در فایل‌های پروژه'],
   ['profile-card','Assistant & memory','دستیار و حافظه','◎','Set project preferences','تنظیم ترجیحات پروژه'],
   ['code-card','Code','کدنویسی','‹›','Run reviewed JavaScript','اجرای JavaScript بازبینی‌شده'],
+  ['reminders-card','Reminders','یادآورها','◷','Export a calendar reminder','خروجی یادآور برای تقویم'],
   ['tasks-card','Tasks','کارها','▦','Run a reviewed task plan','اجرای برنامهٔ بازبینی‌شدهٔ کارها'],
   ['astrology-card','Astrology','اخترشناسی','✧','Explore charts and transits','بررسی چارت و گذرها'],
   ['sky-card','Sky','آسمان','◐','Inspect local sky calculations','بررسی محاسبات آسمان']
@@ -2513,6 +2536,7 @@ const routes=Object.freeze([
  ['data','data-card','Data analysis','تحلیل داده',null,'analyze'],
  ['chart','chart-card','Charts','نمودارها',null,''],
  ['code','code-card','Code','کدنویسی',null,''],
+ ['remind','reminders-card','Reminders','یادآورها','reminder-title','reminders'],
  ['tasks','tasks-card','Tasks','وظایف',null,'task'],
  ['write','canvas-card','Writing','نوشتن',null,''],
  ['sources','sources-card','Sources','منابع',null,''],
@@ -2587,6 +2611,8 @@ function intent(value){
   const route=routes.find(x=>x[0]===command||(x[5]||'').split(' ').includes(command));
   return route?{route,query:message.slice(slash[0].length).trim()}:null;
  }
+ const reminder=/^(?:remind me (?:to )?|set (?:a )?reminder(?: for)?\s+|یادآوری کن\s+)(.+)$/i.exec(message);
+ if(reminder)return {route:routes.find(row=>row[0]==='remind'),query:reminder[1]};
  const s=message.slice(0,340).toLocaleLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ');
  if(!/(بساز|ساخت|تولید|طراحی|بنویس|تنظیم|compose|create|make|generate|write|analy[sz]e|search|find|draw|run|open|list|show|check|اجرا|بررسی|تحلیل|نمایش|نشان\s*بده|وضعیت|جست\s*و\s*جو)/i.test(s))return null;
  const kind=/(github|گیت\s*هاب|گیتهاب|pull requests?|درخواست(?:‌|\s)*ادغام)/i.test(s)?'github':
@@ -2935,6 +2961,85 @@ document.getElementById('language').addEventListener('change', hide);
 document.addEventListener('visibilitychange', () => { if (document.hidden) hide(); });
 window.addEventListener('pagehide', hide);
 toggle.textContent = words(toggle.dataset.en, toggle.dataset.fa);
+})();
+</script><script>/* Local iCalendar export for explicitly reviewed reminder fields. */
+(() => {
+'use strict';
+const encoder = new TextEncoder();
+const frequencies = {daily:'DAILY', weekly:'WEEKLY'};
+const escapeText = value => value.replace(/\\/g, '\\\\').replace(/\r\n?|\n/g, '\\n')
+  .replace(/([,;])/g, '\\$1');
+
+function fold(line) {
+  let result = '', length = 0;
+  for (const character of line) {
+    const size = encoder.encode(character).length;
+    if (length + size > 75) {
+      result += '\r\n ';
+      length = 1;
+    }
+    result += character;
+    length += size;
+  }
+  return result;
+}
+
+function calendarFile({title, start, repeat, advance}, {uid = crypto.randomUUID(), now = new Date()} = {}) {
+  const text = title.trim();
+  if (!text || text.length > 160 || /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(text) ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(start) ||
+      !['once', 'daily', 'weekly'].includes(repeat) ||
+      !['0', '5', '15', '60'].includes(advance)) throw Error('invalid-reminder');
+  // Validate in UTC without adopting the browser time zone. DTSTART below is
+  // deliberately a floating date-time, preserving the selected clock time.
+  const checked = new Date(start + ':00Z');
+  if (!Number.isFinite(checked.getTime()) || checked.toISOString().slice(0, 16) !== start ||
+      start.startsWith('0000')) throw Error('invalid-reminder');
+  const compact = value => value.replace(/[-:]/g, '');
+  const summary = escapeText(text);
+  const lines = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//NEXUS Studio//Calendar reminders//EN',
+    'BEGIN:VEVENT', 'UID:' + uid + '@nexus-studio', 'DTSTAMP:' + compact(now.toISOString().slice(0, 19)) + 'Z',
+    'DTSTART:' + compact(start) + '00', 'DURATION:PT5M', 'TRANSP:TRANSPARENT', 'SUMMARY:' + summary
+  ];
+  if (repeat !== 'once') lines.push('RRULE:FREQ=' + frequencies[repeat]);
+  lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', 'TRIGGER:' + (advance === '0' ? 'PT0S' : '-PT' + advance + 'M'),
+    'DESCRIPTION:' + summary, 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR');
+  return lines.map(fold).join('\r\n') + '\r\n';
+}
+
+const api = {calendarFile};
+if (typeof document !== 'undefined') {
+  const form = $('reminder-form');
+  const status = $('reminder-status');
+  let lastExport = '';
+  const values = () => ({
+    title:$('reminder-title').value, start:$('reminder-start').value,
+    repeat:$('reminder-repeat').value, advance:$('reminder-advance').value
+  });
+  Object.assign(api, {
+    clear() { form.reset(); lastExport = ''; status.textContent = ''; },
+    hasTransientWork() {
+      const draft = values();
+      return Boolean((draft.title || draft.start) && JSON.stringify(draft) !== lastExport);
+    }
+  });
+  form.oninput = () => { status.textContent = ''; };
+  form.onsubmit = event => {
+    event.preventDefault();
+    const draft = values();
+    try {
+      const calendar = calendarFile(draft);
+      download(calendar, 'nexus-reminder.ics', 'text/calendar;charset=utf-8');
+      lastExport = JSON.stringify(draft);
+      status.textContent = t('reminderDownloaded');
+      renderStorage();
+    } catch {
+      status.textContent = t('reminderInvalid');
+    }
+  };
+}
+globalThis.NexusCalendar = Object.freeze(api);
 })();
 </script><script>/* Explicit provider review and separate approval. */
 (()=>{'use strict';

@@ -16,6 +16,7 @@ const tools=[
   ['sources-card','Sources','منابع','▤','Find text in your files','یافتن متن در فایل‌های پروژه'],
   ['profile-card','Assistant & memory','دستیار و حافظه','◎','Set project preferences','تنظیم ترجیحات پروژه'],
   ['code-card','Code','کدنویسی','‹›','Run reviewed JavaScript','اجرای JavaScript بازبینی‌شده'],
+  ['reminders-card','Reminders','یادآورها','◷','Export a calendar reminder','خروجی یادآور برای تقویم'],
   ['tasks-card','Tasks','کارها','▦','Run a reviewed task plan','اجرای برنامهٔ بازبینی‌شدهٔ کارها'],
   ['astrology-card','Astrology','اخترشناسی','✧','Explore charts and transits','بررسی چارت و گذرها'],
   ['sky-card','Sky','آسمان','◐','Inspect local sky calculations','بررسی محاسبات آسمان']
