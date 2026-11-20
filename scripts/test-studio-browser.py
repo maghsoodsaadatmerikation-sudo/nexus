@@ -53,6 +53,14 @@ window.addEventListener('load',async()=>{
   assert($('research-query').value==='Exact query','empty-tool-field-receives-reviewed-query');
   fill('research-query','');$('nexus-zen-home').click();
   fill('message','/research Guide fallback');compose.click();offer.querySelectorAll('button')[1].click();
+  if(!current()?.threads?.[0]?.nodes?.length)
+   throw Error('guide-fallback-state:'+JSON.stringify({
+    status:$('status').textContent,sendDisabled:compose.disabled,
+    message:$('message').value,mode:$('studio-compose-mode').value,
+    guideDisabled:$('guide').disabled,offerHidden:offer.hidden,
+    projectCount:snapshot().projects.length,ui:NexusStudioUI.uiStatus(),
+    activePanel:NexusStudioFocus.active()
+   }));
   assert(offer.hidden&&current().threads[0].nodes.length===2&&network===0,
    'declining-tool-can-continue-with-local-guide');
   change('studio-compose-mode','model');$('studio-compose-config').click();
