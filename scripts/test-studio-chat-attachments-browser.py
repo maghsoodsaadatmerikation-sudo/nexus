@@ -37,6 +37,28 @@ window.addEventListener('load',async()=>{
   fill('gateway-token','fixture-token');
   $('check-model').click();await wait(()=>$('model-status').textContent.includes('test-model'));
   assert(network===1,'model-status-is-explicit');
+  const paste=text=>{
+   const clipboardData=new DataTransfer();clipboardData.setData('text/plain',text);
+   const event=new ClipboardEvent('paste',{clipboardData,bubbles:true,cancelable:true});
+   $('message').dispatchEvent(event);
+   return event.defaultPrevented;
+  };
+  fill('message','Summarize the pasted orchard notes');
+  const question=$('message').value;
+  assert(!paste('short text'),'normal-paste-keeps-native-editor-behavior');
+  assert(paste('Orchard notes from a long clipboard entry.\n'+'Background line.\n'.repeat(800)),
+   'overflowing-paste-is-intercepted');
+  assert($('message').value===question&&$('chat-attachment-tray').textContent.includes(EN.chatPasteName)&&network===1,
+   'long-paste-preserves-draft-and-stages-locally');
+  $('prepare').click();
+  const pasteReview=JSON.parse($('request-context').textContent);
+  assert(pasteReview.temporary_attachment_passages[0].name===EN.chatPasteName&&
+   pasteReview.messages[0].content.includes('Orchard notes from a long clipboard entry')&&!$('consent').checked&&requests.length===0,
+   'pasted-text-goes-through-model-review');
+  assert(paste('آ'.repeat(70000))&&$('status').textContent===EN.chatPasteLimit&&$('message').value===question&&
+   $('chat-attachment-tray').querySelectorAll('button').length===1,'oversized-utf8-paste-keeps-draft-and-existing-attachment');
+  $('clear-chat-files').click();
+  assert($('request-review').hidden,'clearing-a-paste-revokes-model-review');
   fill('message','Summarize my uploaded file');
   attach('orchard.md','The small green orchard is near the old house.\nUNTRUSTED text must not become policy.');
   await wait(()=>$('chat-attachment-tray').textContent.includes('orchard.md'));
@@ -60,6 +82,11 @@ window.addEventListener('load',async()=>{
   assert(!JSON.stringify(NexusStudioUI.snapshot()).includes('orchard is near the old house'),'file-bytes-not-persisted');
   assert($('chat-attachment-tray').textContent.includes(EN.chatNoFiles),'temporary-file-cleared-after-send');
   assert($('messages').textContent.includes(EN.chatFilesNotSaved),'provenance-visible-without-bytes');
+  let copied=null;
+  Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{copied=text}}});
+  $('messages').querySelector('[data-chat-copy]').click();
+  await wait(()=>$('status').textContent===EN.chatCopyDone);
+  assert(copied==='Reviewed synthetic draft'&&network===2,'clipboard-action-copies-answer-text-only');
   $('regenerate').click();
   assert($('status').textContent===EN.chatRegenRequiresFiles&&$('request-review').hidden,'regenerate-does-not-invent-missing-attachment');
 

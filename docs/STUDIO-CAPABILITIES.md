@@ -121,7 +121,28 @@ Editing the draft, switching conversations, hiding the tab, or clearing private
 state cancels an active recording and discards its pending text. Studio's existing
 read-aloud action uses device voices. See [browser speech recognition support](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition).
 
-## Remaining gaps and their actual prerequisites
+## Core feature comparison, 20 November 2026
+
+The comparison covers the workflow users can reach from Studio. OpenAI describes
+its capabilities in the [capability overview](https://help.openai.com/en/articles/9260256-chatgpt-capabilities-overview),
+[release notes](https://help.openai.com/en/articles/6825453-chatgpt-release-notes),
+[Projects guide](https://help.openai.com/en/articles/10169521-projects-in-chatgpt)
+and [sharing guide](https://help.openai.com/en/articles/7925741-sharing-conversations-and-scheduled-tasks-in-chatgpt).
+Availability in ChatGPT varies by account, client and plan.
+
+| Workflow | NEXUS Studio implementation | Open work |
+| --- | --- | --- |
+| Compose and use answers | Copy an answer, prepare an alternate answer in the focused chat, and stage a paste that would overflow the draft as temporary reviewed text. The paste can be up to 128 KiB. | Rich-text paste, in-turn response streaming and interactive answer formatting. |
+| History, projects and sharing | Local search, branches, archives and transcript export. Project-level instructions and manually curated memory. | Share links, multi-user access, cross-device sync and opt-in retrieval across project chats. |
+| Files, data and writing | One-turn excerpts from supported text files and selectable PDFs, separate spreadsheet analysis and charts, and a versioned writing canvas. | Scanned PDF OCR, richer Office and audio ingestion, a reusable binary file library and model-assisted editing. |
+| Models and tools | Optional authenticated gateway, local reflection guide and optional limited device model. Tool recommendations require user review. | Hosted model provisioning, streamed replies and reliable model-driven use of approved tools. |
+
+Short pastes still go into the draft. Studio preserves the draft when staging a
+long paste and requires a separate question and the existing request review.
+Regeneration is disabled while a draft or temporary attachment is open. It
+continues to create an alternate branch after model approval.
+
+## Remaining service prerequisites
 
 The [ChatGPT Plus and Pro comparison](https://chatgpt.com/pricing/) is the
 reference for the consumer-plan features below.
@@ -130,7 +151,7 @@ reference for the consumer-plan features below.
 | --- | --- | --- |
 | Hosted frontier-model reasoning | No hosted model/key supplied | A funded/authorized provider or a separately hosted local model with sufficient compute |
 | Live web retrieval / deep research | Combined, consented Wikipedia/Crossref retrieval and a selected-source brief; autonomous multi-step research is pending | Broader search APIs, source verification, model/tool orchestration and source-quality evaluations |
-| Image understanding / OCR | An opt-in bounded PNG/JPEG vision **API** now exists; no chat image picker, provider provision, OCR validation or public rollout | Operator-configured compatible vision provider, reviewed Studio image UI and real image-quality/security tests |
+| Image understanding / OCR | The chat image picker and bounded PNG/JPEG vision route are implemented with separate consent and an operator-set request allowance | Compatible vision provider, deployment verification and quality tests, including OCR |
 | Image/video generation | Not implemented | A connected generation provider, usage authorization and media QA |
 | Real-time voice conversation | Opt-in microphone dictation and local read-aloud | A real-time audio provider, microphone permissions, interruption tests and device QA |
 | Sandboxed Python/code execution | JavaScript Worker lab available; no Python or OS execution | An isolated Python/OS execution service with resource/network limits and reproducibility checks |
