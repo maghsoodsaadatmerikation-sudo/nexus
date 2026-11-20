@@ -25,4 +25,35 @@ let signalCommit,releaseConflict;const entered=new Promise(r=>signalCommit=r),co
 raceStore.commit=async(expected,raw,guard)=>{if(!guard())throw Error('locked');signalCommit();await conflictGate;throw Error('conflict')};
 const obsoleteSave=raceVault.save(v);await entered;raceVault.lock();const reopen=raceVault.unlock(pass);releaseConflict();await reject(()=>obsoleteSave);const recovered=await reopen;checks++;
 ok(()=>assert(raceVault.unlocked));ok(()=>assert.deepEqual(recovered,S.state(v)));
+// The context builder must preserve a usable chat when opted-in memory,
+// retrieved passages and multiple selected files exceed the model budget.
+const fullProject=S.project('Full context');
+fullProject.instructions='Answer the exact question without inventing sources.';
+fullProject.memories=Array.from({length:30},(_,i)=>'PRIVATE-MEMORY-'+i+' '+'m'.repeat(480));
+fullProject.sources=[{id:S.uid(),name:'orchard-records.txt',text:Array.from({length:25},(_,i)=>'orchard record '+i+' '+'s'.repeat(1600)).join('\n')}];
+const fullFiles=Array.from({length:5},(_,i)=>({id:S.uid(),name:'attachment-'+i+'.txt',text:'orchard '+ 'a'.repeat(5000)}));
+let fullThread=S.thread('Full context');
+fullThread=S.append(fullThread,'user','orchard question','human');
+const fullCtx=S.context(fullProject,fullThread,{memory:true,sources:true,attachments:fullFiles});
+ok(()=>assert.equal(fullCtx.optional_context_truncated,true));
+ok(()=>assert(fullCtx.messages[0].content.length<=24000));
+ok(()=>assert(Buffer.byteLength(JSON.stringify(fullCtx.messages),'utf8')<=80000));
+ok(()=>assert.equal(fullCtx.messages.at(-1).content,'orchard question'));
+ok(()=>assert.equal(fullCtx.attachments_supplied.length,5));
+ok(()=>assert(fullCtx.messages[0].content.includes('Some optional context was omitted')));
+ok(()=>assert(!fullCtx.messages[0].content.includes('PRIVATE-MEMORY-')));
+ok(()=>assert(fullCtx.citations.length>0));
+let longHistory=S.thread('Many turns');
+for(let i=0;i<23;i++){
+ longHistory=S.append(longHistory,'user','orchard '+ 'u'.repeat(1650),'human');
+ longHistory=S.append(longHistory,'assistant','reply '+ 'a'.repeat(1650),'model');
+}
+longHistory=S.append(longHistory,'user','orchard question','human');
+const tightCtx=S.context(fullProject,longHistory,{memory:true,sources:true,attachments:fullFiles});
+ok(()=>assert(Buffer.byteLength(JSON.stringify(tightCtx.messages),'utf8')<=80000));
+ok(()=>assert(tightCtx.messages[0].content.length<=24000));
+ok(()=>assert.equal(tightCtx.messages.at(-1).content,'orchard question'));
+ok(()=>assert(tightCtx.omitted_messages>0));
+ok(()=>assert(!tightCtx.messages[0].content.includes('Untrusted source passages;') ? tightCtx.citations.length===0 : tightCtx.citations.length>0));
+ok(()=>assert(!tightCtx.messages[0].content.includes('one-turn local-file excerpts') ? tightCtx.attachments_supplied.length===0 : tightCtx.attachments_supplied.length===5));
 console.log(JSON.stringify({status:'PASS',checks,scope:'synthetic-state-and-encryption',live_model_tested:false}));
