@@ -134,6 +134,18 @@ def image_bytes(image_base64, mime_type):
 
 
 def register(app):
+    @app.get('/studio-api/vision-status')
+    async def vision_status():
+        c = studio_model.config()
+        available = c is not None and enabled()
+        return JSONResponse({
+            'configured': available,
+            'configuration_id': studio_model.configuration_id(c) if available else None,
+            'model': c[1] if available else None,
+            'provider_host': c[3] if available else None,
+            'authority': 'none'
+        }, headers={'Cache-Control': 'no-store'})
+
     @app.post('/studio-api/vision')
     async def vision(request: Request):
         c = studio_model.config()
