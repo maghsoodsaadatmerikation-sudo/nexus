@@ -1,4 +1,5 @@
 """Offline acceptance for NEXUS's operator-approved synthetic model quality probe."""
+import gzip
 import json
 import sys
 
@@ -81,7 +82,7 @@ def test_live_probe_uses_production_policy_and_text_only_acceptance(monkeypatch)
         {"message": {"role": "assistant", "content": "First"}, "finish_reason": "stop"},
         {"message": {"role": "assistant", "content": "Second"}, "finish_reason": "stop"}]}),
     httpx.Response(200, headers={"content-encoding": "gzip"},
-                   content=b"compressed-body"),
+                   content=gzip.compress(b"compressed-body")),
     httpx.Response(200, content=b"x" * (model.MAX_OUTPUT + 1)),
     httpx.Response(200, json={"choices": [{"message": {"role": "assistant",
                     "content": "Draft"}, "finish_reason": "length"}]}),
