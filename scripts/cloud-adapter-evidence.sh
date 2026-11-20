@@ -52,7 +52,7 @@ printf '%s\n' \
   'Epistemic Claim: TRANSPORT-CONTRACT-ONLY' \
   'Stage D Claim: NOT SATISFIED' \
   "Local Studio launcher inputs SHA-256: ${launcher_inputs_sha}" \
-  "Studio model bridge SHA-256: ${studio_model_sha}"
+  "Studio model bridge SHA-256: ${studio_model_sha}" \
   "Studio vision bridge SHA-256: ${studio_vision_sha}" \
   "Cloud main.py SHA-256: ${main_sha}" \
   "Cloud admission boundary SHA-256: ${transport_bounds_sha}" \
