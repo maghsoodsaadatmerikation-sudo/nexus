@@ -42,7 +42,7 @@ function render(){
  $('astro-summary').textContent=display(current());
  for(const id of ['astro-prepare-natal','astro-prepare-transit','astro-local-natal','astro-local-transit','astro-save','astro-import-natal','astro-import-transit'])$(id).disabled=!p()||busy;
  $('astro-delete').disabled=!p()?.astrology||busy;
- $('use-astrology').disabled=!p()?.astrology?.transit;
+ $('use-astrology').disabled=Boolean(chat()?.isolated)||!p()?.astrology?.transit;
 }
 function changed(){stop();$('use-astrology').checked=false;$('astro-status').textContent=''}
 for(const id of ['astro-birth','astro-transit','astro-orb','astro-known'])for(const event of ['input','change'])$(id).addEventListener(event,changed);

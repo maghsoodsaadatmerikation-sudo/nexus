@@ -228,7 +228,7 @@ function controls(){
  const thread=chat();
  $('isolated-chat-note').hidden=!thread?.isolated;
  $('new-temporary-chat').disabled=busy;
- for(const id of ['use-memory','use-sources','use-astrology','astro-historical'])$(id).disabled=busy||Boolean(thread?.isolated);
+ for(const id of ['use-memory','use-sources','astro-historical'])$(id).disabled=busy||Boolean(thread?.isolated);
  $('use-related-chats').disabled=busy||!thread||thread.temporary||thread.isolated;
  const regenerate=$('regenerate');
  regenerate.hidden=thread?.nodes.find(node=>node.id===thread.head)?.role!=='assistant';
