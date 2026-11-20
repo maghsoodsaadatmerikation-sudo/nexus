@@ -110,6 +110,50 @@ A gateway-only deployment may use an explicitly configured `NEXUS_STUDIO_ORIGIN`
 with Studio hosted separately. There is no provisioned model or live provider
 quality test in this repository's synthetic acceptance suite.
 
+## Optional synthetic model-answer quality evaluation
+
+The operator can test a real configured provider against seven short **fictional**
+prompts covering supplied facts, missing evidence, named source/line attribution,
+Persian answers, conflicting sources, untrusted text instructions, and honest
+claims about actions. The probes use the same system policy and buffered
+response-validation contract as the production Studio model bridge.
+
+The default offline check **does not contact a model** and scores canned correct
+responses. It verifies only the evaluator's mechanics:
+
+```sh
+cd nexus-cloud
+uv run --frozen python -m model_quality_eval --self-test
+```
+
+For an **explicitly approved, live** quality sample, configure
+`NEXUS_MODEL_URL`, `NEXUS_MODEL_ID`, `NEXUS_STUDIO_TOKEN` (minimum 32
+characters), and, when required, `NEXUS_MODEL_API_KEY` securely in the
+operator's environment. The live test makes seven external model requests
+and may incur provider charges. It sends **only the fixed fictional prompts**,
+not stored user conversations, project files, or private data:
+
+```sh
+NEXUS_QUALITY_EVAL_CONSENT=YES uv run --frozen python -m model_quality_eval --live
+```
+
+The command refuses a live run without explicit consent or a valid configured
+provider. It exits nonzero if a probe encounters a provider/transport error or
+if the selected pass-rate threshold is not reached (default 0.85; override
+with `--minimum-pass-rate`). The JSON output contains only probe IDs,
+dimensions, pass/fail/error verdicts, and aggregate scores; it never prints raw
+answers or provider credentials. `trust_env=False` avoids unintended ambient
+HTTP proxy configuration.
+
+**Interpretation:** These are simple deterministic checks on artificial
+examples, not independent fact verification, a safety certification, a
+real-world accuracy score, or proof that the model can cite arbitrary sources
+correctly. The offline CI result explicitly says
+`live_model_evaluated: false`; no funded or deployed provider is implied.
+Do not use this score alone to authorize public deployment or professional
+decisions. Human review, broader adversarial tests, real-provider acceptance,
+and independent operational evidence remain separate requirements.
+
 ## Gateway capacity and deadlines
 
 Each worker admits at most 16 concurrent `/v1/*` requests, including callers
