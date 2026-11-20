@@ -143,6 +143,7 @@ except the Studio operator token when the API is used.
 | `NEXUS_CONNECTOR_GITHUB_REPO` | One repository, in `owner/repository` form. |
 | `NEXUS_CONNECTOR_GITHUB_TOKEN` | Optional fine-grained token for the selected repo. Use Contents read and Pull requests read permissions. Public repositories can be read without a provider token. |
 | `NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN` | Optional separate token for the selected repository, with Contents write permission. Enables reviewed branch creation. |
+| `NEXUS_CONNECTOR_GITHUB_FILE_TOKEN` | Optional separate token for the selected repository, with Contents write permission. Enables reviewed edits to existing files on Studio work branches. |
 | `NEXUS_CONNECTOR_RENDER_SERVICE` | One Render service ID. |
 | `NEXUS_CONNECTOR_RENDER_TOKEN` | Server-side token with the narrowest available deployments read scope. |
 | `NEXUS_STUDIO_ORIGIN` | Exact public Studio origin when the UI and adapter run on different origins. |
@@ -163,6 +164,11 @@ can review the current `main` commit and create `nexus/studio-<name>` at that
 exact commit after a second confirmation. Reviews expire after five minutes.
 Changing the base or branch name requires a fresh review. Existing branches are
 never moved. A retry can recognize the same branch and commit. Branch creation
-can trigger GitHub workflows configured to run on branch pushes. File updates,
-pull-request creation, OAuth and deployment triggers remain outside these
-endpoints.
+can trigger GitHub workflows configured to run on branch pushes. With the separate file token, **Edit a file** loads one regular, non-executable
+UTF-8 file on a `nexus/studio-*` branch. Change the text, review the line diff,
+then confirm a single-file commit. GitHub compares the exact expected branch
+head atomically when committing. Reviews expire in five minutes, and changing
+the text or target invalidates the approval. File edits are bounded to 24 KiB
+and 1,800 LF lines. Hidden directories, binary files, symlinks and executable
+modes are excluded. Pull-request creation, OAuth and deployment triggers remain
+outside these endpoints.

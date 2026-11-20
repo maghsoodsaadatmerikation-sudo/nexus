@@ -7,43 +7,51 @@ const action=(id)=>{const b=el('button','');b.id=id;b.type='button';b.className=
 const open=action('studio-connections-open'),connect=action('studio-connections-load'),
  settings=action('studio-connections-settings'),read=action('studio-connections-read'),
  use=action('studio-connections-use'),close=action('studio-connections-close'),
- create=action('studio-connections-create');
+ create=action('studio-connections-create'),preview=action('studio-file-preview');
 const dialog=el('dialog','');dialog.id='studio-connections';dialog.setAttribute('aria-labelledby','studio-connections-title');
 const title=el('h2','');title.id='studio-connections-title';
 const statusLine=el('p','');statusLine.setAttribute('role','status');
 const operations=el('select',''),path=el('input',''),review=el('pre',''),result=el('pre','');
-path.maxLength=300;path.placeholder='README.md';
+path.id='studio-connection-path';path.maxLength=300;path.placeholder='README.md';
+const topic=el('input',''),editor=el('textarea','');
+topic.id='studio-file-topic';editor.id='studio-file-editor';topic.maxLength=48;topic.placeholder='example-change';editor.maxLength=24576;editor.rows=9;editor.dir='ltr';
 const choices=[
  ['github.pulls','github','Open pull requests','درخواست‌های ادغام باز'],
  ['github.file','github','Read a file','خواندن فایل'],
  ['github.branch','github','Create a branch','ساخت شاخه'],
+ ['github.edit','github','Edit a file','ویرایش فایل'],
  ['render.deploys','render','Recent deployments','انتشارهای اخیر']
 ];
-dialog.append(title,connect,settings,close,operations,path,review,read,statusLine,result,use,create);
+dialog.append(title,connect,settings,close,operations,topic,path,review,read,editor,preview,statusLine,result,use,create);
 open.dataset.en='Connections';open.dataset.fa='اتصال‌ها';
 document.body.append(dialog);composer.append(open);
-let targets=[],origin='',controller=null,selectedResult=null,branchPlan=null;
-const branching=()=>operations.value==='github.branch';
+let targets=[],origin='',controller=null,selectedResult=null,branchPlan=null,fileBase=null,filePlan=null,originalText='';
+const branching=()=>operations.value==='github.branch',editing=()=>operations.value==='github.edit';
+const validSha=s=>/^[a-f0-9]{40}$/.test(s);
+const discardFile=()=>!fileBase||editor.value===originalText||confirm(words('Discard the unsaved file edit?','ویرایش ذخیره‌نشدهٔ فایل پاک شود؟'));
 function labels(){
  for(const [node,en,fa] of [
   [open,open.dataset.en,open.dataset.fa],[title,'Studio connections','اتصال‌های استودیو'],
   [connect,'Load connections','بارگیری اتصال‌ها'],[settings,'Gateway settings','تنظیمات درگاه'],
   [close,'Close','بستن'],[read,'Approve read','تأیید خواندن'],[create,'Confirm branch creation','تأیید ساخت شاخه'],[use,'Attach to next message','پیوست به پیام بعدی']
  ])node.textContent=words(en,fa);
+ preview.textContent=words('Review changes','بازبینی تغییرات');
+ topic.setAttribute('aria-label',words('Working branch suffix','نام کوتاه شاخهٔ کاری'));
+ editor.setAttribute('aria-label',words('Replacement text','متن جایگزین فایل'));
  operations.setAttribute('aria-label',words('Connection action','اقدام اتصال'));
  path.setAttribute('aria-label',words('Repository file path','مسیر فایل در مخزن'));
 }
-function clearResult(){selectedResult=branchPlan=null;result.textContent='';result.hidden=use.hidden=create.hidden=true}
+function clearResult(){selectedResult=branchPlan=filePlan=null;result.textContent='';result.hidden=use.hidden=create.hidden=true}
 function choice(){
  const action=choices.find(row=>row[0]===operations.value);
  return action?targets.find(x=>x.provider===action[1]):null;
 }
 function updateReview(){
- clearResult();
- const entry=choice(),branch=branching();path.hidden=!branch&&operations.value!=='github.file';
+ clearResult();fileBase=null;originalText=editor.value='';editor.hidden=preview.hidden=true;topic.hidden=!editing();
+ const entry=choice(),branch=branching();path.hidden=!branch&&!editing()&&operations.value!=='github.file';
  path.placeholder=branch?'example-change':'README.md';
  path.setAttribute('aria-label',branch?words('New branch name','نام شاخهٔ جدید'):words('Repository file path','مسیر فایل در مخزن'));
- read.textContent=branch?words('Review branch','بازبینی شاخه'):words('Approve read','تأیید خواندن');
+ read.textContent=editing()?words('Load file','باز کردن فایل'):branch?words('Review branch','بازبینی شاخه'):words('Approve read','تأیید خواندن');
  read.hidden=review.hidden=!entry;
  read.disabled=Boolean(controller)||(!path.hidden&&!path.value.trim());
  review.textContent=entry?operations.selectedOptions[0].textContent+'\n'+entry.target+
@@ -52,15 +60,15 @@ function updateReview(){
 function reset(){
  controller?.abort();controller=null;targets=[];origin='';
  operations.replaceChildren();operations.hidden=true;
- statusLine.textContent='';updateReview();
- connect.disabled=false;
+ statusLine.textContent='';topic.value='';updateReview();
+ connect.disabled=false;editor.readOnly=false;
 }
 async function request(suffix,body,apply){
  if(controller)return;
  const abort=new AbortController();controller=abort;
- const branchWrite=suffix==='/github/branch';
- const timer=setTimeout(()=>abort.abort(),branchWrite?43000:15000);
- connect.disabled=read.disabled=create.disabled=true;
+ const branchWrite=suffix==='/github/branch',fileWrite=suffix==='/github/file-commit';
+ const timer=setTimeout(()=>abort.abort(),suffix.includes('/file-')?55000:branchWrite?43000:15000);
+ connect.disabled=read.disabled=create.disabled=preview.disabled=editor.readOnly=true;
  statusLine.textContent=words('Loading…','در حال بارگیری…');
  try{
   const url=gateway(),token=$('gateway-token').value.trim();
@@ -72,6 +80,10 @@ async function request(suffix,body,apply){
    ...(body?{body:JSON.stringify(body)}:{}),signal:abort.signal
   });
   if(controller!==abort||!dialog.open)return;
+  if(suffix.includes('/file-')&&response.status===409){
+   statusLine.textContent=words('Review again. Reload the file if the branch changed.','دوباره بازبینی کن. اگر شاخه تغییر کرده، فایل را دوباره باز کن.');
+   return;
+  }
   if(branchWrite&&response.status===409){
    statusLine.textContent=words('Review again or choose a new name. The branch was not confirmed.',
     'دوباره بازبینی کن یا نام دیگری انتخاب کن. ایجاد شاخه تأیید نشد.');
@@ -87,25 +99,29 @@ async function request(suffix,body,apply){
     'اتصال برقرار نشد. درگاه، توکن دسترسی و مجوز سرویس را بررسی کن.');
    if(branchWrite)statusLine.textContent=words('Branch result unknown. Retry with the same name.',
     'نتیجهٔ ساخت شاخه مشخص نیست. با همان نام دوباره تلاش کن.');
+   if(fileWrite)statusLine.textContent=words('Commit status unknown. Check the branch before retrying.','وضعیت ثبت تغییر مشخص نیست. پیش از تلاش دوباره، شاخه را بررسی کن.');
   }
  }finally{
   clearTimeout(timer);
-  if(controller===abort){controller=null;connect.disabled=create.disabled=false;read.disabled=!path.hidden&&!path.value.trim()}
+  if(controller===abort){controller=null;connect.disabled=create.disabled=preview.disabled=editor.readOnly=false;read.disabled=!path.hidden&&!path.value.trim()}
  }
 }
 open.onclick=()=>{reset();labels();dialog.showModal()};
-close.onclick=()=>dialog.close();
+close.onclick=()=>{if(discardFile())dialog.close()};
+dialog.addEventListener('cancel',event=>{if(!discardFile())event.preventDefault()});
 dialog.addEventListener('close',reset);
 settings.onclick=()=>{
+ if(!discardFile())return;
  dialog.close();document.dispatchEvent(new Event('nexus-studio-show-chat-options'));
  $('studio-model-settings').open=true;$('gateway').focus();
 };
 connect.onclick=()=>{
+ if(!discardFile())return;
  reset();request('',null,(output,url)=>{
   if(!Array.isArray(output.connections))throw Error('catalog');
   targets=output.connections.filter(x=>typeof x.target==='string'&&/^[a-f0-9]{64}$/.test(x.configuration_id));
   origin=url;
-  for(const [id,provider,en,fa] of choices)if(targets.some(x=>x.provider===provider&&(id!=='github.branch'||x.branch_creation===true))){
+  for(const [id,provider,en,fa] of choices)if(targets.some(x=>x.provider===provider&&(id!=='github.branch'||x.branch_creation===true)&&(id!=='github.edit'||x.file_commit===true))){
    operations.append(option(id,(provider==='github'?'GitHub':'Render')+' · '+words(en,fa)));
   }
   operations.hidden=!operations.options.length;
@@ -113,9 +129,30 @@ connect.onclick=()=>{
   updateReview();
  });
 };
-operations.onchange=path.oninput=()=>{controller?.abort();controller=null;connect.disabled=false;updateReview()};
+operations.onchange=topic.onchange=path.onchange=()=>{
+ if(!discardFile()){operations.value='github.edit';topic.value=fileBase.slug;path.value=fileBase.path;preview.disabled=false;return}
+ controller?.abort();controller=null;connect.disabled=editor.readOnly=false;updateReview();
+};
+topic.oninput=path.oninput=()=>{
+ controller?.abort();controller=null;connect.disabled=editor.readOnly=false;
+ if(fileBase){clearResult();preview.disabled=topic.value.trim()!==fileBase.slug||path.value.trim()!==fileBase.path;return}
+ updateReview();
+};
 read.onclick=()=>{
  const entry=choice();if(!entry)return;
+ if(editing()){
+  const data={configuration_id:entry.configuration_id,slug:topic.value.trim(),path:path.value.trim()};
+  if(!data.slug||!data.path||!discardFile())return;
+  clearResult();
+  request('/github/file-base',data,p=>{
+   if(!sameFile(data,entry,p)||!validSha(p.base_sha)||typeof p.text!=='string')throw Error('file identity');
+   fileBase={...data,base_sha:p.base_sha};
+   clearResult();originalText=editor.value=p.text;editor.hidden=preview.hidden=false;
+   review.textContent=p.target+' / '+p.branch+' / '+p.path+'\n'+p.base_sha;
+   editor.focus();
+  });
+  return;
+ }
  if(branching()){
   const slug=path.value.trim();
   if(!/^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/.test(slug)){
@@ -128,6 +165,7 @@ read.onclick=()=>{
       !/^[a-f0-9]{64}$/.test(p.review_id)||!Number.isInteger(p.expires_at))throw Error('branch preview');
    branchPlan={slug,configuration_id,base_sha:p.base_sha,review_id:p.review_id,expires_at:p.expires_at};
    result.textContent=p.target+'\n'+p.branch+'\nmain @ '+p.base_sha;
+   create.textContent=words('Confirm branch creation','تأیید ساخت شاخه');
    result.hidden=create.hidden=false;
   });
   return;
@@ -145,7 +183,31 @@ read.onclick=()=>{
   result.hidden=use.hidden=false;
  });
 };
+function sameFile(data,entry,p){
+ return p.target===entry.target&&p.branch==='nexus/studio-'+data.slug&&p.path===data.path;
+}
+editor.oninput=()=>{controller?.abort();controller=null;connect.disabled=preview.disabled=read.disabled=false;clearResult()};
+preview.onclick=()=>{
+ if(!fileBase||topic.value.trim()!==fileBase.slug||path.value.trim()!==fileBase.path)return;
+ const entry=choice(),data={...fileBase,text:editor.value};
+ clearResult();request('/github/file-preview',data,p=>{
+  if(!sameFile(data,entry,p)||p.base_sha!==data.base_sha||typeof p.diff!=='string'||
+     !/^[a-f0-9]{64}$/.test(p.review_id)||!Number.isInteger(p.expires_at))throw Error('file review');
+  filePlan={...data,review_id:p.review_id,expires_at:p.expires_at};
+  result.textContent=p.diff;result.hidden=create.hidden=false;
+  create.textContent=words('Confirm commit','تأیید ثبت تغییر');
+ });
+};
 create.onclick=()=>{
+ if(filePlan&&!controller){
+  const approved=filePlan,entry=choice();
+  request('/github/file-commit',{...approved,consent:true},p=>{
+   if(!sameFile(approved,entry,p)||!validSha(p.commit))throw Error('commit identity');
+   clearResult();fileBase=null;originalText=editor.value='';editor.hidden=preview.hidden=true;
+   result.textContent=words('Commit created','تغییر ثبت شد')+'\n'+p.commit;result.hidden=false;
+  });
+  return;
+ }
  if(!branchPlan||controller)return;
  const approved=branchPlan,entry=choice();
  request('/github/branch',{...approved,consent:true},p=>{
@@ -161,6 +223,9 @@ use.onclick=()=>{
  if(window.NexusStudioUI.stageChatContext(label,text)){dialog.close();$('message').focus()}
  else statusLine.textContent=words('Open an active chat with room for attachments.','یک گفتگوی فعال با ظرفیت پیوست باز کن.');
 };
+window.addEventListener('beforeunload',event=>{
+ if(fileBase&&editor.value!==originalText){event.preventDefault();event.returnValue=''}
+});
 document.addEventListener('nexus-studio-private-clear',()=>{if(dialog.open)dialog.close();reset()});
 for(const id of ['gateway','gateway-token'])$(id).addEventListener('input',reset);
 $('language').addEventListener('change',labels);

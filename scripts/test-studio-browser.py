@@ -175,7 +175,14 @@ window.addEventListener('load',async()=>{
   window.fetch=async(url,options)=>{
    requests.push({url,options});
    const body=options.body?JSON.parse(options.body):null;
-   if(!body)return new Response(JSON.stringify({connections:[{provider:'github',target:'example/nexus',configuration_id:'b'.repeat(64),branch_creation:true}]}));
+   if(!body)return new Response(JSON.stringify({connections:[{provider:'github',target:'example/nexus',configuration_id:'b'.repeat(64),branch_creation:true,file_commit:true}]}));
+   if(url.includes('/github/file-')){
+    const result={target:'example/nexus',branch:'nexus/studio-'+body.slug,path:body.path,base_sha:'a'.repeat(40)};
+    if(url.endsWith('/file-base'))result.text='Before\n';
+    if(url.endsWith('/file-preview'))Object.assign(result,{diff:'-Before\n+'+body.text,review_id:'c'.repeat(64),expires_at:2000000000});
+    if(url.endsWith('/file-commit'))result.commit='d'.repeat(40);
+    return new Response(JSON.stringify(result));
+   }
    if(url.endsWith('/github/branch-preview'))return new Response(JSON.stringify({target:'example/nexus',
     branch:'nexus/studio-'+body.slug,base_sha:'a'.repeat(40),expires_at:2000000000,review_id:'c'.repeat(64)}));
    if(url.endsWith('/github/branch'))return new Response(JSON.stringify({target:'example/nexus',
@@ -190,9 +197,9 @@ window.addEventListener('load',async()=>{
   assert($('studio-connections').open&&requests.length===0,'opening-connections-does-not-contact-gateway');
   $('studio-connections-load').click();
   const actions=$('studio-connections').querySelector('select');
-  await wait(()=>actions.options.length===3);
+  await wait(()=>actions.options.length===4);
   actions.value='github.file';actions.dispatchEvent(new Event('change',{bubbles:true}));
-  const filePath=$('studio-connections').querySelector('input');
+  const filePath=$('studio-connection-path');
   filePath.value='README.md';filePath.dispatchEvent(new Event('input',{bubbles:true}));
   assert($('studio-connections').textContent.includes('example/nexus / README.md')&&requests.length===1,
    'connection-target-and-path-visible-before-approved-read');
@@ -206,7 +213,7 @@ window.addEventListener('load',async()=>{
    'selected-file-attachment-preserves-draft-and-does-not-call-model');
   await sleep(40);
   $('studio-connections-open').click();$('studio-connections-load').click();
-  await wait(()=>actions.options.length===3);
+  await wait(()=>actions.options.length===4);
   actions.value='github.branch';actions.dispatchEvent(new Event('change',{bubbles:true}));
   filePath.value='example-change';filePath.dispatchEvent(new Event('input',{bubbles:true}));
   const create=$('studio-connections-create');
@@ -222,6 +229,27 @@ window.addEventListener('load',async()=>{
   const writes=requests.filter(x=>x.url.endsWith('/github/branch')).map(x=>JSON.parse(x.options.body));
   assert(writes.length===1&&writes[0].slug==='other-change'&&writes[0].base_sha==='a'.repeat(40)&&
    writes[0].consent===true&&$('message').value===draft,'separate-approval-creates-only-reviewed-branch');
+  actions.value='github.edit';actions.dispatchEvent(new Event('change',{bubbles:true}));
+  fill('studio-file-topic','other-change');fill('studio-connection-path','docs/intro.md');
+  $('studio-connections-read').click();
+  const editor=$('studio-file-editor');
+  await wait(()=>!editor.hidden);
+  assert(editor.value==='Before\n'&&create.hidden,'file-editor-loads-original-without-write');
+  fill('studio-file-editor','After\n');
+  window.confirm=()=>false;$('studio-connections-close').click();
+  assert($('studio-connections').open&&editor.value==='After\n','declining-close-keeps-source-edit');
+  window.confirm=()=>true;
+  $('studio-file-preview').click();await wait(()=>!create.hidden);
+  assert($('studio-connections').textContent.includes('-Before\n+After')&&
+   requests.every(x=>!x.url.endsWith('/github/file-commit')),'review-shows-diff-before-commit');
+  fill('studio-file-editor','Final edit\n');
+  assert(create.hidden,'editing-text-invalidates-the-reviewed-diff');
+  $('studio-file-preview').click();await wait(()=>!create.hidden);
+  create.click();await wait(()=>$('studio-connections').textContent.includes('Commit created'));
+  const writesToFile=requests.filter(x=>x.url.endsWith('/file-commit')).map(x=>JSON.parse(x.options.body));
+  assert(writesToFile.length===1&&writesToFile[0].base_sha==='a'.repeat(40)&&
+   writesToFile[0].consent===true&&writesToFile[0].text==='Final edit\n'&&$('message').value===draft,
+   'file-commit-only-sends-the-independently-approved-text');
   $('studio-connections-close').click();
 
   assert(document.documentElement.scrollWidth<=innerWidth+2,'no-horizontal-overflow');
