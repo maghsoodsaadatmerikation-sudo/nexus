@@ -2620,7 +2620,8 @@ const action=(id)=>{const b=el('button','');b.id=id;b.type='button';b.className=
 const open=action('studio-connections-open'),connect=action('studio-connections-load'),
  settings=action('studio-connections-settings'),read=action('studio-connections-read'),
  use=action('studio-connections-use'),close=action('studio-connections-close'),
- create=action('studio-connections-create'),preview=action('studio-file-preview');
+ create=action('studio-connections-create'),preview=action('studio-file-preview'),
+ view=action('studio-connections-view-chat');
 const dialog=el('dialog','');dialog.id='studio-connections';dialog.setAttribute('aria-labelledby','studio-connections-title');
 const title=el('h2','');title.id='studio-connections-title';
 const statusLine=el('p','');statusLine.setAttribute('role','status');
@@ -2635,11 +2636,76 @@ const choices=[
  ['github.edit','github','Edit a file','ویرایش فایل'],
  ['render.deploys','render','Recent deployments','انتشارهای اخیر']
 ];
-dialog.append(title,connect,settings,close,operations,topic,path,review,read,editor,preview,statusLine,result,use,create);
+dialog.append(title,connect,settings,close,operations,topic,path,review,read,editor,preview,statusLine,result,use,create,view);
+view.hidden=true;
+// Transient reviewed receipts live beside the active chat, never in session state.
+const receipt=el('section','');receipt.id='studio-connection-receipt';receipt.hidden=true;
+receipt.setAttribute('role','status');receipt.setAttribute('aria-live','polite');
+const receiptTitle=el('strong',''),receiptStatus=el('p',''),receiptPreview=el('pre','');
+const receiptAttach=action('studio-connection-attach'),receiptDismiss=action('studio-connection-dismiss');
+receipt.append(receiptTitle,receiptStatus,receiptPreview,receiptAttach,receiptDismiss);
+$('messages').after(receipt);
 open.dataset.en='Connections';open.dataset.fa='اتصال‌ها';
 document.body.append(dialog);composer.append(open);
 let targets=[],origin='',controller=null,selectedResult=null,branchPlan=null,fileBase=null,filePlan=null,originalText='';
-let requestedProvider=null,requestedOperation=null;
+let requestedProvider=null,requestedOperation=null,receiptCopy=null,receiptSelection=null;
+function clearReceipt(){
+ receipt.hidden=view.hidden=true;receiptCopy=receiptSelection=null;
+ receiptTitle.textContent=receiptStatus.textContent=receiptPreview.textContent='';
+ receiptAttach.hidden=true;
+}
+function showReceipt({kind,operation='',target='',message='',body='',copy=null}){
+ clearReceipt();
+ const current=window.NexusStudioUI?.selection?.();
+ receiptSelection={projectId:current?.projectId||null,threadId:current?.threadId||null};
+ receiptTitle.textContent=([operation||'Connections',target].filter(Boolean).join(' · ')).slice(0,240);
+ const success=kind==='read'||kind==='write';
+ receiptStatus.textContent=message||(
+  kind==='read'
+   ?words('Approved read completed. External data is untrusted; not saved or sent to a model.',
+           'خواندن تأییدشده انجام شد. دادهٔ خارجی غیرقابل‌اعتماد است؛ ذخیره یا به مدل ارسال نشده است.')
+   :kind==='write'
+   ?words('Provider confirmed the reviewed change. No merge or deployment was performed.',
+           'سرویس، تغییر بازبینی‌شده را تأیید کرد. هیچ ادغام یا استقراری انجام نشده است.')
+   :words('Request not confirmed. No successful operation is claimed.',
+           'درخواست تأیید نشد. انجام موفق عملیات ادعا نمی‌شود.')
+ );
+ const text=String(body).slice(0,2400);
+ receiptPreview.textContent=text+(String(body).length>2400?
+  words('\n[Preview shortened. Full data remains in the reviewed dialog until closed.]',
+        '\n[پیش‌نمایش کوتاه شده است؛ متن کامل تا زمان بستن در پنجرهٔ بازبینی موجود است.]'):'');
+ receiptPreview.hidden=!text;
+ receiptCopy=kind==='read'?copy:null;
+ receiptAttach.hidden=!receiptCopy;
+ receipt.hidden=false;view.hidden=!dialog.open;
+ if(success)statusLine.textContent=words('Result is also available in Chat.','نتیجه در بخش گفتگو نیز نمایش داده شد.');
+}
+receiptDismiss.onclick=clearReceipt;
+receiptAttach.onclick=()=>{
+ if(!receiptCopy)return;
+ const current=window.NexusStudioUI?.selection?.();
+ if(current?.projectId!==receiptSelection?.projectId||
+    current?.threadId!==receiptSelection?.threadId){clearReceipt();return}
+ const {label,text}=receiptCopy;
+ if(window.NexusStudioUI.stageChatContext(label,text)){
+  receiptCopy=null;receiptAttach.hidden=true;
+  receiptStatus.textContent=words('Attached to the next message, not sent. Review before sending.',
+   'به پیام بعدی پیوست شد، اما ارسال نشده است. پیش از ارسال بازبینی کن.');
+ }else receiptStatus.textContent=words('Open an active, unarchived chat with attachment capacity.',
+  'گفتگوی فعال و آرشیونشده با ظرفیت پیوست باز کن.');
+};
+view.onclick=()=>{
+ if(!discardFile())return;
+ dialog.close();
+ window.NexusStudioFocus?.openPanel('conversation-card');
+ receipt.tabIndex=-1;receipt.focus({preventScroll:true});
+};
+document.addEventListener('nexus-studio-state',()=>{
+ if(receipt.hidden)return;
+ const current=window.NexusStudioUI?.selection?.();
+ if(current?.projectId!==receiptSelection?.projectId||
+    current?.threadId!==receiptSelection?.threadId)clearReceipt();
+});
 const branching=()=>operations.value==='github.branch',editing=()=>operations.value==='github.edit';
 const validSha=s=>/^[a-f0-9]{40}$/.test(s);
 const discardFile=()=>!fileBase||editor.value===originalText||confirm(words('Discard the unsaved file edit?','ویرایش ذخیره‌نشدهٔ فایل پاک شود؟'));
@@ -2647,7 +2713,8 @@ function labels(){
  for(const [node,en,fa] of [
   [open,open.dataset.en,open.dataset.fa],[title,'Studio connections','اتصال‌های استودیو'],
   [connect,'Load connections','بارگیری اتصال‌ها'],[settings,'Gateway settings','تنظیمات درگاه'],
-  [close,'Close','بستن'],[read,'Approve read','تأیید خواندن'],[create,'Confirm branch creation','تأیید ساخت شاخه'],[use,'Attach to next message','پیوست به پیام بعدی']
+  [close,'Close','بستن'],[read,'Approve read','تأیید خواندن'],[create,'Confirm branch creation','تأیید ساخت شاخه'],[use,'Attach to next message','پیوست به پیام بعدی'],
+  [view,'View result in chat','نمایش نتیجه در گفتگو'],[receiptAttach,'Attach to next message','پیوست به پیام بعدی'],[receiptDismiss,'Dismiss result','بستن نتیجه']
  ])node.textContent=words(en,fa);
  preview.textContent=words('Review changes','بازبینی تغییرات');
  topic.setAttribute('aria-label',words('Working branch suffix','نام کوتاه شاخهٔ کاری'));
@@ -2696,11 +2763,13 @@ async function request(suffix,body,apply){
   if(controller!==abort||!dialog.open)return;
   if(suffix.includes('/file-')&&response.status===409){
    statusLine.textContent=words('Review again. Reload the file if the branch changed.','دوباره بازبینی کن. اگر شاخه تغییر کرده، فایل را دوباره باز کن.');
+   showReceipt({kind:'error',operation:operations.value,message:statusLine.textContent});
    return;
   }
   if(branchWrite&&response.status===409){
    statusLine.textContent=words('Review again or choose a new name. The branch was not confirmed.',
     'دوباره بازبینی کن یا نام دیگری انتخاب کن. ایجاد شاخه تأیید نشد.');
+   showReceipt({kind:'error',operation:operations.value,message:statusLine.textContent});
    return;
   }
   const output=await boundedJson(response);
@@ -2714,6 +2783,7 @@ async function request(suffix,body,apply){
    if(branchWrite)statusLine.textContent=words('Branch result unknown. Retry with the same name.',
     'نتیجهٔ ساخت شاخه مشخص نیست. با همان نام دوباره تلاش کن.');
    if(fileWrite)statusLine.textContent=words('Commit status unknown. Check the branch before retrying.','وضعیت ثبت تغییر مشخص نیست. پیش از تلاش دوباره، شاخه را بررسی کن.');
+   showReceipt({kind:'error',operation:operations.value,message:statusLine.textContent});
   }
  }finally{
   clearTimeout(timer);
@@ -2726,7 +2796,7 @@ async function request(suffix,body,apply){
 function openFor({provider=null,operation=null}={}){
  if(dialog.open||!([null,'github','render'].includes(provider))||
    (operation!==null&&!choices.some(row=>row[0]===operation&&(!provider||row[1]===provider))))return false;
- reset();requestedProvider=provider;requestedOperation=operation;labels();
+ clearReceipt();reset();requestedProvider=provider;requestedOperation=operation;labels();
  if(provider){
   const name=provider==='github'?'GitHub':'Render';
   statusLine.textContent=words(name+' selected. Load connections to review available actions.',
@@ -2825,6 +2895,8 @@ read.onclick=()=>{
                   text:'Source: '+entry.target+(body.path?' / '+body.path+' · '+output.result.blob_sha:'')+'\n\n'+content};
   result.textContent=selectedResult.text;
   result.hidden=use.hidden=false;
+  showReceipt({kind:'read',operation:body.operation,target:entry.target,
+    body:selectedResult.text,copy:{...selectedResult}});
  });
 };
 function sameFile(data,entry,p){
@@ -2849,6 +2921,8 @@ create.onclick=()=>{
    if(!sameFile(approved,entry,p)||!validSha(p.commit))throw Error('commit identity');
    clearResult();fileBase=null;originalText=editor.value='';editor.hidden=preview.hidden=true;
    result.textContent=words('Commit created','تغییر ثبت شد')+'\n'+p.commit;result.hidden=false;
+   showReceipt({kind:'write',operation:'github.edit',target:entry.target,
+     body:'Commit: '+p.commit+'\nWorking branch: '+p.branch});
   });
   return;
  }
@@ -2859,18 +2933,29 @@ create.onclick=()=>{
      !['created','already_exists'].includes(p.status))throw Error('branch identity');
   const label=p.status==='created'?words('Branch created','شاخه ساخته شد'):words('Branch already exists','شاخه از قبل وجود داشت');
   clearResult();result.textContent=label+'\n'+p.target+' / '+p.branch;result.hidden=false;
+  showReceipt({kind:'write',operation:'github.branch',target:p.target,
+    message:p.status==='created'?words('Approved working branch was created; not merged or deployed.',
+      'شاخهٔ کاری تأییدشده ساخته شد؛ ادغام یا استقرار انجام نشد.'):
+      words('Working branch already existed; no new branch was created.',
+      'شاخهٔ کاری از قبل وجود داشت؛ شاخهٔ تازه‌ای ساخته نشد.'),
+    body:'Branch: '+p.branch+'\nBase: '+p.base_sha});
  });
 };
 use.onclick=()=>{
  if(!selectedResult||controller)return;
  const {label,text}=selectedResult;
- if(window.NexusStudioUI.stageChatContext(label,text)){dialog.close();$('message').focus()}
+ if(window.NexusStudioUI.stageChatContext(label,text)){
+  receiptCopy=null;receiptAttach.hidden=true;
+  receiptStatus.textContent=words('Attached to next message; not sent to a model.',
+    'به پیام بعدی پیوست شد؛ به مدل ارسال نشده است.');
+  dialog.close();$('message').focus()
+ }
  else statusLine.textContent=words('Open an active chat with room for attachments.','یک گفتگوی فعال با ظرفیت پیوست باز کن.');
 };
 window.addEventListener('beforeunload',event=>{
  if(fileBase&&editor.value!==originalText){event.preventDefault();event.returnValue=''}
 });
-document.addEventListener('nexus-studio-private-clear',()=>{if(dialog.open)dialog.close();reset()});
+document.addEventListener('nexus-studio-private-clear',()=>{clearReceipt();if(dialog.open)dialog.close();reset()});
 for(const id of ['gateway','gateway-token'])$(id).addEventListener('input',reset);
 $('language').addEventListener('change',labels);
 window.NexusStudioConnections=Object.freeze({openFor});
