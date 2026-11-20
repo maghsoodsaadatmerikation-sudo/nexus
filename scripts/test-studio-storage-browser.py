@@ -51,6 +51,46 @@ window.addEventListener('load',async()=>{
   assert(JSON.stringify(NexusStudioUI.snapshot())===before,'persian-recovery-message-retains-open-work');
   assert(escaped.length===0,'no-unhandled-storage-events');
   await direct(true,saved);await vault.erase();assert(await store.read()===null,'healthy-archive-can-still-be-erased');
+  const oldTime=Date.now()-40*86400000;
+  const old=S.append(S.thread('Expired chat'),'user','EXPIRED SAMPLE','human');
+  old.last_activity=oldTime;
+  const recent=S.append(S.thread('Recently active'),'user','RECENT SAMPLE','human');
+  recent.last_activity=oldTime+20*86400000;
+  const legacy=S.thread('Legacy chat');
+  const retainedProject={...project,threads:[old,recent,legacy]};
+  await vault.create(pass);
+  await vault.save({schema:S.SCHEMA,projects:[retainedProject],history_days:30},{now:recent.last_activity});
+  const beforePurge=await store.read();
+  vault.lock();
+  const retained=await vault.unlock(pass);
+  assert(retained.projects[0].threads.map(t=>t.id).join()===recent.id+','+legacy.id,'expired-conversation-removed-on-unlock');
+  const afterPurge=await store.read();
+  assert(beforePurge!==afterPurge&&!(await S.decrypt(afterPurge,pass)).data.projects[0].threads.some(t=>t.id===old.id),
+   'expiry-rewrites-encrypted-history');
+  assert(Number.isSafeInteger(retained.projects[0].threads[1].last_activity),'legacy-retention-clock-initialized');
+  assert(retained.projects[0].sources.length===retainedProject.sources.length,'expiry-keeps-project-material');
+
+  $('language').value='en';$('language').dispatchEvent(new Event('change'));
+  fill('passphrase',pass);$('unlock').click();await wait(()=>$('history-days').value==='30'&&!$('save').disabled);
+  assert(!$('training-opt-in').checked&&$('training-review').disabled,'retaining-history-does-not-authorize-training');
+  $('history-days').value='0';$('history-days').dispatchEvent(new Event('change',{bubbles:true}));
+  $('save').click();await wait(()=>$('status').textContent.includes('encrypted data')&&!$('save').disabled);
+  const off=(await S.decrypt(await store.read(),pass)).data;
+  assert(off.history_days===0&&off.projects[0].threads.length===0&&off.projects[0].id===project.id,'history-off-only-removes-chat-from-ciphertext');
+  assert(NexusStudioUI.snapshot().projects[0].threads.some(t=>t.id===recent.id),'temporary-chat-remains-available');
+  $('training-opt-in').click();$('training-review').click();
+  const review=JSON.parse($('training-preview').textContent);
+  assert(review.messages.length===1&&review.messages[0].text==='RECENT SAMPLE','training-review-works-with-history-off');
+  $('training-opt-in').click();
+  assert($('training-preview').hidden&&$('training-download').hidden&&!$('training-preview').textContent,'withdrawal-clears-training-review');
+  fill('message','TEMPORARY MESSAGE');$('guide').click();
+  $('history-days').value='';$('history-days').dispatchEvent(new Event('change',{bubbles:true}));
+  $('save').click();await wait(()=>$('status').textContent.includes('encrypted data')&&!$('save').disabled);
+  assert((await S.decrypt(await store.read(),pass)).data.projects[0].threads.length===0,'re-enabling-history-does-not-save-temporary-conversations');
+  $('training-opt-in').click();$('training-review').click();
+  assert(!$('training-preview').hidden&&$('training-preview').textContent.includes('TEMPORARY MESSAGE'),'review-binds-to-current-branch');
+  $('lock').click();
+  assert(!$('training-opt-in').checked&&$('training-preview').hidden&&!$('training-preview').textContent,'locking-revokes-training-opt-in');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,real_indexeddb_tested:true,network_requests:0,authority:'none'});
  }catch(error){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:error.message,checks})}
 });
