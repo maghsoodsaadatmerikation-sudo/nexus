@@ -74,16 +74,55 @@ def test_github_reads_pinned_utf8_and_returns_only_reviewed_fields(monkeypatch):
         assert request.url.path == f"/repos/{REPO}/contents/docs/intro.md"
         assert request.url.params["ref"] == "b" * 40
         assert request.headers["authorization"] == "Bearer synthetic-github-token"
-        return httpx.Response(200, json={"type": "file", "encoding": "base64", "sha": "a" * 40,
+        return httpx.Response(200, json={"type": "file", "encoding": "base64", "sha": "2fff7e03e4b1b357ff55ef2a36fb232441fd6052",
                                        "path": "docs/intro.md", "content": base64.b64encode(source.encode()).decode(),
                                        "unreviewed": "internal details"})
     with gateway(monkeypatch, handler) as client:
         result = client.post("/studio-api/connections/read", headers=AUTH,
                              json=read_body(path="docs/intro.md", revision="b" * 40))
         assert result.status_code == 200
-        assert result.json()["result"] == {"path": "docs/intro.md", "blob_sha": "a" * 40, "text": source}
+        assert result.json()["result"] == {"path": "docs/intro.md", "blob_sha": "2fff7e03e4b1b357ff55ef2a36fb232441fd6052", "text": source}
         assert result.json()["provenance"] == "external-untrusted"
         assert "internal details" not in result.text
+
+
+
+def test_github_file_rejects_content_that_does_not_match_its_blob_id(monkeypatch):
+    """An external response must not label altered bytes with a Git blob identifier."""
+    calls = []
+    def handler(request):
+        calls.append(request.url.path)
+        return httpx.Response(200, json={
+            "type": "file", "encoding": "base64", "path": "docs/intro.md",
+            # Real Git blob SHA-1 of "Hello\\n", NOT the bytes supplied below.
+            "sha": "e965047ad7c57865823c7d992b1d046ea66edf78",
+            "content": base64.b64encode("Altered note\\n".encode()).decode(),
+        })
+    with gateway(monkeypatch, handler) as client:
+        result = client.post("/studio-api/connections/read", headers=AUTH,
+                             json=read_body(path="docs/intro.md", revision="b" * 40))
+        assert result.status_code == 502
+        assert result.json()["detail"] == "Provider result is not supported text or metadata"
+        assert "Altered note" not in result.text
+        assert calls == ["/repos/example/nexus/contents/docs/intro.md"]
+
+
+def test_github_blob_identity_covers_exact_line_endings(monkeypatch):
+    source = "Hello\\r\\n"
+    import hashlib
+    raw = source.encode("utf-8")
+    expected = hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + bytes([0]) + raw).hexdigest()
+    def handler(request):
+        return httpx.Response(200, json={"type": "file", "encoding": "base64",
+            "path": "docs/intro.md", "sha": expected,
+            "content": base64.b64encode(raw).decode()})
+    with gateway(monkeypatch, handler) as client:
+        result = client.post("/studio-api/connections/read", headers=AUTH,
+                             json=read_body(path="docs/intro.md"))
+        assert result.status_code == 200, result.text
+        assert result.json()["result"]["blob_sha"] == expected
+        assert result.json()["result"]["text"] == source
+        assert result.json()["provenance"] == "external-untrusted"
 
 
 def test_render_only_reads_selected_service_and_projects_deploy_metadata(monkeypatch):
@@ -240,13 +279,13 @@ def test_reviewed_file_edit_is_bound_to_text_and_atomic_head(monkeypatch):
             return httpx.Response(200, json={"sha": BASE_SHA, "tree": {"sha": "b" * 40}})
         if path.endswith("/git/trees/" + "b" * 40):
             return httpx.Response(200, json={"truncated": False, "tree": [
-                {"path": FILE_PATH, "mode": "100644", "type": "blob", "sha": "c" * 40},
+                {"path": FILE_PATH, "mode": "100644", "type": "blob", "sha": "e965047ad7c57865823c7d992b1d046ea66edf78"},
                 {"path": "docs/link.md", "mode": "120000", "type": "blob", "sha": "d" * 40},
             ]})
         if path.endswith("/contents/" + FILE_PATH):
             assert request.url.params["ref"] == BASE_SHA
             return httpx.Response(200, json={"type": "file", "path": FILE_PATH, "encoding": "base64",
-                                             "sha": "c" * 40, "content": base64.b64encode(old.encode()).decode()})
+                                             "sha": "e965047ad7c57865823c7d992b1d046ea66edf78", "content": base64.b64encode(old.encode()).decode()})
         assert request.method == "POST" and path == "/graphql"
         data = json.loads(request.content)["variables"]["input"]
         assert data["branch"] == {"repositoryNameWithOwner": REPO, "branchName": TOPIC}
