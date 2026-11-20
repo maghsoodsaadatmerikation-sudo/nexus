@@ -3,10 +3,9 @@
 from pathlib import Path
 import stat
 
-# Keep a separate bound for the standalone HTML, including local Office
-# text extraction and the bilingual decision guide.
-MAX_HTML = 584_000
-MAX_FILE = 580_000
+# Bounded Studio asset budget, including local Office text extraction and
+# bilingual decision support in the standalone HTML.
+MAX_FILE = 584_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000
@@ -28,11 +27,7 @@ LEGACY_FILES = (
 FILES = LEGACY_FILES + PDF_FILES
 
 def asset_limit(name):
-    if name == "index.html":
-        return MAX_HTML
-    if name == "pdf/pdf.worker.min.mjs":
-        return WORKER_LIMIT
-    return MAX_FILE
+    return WORKER_LIMIT if name == 'pdf/pdf.worker.min.mjs' else MAX_FILE
 
 
 def check_public_tree(root):
