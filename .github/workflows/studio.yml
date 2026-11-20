@@ -37,6 +37,7 @@ jobs:
           python3 scripts/build-studio.py --check
           node --check web/studio-core.js
           node --check web/studio-app.js
+          node --check web/studio-vision-ui.js
           node --check web/studio-locales.js
           node scripts/test-studio-locales.mjs
           node --check web/studio-tasks.js
@@ -93,6 +94,8 @@ jobs:
         run: python3 scripts/test-studio-vocal-races-browser.py
       - name: Prove private Studio lock and archive erasure revoke local vocal and music state in Chromium
         run: python3 scripts/test-studio-private-lifecycle-browser.py
+      - name: Exercise opt-in vision review, image data disposal and text-only receipt in Chromium
+        run: python3 scripts/test-studio-vision-browser.py
       - name: Exercise direct chat-file context, explicit model consent and private attachment cleanup
         run: python3 scripts/test-studio-chat-attachments-browser.py
       - name: Exercise selected research, code and data result handoffs into reviewed chat
