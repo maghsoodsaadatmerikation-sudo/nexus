@@ -315,6 +315,51 @@ window.addEventListener('load',async()=>{
   document.dispatchEvent(new Event('nexus-studio-private-clear'));
   assert(receipt.hidden&&!dialog.open,'private-clear-revokes-visible-provider-result');
 
+  // Real browser DOM lifecycle, with a deterministic speech recognition double.
+  let recognizer=null,starts=0;
+  window.SpeechRecognition=class {
+   start(){recognizer=this;starts++}
+   stop(){this.onend()}
+   abort(){this.aborted=true}
+   emit(text){this.onresult({resultIndex:0,results:[Object.assign([{transcript:text}],{isFinal:true})]})}
+  };
+  const voice=$('studio-voice-toggle'),voiceStart=$('studio-voice-start'),voicePanel=$('studio-voice-panel');
+  const beforeVoice=JSON.stringify(snapshot()),beforeVoiceNetwork=providerCalls;
+  fill('message','Unsent');
+  voice.click();
+  assert(!voicePanel.hidden&&starts===0,'voice-disclosure-never-starts-microphone');
+  voiceStart.click();
+  assert(starts===1&&recognizer.lang==='en','explicit-voice-opt-in-selects-english');
+  recognizer.emit('spoken question');
+  assert($('message').value==='Unsent','recognition-buffer-does-not-change-unfinished-draft');
+  $('studio-voice-stop').click();
+  assert($('message').value==='Unsent spoken question'&&voicePanel.hidden,'final-transcript-appends-to-existing-draft');
+  assert(JSON.stringify(snapshot())===beforeVoice&&providerCalls===beforeVoiceNetwork&&$('request-review').hidden,
+   'dictation-does-not-send-save-or-authorize-model');
+
+  const language=$('language');
+  language.value='fa';language.dispatchEvent(new Event('change',{bubbles:true}));
+  await wait(()=>document.documentElement.lang==='fa');
+  voice.click();voiceStart.click();
+  const abandoned=recognizer;
+  assert(starts===2&&abandoned.lang==='fa-IR','farsi-dictation-uses-iranian-persian-locale');
+  assert(NexusStudioUI.openConversation(prior.projectId,prior.threadId),'navigate-away-during-dictation');
+  abandoned.emit('discarded words');abandoned.onend();
+  assert(abandoned.aborted&&voicePanel.hidden&&!$('message').value.includes('discarded words'),
+   'changing-chats-aborts-and-discards-late-speech');
+
+  voice.click();voiceStart.click();
+  const denied=recognizer;
+  denied.onerror({error:'not-allowed'});
+  assert(denied.aborted&&!voiceStart.disabled&&!$('message').value,'microphone-refusal-leaves-typing-available');
+
+  voiceStart.click();
+  const edited=recognizer;
+  fill('message','manual edit');
+  edited.emit('late text');edited.onend();
+  assert(edited.aborted&&$('message').value==='manual edit','typing-cancels-the-active-recognizer');
+
+
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,real_model_tested:false});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
 });

@@ -16,8 +16,8 @@ class StudioModuleGraphTests(unittest.TestCase):
     def test_real_studio_module_graph_is_reviewed_and_ordered(self):
         shell = (ROOT / "web/studio-shell.html").read_text()
         self.assertEqual(validate_module_graph(shell, ROOT / "web"), MODULES)
-        self.assertEqual(len(MODULES), 23)
-        self.assertEqual(len({m.filename for m in MODULES}), 23)
+        self.assertEqual(len(MODULES), 24)
+        self.assertEqual(len({m.filename for m in MODULES}), 24)
 
     def test_missing_duplicate_unreviewed_and_reordered_slots_are_rejected(self):
         shell = (ROOT / "web/studio-shell.html").read_text()

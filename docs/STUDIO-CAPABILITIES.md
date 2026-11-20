@@ -71,7 +71,24 @@ model-send approval. See [the operating contract](STUDIO-CHAT-TOOL-HANDOFF.md).
 This is user-directed data flow; **not autonomous model tool calling,
 open-ended research, tool-execution authority, or a trained model**.
 
+## Chat dictation
+
+Open **Dictate** from the conversation composer. Studio shows a disclosure before
+asking the browser to start speech recognition. The browser may send microphone
+audio to its speech service. Support depends on the browser, device permissions
+and recognition locale. Studio uses Persian (Iran) with the Persian interface and
+the selected interface locale elsewhere.
+
+Finish dictation to append recognized text to the existing draft. The transcript
+stays in the composer for editing and follows the existing send and save controls.
+Editing the draft, switching conversations, hiding the tab, or clearing private
+state cancels an active recording and discards its pending text. Studio's existing
+read-aloud action uses device voices. See [browser speech recognition support](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition).
+
 ## Remaining gaps and their actual prerequisites
+
+The [ChatGPT Plus and Pro comparison](https://chatgpt.com/pricing/) is the
+reference for the consumer-plan features below.
 
 | ChatGPT capability | NEXUS boundary after this change | Required next dependency |
 | --- | --- | --- |
@@ -79,10 +96,10 @@ open-ended research, tool-execution authority, or a trained model**.
 | Live web retrieval / deep research | Explicit Wikipedia/Crossref retrieval and local text; no autonomous multi-step research | Broader search APIs, source verification, model/tool orchestration and source-quality evaluations |
 | Image understanding / OCR | Studio imports text, not images/PDF OCR | A vision/OCR provider, image limits and actual image-quality tests |
 | Image/video generation | Not implemented | A connected generation provider, usage authorization and media QA |
-| Real-time voice conversation | Device adapters/read aloud are not real-time model audio | A real-time audio provider, microphone permissions, interruption tests and device QA |
+| Real-time voice conversation | Opt-in microphone dictation and local read-aloud | A real-time audio provider, microphone permissions, interruption tests and device QA |
 | Sandboxed Python/code execution | JavaScript Worker lab available; no Python or OS execution | An isolated Python/OS execution service with resource/network limits and reproducibility checks |
-| Scheduled unattended work and push notifications | No scheduler or push delivery | A durable job runner, delivery channel and user-specific authorization |
-| Third-party app actions/MCP | Constitutional capability types are not authenticated connectors | Per-service OAuth, scoped tokens, concrete tools, revocation and action review |
+| Scheduled unattended work and push notifications | Local task tracking with due dates. Background execution and push delivery are pending | A durable job runner, delivery channel and user-specific authorization |
+| Third-party app actions/MCP | Configured gateways can expose reviewed GitHub and Render operations. A general-purpose app catalog is pending | Per-service OAuth, scoped tokens, concrete tools, revocation and action review |
 | Shared projects and live collaboration | Single browser owner only | User accounts, tenancy, encrypted sync, access control and conflict resolution |
 | Cross-device automatic history sync | Portable encrypted file only | An authenticated sync service and account recovery design |
 | All-language reviewed localization | English/Persian bundled; other interface languages accept complete local packs | Reviewed bundled translation packs and accessibility testing for additional languages |
