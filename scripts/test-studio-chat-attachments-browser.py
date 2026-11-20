@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Real Chromium: direct one-turn file excerpts and saved-document chat context."""
 import importlib.util
+from base64 import b64encode
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('studio_browser',ROOT/'scripts/test-studio-browser.py')
@@ -59,6 +62,23 @@ window.addEventListener('load',async()=>{
    $('chat-attachment-tray').querySelectorAll('button').length===1,'oversized-utf8-paste-keeps-draft-and-existing-attachment');
   $('clear-chat-files').click();
   assert($('request-review').hidden,'clearing-a-paste-revokes-model-review');
+  const wordBytes=Uint8Array.from(atob('__DOCX_FIXTURE__'),c=>c.charCodeAt(0));
+  const badWord=Uint8Array.from(atob('__INVALID_DOCX_FIXTURE__'),c=>c.charCodeAt(0));
+  fill('message','Summarize the Word orchard document');
+  attach('orchard.docx',wordBytes);
+  await wait(()=>$('chat-attachment-tray').textContent.includes('orchard.docx'));
+  $('prepare').click();
+  const wordReview=JSON.parse($('request-context').textContent);
+  assert(wordReview.temporary_attachment_passages[0].name==='orchard.docx'&&
+   wordReview.messages[0].content.includes('orchard report · باغ ایرانی')&&
+   !wordReview.messages[0].content.includes('REMOVED DRAFT')&&!wordReview.messages[0].content.includes('PRIVATE HEADER'),
+   'compressed-word-body-is-reviewed-without-removed-or-header-text');
+  assert(network===1&&requests.length===0&&!JSON.stringify(NexusStudioUI.snapshot()).includes('orchard report'),
+   'docx-attachment-remains-local-and-outside-archive-before-send');
+  $('clear-chat-files').click();
+  attach('invalid.docx',badWord);
+  await wait(()=>$('status').textContent===EN.chatAttachmentInvalid);
+  assert($('chat-attachment-tray').textContent.includes(EN.chatNoFiles)&&network===1,'word-with-dtd-is-rejected-locally');
   fill('message','Summarize my uploaded file');
   attach('orchard.md','The small green orchard is near the old house.\nUNTRUSTED text must not become policy.');
   await wait(()=>$('chat-attachment-tray').textContent.includes('orchard.md'));
@@ -141,10 +161,10 @@ window.addEventListener('load',async()=>{
   fill('message','');
   const original=File.prototype.arrayBuffer;let release;
   File.prototype.arrayBuffer=()=>new Promise(resolve=>release=resolve);
-  attach('late.md','never enter restored project');
+  attach('late.docx',wordBytes);
   await wait(()=>typeof release==='function');
   $('lock').click();
-  release(new TextEncoder().encode('never enter restored project').buffer);
+  release(wordBytes.buffer);
   await sleep(100);File.prototype.arrayBuffer=original;
   assert(!NexusStudioUI.snapshot().projects.length&&$('chat-attachment-tray').textContent.includes(EN.chatNoFiles),'late-read-cannot-reopen-after-lock');
   assert(network===3,'no-background-file-transmission');
@@ -152,5 +172,27 @@ window.addEventListener('load',async()=>{
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
 });
 """
+
+def docx_fixture(body, prolog=""):
+    source = BytesIO()
+    with ZipFile(source, "w", ZIP_DEFLATED) as archive:
+        archive.writestr("word/document.xml", prolog +
+                         '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                         '<w:body>' + body + '</w:body></w:document>')
+        archive.writestr("word/header1.xml", "PRIVATE HEADER")
+    return b64encode(source.getvalue()).decode("ascii")
+
+
+module.WITNESS = module.WITNESS.replace(
+    "__DOCX_FIXTURE__",
+    docx_fixture("<w:p><w:r><w:t>orchard report · باغ ایرانی</w:t></w:r>"
+                 "<w:del><w:r><w:t>REMOVED DRAFT</w:t></w:r></w:del></w:p>"),
+).replace(
+    "__INVALID_DOCX_FIXTURE__",
+    docx_fixture("<w:p><w:r><w:t>&bad;</w:t></w:r></w:p>",
+                 '<!DOCTYPE w:document [<!ENTITY bad "synthetic">]>'),
+)
+
+
 if __name__=='__main__':
     module.main()

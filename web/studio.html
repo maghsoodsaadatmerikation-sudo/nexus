@@ -383,7 +383,7 @@ html.studio-focus-mode{
 <section id="model-stream-preview" class="message assistant" aria-labelledby="model-stream-title" hidden><strong id="model-stream-title" data-t="streamPreview">Answer in progress</strong><div id="model-stream-text" class="body" dir="auto"></div></section>
 <label for="message" data-t="message">Your message</label><textarea id="message" maxlength="12000" dir="auto"></textarea><label class="inline"><input id="study-mode" type="checkbox"><span data-t="studyMode">Study mode</span></label><p id="branch-notice" class="help"></p>
 <details id="chat-file-panel"><summary data-t="chatAttachments">Attach text files to this message</summary><p class="help" data-t="chatAttachmentsHelp"></p>
-<input id="chat-file" type="file" multiple accept=".txt,.md,.csv,.tsv,.json" aria-label="Attach text files for reviewed model context"><div id="chat-attachment-tray" class="row" aria-live="polite"></div>
+<input id="chat-file" type="file" multiple accept=".txt,.md,.csv,.tsv,.json,.docx" aria-label="Attach text or Word files for reviewed model context"><div id="chat-attachment-tray" class="row" aria-live="polite"></div>
 <label class="inline"><input id="attach-document" type="checkbox"><span data-t="chatAttachedDocument">Include latest saved writing document as a temporary excerpt</span></label>
 <button id="clear-chat-files" class="secondary" data-t="chatClearAttachments">Clear attachments</button></details>
 <label class="inline"><input id="use-memory" type="checkbox"><span data-t="useMemory">Include this project's reviewed memory</span></label><label class="inline"><input id="use-sources" type="checkbox"><span data-t="useSources">Include relevant project source excerpts</span></label><div class="row"><button id="guide" data-t="guide">Use local reflection guide</button><button id="prepare" data-t="prepare">Prepare model request</button><button id="regenerate" data-t="regenerate">Prepare another answer</button><button id="stop" data-t="stop">Stop</button></div>
@@ -1730,6 +1730,89 @@ function exportHtml(sourceDocument, text, {title, format}) {
 
 globalThis.NexusReplyFormat = Object.freeze({render, exportHtml});
 })();
+</script><script>/* Bounded ZIP and XML readers reused by Studio and the offline file desk. */
+(function(root){'use strict';
+const PREVIEW_LIMIT=512*1024;
+function decodeFileText(bytes){
+  if(bytes[0]===0xff&&bytes[1]===0xfe)return new TextDecoder('utf-16le',{fatal:true}).decode(bytes.subarray(2));
+  if(bytes[0]===0xfe&&bytes[1]===0xff)return new TextDecoder('utf-16be',{fatal:true}).decode(bytes.subarray(2));
+  return new TextDecoder('utf-8',{fatal:true}).decode(bytes);
+}
+function xmlDocument(bytes){
+  const text=decodeFileText(bytes);if(/<!DOCTYPE|<!ENTITY/i.test(text))throw Error('xml-dtd');
+  const doc=new DOMParser().parseFromString(text,'application/xml');
+  if(doc.getElementsByTagName('parsererror').length)throw Error('invalid-xml');return doc;
+}
+const ZIP_CRC_TABLE=Uint32Array.from({length:256},(_,value)=>{let c=value;for(let i=0;i<8;i++)c=(c>>>1)^((c&1)?0xedb88320:0);return c>>>0;});
+function crc32(bytes){
+  let crc=0xffffffff;for(const byte of bytes)crc=(crc>>>8)^ZIP_CRC_TABLE[(crc^byte)&255];
+  return (crc^0xffffffff)>>>0;
+}
+function zipReader(bytes){
+  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),size=bytes.length;
+  const u16=at=>view.getUint16(at,true),u32=at=>view.getUint32(at,true);
+  let end=-1;
+  for(let at=size-22;at>=Math.max(0,size-65557);at--)if(u32(at)===0x06054b50&&at+22+u16(at+20)===size){end=at;break;}
+  if(end<0||u16(end+4)||u16(end+6)||u16(end+8)!==u16(end+10)||u16(end+10)>500||u32(end+16)+u32(end+12)!==end)throw Error('zip-directory');
+  const directory=u32(end+16),map=new Map();let at=directory,expanded=0;
+  for(let i=0;i<u16(end+10);i++){
+    if(at+46>end||u32(at)!==0x02014b50)throw Error('zip-central');
+    const n=u16(at+28),extra=u16(at+30),comment=u16(at+32),flags=u16(at+8),method=u16(at+10),packed=u32(at+20),raw=u32(at+24),offset=u32(at+42),crc=u32(at+16);
+    if(at+46+n+extra+comment>end||flags&1||u16(at+34))throw Error('zip-entry');
+    const name=new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(at+46,at+46+n));
+    if(!name||name.includes('\\')||name.startsWith('/')||name.split('/').includes('..')||name.includes('\0')||map.has(name))throw Error('zip-path');
+    map.set(name,{name,flags,method,packed,raw,offset,crc});at+=46+n+extra+comment;
+  }
+  if(at!==end)throw Error('zip-directory-size');
+  return {names:Array.from(map.keys()),read:async name=>{
+    const entry=map.get(name);if(!entry||entry.raw>PREVIEW_LIMIT||(expanded+=entry.raw)>3*PREVIEW_LIMIT||![0,8].includes(entry.method))throw Error('zip-budget');
+    const o=entry.offset;
+    if(o+30>directory||u32(o)!==0x04034b50||(u16(o+6)&1)||u16(o+8)!==entry.method)throw Error('zip-local');
+    const n=u16(o+26),extra=u16(o+28),start=o+30+n+extra;
+    if(start+entry.packed>directory||new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(o+30,o+30+n))!==name)throw Error('zip-offset');
+    const compressed=bytes.subarray(start,start+entry.packed);let data;
+    if(entry.method===0)data=compressed;
+    else{
+      const stream=new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader(),parts=[];let length=0;
+      try{while(true){const step=await stream.read();if(step.done)break;length+=step.value.length;if(length>entry.raw||length>PREVIEW_LIMIT)throw Error('zip-inflation');parts.push(step.value);}}
+      catch(error){try{await stream.cancel()}catch{}throw error;}
+      data=new Uint8Array(length);let p=0;for(const part of parts){data.set(part,p);p+=part.length;}
+    }
+    if(data.length!==entry.raw||crc32(data)!==entry.crc)throw Error('zip-integrity');return data;
+  }};
+}
+const DOCX_MAX_BYTES=2*1024*1024;
+const WORD_NAMESPACES=[
+ 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+ 'http://purl.oclc.org/ooxml/wordprocessingml/main'
+];
+
+async function readDocx(file){
+ if(!Number.isSafeInteger(file.size)||file.size<1||file.size>DOCX_MAX_BYTES)throw Error('docx-size');
+ const bytes=new Uint8Array(await file.arrayBuffer());
+ if(bytes.length!==file.size)throw Error('docx-size');
+ const zip=zipReader(bytes);
+ const document=xmlDocument(await zip.read('word/document.xml'));
+ const main=document.documentElement,ns=main.namespaceURI;
+ const bodies=Array.from(main.children).filter(node=>node.namespaceURI===ns&&node.localName==='body');
+ if(main.localName!=='document'||!WORD_NAMESPACES.includes(ns)||bodies.length!==1)throw Error('docx-document');
+ const filter=node=>node.namespaceURI===ns&&['del','moveFrom'].includes(node.localName)
+  ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+ const walker=document.createTreeWalker(bodies[0],NodeFilter.SHOW_ELEMENT,filter);
+ const parts=[];
+ for(let node=walker.nextNode();node;node=walker.nextNode()){
+  if(node.namespaceURI!==ns)continue;
+  if(node.localName==='p'||node.localName==='br'||node.localName==='cr')parts.push('\n');
+  else if(node.localName==='tab')parts.push('\t');
+  else if(node.localName==='t'&&!node.children.length)parts.push(node.textContent);
+ }
+ const text=parts.join('').trim();
+ if(!text||new TextEncoder().encode(text).length>131072)throw Error('docx-text');
+ return text;
+}
+
+root.NexusOfficeZip=Object.freeze({readDocx,DOCX_MAX_BYTES});
+})(globalThis);
 </script><script>'use strict';
 const S=NexusStudio,$=id=>document.getElementById(id),vault=new S.Vault(),undoSlot=new S.UndoSlot(),localePacks=new NexusLocales.Registry();
 let data=S.empty(),projectId=null,threadId=null,documentId=null,dirty=false,profileDirty=false,editorDirty=false,revision=0,branchBase=undefined,pending=null,controller=null,busy=false,language='en',modelInfo=null,languageImport=0,sourceViewStamp='';
@@ -1740,8 +1823,8 @@ const FA={subtitle:'گفتگو، منابع و نوشته‌هایت — در ا
 Object.assign(FA,{languagePacks:'بسته‌های زبان رابط',languageHelp:'تا هشت بستهٔ ترجمهٔ کامل در همین برگه نگه داشته می‌شوند. فقط برچسب‌ها را شامل می‌شوند، نه پروژه‌هایت.',languageTemplate:'دانلود الگوی برچسب‌های انگلیسی',gatewayOrigin:'آدرس درگاه مدل',gatewayAccess:'توکن درگاه — کلید API ارائه‌دهنده نیست'});
 Object.assign(EN,{archiveDamaged:'The browser archive is damaged or unsupported. It was not replaced; your open session remains available for encrypted backup.'});
 Object.assign(FA,{archiveDamaged:'آرشیو مرورگر آسیب‌دیده یا ناسازگار است؛ جایگزین نشد. نشست باز برای تهیهٔ پشتیبان رمزگذاری‌شده در دسترس است.'});
-Object.assign(EN,{chatAttachments:'Attach text files to this message',chatAttachmentsHelp:'Up to four TXT, Markdown, CSV, TSV or JSON files, 128 KiB each. Only short, clearly marked excerpts enter the exact reviewed model request. This is not image/PDF understanding. The original files are not stored in chat or archive; filenames are retained with your turn. Nothing is sent until you explicitly approve the model request.',chatAttachedDocument:'Include latest saved writing document as a temporary excerpt',chatClearAttachments:'Clear attachments',chatNoFiles:'No text files attached',chatAttachmentAdded:'Local files added to next reviewed model request.',chatAttachmentInvalid:'Could not read text files; check size, format and capacity.',chatAttachmentRequiresModel:'Attached file excerpts require a configured model request; the local guide cannot read them.',chatAttachedUsed:'One-turn excerpts supplied (not verified):',chatRegenRequiresFiles:'A response grounded in temporary files cannot be regenerated from the filenames alone. Edit the user message to a new branch and attach the files again.',chatFilesNotSaved:'Files are held only in this tab and their bytes are never saved to the chat archive.'});
-Object.assign(FA,{chatAttachments:'پیوست فایل متنی برای همین پیام',chatAttachmentsHelp:'حداکثر چهار فایل TXT، Markdown، CSV، TSV یا JSON، هرکدام تا ۱۲۸ کیبی‌بایت. فقط گزیده‌های کوتاه و مشخص وارد درخواست مدل پس از بازبینی می‌شوند. تصویر و PDF تحلیل نمی‌شوند. محتوای فایل‌ها در تاریخچه یا آرشیو ذخیره نمی‌شود؛ فقط نامشان کنار پیام می‌ماند. تا تأیید صریح شما چیزی فرستاده نمی‌شود.',chatAttachedDocument:'افزودن گزیده‌ای از آخرین نسخهٔ ذخیره‌شدهٔ سند',chatClearAttachments:'پاک‌کردن پیوست‌ها',chatNoFiles:'فایل متنی پیوست نشده است',chatAttachmentAdded:'فایل‌های محلی به درخواست بعدی اضافه شدند؛ قبل از ارسال بازبینی می‌شوند.',chatAttachmentInvalid:'خواندن فایل‌های متنی انجام نشد؛ اندازه، قالب یا ظرفیت را بررسی کن.',chatAttachmentRequiresModel:'گزیدهٔ فایل‌ها فقط در درخواست مدل پیکربندی‌شده استفاده می‌شود؛ راهنمای محلی فایل را نمی‌خواند.',chatAttachedUsed:'گزیده‌های موقت ارائه‌شده (تأییدنشده):',chatRegenRequiresFiles:'پاسخ مبتنی بر فایل موقت را نمی‌توان فقط از نام فایل بازتولید کرد. پیام را در شاخهٔ تازه ویرایش کن و فایل‌ها را دوباره اضافه کن.',chatFilesNotSaved:'محتوای فایل‌ها فقط در همین برگه است و در آرشیو گفتگو ذخیره نمی‌شود.'});
+Object.assign(EN,{chatAttachments:'Attach files to this message',chatAttachmentsHelp:'Up to four files. Text formats are limited to 128 KiB per file. Word (.docx) files are limited to 2 MiB and only their main document text is extracted. Only short, clearly marked excerpts enter the exact reviewed model request. This is not image/PDF understanding. The original files are not stored in chat or archive; filenames are retained with your turn. Nothing is sent until you explicitly approve the model request.',chatAttachedDocument:'Include latest saved writing document as a temporary excerpt',chatClearAttachments:'Clear attachments',chatNoFiles:'No text files attached',chatAttachmentAdded:'Local files added to next reviewed model request.',chatAttachmentInvalid:'Could not read text files; check size, format and capacity.',chatAttachmentRequiresModel:'Attached file excerpts require a configured model request; the local guide cannot read them.',chatAttachedUsed:'One-turn excerpts supplied (not verified):',chatRegenRequiresFiles:'A response grounded in temporary files cannot be regenerated from the filenames alone. Edit the user message to a new branch and attach the files again.',chatFilesNotSaved:'Files are held only in this tab and their bytes are never saved to the chat archive.'});
+Object.assign(FA,{chatAttachments:'پیوست فایل برای همین پیام',chatAttachmentsHelp:'حداکثر چهار فایل. سقف هر فایل متنی ۱۲۸ کیبی‌بایت است. فایل Word با پسوند docx تا ۲ مِبی‌بایت پذیرفته می‌شود و فقط متن اصلی آن استخراج می‌شود. فقط گزیده‌های کوتاه و مشخص وارد درخواست مدل پس از بازبینی می‌شوند. تصویر و PDF تحلیل نمی‌شوند. محتوای فایل‌ها در تاریخچه یا آرشیو ذخیره نمی‌شود؛ فقط نامشان کنار پیام می‌ماند. تا تأیید صریح شما چیزی فرستاده نمی‌شود.',chatAttachedDocument:'افزودن گزیده‌ای از آخرین نسخهٔ ذخیره‌شدهٔ سند',chatClearAttachments:'پاک‌کردن پیوست‌ها',chatNoFiles:'فایل متنی پیوست نشده است',chatAttachmentAdded:'فایل‌های محلی به درخواست بعدی اضافه شدند؛ قبل از ارسال بازبینی می‌شوند.',chatAttachmentInvalid:'خواندن فایل‌های متنی انجام نشد؛ اندازه، قالب یا ظرفیت را بررسی کن.',chatAttachmentRequiresModel:'گزیدهٔ فایل‌ها فقط در درخواست مدل پیکربندی‌شده استفاده می‌شود؛ راهنمای محلی فایل را نمی‌خواند.',chatAttachedUsed:'گزیده‌های موقت ارائه‌شده (تأییدنشده):',chatRegenRequiresFiles:'پاسخ مبتنی بر فایل موقت را نمی‌توان فقط از نام فایل بازتولید کرد. پیام را در شاخهٔ تازه ویرایش کن و فایل‌ها را دوباره اضافه کن.',chatFilesNotSaved:'محتوای فایل‌ها فقط در همین برگه است و در آرشیو گفتگو ذخیره نمی‌شود.'});
 Object.assign(EN,{
  storageCenter:'Storage & unsaved work',storageHelp:'Only applied conversations, projects and document versions enter an explicitly saved encrypted browser archive. Draft text, temporary tool work and Music/Orchestra output remain in this tab. Export audio and keep an encrypted backup separately.',
  storageArchive:'Projects and applied conversations',storageChat:'Unsent chat and attachments',storageWriting:'Writing and preferences',storageMedia:'Music and original vocals',
@@ -2160,18 +2243,24 @@ $('branch').onchange=()=>{
 };
 $('guide').onclick=()=>{if(chatAttachments.length||$('attach-document').checked)return status('chatAttachmentRequiresModel');if($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())return status('needApply');try{const c=candidate();installThread(S.append(c,'assistant',S.guide(S.path(c).at(-1).text,language==='fa',{skyTone:$('sky-tone').checked,study:$('study-mode').checked})+($('use-astrology').checked?'\n\n'+NexusAstrology.reflection(p().astrology,language==='fa',{historical:$('astro-historical').checked}):''),'guide'))}catch{status('failed')}};
 $('prepare').onclick=()=>prepare();$('regenerate').onclick=()=>{if(!$('regenerate').disabled)prepare(true)};$('consent').onchange=controls;$('stop').onclick=()=>{stop({refresh:false});render()};
+const isDocx=file=>/\.docx$/i.test(file.name);
 $('chat-file').onchange=async event=>{
  const files=Array.from(event.target.files);event.target.value='';
  if(!files.length||busy||!p()||!chat())return;
  if(files.length>4||chatAttachments.length+files.length+($('attach-document').checked?1:0)>S.MAX_CHAT_ATTACHMENTS||
-    files.some(file=>file.size>131072||file.size<1)){status('chatAttachmentInvalid');return}
+    files.some(file=>file.name.length>160||file.size>(isDocx(file)?NexusOfficeZip.DOCX_MAX_BYTES:131072)||file.size<1)){status('chatAttachmentInvalid');return}
  const epoch=++attachmentEpoch,pid=projectId,tid=threadId;
+ const current=()=>epoch===attachmentEpoch&&pid===projectId&&tid===threadId&&!busy;
  try{
-  const incoming=await S.readSources(files);
-  if(epoch!==attachmentEpoch||pid!==projectId||tid!==threadId||busy)return;
+  const incoming=[];
+  for(const file of files){
+   const entry=isDocx(file)?{id:S.uid(),name:file.name,text:await NexusOfficeZip.readDocx(file)}:(await S.readSources([file]))[0];
+   if(!current())return;
+   incoming.push(entry);
+  }
   if(chatAttachments.length+incoming.length+Number($('attach-document').checked)>S.MAX_CHAT_ATTACHMENTS){status('chatAttachmentInvalid');return}
   chatAttachments.push(...incoming);stop();renderChatAttachments();status('chatAttachmentAdded');
- }catch{if(epoch===attachmentEpoch)status('chatAttachmentInvalid')}
+ }catch{if(current())status('chatAttachmentInvalid')}
 };
 $('message').addEventListener('paste',event=>{
  if(event.defaultPrevented||busy||chat()?.archived)return;
