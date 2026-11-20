@@ -3,8 +3,9 @@
 from pathlib import Path
 import stat
 
-# Bounded standalone HTML budget, including the calendar reminder panel.
-MAX_FILE = 530_000
+# Bounded standalone HTML budget, including reviewed single-image chat UI.
+# Public image bytes are NOT bundled; 560 KB only accommodates checked source code.
+MAX_FILE = 560_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000

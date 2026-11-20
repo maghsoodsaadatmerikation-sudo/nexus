@@ -59,3 +59,38 @@ authorization, image bounds, request forwarding, provider response rejection,
 redirect refusal, and bounded recovery. The normal cloud-adapter CI must pass.
 Actual provider integration, browser file preview/consent flow, image lifetime
 management, costs, mobile QA, and public deployment remain separate work.
+
+## Studio chat interface (follow-up)
+
+The chat panel now contains an optional **Image** control and a disclosure-first
+image review. A user selects one PNG/JPEG image and enters a bounded question.
+Studio reads and previews it locally, verifies decoded dimensions and computes a
+SHA-256 digest for the review. Merely selecting or previewing a file does not
+send an image to a provider.
+
+**Review image and provider** contacts only GET /studio-api/vision-status, which
+returns a provider model/fingerprint or an honest unavailable state. The review
+shows the same preview image, recipient, prompt, size, dimensions, and digest.
+A separate unchecked checkbox explicitly approves the subsequent POST. Changing
+the question, gateway or file invalidates the approval. A failed request does
+not automatically retry; the provider may nevertheless have received the image.
+
+The image binary stays transient in the browser. On a successful response,
+NEXUS appends only the user question, a generic image-not-saved marker, and the
+model's text response into the selected chat branch; **the binary is erased from
+the in-page selection before writing the text state**. No automatic encrypted
+save is performed. The image is also cleared on project switch, lock or private
+erase, and any pending review/request is cancelled. Browser availability of the
+image panel does not imply a configured or paid provider. The separate small
+on-device text model is not a vision provider.
+
+This remains a bounded single-image analysis flow, not continuous multimodal
+conversation, image memory, validated OCR, video generation or clinical image
+diagnosis. The user's separate text composer is not silently replaced by image
+analysis. A message typed in that composer must be resolved separately before
+the image answer is appended.
+
+The new real Chromium acceptance script checks local preview/no upload on
+selection, explicit model-provider/sha review, image absence from stored chat,
+and invalidation on edits/lock. The cloud adapter's synthetic tests check
+the network contract separately.
