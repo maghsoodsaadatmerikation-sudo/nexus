@@ -9,8 +9,15 @@ function researchRequest(engine,query,language='en'){
   const u=new URL('https://'+language+'.wikipedia.org/w/api.php');u.search=new URLSearchParams({action:'query',generator:'search',gsrsearch:query.trim(),gsrlimit:'5',prop:'extracts',explaintext:'1',exintro:'1',exchars:'1200',exlimit:'max',format:'json',origin:'*'});return u.href;
  }
  if(engine==='crossref'){const u=new URL('https://api.crossref.org/works');u.search=new URLSearchParams({query:query.trim(),rows:'5',select:'DOI,title,author,published,type'});return u.href}
+ if(engine==='europepmc'){
+  const u=new URL('https://www.ebi.ac.uk/europepmc/webservices/rest/search');
+  u.search=new URLSearchParams({query:query.trim(),pageSize:'5',resultType:'core',format:'json'});
+  return u.href;
+ }
  fail('provider');
 }
+const doiValue=value=>{const d=bounded(value,200);return /^10\.\d{4,9}\/\S+$/i.test(d)?d:''};
+const doiUrl=doi=>'https://doi.org/'+encodeURI(doi).replace(/#/g,'%23').replace(/\?/g,'%3F');
 function results(engine,body,query,language='en',at=new Date().toISOString()){
  const out=[];if(engine==='wikipedia'){
   researchRequest(engine,query,language);
@@ -25,11 +32,24 @@ function results(engine,body,query,language='en',at=new Date().toISOString()){
  }else if(engine==='crossref'){
   if(!Array.isArray(body?.message?.items))fail('provider-response');
   for(const item of body.message.items.slice(0,5)){
-   const doi=bounded(item.DOI,200);if(!/^10\.\d{4,9}\/\S+$/i.test(doi))continue;
+   const doi=doiValue(item?.DOI);if(!doi)continue;
    const title=bounded(item.title?.[0],300);if(!title)continue;
    const authors=Array.isArray(item.author)?item.author.slice(0,8).map(a=>bounded(a.given,60)+' '+bounded(a.family,80)).join('; '):'';
    const year=item.published?.['date-parts']?.[0]?.[0];
-   out.push({engine,title,excerpt:[title,authors,Number.isInteger(year)?String(year):'',bounded(item.type,80),'DOI: '+doi].filter(Boolean).join('\n'),url:'https://doi.org/'+encodeURI(doi).replace(/#/g,'%23').replace(/\?/g,'%3F'),kind:'bibliographic-metadata-only',query,at,license:'Crossref metadata; full text and findings were not retrieved'});
+   out.push({engine,title,excerpt:[title,authors,Number.isInteger(year)?String(year):'',bounded(item.type,80),'DOI: '+doi].filter(Boolean).join('\n'),url:doiUrl(doi),kind:'bibliographic-metadata-only',query,at,license:'Crossref metadata; full text and findings were not retrieved'});
+  }
+ }else if(engine==='europepmc'){
+  if(!Array.isArray(body?.resultList?.result))fail('provider-response');
+  for(const item of body.resultList.result.slice(0,5)){
+   const title=bounded(item?.title,300),doi=doiValue(item?.doi);
+   const pmid=bounded(item?.pmid,20),pmcid=bounded(item?.pmcid,22);
+   const url=doi?doiUrl(doi):/^\d{1,12}$/.test(pmid)?'https://europepmc.org/article/MED/'+pmid:
+    /^PMC\d{1,12}$/.test(pmcid)?'https://europepmc.org/article/PMC/'+pmcid:'';
+   if(!title.trim()||!url)continue;
+   const abstract=bounded(item.abstractText,5000).replace(/<[^<>]{1,200}>/g,' ').replace(/\s+/g,' ').trim().slice(0,1400);
+   const excerpt=[title,bounded(item.authorString,240),bounded(item.pubYear,8),abstract].filter(Boolean).join('\n');
+   out.push({engine,title,excerpt,url,kind:abstract?'abstract-excerpt':'bibliographic-metadata-only',query,at,
+    license:'Europe PMC record. Follow the article for terms and full text.'});
   }
  }else fail('provider');return out;
 }
@@ -39,8 +59,9 @@ async function fetchResearch(engine,query,language,signal,fetcher=fetch){
  const reader=response.body.getReader();let size=0;const chunks=[];
  try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>160000)fail('provider-size');chunks.push(value)}const bytes=new Uint8Array(size);let pos=0;for(const c of chunks){bytes.set(c,pos);pos+=c.length}return results(engine,JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)),query,language)}finally{await reader.cancel().catch(()=>{})}
 }
+const researchEngines=provider=>provider==='all'?['wikipedia','crossref','europepmc']:provider==='both'?['wikipedia','crossref']:[provider];
 async function researchBatch(provider,query,language,signal,fetcher=fetch){
- const engines=provider==='both'?['wikipedia','crossref']:[provider];
+ const engines=researchEngines(provider);
  const settled=await Promise.allSettled(engines.map(engine=>fetchResearch(engine,query,language,signal,fetcher)));
  const cards=[],failed=[];
  for(let i=0;i<engines.length;i++){
@@ -58,7 +79,7 @@ function researchQueries(input){
 }
 async function researchPlan(provider,input,language,signal,onProgress=()=>{},fetcher=fetch){
  const queries=researchQueries(input);
- const engines=provider==='both'?['wikipedia','crossref']:[provider];
+ const engines=researchEngines(provider);
  for(const engine of engines)researchRequest(engine,queries[0],language);
  const sources=new Map(),failed=new Set();
  let successful=0,completed=0;
@@ -66,10 +87,14 @@ async function researchPlan(provider,input,language,signal,onProgress=()=>{},fet
   if(signal?.aborted)break;
   const batch=await researchBatch(provider,query,language,signal,fetcher);
   for(const card of batch.cards){
-   const key=card.engine==='crossref'?card.url.toLowerCase():card.url;
+   const key=card.url.startsWith('https://doi.org/')?card.url.toLowerCase():card.url;
    const previous=sources.get(key);
    if(!previous)sources.set(key,{...card,queries:[query]});
-   else if(!previous.queries.includes(query))previous.queries.push(query);
+   else{
+    if(!previous.queries.includes(query))previous.queries.push(query);
+    if(previous.kind==='bibliographic-metadata-only'&&card.kind==='abstract-excerpt')
+     sources.set(key,{...card,queries:previous.queries});
+   }
   }
   for(const engine of batch.failed)failed.add(engine);
   successful+=engines.length-batch.failed.length;

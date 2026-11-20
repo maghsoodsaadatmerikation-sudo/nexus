@@ -54,7 +54,7 @@ Object.assign(FA,{streamPreview:'پاسخ در حال تولید',streamFailed:'
 Object.assign(EN,{
  chatCopy:'Copy answer',chatCopyDone:'Answer copied to the clipboard.',
  chatCopyFailed:'Clipboard access is unavailable. Select the answer text to copy it.',
- chatExport:'Download answer',chatExportTitle:'NEXUS answer',
+ chatExportThread:'Download active branch as HTML',chatExport:'Download answer',chatExportTitle:'NEXUS answer',
  chatExportConfirm:'Download this answer as an unencrypted HTML file?',chatExportDone:'HTML download requested.',
  chatPasteName:'Pasted text',chatPasteAdded:'Long paste attached locally. Add a question and review the excerpts before sending.',
  chatPasteLimit:'The draft was kept. Paste less text or remove an attachment to make room.'
@@ -62,7 +62,7 @@ Object.assign(EN,{
 Object.assign(FA,{
  chatCopy:'کپی پاسخ',chatCopyDone:'پاسخ در کلیپ‌بورد کپی شد.',
  chatCopyFailed:'دسترسی به کلیپ‌بورد ممکن نیست. متن پاسخ را انتخاب و کپی کن.',
- chatExport:'دریافت فایل پاسخ',chatExportTitle:'پاسخ نکسوس',
+ chatExportThread:'دریافت شاخهٔ فعال به‌صورت HTML',chatExport:'دریافت فایل پاسخ',chatExportTitle:'پاسخ نکسوس',
  chatExportConfirm:'همین پاسخ را به‌صورت فایل HTML بدون رمزگذاری دانلود می‌کنی؟',chatExportDone:'درخواست دانلود HTML ثبت شد.',
  chatPasteName:'متن چسبانده‌شده',chatPasteAdded:'متن بلند به‌صورت محلی پیوست شد. پرسشت را بنویس و گزیده‌ها را پیش از ارسال بازبینی کن.',
  chatPasteLimit:'پیش‌نویس حفظ شد. متن کوتاه‌تری بچسبان یا یکی از پیوست‌ها را بردار.'
@@ -90,12 +90,14 @@ Object.assign(FA,{
 });
 const CHAT_CONTEXT_EN={
  temporaryAttachments:'Remove staged attachments before starting a temporary chat.',
+ autoSpeak:'Read completed replies aloud with a local voice',
  useRelatedChats:'Review related excerpts from other chats in this project',
  isolatedChat:'Temporary chat',isolatedChatNote:'This chat stays in this tab. Project context is off. Online model requests still require approval.'
 };
 Object.assign(EN,CHAT_CONTEXT_EN);
 Object.assign(FA,{
  temporaryAttachments:'برای شروع گفتگوی موقت، پیوست‌های آماده‌شده را بردار.',
+ autoSpeak:'خواندن خودکار پاسخ‌های کامل با صدای محلی',
  useRelatedChats:'بازبینی بخش‌های مرتبط از گفتگوهای دیگر همین پروژه',
  isolatedChat:'گفتگوی موقت',isolatedChatNote:'این گفتگو فقط در همین برگه می‌ماند. زمینهٔ پروژه خاموش است. ارسال به مدل آنلاین همچنان به تأیید تو نیاز دارد.'
 });
@@ -196,6 +198,7 @@ function toolLifecycle(phase){
  }
  if(phase==='private'){
   $('study-mode').checked=false;
+  $('auto-speak').checked=false;
   $('training-opt-in').checked=false;clearTrainingReview();
   document.dispatchEvent(new Event('nexus-studio-private-clear'));
  }
@@ -230,6 +233,7 @@ function controls(){
  $('new-temporary-chat').disabled=busy;
  for(const id of ['use-memory','use-sources','astro-historical'])$(id).disabled=busy||Boolean(thread?.isolated);
  $('use-related-chats').disabled=busy||!thread||thread.temporary||thread.isolated;
+ $('export-thread-html').disabled=busy||!thread?.head;
  const regenerate=$('regenerate');
  regenerate.hidden=thread?.nodes.find(node=>node.id===thread.head)?.role!=='assistant';
  regenerate.disabled=regenerate.hidden||busy||thread.archived||branchBase!==undefined||hasChatDraft();
@@ -328,7 +332,7 @@ function resetConversation(id){
  // Only first-chat setup may preserve a selected image when there is no prior thread.
  if(threadId!==null&&threadId!==id)window.NexusStudioVision?.clear?.();
  threadId=id;clearChatDraft();
- for(const key of ['use-memory','use-sources','use-related-chats','use-astrology','astro-historical','study-mode'])$(key).checked=false;
+ for(const key of ['use-memory','use-sources','use-related-chats','use-astrology','astro-historical','study-mode','auto-speak'])$(key).checked=false;
 }
 function resetProject(id){
  toolLifecycle('project');
@@ -413,8 +417,15 @@ function startConversation(fresh=false,{isolated=false}={}){
 function noForms(){if(forms()||hasChatDraft()){status('needApply');return false}return true}
 function candidate(regenerate=false,materials=[]){const c=chat();if(!c||!p()||c.archived)throw Error('select-chat');if(regenerate){const path=S.path(c),last=path.at(-1);if(last?.role!=='assistant')throw Error('no-answer');if(path.at(-2)?.attached_files?.length)throw Error('reattach-required');return {...S.copy(c),head:last.parent}}return S.append(c,'user',$('message').value.trim(),'human',branchBase===undefined?c.head:branchBase,materials.map(x=>x.name))}
 function installThread(next){
- return mutate(v=>{const q=projectIn(v);q.threads[q.threads.findIndex(x=>x.id===next.id)]=next},{afterCommit:clearChatDraft});
+ const installed=mutate(v=>{const q=projectIn(v);q.threads[q.threads.findIndex(x=>x.id===next.id)]=next},{afterCommit:clearChatDraft});
+ if(installed&&$('auto-speak').checked&&!document.hidden){
+  const reply=$('messages').lastElementChild;
+  const trigger=reply?.querySelector('[data-chat-speak]');
+  if(trigger)window.NexusSpeechPlayback?.start(reply.querySelector('.body').innerText,trigger,{passive:true});
+ }
+ return installed;
 }
+$('auto-speak').onchange=()=>{if(!$('auto-speak').checked)window.NexusSpeechPlayback?.stop()};
 function selectedModelEngine(){return document.getElementById('model-engine')?.value==='device'?'device':'gateway'}
 function prepare(regenerate=false){if(!chat()?.isolated&&(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,relatedChats:$('use-related-chats').checked,historyDays:data.history_days,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked,onDevice:destination==='device'});if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');const stream=destination==='gateway'&&modelInfo.streaming===true;
  pending={destination,stream,thread:c,body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);$('request-review').hidden=false;controls()}catch(error){status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
@@ -601,6 +612,16 @@ $('versions').onchange=()=>{const a=doc()?.versions.find(x=>x.id===$('versions')
 $('load-version').onclick=()=>{if(forms()&&!confirm(t('discard')))return;const v=doc()?.versions.find(x=>x.id===$('versions').value);if(v){$('editor').value=v.text;editorDirty=true;stop()}};
 $('export-document').onclick=()=>{if(doc()&&confirm(t('plain')))download($('editor').value,'nexus-document.md','text/markdown')};
 $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+chat().title+'\n\n'+S.path(chat()).map(n=>'## '+t(n.origin==='human'?'human':n.origin==='model'?'model':'local')+'\n\n'+n.text+(n.attached_files?.length?'\n\n'+t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' — '+t('chatFilesNotSaved'):'')).join('\n\n'),'nexus-conversation.md','text/markdown')};
+$('export-thread-html').onclick=()=>{
+ const thread=chat();
+ if(busy||!thread?.head||!confirm(t('plain')))return;
+ const sections=S.path(thread).map(n=>({
+  label:t(n.origin==='human'?'human':n.origin==='model'?'model':'local'),
+  text:n.text,format:n.origin==='model'
+ }));
+ download(NexusReplyFormat.exportConversation(document,sections,thread.title),'nexus-conversation.html','text/html;charset=utf-8');
+ status('chatExportDone');
+};
 $('create-vault').onclick=()=>{const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation((rev,abort)=>vault.create(pass,{signal:abort.signal}))};
 $('unlock').onclick=()=>{if(storageSnapshot().lossRisk&&!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const next=await vault.unlock(pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=next;dirty=false;selectProject(data.projects[0]?.id||null);render()})};
 $('history-days').onchange=()=>{
@@ -655,7 +676,7 @@ $('language-file').onchange=async event=>{
  if(!f||busy)return;if(f.size>NexusLocales.MAX_BYTES)return status('failed');
  const current=()=>task===languageImport&&rev===revision&&!busy;
  try{
-  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:[...Object.keys(PRIVACY_EN),...Object.keys(CHAT_CONTEXT_EN),'storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
+  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:[...Object.keys(PRIVACY_EN),...Object.keys(CHAT_CONTEXT_EN),'storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchAll','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
   if(!$('language').querySelector('option[value="'+pack.code+'"]'))$('language').append(option(pack.code,pack.code));
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}

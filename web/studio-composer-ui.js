@@ -108,6 +108,7 @@ function showDirectory(){
  }
  directoryItems.firstElementChild.focus();
 }
+const explicitResearch=/^(?:search\s+(?:the\s+web\s+)?for|جست[\s\u200c]*و[\s\u200c]*جو\s+کن)\s+(.+)$/is;
 function intent(value){
  const message=value.trim();
  const slash=/^\/([a-z-]+)(?:\s|$)/i.exec(message);
@@ -116,7 +117,7 @@ function intent(value){
   const route=routes.find(x=>x[0]===command||(x[5]||'').split(' ').includes(command));
   return route?{route,query:message.slice(slash[0].length).trim()}:null;
  }
- const search=/^(?:search\s+(?:the\s+web\s+)?for|جست[\s\u200c]*و[\s\u200c]*جو\s+کن)\s+(.+)$/is.exec(message);
+ const search=explicitResearch.exec(message);
  if(search)return {route:routes.find(row=>row[0]==='research'),query:search[1]};
  const reminder=/^(?:remind me (?:to )?|set (?:a )?reminder(?: for)?\s+|یادآوری کن\s+)(.+)$/i.exec(message);
  if(reminder)return {route:routes.find(row=>row[0]==='remind'),query:reminder[1]};
@@ -160,7 +161,7 @@ function clearOffer(){
  offeredDraft=null;offer.hidden=true;offer.replaceChildren();
 }
 function suggestion(message){
- if(!window.NexusStudioFocus?.isFocused()||(select.value==='model'&&!message.trimStart().startsWith('/')))return null;
+ if(!window.NexusStudioFocus?.isFocused()||(select.value==='model'&&!message.trimStart().startsWith('/')&&!explicitResearch.test(message.trim())))return null;
  return intent(message);
 }
 function offerTool(message,result){

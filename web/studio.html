@@ -284,6 +284,7 @@ html.studio-focus-mode{
 .studio-focus-mode:not(.nexus-chat-options-open) #conversation-card label:has(#use-memory),
 .studio-focus-mode:not(.nexus-chat-options-open) #conversation-card label:has(#use-sources),
 .studio-focus-mode:not(.nexus-chat-options-open) #conversation-card label:has(#use-related-chats),
+.studio-focus-mode:not(.nexus-chat-options-open) #conversation-card label:has(#auto-speak),
 .studio-focus-mode:not(.nexus-chat-options-open) #studio-model-settings{display:none}
 .studio-focus-mode #studio-install-card{max-width:920px;margin:8px auto}
 #studio-install-card>summary{padding:9px 0;cursor:pointer}
@@ -389,14 +390,14 @@ html.studio-focus-mode{
 <button id="training-download" type="button" data-t="trainingDownload" hidden></button>
 </details><input id="restore-file" type="file" accept="application/json" hidden></section>
 </aside><div>
-<section class="card" id="conversation-card"><div class="row"><h2 data-t="conversation">Conversation</h2><button id="new-temporary-chat" type="button" class="secondary" data-t="isolatedChat"></button><button id="rename-thread" class="secondary" data-t="rename">Rename</button><button id="archive-thread" class="secondary" data-t="archiveChat">Archive / reopen</button><button id="delete-thread" class="secondary" data-t="deleteChat">Delete chat</button><button id="export-thread" class="secondary" data-t="exportChat">Export transcript</button></div><p id="isolated-chat-note" class="help" data-t="isolatedChatNote" hidden></p><p class="help" data-t="temporary">Until you explicitly save, this session exists only in this tab. Closing it can lose your work.</p><select id="branch" aria-label="Conversation branch"></select><div id="messages" role="log" aria-live="polite"></div>
+<section class="card" id="conversation-card"><div class="row"><h2 data-t="conversation">Conversation</h2><button id="new-temporary-chat" type="button" class="secondary" data-t="isolatedChat"></button><button id="rename-thread" class="secondary" data-t="rename">Rename</button><button id="archive-thread" class="secondary" data-t="archiveChat">Archive / reopen</button><button id="delete-thread" class="secondary" data-t="deleteChat">Delete chat</button><button id="export-thread" class="secondary" data-t="exportChat">Export transcript</button><button id="export-thread-html" type="button" class="secondary" data-t="chatExportThread"></button></div><p id="isolated-chat-note" class="help" data-t="isolatedChatNote" hidden></p><p class="help" data-t="temporary">Until you explicitly save, this session exists only in this tab. Closing it can lose your work.</p><select id="branch" aria-label="Conversation branch"></select><div id="messages" role="log" aria-live="polite"></div>
 <section id="model-stream-preview" class="message assistant" aria-labelledby="model-stream-title" hidden><strong id="model-stream-title" data-t="streamPreview">Answer in progress</strong><div id="model-stream-text" class="body" dir="auto"></div></section>
 <label for="message" data-t="message">Your message</label><textarea id="message" maxlength="12000" dir="auto"></textarea><label class="inline"><input id="study-mode" type="checkbox"><span data-t="studyMode">Study mode</span></label><p id="branch-notice" class="help"></p>
 <details id="chat-file-panel"><summary data-t="chatAttachments">Attach text files to this message</summary><p class="help" data-t="chatAttachmentsHelp"></p>
 <input id="chat-file" type="file" multiple accept=".txt,.md,.csv,.tsv,.json,.docx,.pptx" aria-label="Attach files for reviewed model context"><div id="chat-attachment-tray" class="row" aria-live="polite"></div>
 <label class="inline"><input id="attach-document" type="checkbox"><span data-t="chatAttachedDocument">Include latest saved writing document as a temporary excerpt</span></label>
 <button id="clear-chat-files" class="secondary" data-t="chatClearAttachments">Clear attachments</button></details>
-<label class="inline"><input id="use-memory" type="checkbox"><span data-t="useMemory">Include this project's reviewed memory</span></label><label class="inline"><input id="use-related-chats" type="checkbox"><span data-t="useRelatedChats"></span></label><label class="inline"><input id="use-sources" type="checkbox"><span data-t="useSources">Include relevant project source excerpts</span></label><div class="row"><button id="guide" data-t="guide">Use local reflection guide</button><button id="prepare" data-t="prepare">Prepare model request</button><button id="regenerate" data-t="regenerate">Prepare another answer</button><button id="stop" data-t="stop">Stop</button></div>
+<label class="inline"><input id="use-memory" type="checkbox"><span data-t="useMemory">Include this project's reviewed memory</span></label><label class="inline"><input id="auto-speak" type="checkbox"><span data-t="autoSpeak"></span></label><label class="inline"><input id="use-related-chats" type="checkbox"><span data-t="useRelatedChats"></span></label><label class="inline"><input id="use-sources" type="checkbox"><span data-t="useSources">Include relevant project source excerpts</span></label><div class="row"><button id="guide" data-t="guide">Use local reflection guide</button><button id="prepare" data-t="prepare">Prepare model request</button><button id="regenerate" data-t="regenerate">Prepare another answer</button><button id="stop" data-t="stop">Stop</button></div>
 <details id="studio-model-settings"><summary data-t="modelSettings">Optional generative model connection</summary><p class="help" data-t="modelHelp">An operator must configure a model gateway. A ChatGPT subscription is not an API credential. Provider keys stay on the gateway; only its access token is entered here, for this tab.</p><label for="gateway" data-t="gatewayOrigin">Model gateway origin</label><input id="gateway" placeholder="https://your-gateway.example" aria-label="Model gateway URL"><label for="gateway-token" data-t="gatewayAccess">Gateway access token (not the provider API key)</label><input id="gateway-token" type="password" autocomplete="off" aria-label="Studio gateway access token"><button id="check-model" class="secondary" data-t="checkModel">Check configured model</button><pre id="model-status"></pre><label for="model-mode" data-t="modelMode"></label><select id="model-mode"><option value="standard" data-t="modeDefault"></option><option value="thinking" data-t="modeThinking"></option><option value="non-thinking" data-t="modeFast"></option></select><label for="model-budget" data-t="modelBudget"></label><input id="model-budget" type="number" min="1" max="8192" value="2048"></details>
 <div id="request-review" hidden><h3 data-t="requestReview">Exact context to send</h3><pre id="request-context"></pre><label class="inline"><input id="consent" type="checkbox"><span data-t="consent">Send this exact context to the configured provider once.</span></label><button id="send-model" data-t="send">Send approved request</button></div></section>
 <section class="card" id="profile-card"><h2 data-t="profile">Project assistant & memory</h2><label for="instructions" data-t="instructions">Custom instructions (preferences, not authority)</label><textarea id="instructions" maxlength="2000" dir="auto"></textarea><label for="memories" data-t="memories">Reviewed memory — one item per line, up to 30</label><textarea id="memories" maxlength="15030" dir="auto"></textarea><button id="apply-profile" data-t="applyProfile">Apply project preferences</button><p class="help" data-t="memoryHelp">Nothing is learned automatically. Memory is isolated to this project and sent only when selected. Removing memory does not remove earlier transcript text.</p></section>
@@ -413,7 +414,7 @@ html.studio-focus-mode{
 <p id="astro-status" role="status"></p><button id="astro-save" data-t="astroSave"></button><button id="astro-delete" class="secondary" data-t="astroDelete"></button>
 <details><summary data-t="astroImportHelp"></summary><button id="astro-import-natal" class="secondary" data-t="astroImportNatal"></button><button id="astro-import-transit" class="secondary" data-t="astroImportTransit"></button><input id="astro-import-file" type="file" accept="application/json" hidden></details>
 <pre id="astro-summary"></pre><label class="inline"><input id="use-astrology" type="checkbox"><span data-t="astroUse"></span></label><label class="inline"><input id="astro-historical" type="checkbox"><span data-t="astroHistorical"></span></label><p class="help" data-t="astroPrivacy"></p></section>
-<section class="card" id="research-card"><h2 data-t="research">Live research desk</h2><p class="help" data-t="researchHelp"></p><label for="research-query" data-t="researchQueries">Search queries</label><textarea id="research-query" maxlength="1003" rows="3" dir="auto"></textarea><div class="row"><div><label for="research-provider" data-t="researchProvider"></label><select id="research-provider"><option value="wikipedia">Wikipedia</option><option value="crossref">Crossref</option><option value="both" data-t="researchBoth">Wikipedia and Crossref</option></select></div><div><label for="research-language" data-t="researchLanguage"></label><select id="research-language"><option value="en" selected>English</option><option value="fa">فارسی</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="ar">العربية</option></select></div></div><label class="inline"><input id="research-consent" type="checkbox"><span data-t="researchPlanConsent"></span></label><button id="research-run" data-t="researchSearch"></button><button id="research-stop" data-t="researchStop" disabled></button><p id="research-status" role="status"></p><p class="help" data-t="researchNote"></p><div id="research-cards"></div><section id="research-brief" hidden><h3 data-t="researchBrief">Research brief</h3><pre id="research-brief-text"></pre><button id="research-brief-chat" class="secondary" data-t="researchBriefChat"></button><button id="research-brief-export" class="secondary" data-t="researchBriefExport"></button></section></section>
+<section class="card" id="research-card"><h2 data-t="research">Live research desk</h2><p class="help" data-t="researchHelp"></p><label for="research-query" data-t="researchQueries">Search queries</label><textarea id="research-query" maxlength="1003" rows="3" dir="auto"></textarea><div class="row"><div><label for="research-provider" data-t="researchProvider"></label><select id="research-provider"><option value="wikipedia">Wikipedia</option><option value="crossref">Crossref</option><option value="both" data-t="researchBoth">Wikipedia and Crossref</option><option value="europepmc">Europe PMC</option><option value="all" data-t="researchAll"></option></select></div><div><label for="research-language" data-t="researchLanguage"></label><select id="research-language"><option value="en" selected>English</option><option value="fa">فارسی</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="ar">العربية</option></select></div></div><label class="inline"><input id="research-consent" type="checkbox"><span data-t="researchPlanConsent"></span></label><button id="research-run" data-t="researchSearch"></button><button id="research-stop" data-t="researchStop" disabled></button><p id="research-status" role="status"></p><p class="help" data-t="researchNote"></p><div id="research-cards"></div><section id="research-brief" hidden><h3 data-t="researchBrief">Research brief</h3><pre id="research-brief-text"></pre><button id="research-brief-chat" class="secondary" data-t="researchBriefChat"></button><button id="research-brief-export" class="secondary" data-t="researchBriefExport"></button></section></section>
 <section class="card" id="reminders-card"><h2 data-t="reminderTitle">Reminders</h2>
 <p class="help" data-t="reminderHelp">Download an .ics file and import it into your calendar. The receiving calendar interprets the local time and manages alerts.</p>
 <form id="reminder-form">
@@ -1449,8 +1450,15 @@ function researchRequest(engine,query,language='en'){
   const u=new URL('https://'+language+'.wikipedia.org/w/api.php');u.search=new URLSearchParams({action:'query',generator:'search',gsrsearch:query.trim(),gsrlimit:'5',prop:'extracts',explaintext:'1',exintro:'1',exchars:'1200',exlimit:'max',format:'json',origin:'*'});return u.href;
  }
  if(engine==='crossref'){const u=new URL('https://api.crossref.org/works');u.search=new URLSearchParams({query:query.trim(),rows:'5',select:'DOI,title,author,published,type'});return u.href}
+ if(engine==='europepmc'){
+  const u=new URL('https://www.ebi.ac.uk/europepmc/webservices/rest/search');
+  u.search=new URLSearchParams({query:query.trim(),pageSize:'5',resultType:'core',format:'json'});
+  return u.href;
+ }
  fail('provider');
 }
+const doiValue=value=>{const d=bounded(value,200);return /^10\.\d{4,9}\/\S+$/i.test(d)?d:''};
+const doiUrl=doi=>'https://doi.org/'+encodeURI(doi).replace(/#/g,'%23').replace(/\?/g,'%3F');
 function results(engine,body,query,language='en',at=new Date().toISOString()){
  const out=[];if(engine==='wikipedia'){
   researchRequest(engine,query,language);
@@ -1465,11 +1473,24 @@ function results(engine,body,query,language='en',at=new Date().toISOString()){
  }else if(engine==='crossref'){
   if(!Array.isArray(body?.message?.items))fail('provider-response');
   for(const item of body.message.items.slice(0,5)){
-   const doi=bounded(item.DOI,200);if(!/^10\.\d{4,9}\/\S+$/i.test(doi))continue;
+   const doi=doiValue(item?.DOI);if(!doi)continue;
    const title=bounded(item.title?.[0],300);if(!title)continue;
    const authors=Array.isArray(item.author)?item.author.slice(0,8).map(a=>bounded(a.given,60)+' '+bounded(a.family,80)).join('; '):'';
    const year=item.published?.['date-parts']?.[0]?.[0];
-   out.push({engine,title,excerpt:[title,authors,Number.isInteger(year)?String(year):'',bounded(item.type,80),'DOI: '+doi].filter(Boolean).join('\n'),url:'https://doi.org/'+encodeURI(doi).replace(/#/g,'%23').replace(/\?/g,'%3F'),kind:'bibliographic-metadata-only',query,at,license:'Crossref metadata; full text and findings were not retrieved'});
+   out.push({engine,title,excerpt:[title,authors,Number.isInteger(year)?String(year):'',bounded(item.type,80),'DOI: '+doi].filter(Boolean).join('\n'),url:doiUrl(doi),kind:'bibliographic-metadata-only',query,at,license:'Crossref metadata; full text and findings were not retrieved'});
+  }
+ }else if(engine==='europepmc'){
+  if(!Array.isArray(body?.resultList?.result))fail('provider-response');
+  for(const item of body.resultList.result.slice(0,5)){
+   const title=bounded(item?.title,300),doi=doiValue(item?.doi);
+   const pmid=bounded(item?.pmid,20),pmcid=bounded(item?.pmcid,22);
+   const url=doi?doiUrl(doi):/^\d{1,12}$/.test(pmid)?'https://europepmc.org/article/MED/'+pmid:
+    /^PMC\d{1,12}$/.test(pmcid)?'https://europepmc.org/article/PMC/'+pmcid:'';
+   if(!title.trim()||!url)continue;
+   const abstract=bounded(item.abstractText,5000).replace(/<[^<>]{1,200}>/g,' ').replace(/\s+/g,' ').trim().slice(0,1400);
+   const excerpt=[title,bounded(item.authorString,240),bounded(item.pubYear,8),abstract].filter(Boolean).join('\n');
+   out.push({engine,title,excerpt,url,kind:abstract?'abstract-excerpt':'bibliographic-metadata-only',query,at,
+    license:'Europe PMC record. Follow the article for terms and full text.'});
   }
  }else fail('provider');return out;
 }
@@ -1479,8 +1500,9 @@ async function fetchResearch(engine,query,language,signal,fetcher=fetch){
  const reader=response.body.getReader();let size=0;const chunks=[];
  try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>160000)fail('provider-size');chunks.push(value)}const bytes=new Uint8Array(size);let pos=0;for(const c of chunks){bytes.set(c,pos);pos+=c.length}return results(engine,JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)),query,language)}finally{await reader.cancel().catch(()=>{})}
 }
+const researchEngines=provider=>provider==='all'?['wikipedia','crossref','europepmc']:provider==='both'?['wikipedia','crossref']:[provider];
 async function researchBatch(provider,query,language,signal,fetcher=fetch){
- const engines=provider==='both'?['wikipedia','crossref']:[provider];
+ const engines=researchEngines(provider);
  const settled=await Promise.allSettled(engines.map(engine=>fetchResearch(engine,query,language,signal,fetcher)));
  const cards=[],failed=[];
  for(let i=0;i<engines.length;i++){
@@ -1498,7 +1520,7 @@ function researchQueries(input){
 }
 async function researchPlan(provider,input,language,signal,onProgress=()=>{},fetcher=fetch){
  const queries=researchQueries(input);
- const engines=provider==='both'?['wikipedia','crossref']:[provider];
+ const engines=researchEngines(provider);
  for(const engine of engines)researchRequest(engine,queries[0],language);
  const sources=new Map(),failed=new Set();
  let successful=0,completed=0;
@@ -1506,10 +1528,14 @@ async function researchPlan(provider,input,language,signal,onProgress=()=>{},fet
   if(signal?.aborted)break;
   const batch=await researchBatch(provider,query,language,signal,fetcher);
   for(const card of batch.cards){
-   const key=card.engine==='crossref'?card.url.toLowerCase():card.url;
+   const key=card.url.startsWith('https://doi.org/')?card.url.toLowerCase():card.url;
    const previous=sources.get(key);
    if(!previous)sources.set(key,{...card,queries:[query]});
-   else if(!previous.queries.includes(query))previous.queries.push(query);
+   else{
+    if(!previous.queries.includes(query))previous.queries.push(query);
+    if(previous.kind==='bibliographic-metadata-only'&&card.kind==='abstract-excerpt')
+     sources.set(key,{...card,queries:previous.queries});
+   }
   }
   for(const engine of batch.failed)failed.add(engine);
   successful+=engines.length-batch.failed.length;
@@ -1817,7 +1843,7 @@ const exportStyle = `
  @media print {body {padding: 0;} pre {white-space: pre-wrap;}}
 `;
 
-function exportHtml(sourceDocument, text, {title, format}) {
+function exportHtml(sourceDocument, sections, {title}) {
  const doc = sourceDocument.implementation.createHTMLDocument(title);
  doc.documentElement.lang = sourceDocument.documentElement.lang || 'en';
  doc.documentElement.dir = sourceDocument.documentElement.dir === 'rtl' ? 'rtl' : 'ltr';
@@ -1840,15 +1866,22 @@ function exportHtml(sourceDocument, text, {title, format}) {
  article.dir = 'auto';
  const heading = doc.createElement('h1');
  heading.textContent = title;
- const content = doc.createElement('div');
- if (format) render(content, text);
- else content.textContent = text;
- article.append(heading, content);
+ article.append(heading);
+ for(const {label,text,format} of sections){
+  const section=doc.createElement('section'), content=doc.createElement('div');
+  if(label){const name=doc.createElement('h2');name.textContent=label;section.append(name);}
+  if(format)render(content,text);else content.textContent=text;
+  section.append(content);article.append(section);
+ }
  doc.body.append(article);
  return '<!doctype html>\n' + doc.documentElement.outerHTML;
 }
 
-globalThis.NexusReplyFormat = Object.freeze({render, exportHtml});
+globalThis.NexusReplyFormat = Object.freeze({
+ render,
+ exportHtml:(doc,text,{title,format})=>exportHtml(doc,[{text,format}],{title}),
+ exportConversation:(doc,sections,title)=>exportHtml(doc,sections,{title})
+});
 })();
 </script><script>/* Bounded ZIP and XML readers reused by Studio and the offline file desk. */
 (function(root){'use strict';
@@ -2056,7 +2089,7 @@ Object.assign(FA,{streamPreview:'پاسخ در حال تولید',streamFailed:'
 Object.assign(EN,{
  chatCopy:'Copy answer',chatCopyDone:'Answer copied to the clipboard.',
  chatCopyFailed:'Clipboard access is unavailable. Select the answer text to copy it.',
- chatExport:'Download answer',chatExportTitle:'NEXUS answer',
+ chatExportThread:'Download active branch as HTML',chatExport:'Download answer',chatExportTitle:'NEXUS answer',
  chatExportConfirm:'Download this answer as an unencrypted HTML file?',chatExportDone:'HTML download requested.',
  chatPasteName:'Pasted text',chatPasteAdded:'Long paste attached locally. Add a question and review the excerpts before sending.',
  chatPasteLimit:'The draft was kept. Paste less text or remove an attachment to make room.'
@@ -2064,7 +2097,7 @@ Object.assign(EN,{
 Object.assign(FA,{
  chatCopy:'کپی پاسخ',chatCopyDone:'پاسخ در کلیپ‌بورد کپی شد.',
  chatCopyFailed:'دسترسی به کلیپ‌بورد ممکن نیست. متن پاسخ را انتخاب و کپی کن.',
- chatExport:'دریافت فایل پاسخ',chatExportTitle:'پاسخ نکسوس',
+ chatExportThread:'دریافت شاخهٔ فعال به‌صورت HTML',chatExport:'دریافت فایل پاسخ',chatExportTitle:'پاسخ نکسوس',
  chatExportConfirm:'همین پاسخ را به‌صورت فایل HTML بدون رمزگذاری دانلود می‌کنی؟',chatExportDone:'درخواست دانلود HTML ثبت شد.',
  chatPasteName:'متن چسبانده‌شده',chatPasteAdded:'متن بلند به‌صورت محلی پیوست شد. پرسشت را بنویس و گزیده‌ها را پیش از ارسال بازبینی کن.',
  chatPasteLimit:'پیش‌نویس حفظ شد. متن کوتاه‌تری بچسبان یا یکی از پیوست‌ها را بردار.'
@@ -2092,12 +2125,14 @@ Object.assign(FA,{
 });
 const CHAT_CONTEXT_EN={
  temporaryAttachments:'Remove staged attachments before starting a temporary chat.',
+ autoSpeak:'Read completed replies aloud with a local voice',
  useRelatedChats:'Review related excerpts from other chats in this project',
  isolatedChat:'Temporary chat',isolatedChatNote:'This chat stays in this tab. Project context is off. Online model requests still require approval.'
 };
 Object.assign(EN,CHAT_CONTEXT_EN);
 Object.assign(FA,{
  temporaryAttachments:'برای شروع گفتگوی موقت، پیوست‌های آماده‌شده را بردار.',
+ autoSpeak:'خواندن خودکار پاسخ‌های کامل با صدای محلی',
  useRelatedChats:'بازبینی بخش‌های مرتبط از گفتگوهای دیگر همین پروژه',
  isolatedChat:'گفتگوی موقت',isolatedChatNote:'این گفتگو فقط در همین برگه می‌ماند. زمینهٔ پروژه خاموش است. ارسال به مدل آنلاین همچنان به تأیید تو نیاز دارد.'
 });
@@ -2198,6 +2233,7 @@ function toolLifecycle(phase){
  }
  if(phase==='private'){
   $('study-mode').checked=false;
+  $('auto-speak').checked=false;
   $('training-opt-in').checked=false;clearTrainingReview();
   document.dispatchEvent(new Event('nexus-studio-private-clear'));
  }
@@ -2232,6 +2268,7 @@ function controls(){
  $('new-temporary-chat').disabled=busy;
  for(const id of ['use-memory','use-sources','astro-historical'])$(id).disabled=busy||Boolean(thread?.isolated);
  $('use-related-chats').disabled=busy||!thread||thread.temporary||thread.isolated;
+ $('export-thread-html').disabled=busy||!thread?.head;
  const regenerate=$('regenerate');
  regenerate.hidden=thread?.nodes.find(node=>node.id===thread.head)?.role!=='assistant';
  regenerate.disabled=regenerate.hidden||busy||thread.archived||branchBase!==undefined||hasChatDraft();
@@ -2330,7 +2367,7 @@ function resetConversation(id){
  // Only first-chat setup may preserve a selected image when there is no prior thread.
  if(threadId!==null&&threadId!==id)window.NexusStudioVision?.clear?.();
  threadId=id;clearChatDraft();
- for(const key of ['use-memory','use-sources','use-related-chats','use-astrology','astro-historical','study-mode'])$(key).checked=false;
+ for(const key of ['use-memory','use-sources','use-related-chats','use-astrology','astro-historical','study-mode','auto-speak'])$(key).checked=false;
 }
 function resetProject(id){
  toolLifecycle('project');
@@ -2415,8 +2452,15 @@ function startConversation(fresh=false,{isolated=false}={}){
 function noForms(){if(forms()||hasChatDraft()){status('needApply');return false}return true}
 function candidate(regenerate=false,materials=[]){const c=chat();if(!c||!p()||c.archived)throw Error('select-chat');if(regenerate){const path=S.path(c),last=path.at(-1);if(last?.role!=='assistant')throw Error('no-answer');if(path.at(-2)?.attached_files?.length)throw Error('reattach-required');return {...S.copy(c),head:last.parent}}return S.append(c,'user',$('message').value.trim(),'human',branchBase===undefined?c.head:branchBase,materials.map(x=>x.name))}
 function installThread(next){
- return mutate(v=>{const q=projectIn(v);q.threads[q.threads.findIndex(x=>x.id===next.id)]=next},{afterCommit:clearChatDraft});
+ const installed=mutate(v=>{const q=projectIn(v);q.threads[q.threads.findIndex(x=>x.id===next.id)]=next},{afterCommit:clearChatDraft});
+ if(installed&&$('auto-speak').checked&&!document.hidden){
+  const reply=$('messages').lastElementChild;
+  const trigger=reply?.querySelector('[data-chat-speak]');
+  if(trigger)window.NexusSpeechPlayback?.start(reply.querySelector('.body').innerText,trigger,{passive:true});
+ }
+ return installed;
 }
+$('auto-speak').onchange=()=>{if(!$('auto-speak').checked)window.NexusSpeechPlayback?.stop()};
 function selectedModelEngine(){return document.getElementById('model-engine')?.value==='device'?'device':'gateway'}
 function prepare(regenerate=false){if(!chat()?.isolated&&(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,relatedChats:$('use-related-chats').checked,historyDays:data.history_days,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked,onDevice:destination==='device'});if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');const stream=destination==='gateway'&&modelInfo.streaming===true;
  pending={destination,stream,thread:c,body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);$('request-review').hidden=false;controls()}catch(error){status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
@@ -2603,6 +2647,16 @@ $('versions').onchange=()=>{const a=doc()?.versions.find(x=>x.id===$('versions')
 $('load-version').onclick=()=>{if(forms()&&!confirm(t('discard')))return;const v=doc()?.versions.find(x=>x.id===$('versions').value);if(v){$('editor').value=v.text;editorDirty=true;stop()}};
 $('export-document').onclick=()=>{if(doc()&&confirm(t('plain')))download($('editor').value,'nexus-document.md','text/markdown')};
 $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+chat().title+'\n\n'+S.path(chat()).map(n=>'## '+t(n.origin==='human'?'human':n.origin==='model'?'model':'local')+'\n\n'+n.text+(n.attached_files?.length?'\n\n'+t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' — '+t('chatFilesNotSaved'):'')).join('\n\n'),'nexus-conversation.md','text/markdown')};
+$('export-thread-html').onclick=()=>{
+ const thread=chat();
+ if(busy||!thread?.head||!confirm(t('plain')))return;
+ const sections=S.path(thread).map(n=>({
+  label:t(n.origin==='human'?'human':n.origin==='model'?'model':'local'),
+  text:n.text,format:n.origin==='model'
+ }));
+ download(NexusReplyFormat.exportConversation(document,sections,thread.title),'nexus-conversation.html','text/html;charset=utf-8');
+ status('chatExportDone');
+};
 $('create-vault').onclick=()=>{const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation((rev,abort)=>vault.create(pass,{signal:abort.signal}))};
 $('unlock').onclick=()=>{if(storageSnapshot().lossRisk&&!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const next=await vault.unlock(pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=next;dirty=false;selectProject(data.projects[0]?.id||null);render()})};
 $('history-days').onchange=()=>{
@@ -2657,7 +2711,7 @@ $('language-file').onchange=async event=>{
  if(!f||busy)return;if(f.size>NexusLocales.MAX_BYTES)return status('failed');
  const current=()=>task===languageImport&&rev===revision&&!busy;
  try{
-  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:[...Object.keys(PRIVACY_EN),...Object.keys(CHAT_CONTEXT_EN),'storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
+  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:[...Object.keys(PRIVACY_EN),...Object.keys(CHAT_CONTEXT_EN),'storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchAll','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
   if(!$('language').querySelector('option[value="'+pack.code+'"]'))$('language').append(option(pack.code,pack.code));
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}
@@ -2693,7 +2747,7 @@ Object.assign(EN,{research:'Live research desk',researchHelp:'Only the exact que
 Object.assign(FA,{research:'میز پژوهش زنده',researchHelp:'فقط عبارت‌های دقیق زیر مستقیماً به APIهای عمومی انتخاب‌شده فرستاده می‌شوند. گفتگو، فایل، حافظه و توکن‌ها اضافه نمی‌شوند. نتیجه‌ها سرنخ منبع‌اند، نه حقیقت تأییدشده یا نتیجه‌گیری خودکار.',researchQuery:'عبارت عمومی — حداکثر ۲۵۰ نویسه',researchProvider:'ارائه‌دهندهٔ منبع',researchLanguage:'زبان ویکی‌پدیا',researchConsent:'این عبارت دقیق را یک بار به منابع انتخاب‌شده بفرست.',researchSearch:'جست‌وجوی منابع عمومی',researchStop:'لغو پژوهش',researchAdd:'نگهداری گزیده به‌عنوان منبع پروژه',researchEmpty:'منبع مطابق پیدا نشد.',researchWorking:'در حال دریافت سرنخ‌های منابع عمومی…',researchFailed:'دریافت منبع ناموفق یا مسدود شد. اتصال، دسترس‌پذیری سرویس و عبارت را بررسی کن.',researchNote:'Crossref اطلاعات کتاب‌شناختی می‌دهد، نه یافته یا متن کامل مقاله. گزیده‌های ویکی‌پدیا تابع شرایط انتساب آن هستند.',codeLab:'آزمایشگاه محلی JavaScript',codeHelp:'فقط کد و ورودی نمایش‌داده‌شده در یک Worker مرورگر با مبدأ ایزوله اجرا می‌شوند. به صفحه، آرشیو و شبکهٔ Studio دسترسی ندارد. پس از ۳ ثانیه متوقف می‌شود و خروجی تا ۶۴٬۰۰۰ بایت محدود است. سقف سخت حافظه ندارد؛ محیط Python یا سیستم‌عامل نیست. ورودی و خروجی موقت‌اند؛ برای نگهداری، خروجی را به ویرایشگر نوشته کپی کن.',codeSource:'بدنهٔ تابع JavaScript — از input به‌صورت رشته، console.log و return استفاده کن',codeInput:'فقط همین ورودی به کد داده می‌شود',codeConsent:'این کد و ورودی دقیق را یک بار محلی اجرا کن.',codeSample:'بارگذاری نمونهٔ محاسبه',codeRun:'اجرای محلی',codeStop:'توقف اجرا',codeCopy:'کپی خروجی به ویرایشگر نوشته',codeOutput:'خروجی تأییدنشدهٔ برنامهٔ محلی',codeWorking:'در حال اجرای محلی…',codeFailed:'اجرا ناموفق، لغو یا متوقف شد یا از محدودیت گذشت.',chartLab:'نمودار دادهٔ محلی',chartHelp:'JSON شامل type برابر bar یا line، عنوان title، برچسب‌های labels و مقادیر عددی values بده. حداکثر ۲۰۰ نقطه و عدد متناهی تا ±۱۰¹². رسم نمودار به مدل، ارسال داده یا اجرای کد نیاز ندارد.',chartDraw:'رسم نمودار',chartUse:'استفاده از نتیجهٔ کد',chartExport:'خروجی PNG',chartJson:'دادهٔ JSON نمودار',chartFailed:'دادهٔ نمودار معتبر نیست. نوع، تعداد برابر برچسب و مقدار و محدودیت عددی را بررسی کن.'});
 Object.assign(EN,{researchChat:'Use source excerpt in next chat',codeChat:'Use code result in next chat'});Object.assign(FA,{researchChat:'استفاده از گزیدهٔ منبع در پیام بعدی',codeChat:'استفاده از نتیجهٔ کد در پیام بعدی'});
 Object.assign(EN,{
- researchBoth:'Wikipedia and Crossref',researchPartial:'Some providers failed: ',researchPick:'Include in brief',
+ researchBoth:'Wikipedia and Crossref',researchAll:'Wikipedia, Crossref and Europe PMC',researchPartial:'Some providers failed: ',researchPick:'Include in brief',
  researchBrief:'Research brief',researchBriefChat:'Attach brief excerpts to chat',researchBriefExport:'Download brief',
  researchQueries:'Search queries (up to four, one per line, 250 characters each)',
  researchPlanConsent:'Send these exact queries once to the selected providers.',
@@ -2701,7 +2755,7 @@ Object.assign(EN,{
  researchCardQueries:'Matched queries',researchInvalidPlan:'Enter up to four queries, one per line, with 250 characters or fewer per query.'
 });
 Object.assign(FA,{
- researchBoth:'ویکی‌پدیا و کراس‌رف',researchPartial:'دریافت از بعضی منابع ناموفق بود: ',researchPick:'افزودن به پرونده',
+ researchBoth:'ویکی‌پدیا و کراس‌رف',researchAll:'ویکی‌پدیا، کراس‌رف و Europe PMC',researchPartial:'دریافت از بعضی منابع ناموفق بود: ',researchPick:'افزودن به پرونده',
  researchBrief:'پروندهٔ پژوهشی',researchBriefChat:'پیوست گزیدهٔ پرونده به گفتگو',researchBriefExport:'دریافت پرونده',
  researchQueries:'عبارت‌های جست‌وجو (حداکثر چهار عبارت، هر خط یک عبارت تا ۲۵۰ نویسه)',
  researchPlanConsent:'همین عبارت‌ها را یک بار به ارائه‌دهندگان انتخاب‌شده بفرست.',
@@ -3364,6 +3418,7 @@ function showDirectory(){
  }
  directoryItems.firstElementChild.focus();
 }
+const explicitResearch=/^(?:search\s+(?:the\s+web\s+)?for|جست[\s\u200c]*و[\s\u200c]*جو\s+کن)\s+(.+)$/is;
 function intent(value){
  const message=value.trim();
  const slash=/^\/([a-z-]+)(?:\s|$)/i.exec(message);
@@ -3372,7 +3427,7 @@ function intent(value){
   const route=routes.find(x=>x[0]===command||(x[5]||'').split(' ').includes(command));
   return route?{route,query:message.slice(slash[0].length).trim()}:null;
  }
- const search=/^(?:search\s+(?:the\s+web\s+)?for|جست[\s\u200c]*و[\s\u200c]*جو\s+کن)\s+(.+)$/is.exec(message);
+ const search=explicitResearch.exec(message);
  if(search)return {route:routes.find(row=>row[0]==='research'),query:search[1]};
  const reminder=/^(?:remind me (?:to )?|set (?:a )?reminder(?: for)?\s+|یادآوری کن\s+)(.+)$/i.exec(message);
  if(reminder)return {route:routes.find(row=>row[0]==='remind'),query:reminder[1]};
@@ -3416,7 +3471,7 @@ function clearOffer(){
  offeredDraft=null;offer.hidden=true;offer.replaceChildren();
 }
 function suggestion(message){
- if(!window.NexusStudioFocus?.isFocused()||(select.value==='model'&&!message.trimStart().startsWith('/')))return null;
+ if(!window.NexusStudioFocus?.isFocused()||(select.value==='model'&&!message.trimStart().startsWith('/')&&!explicitResearch.test(message.trim())))return null;
  return intent(message);
 }
 function offerTool(message,result){
@@ -3954,7 +4009,7 @@ function next(session) {
   session.engine.speak(utterance);
  } catch { failed(session); }
 }
-function start(text, origin) {
+function start(text, origin, {passive=false}={}) {
  stop();
  trigger = origin;
  panel.hidden = false;
@@ -3967,8 +4022,7 @@ function start(text, origin) {
  const parts = split(text);
  if (!choices.length || !parts.length || typeof window.SpeechSynthesisUtterance !== 'function') {
   update(null, words('No local playback voice is available.', 'صدای محلی برای پخش در دسترس نیست.'));
-  panel.scrollIntoView({block:'nearest'});
-  close.focus({preventScroll:true});
+  if(!passive){panel.scrollIntoView({block:'nearest'});close.focus({preventScroll:true});}
   return;
  }
  document.dispatchEvent(new Event('nexus-studio-playback-start'));
@@ -3984,8 +4038,7 @@ function start(text, origin) {
  const session = {engine, choices, parts, index:0, paused:false, utterance:null};
  current = session;
  try { if(engine.paused)engine.resume(); next(session); } catch { failed(session); }
- panel.scrollIntoView({block:'nearest'});
- (pause.disabled ? close : pause).focus({preventScroll:true});
+ if(!passive){panel.scrollIntoView({block:'nearest'});(pause.disabled ? close : pause).focus({preventScroll:true});}
 }
 pause.onclick = () => {
  const session = current;

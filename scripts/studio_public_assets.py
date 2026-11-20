@@ -5,7 +5,7 @@ import stat
 
 # Bounded Studio asset budget, including local Office text extraction and
 # bilingual decision support in the standalone HTML.
-MAX_FILE = 594_000
+MAX_FILE = 598_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000

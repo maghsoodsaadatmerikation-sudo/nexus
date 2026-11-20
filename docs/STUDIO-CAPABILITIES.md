@@ -168,7 +168,11 @@ the preview and preserve the user draft.
 
 Use **Download answer** to save only the selected answer to an unencrypted HTML
 file. The file opens offline and keeps the answer's supported Markdown
-formatting. Conversation history and project context stay in Studio.
+formatting. **Download active branch as HTML** exports the selected conversation path,
+with speaker labels, supported Markdown and citations. The file opens offline
+and can be printed. Project memory, source files, unselected branches and
+model request credentials are outside the exported transcript. The file is
+plaintext and requires explicit download approval.
 
 ## Project chat context and temporary chats
 
@@ -191,6 +195,18 @@ an online request or deliberately export a transcript. The
 [ChatGPT Temporary Chat FAQ](https://help.openai.com/en/articles/8914046-temporary-chat-in-chatgpt)
 describes its own service's separate privacy behavior.
 
+An explicit **Search the web for …** request in chat opens the reviewed
+research flow even while the model engine is selected. Studio discloses the
+selected providers and sends only the approved queries. Europe PMC contributes
+bibliographic records and available abstracts through its
+[public literature API](https://dev.europepmc.org/RestfulWebService). An abstract
+is a source excerpt. The research flow does not verify its conclusions.
+
+Enable **Read completed replies aloud with a local voice** in chat options to
+hear new finished replies. The setting starts off and resets between
+conversations. Playback uses a browser voice marked local, leaves input focus
+in place and stops on navigation or opt-out. Browser voice availability varies.
+
 ## Remaining service prerequisites
 
 The [ChatGPT Plus and Pro comparison](https://chatgpt.com/pricing/) is the
@@ -199,7 +215,7 @@ reference for the consumer-plan features below.
 | ChatGPT capability | NEXUS boundary after this change | Required next dependency |
 | --- | --- | --- |
 | Hosted frontier-model reasoning | No hosted model/key supplied | A funded/authorized provider or a separately hosted local model with sufficient compute |
-| Live web retrieval / deep research | Review and run up to four queries, one per line, against Wikipedia, Crossref or both. Duplicate results retain their matching queries, and selected sources can be exported or attached to the chat. | Broader search APIs, source verification, model/tool orchestration and source-quality evaluations |
+| Live web retrieval / deep research | Review and run up to four queries, one per line, against Wikipedia, Crossref or Europe PMC, individually or in a combined plan. Europe PMC may supply a bounded abstract excerpt. Matching DOI records are consolidated, and selected sources can be exported or attached to the chat. | Broader search APIs, source verification, model/tool orchestration and source-quality evaluations |
 | Image understanding / OCR | The chat image picker and bounded PNG/JPEG vision route are implemented with separate consent and an operator-set request allowance | Compatible vision provider, deployment verification and quality tests, including OCR |
 | Image/video generation | Not implemented | A connected generation provider, usage authorization and media QA |
 | Real-time voice conversation | Opt-in microphone dictation and local read-aloud | A real-time audio provider, microphone permissions, interruption tests and device QA |

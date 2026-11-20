@@ -44,6 +44,10 @@ window.addEventListener('load',async()=>{
   assert(compose.textContent==='Review Research','explicit-tool-discoverable-in-model-mode');
   compose.click();
   assert(!offer.hidden&&$('request-review').hidden&&network===0,'explicit-tool-does-not-start-model-review');
+  fill('message','Search the web for sleep studies');
+  assert(compose.textContent==='Review Research','explicit-natural-search-is-reviewable-in-model-mode');
+  compose.click();
+  assert(!offer.hidden&&$('request-review').hidden&&network===0,'explicit-natural-search-does-not-send-model-request');
   change('studio-compose-mode','guide');
   fill('message','تحليل فايل CSV');
   assert(compose.textContent==='Review Data analysis','persian-intent-shows-tool-before-submit');
@@ -188,6 +192,23 @@ window.addEventListener('load',async()=>{
   assert(!exportedHtml.includes('orchard trees')&&!exportedHtml.includes('REVIEWED SECRET MEMORY')&&
    !exportedHtml.includes('TRANSIENT ACCESS TOKEN')&&JSON.stringify(snapshot())===beforeExport&&network===beforeExportCalls,
    'answer-export-excludes-conversation-context-and-stays-local');
+  let branchBlob,branchName;
+  URL.createObjectURL=blob=>{branchBlob=blob;return previousCreate.call(URL,blob)};
+  HTMLAnchorElement.prototype.click=function(){branchName=this.download};
+  try{
+   window.confirm=()=>false;$('export-thread-html').click();
+   assert(!branchBlob,'declining-full-conversation-export-does-not-download');
+   window.confirm=()=>true;$('export-thread-html').click();
+  }finally{
+   URL.createObjectURL=previousCreate;HTMLAnchorElement.prototype.click=previousClick;window.confirm=previousConfirm;
+  }
+  const branchHtml=await branchBlob.text(),branchDoc=new DOMParser().parseFromString(branchHtml,'text/html');
+  assert(branchName==='nexus-conversation.html'&&branchDoc.querySelectorAll('main > section').length===NexusStudio.path(current().threads[0]).length&&
+   branchDoc.querySelector('main h3').textContent==='Synthetic answer'&&branchDoc.body.textContent.includes('orchard trees'),
+   'conversation-html-preserves-active-turns-and-answer-formatting');
+  assert(!branchHtml.includes('BRANCHED QUESTION')&&!branchHtml.includes('REVIEWED SECRET MEMORY')&&
+   !branchHtml.includes('TRANSIENT ACCESS TOKEN')&&!branchDoc.querySelector('script,img,iframe,form')&&network===beforeExportCalls,
+   'conversation-html-excludes-other-branches-and-context-stays-local');
   const spoken=[];
   let pauses=0,resumes=0,cancellations=0,paused=false;
   const localEnglish={name:'Local English',lang:'en-US',localService:true};
@@ -469,6 +490,16 @@ window.addEventListener('load',async()=>{
    !JSON.stringify(isolatedReview).includes('CUSTOM PREFERENCE')&&!$('consent').checked,
    'temporary-model-review-excludes-project-content');
 
+  fill('message','');
+  $('new-thread').click();
+  const audioCount=spoken.length;
+  assert(!$('auto-speak').checked,'automatic-playback-stays-off-by-default');
+  $('auto-speak').click();
+  fill('message','Local test for automatic read aloud');$('message').focus();$('guide').click();
+  assert(spoken.length===audioCount+1&&!playback.hidden&&spoken.at(-1).voice.localService&&
+   document.activeElement===$('message'),'opt-in-automatic-read-aloud-uses-local-voice-without-taking-focus');
+  $('auto-speak').click();
+  assert(playback.hidden,'turning-off-auto-speak-stops-playback');
   assert(document.documentElement.scrollWidth<=innerWidth+2,'no-horizontal-overflow');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
