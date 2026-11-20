@@ -190,9 +190,40 @@ window.addEventListener('load',async()=>{
    'unavailable-write-action-never-silently-falls-back-to-read');
   assert(connectionActions===2,'unavailable-branch-not-executed');
   await closeConnection();
+  // A single frozen catalog drives quick buttons, slash routing and the
+  // opt-in palette. Browsing a tool never requests credentials or executes it.
+  const catalog=NexusStudioCompose.catalog();
+  assert(Object.isFrozen(catalog)&&catalog.length===15&&catalog.every(Object.isFrozen),
+   'capability-catalog-is-read-only-and-complete');
+  assert(new Set(catalog.map(x=>x.command)).size===catalog.length,
+   'capability-commands-unique');
+  assert(catalog.filter(x=>x.kind==='connection-review').map(x=>x.command).join(',')===
+   'github,render,connections','connector-routes-identified-without-claiming-authority');
+  const networkBefore={catalogCalls,connectionActions,providerCalls,searchCalls};
+  fill('message','/tools');
+  assert(chatSend.textContent.includes('Capabilities'),'tools-command-discovered');
+  chatSend.click();
+  const palette=$('studio-capability-directory');
+  assert(!palette.hidden&&palette.querySelector('div').children.length===15,
+   'capability-palette-shows-all-reviewable-tools');
+  assert(JSON.stringify({catalogCalls,connectionActions,providerCalls,searchCalls})===
+   JSON.stringify(networkBefore),'capability-browser-has-no-network-effects');
+  const pick=[...palette.querySelectorAll('button')].find(x=>x.textContent.startsWith('/github ·'));
+  assert(Boolean(pick),'github-option-shown-with-provider-review');
+  pick.click();
+  assert(palette.hidden&&$('message').value==='/github ',
+   'capability-selection-only-fills-draft');
+  assert(catalogCalls===networkBefore.catalogCalls&&connectionActions===networkBefore.connectionActions,
+   'capability-selection-never-performs-provider-operation');
+  fill('message','/repo list open pull requests');
+  assert(chatSend.textContent.includes('GitHub'),'alias-resolved-from-single-catalog');
+  fill('message','/help');
+  chatSend.click();
+  assert(!palette.hidden,'help-alias-opens-capability-directory');
+  document.dispatchEvent(new Event('nexus-studio-private-clear'));
+  assert(palette.hidden,'private-clear-revokes-capability-directory');
   fill('message','/unknown do something');
   assert(!chatSend.textContent.includes('Review Connections'),'unsupported-command-not-misrouted');
-  document.dispatchEvent(new Event('nexus-studio-private-clear'));
   assert($('studio-connection-receipt').hidden,'private-clear-revokes-provider-receipt');
 
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,real_model_tested:false});
