@@ -107,20 +107,21 @@ before the learner approves the send. Changing the option invalidates a
 pending review. The option resets when switching conversations or clearing
 private state.
 
-## Decision support in chat
+## How NEXUS supports judgment in chat
 
-Turn on **Decision support** when you want help making a choice. The local guide
-prompts you to name your criteria, compare realistic options and consequences,
-identify gaps in the evidence, and find a reversible next step. With a model,
-the same request appears in the exact context preview before you approve it.
-The configured gateway also asks text and image models to apply this approach
-to consequential choices in ordinary conversation.
+Write the question in the ordinary composer. NEXUS answers routine questions
+directly. For meaningful choices, the response guidance asks the model to weigh
+evidence, uncertainty and consequences against the user's criteria. The
+non-generative local guide uses English and Persian choice cues to offer
+reflection questions when appropriate. Asking whether to use a tool stays in
+chat, while explicit tool commands continue to open the existing review flow.
+The optional on-device model drafts short English answers and gets concise
+turn-specific guidance when the question asks for a choice.
 
-Decision support and Study mode are mutually exclusive. Changing either
-invalidates a pending model review. A reply stays a guide or a model draft.
-The decision workspace records a human judgment through its explicit
-human-authored action. Any tool use still follows that tool's review and
-authorization rules.
+The reviewed model request still shows the exact material sent. A reply
+stays a guide or model draft. Recording a judgment remains an explicit
+human-authored action, and tool use follows the relevant review and
+authorization steps.
 
 ## Chat dictation
 

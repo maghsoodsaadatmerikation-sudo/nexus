@@ -4,7 +4,7 @@
 
 Created by **Maryam Najafi** · [maryamnajafi4991@gmail.com](mailto:maryamnajafi4991@gmail.com)
 
-Use NEXUS to chat, write, research, analyze files, code, and make music. When a choice matters, turn on **Decision support** in Studio to compare options against your priorities, examine the evidence and consequences, and identify what would change the recommendation. You decide what to do with the result.
+Use NEXUS to chat, write, research, analyze files, code, and make music. Ask directly in chat. When a choice matters, NEXUS weighs options against your priorities, examines evidence and consequences, and explains what would change the recommendation. You decide what to do with the result.
 
 Studio offers a local decision guide and model-assisted answers with a configured model. The Rust core records human judgment through a separate, explicit human action. [Current capabilities and availability](docs/STUDIO-CAPABILITIES.md).
 

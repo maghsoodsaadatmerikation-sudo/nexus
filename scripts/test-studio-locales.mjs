@@ -23,4 +23,8 @@ const modern=value('es');modern.messages.added='Nueva etiqueta';
 assert.equal(registry.install(JSON.stringify(modern),revised,optional).messages.added,'Nueva etiqueta');checks++;
 delete modern.messages.save;
 assert.throws(()=>registry.install(JSON.stringify(modern),revised,optional));checks++;
+const legacy=value('es','Legacy Spanish');
+legacy.messages.retired='An earlier control';
+const withoutRetired=registry.install(JSON.stringify(legacy),defaults,{retiredKeys:['retired']});
+assert.deepEqual(withoutRetired.messages,{conversation:'Legacy Spanish',save:'Save es'});checks++;
 console.log(JSON.stringify({status:'PASS',checks,scope:'bounded-tab-local-label-packs',real_browser_tested:false}));

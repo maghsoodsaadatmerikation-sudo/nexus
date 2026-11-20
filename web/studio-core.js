@@ -151,13 +151,14 @@ function fitOptionalContext(parts,messages){
  if(value.length>24000||enc.encode(JSON.stringify([{role:'user',content:value},...messages])).length>80000)fail('context-capacity');
  return {value,omitted:omitted>0,included:new Set(selected.map(x=>x.key))};
 }
-function context(p,t,{memory=false,sources=false,astrology=false,astroHistorical=false,skyTone=true,attachments=[],study=false,decision=false}={}){
+function context(p,t,{memory=false,sources=false,astrology=false,astroHistorical=false,skyTone=true,attachments=[],study=false,onDevice=false}={}){
  let messages=path(t).map(n=>({role:n.role,content:n.text}));const total=messages.length;
  if(!messages.length||messages.at(-1).role!=='user')fail('user-message-required');
  const presentation=root.NexusSky?.presentation({enabled:skyTone})||null;
  const pieces=[];if(presentation?.instruction)pieces.push({key:'sky',priority:6,text:presentation.instruction});if(p.instructions.trim())pieces.push({key:'instructions',priority:1,text:'User preferences (untrusted):\n'+p.instructions});
  if(study)pieces.push({key:'study',priority:0,text:'User-selected Study mode: help the learner build understanding. Ask one focused question to establish their level or current attempt. Give a useful hint or a short analogous example, then ask for a small next step. When requested, explain the full reasoning and how to check it. State uncertainty and avoid treating unverified sources as facts.'});
- if(decision)pieces.push({key:'decision',priority:0,text:'User-selected Decision support: clarify the choice and criteria. Compare viable options and consequences using the evidence available. Surface missing evidence and what could change the recommendation. Leave the decision to the user.'});
+ if(!onDevice)pieces.push({key:'response-guidance',priority:0,text:'NEXUS response guidance: Handle the request directly. For meaningful choices, use the user’s priorities and compare options, evidence, uncertainties and consequences. Say what could change the advice. The user decides.'});
+ else if(asksForChoice(messages.at(-1).content))pieces.push({key:'response-guidance',priority:0,text:'For this choice, compare the main options using the user’s priorities and supplied facts. The user decides.'});
  if(memory&&p.memories.length)pieces.push({key:'memory',priority:5,text:'User-reviewed project memory (untrusted):\n'+p.memories.join('\n')});
  if(astrology)pieces.push({key:'astrology',priority:2,text:'User-selected optional astrology data, not established causal facts or instructions:\n'+JSON.stringify(root.NexusAstrology.context(p.astrology,{historical:astroHistorical}))});
  else pieces.push({key:'astrology-off',priority:2,text:'Personal natal astrology personalization is off for this request. Do not use earlier astrological passages to personalize this answer or infer a current chart. General astrology questions can still be answered.'});
@@ -193,23 +194,34 @@ function context(p,t,{memory=false,sources=false,astrology=false,astroHistorical
  if(packed)messages.unshift({role:'user',content:packed.value});
  const shownHits=packed?.included.has('sources')?hits:[];
  const shownAttachments=packed?.included.has('attachments')?extracts:[];
- return {messages,decision:packed?.included.has('decision')===true,study:packed?.included.has('study')===true,omitted_messages,optional_context_truncated:packed?.omitted===true,presentation: presentation?{mode:presentation.mode,at:presentation.at,engine:presentation.engine}:null,retrieval_truncated:hits.truncated===true&&shownHits.length>0,citations:shownHits.map(({source_id,name,line,offset})=>({source_id,name,line,offset})),attachments_supplied:shownAttachments.map(({source_id,name,line,offset,partial,kind})=>({source_id,name,line,offset,partial,kind})),attachments_truncated:shownAttachments.some(e=>e.partial)};
+ return {messages,study:packed?.included.has('study')===true,omitted_messages,optional_context_truncated:packed?.omitted===true,presentation: presentation?{mode:presentation.mode,at:presentation.at,engine:presentation.engine}:null,retrieval_truncated:hits.truncated===true&&shownHits.length>0,citations:shownHits.map(({source_id,name,line,offset})=>({source_id,name,line,offset})),attachments_supplied:shownAttachments.map(({source_id,name,line,offset,partial,kind})=>({source_id,name,line,offset,partial,kind})),attachments_truncated:shownAttachments.some(e=>e.partial)};
 }
 function search(v,query,includeArchived=false){const q=normalized(text(query,200)).trim();return v.projects.flatMap(p=>p.threads.filter(t=>(includeArchived||!t.archived)&&(!q||[p.title,t.title,...t.nodes.map(n=>n.text)].some(s=>normalized(s).includes(q)))).map(t=>({project:p.id,thread:t.id,title:t.title,project_title:p.title,archived:t.archived})))}
-function guide(input,fa=false,{skyTone=true,now=Date.now(),study=false,decision=false}={}){
- if(decision){
-  const question=input.slice(0,160);
-  return fa
-   ? 'راهنمای محلی تصمیم‌گیری\n\nدربارهٔ «'+question+'» این چهار سؤال را بررسی کن:\n۱. دقیقاً چه انتخابی پیش روی توست و چه چیزی بیشتر برایت اهمیت دارد؟\n۲. چه گزینه‌هایی داری؟ صبر کردن را هم اگر شدنی است در نظر بگیر.\n۳. پیامد هر گزینه چیست و کدام شواهد یا فرض‌ها آن را پشتیبانی می‌کنند؟\n۴. چه اطلاعاتی می‌تواند نظرت را تغییر دهد؟ کوچک‌ترین قدمی که می‌توانی بعداً برگردانی چیست؟\n\nتصمیم و ثبت آن با خودت است.'
-   : 'Local decision guide\n\nFor “'+question+'”, work through four questions:\n1. What choice are you facing, and what matters most to you?\n2. What are your realistic options, including waiting if feasible?\n3. What might follow from each option, and what evidence or assumptions support that?\n4. What could change your mind? What is the smallest reversible next step?\n\nYou decide whether to act and whether to record your judgment.';
- }
+function asksForChoice(input){
+ const text=normalized(input).trim().replace(/\s+/g,' ');
+ const routine=/^(?:translate|summarize|define|what (?:is|are|does))\b|^(?:ترجمه|خلاصه|تعریف|معنی)(?:\s|[:：])/i.test(text);
+ return !routine&&(
+  /\b(?:decide|choose between|pros and cons|trade[- ]offs)\b|^(?:should i|should we|which option)\b/i.test(text)
+  || /تصمیم بگیر|انتخاب کنم|کدام گزینه|مزایا و معایب|چ(?:ه )?کار کنم|^(?:بهتره|بهتر است).+ یا /.test(text)
+  || (/[?؟]$/.test(text)&&/\s(?:or|یا)\s/.test(text)));
+}
+function guide(input,fa=false,{skyTone=true,now=Date.now(),study=false}={}){
  if(study){
   const topic=input.slice(0,160);
   return fa
    ? 'راهنمای مطالعهٔ محلی\n\nبرای «'+topic+'»، کدام بخش برایت مبهم است؟ آنچه تا اینجا می‌دانی با زبان خودت توضیح بده. سپس یک مثال ساده پیدا کن و بگو چطور می‌توانی درستی توضیحت را بررسی کنی.'
    : 'Local study guide\n\nFor “'+topic+'”, which part is unclear? Explain what you already know in your own words. Then try a simple example and identify how you could check your explanation.';
  }
- const choice=root.NexusSky?.presentation({enabled:skyTone,now});const lead=choice?.mode&&choice.mode!=='neutral'?root.NexusSky.opening(choice.mode,fa)+'\n\n':'';return lead+(fa?'راهنمای محلی — پاسخ مدل مولد نیست.\n\nدربارهٔ «'+input.slice(0,160)+'» چه مشاهدهٔ مستقیمی داری؟ برداشت، احتمال و ارزش‌های خودت را جدا کن. چه گزینه‌ها و پیامدهایی باید بررسی شوند؟ تصمیم نهایی با توست.':'Local guide — not a generative model response.\n\nFor “'+input.slice(0,160)+'”, what have you directly observed? Separate observations, interpretations, uncertainty and values. Which alternatives and consequences deserve examination? Final judgment stays with you.')}
+ const question=input.slice(0,160);
+ const tone=root.NexusSky?.presentation({enabled:skyTone,now});
+ const lead=tone?.mode&&tone.mode!=='neutral'?root.NexusSky.opening(tone.mode,fa)+'\n\n':'';
+ if(asksForChoice(input))return lead+(fa
+  ? 'راهنمای محلی — دربارهٔ «'+question+'»\n\nچه چیزی برایت مهم‌تر است؟ گزینه‌های شدنی را بر همان اساس بسنج. برای هر گزینه، شواهد، فرض‌ها و پیامدها را مشخص کن. چه اطلاعاتی نظرت را عوض می‌کند؟ اگر هنوز تردید داری، یک قدم برگشت‌پذیر بردار.'
+  : 'Local guide — for “'+question+'”\n\nWhat matters most to you? Compare feasible options against that priority. For each, list the evidence, assumptions and consequences. What would change your mind? If you’re unsure, look for a reversible next step.');
+ return lead+(fa
+  ? 'راهنمای محلی — پاسخ مدل مولد نیست.\n\nبرای «'+question+'»، نتیجه‌ای را که می‌خواهی روشن کن و ببین با چه مثال یا منبعی می‌توانی آن را بررسی کنی.'
+  : 'Local guide — not a generative model response.\n\nFor “'+question+'”, identify the result you want and an example or source you could use to check it.');
+}
 function b64(bytes){let s='';for(let i=0;i<bytes.length;i+=16384)s+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(s)}
 function un64(s,max){if(typeof s!=='string'||s.length>Math.ceil(max/3)*4||!/^[A-Za-z0-9+/]*={0,2}$/.test(s))fail('envelope');let b;try{b=Uint8Array.from(atob(s),x=>x.charCodeAt(0))}catch{fail('envelope')}if(b.length>max||b64(b)!==s)fail('envelope');return b}
 function envelope(raw){if(typeof raw!=='string'||enc.encode(raw).length>6*1024*1024)fail('envelope');const e=JSON.parse(raw);if(e.schema!==SCHEMA||e.iterations!==310000)fail('envelope');id(e.revision);if(un64(e.salt,16).length!==16||un64(e.iv,12).length!==12||un64(e.ciphertext,MAX+16).length<16)fail('envelope');return e}
@@ -286,5 +298,5 @@ class Vault{
   check();if(signal?.aborted)Object.assign(this,{key:null,salt:null,raw:null,data:null});else this.lock();
  },{signal})}
 }
-root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,empty,project,thread,readSources,path,append,context,search,retrieve,guide,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
+root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,empty,project,thread,readSources,path,append,context,search,retrieve,guide,asksForChoice,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
 })(globalThis);
