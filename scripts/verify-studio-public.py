@@ -38,6 +38,8 @@ def sanity():
     assert "const EXPECTED_SHA256='"+hashlib.sha256(html).hexdigest()+"'" in worker
     assert manifest['scope']==manifest['start_url']=='./'
     assert manifest['display']=='standalone'
+    assert manifest['lang']=='en' and manifest['dir']=='ltr'
+    assert html.startswith(b'<!doctype html><html lang="en" dir="ltr">')
     assert b"manifest-src 'self'" in html and b"worker-src 'self' blob:" in html
     assert b'id="studio-offline"' in html and b'No model hosted here' in html
     assert {icon['src'] for icon in manifest['icons']}=={'./icons/nexus-192.png','./icons/nexus-512.png'}

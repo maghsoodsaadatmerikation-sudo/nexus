@@ -71,6 +71,18 @@ model-send approval. See [the operating contract](STUDIO-CHAT-TOOL-HANDOFF.md).
 This is user-directed data flow; **not autonomous model tool calling,
 open-ended research, tool-execution authority, or a trained model**.
 
+## Study mode and interface language
+
+English is the initial interface and installable app language. Persian is
+available through the language selector, with right-to-left layout when chosen.
+
+Select **Study mode** below the message field to work through a question in
+steps. The local study guide offers a self-explanation and practice prompt.
+For a configured model, the request preview displays the tutoring instruction
+before the learner approves the send. Changing the option invalidates a
+pending review. The option resets when switching conversations or clearing
+private state.
+
 ## Chat dictation
 
 Open **Dictate** from the conversation composer. Studio shows a disclosure before
