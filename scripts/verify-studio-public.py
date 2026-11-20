@@ -8,14 +8,14 @@ from pathlib import Path
 import subprocess
 import sys
 
+from studio_public_assets import MAX_FILE
+
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('public_assets',ROOT/'scripts/verify-public-pwa-assets.py')
 observer=importlib.util.module_from_spec(spec);spec.loader.exec_module(observer)
 observer.ORIGIN='https://nexus-studio-merikation.onrender.com'
-# The shared Pilot 12 observer defaults to 300KB, while current Studio HTML
-# legitimately exceeds that limit. Keep an explicit bounded Studio-only cap,
-# identical to the reviewed Phase 46 release allowlist (450KB).
-observer.MAX_BYTES=450_000
+# Use the same Studio-only response bound as the release package.
+observer.MAX_BYTES=MAX_FILE
 observer.ASSETS={
     '/':('public/studio/index.html','text/html'),
     '/manifest.json':('public/studio/manifest.json','manifest'),
@@ -30,6 +30,11 @@ def sanity():
     html=(ROOT/'public/studio/index.html').read_bytes()
     worker=(ROOT/'public/studio/service-worker.js').read_text()
     manifest=json.loads((ROOT/'public/studio/manifest.json').read_text())
+    assert observer.ORIGIN=='https://nexus-studio-merikation.onrender.com'
+    assert len(observer.ASSETS)==9
+    assert observer.compare(200,'text/html',html,html,'text/html')['ok']
+    oversized = b'x' * (MAX_FILE + 1)
+    assert not observer.compare(200,'text/html',oversized,oversized,'text/html')['ok']
     assert "const EXPECTED_SHA256='"+hashlib.sha256(html).hexdigest()+"'" in worker
     assert manifest['scope']==manifest['start_url']=='./'
     assert manifest['display']=='standalone'
