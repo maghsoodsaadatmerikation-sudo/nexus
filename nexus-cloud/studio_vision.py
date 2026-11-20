@@ -6,7 +6,9 @@ import binascii
 import hmac
 import json
 import os
+import re
 import struct
+import threading
 import zlib
 from typing import Literal
 
@@ -26,6 +28,40 @@ MAX_PIXELS = 8_000_000
 PNG_SIGNATURE = b'\x89PNG\r\n\x1a\n'
 SOF_MARKERS = frozenset((0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
                          0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF))
+
+
+class ProcessVisionQuota:
+    """Atomic, per-worker provider-attempt guard; NOT a durable billing quota."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._used = 0
+
+    def remaining(self, limit: int) -> int:
+        with self._lock:
+            return max(0, limit - self._used)
+
+    def reserve(self, limit: int) -> bool:
+        # Reserve BEFORE contacting the model provider, even if it later fails.
+        with self._lock:
+            if self._used >= limit:
+                return False
+            self._used += 1
+            return True
+
+
+def request_cap() -> int | None:
+    """Explicitly configured 1..1000 provider attempts per Python process.
+
+    No cap means vision must fail closed. Never interpret invalid input as
+    unlimited. A restart, worker replacement or extra worker resets/multiplies
+    this guard: it does not replace a durable provider spending limit.
+    """
+    value = os.getenv('NEXUS_VISION_MAX_REQUESTS_PER_PROCESS', '')
+    if not re.fullmatch(r'[1-9][0-9]{0,3}', value):
+        return None
+    limit = int(value)
+    return limit if limit <= 1000 else None
 
 
 class VisionRequest(BaseModel):
@@ -135,11 +171,18 @@ def image_bytes(image_base64, mime_type):
 
 def register(app):
     @app.get('/studio-api/vision-status')
-    async def vision_status():
+    async def vision_status(request: Request):
         c = studio_model.config()
-        available = c is not None and enabled()
+        limit = request_cap()
+        enabled_config = c is not None and enabled()
+        remaining = request.app.state.vision_quota.remaining(limit) if limit is not None else 0
+        available = enabled_config and limit is not None and remaining > 0
+        reason = ('disabled' if not enabled_config else
+                  'limit-unconfigured' if limit is None else
+                  'limit-reached' if remaining == 0 else 'configured')
         return JSONResponse({
             'configured': available,
+            'reason': reason,
             'configuration_id': studio_model.configuration_id(c) if available else None,
             'model': c[1] if available else None,
             'provider_host': c[3] if available else None,
@@ -151,6 +194,9 @@ def register(app):
         c = studio_model.config()
         if c is None or not enabled():
             raise HTTPException(503, 'Vision provider is not enabled')
+        limit = request_cap()
+        if limit is None:
+            raise HTTPException(503, 'A bounded vision process quota is required')
         auths = request.headers.getlist('authorization')
         authorization = auths[0] if len(auths) == 1 else ''
         if not hmac.compare_digest(authorization.encode(), ('Bearer ' + c[2]).encode()):
@@ -189,6 +235,10 @@ def register(app):
                 headers['authorization'] = 'Bearer ' + key
             payload = {'model': c[1], 'messages': messages, 'stream': False, 'store': False,
                        'max_completion_tokens': data.max_output_tokens}
+            if not request.app.state.vision_quota.reserve(limit):
+                raise HTTPException(
+                    429, 'Vision process quota exhausted; operator action required',
+                    headers={'Cache-Control': 'no-store'})
             result = bytearray()
             with anyio.fail_after(45):
                 async with request.app.state.client.stream(
