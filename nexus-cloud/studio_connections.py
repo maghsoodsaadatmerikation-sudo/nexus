@@ -20,6 +20,7 @@ from transport_bounds import read_bounded_body
 
 MAX_SOURCE = 24 * 1024
 MAX_RESPONSE = 128 * 1024
+MAX_PULL_RESPONSE = 1024 * 1024
 NO_STORE = {"Cache-Control": "no-store"}
 REPO = re.compile(r"[A-Za-z0-9-]{1,39}/[A-Za-z0-9_.-]{1,100}")
 SERVICE = re.compile(r"srv-[a-z0-9]{10,40}")
@@ -122,6 +123,8 @@ async def read_provider(client, data, provider, target, token):
     if token:
         headers["authorization"] = "Bearer " + token
     body = bytearray()
+    # GitHub includes each full PR description even though Studio only needs metadata.
+    limit = MAX_PULL_RESPONSE if data.operation == "github.pulls" else MAX_RESPONSE
     try:
         with anyio.fail_after(12):
             async with client.stream("GET", url, params=params, headers=headers,
@@ -133,7 +136,7 @@ async def read_provider(client, data, provider, target, token):
                 if reply.status_code != 200 or reply.headers.get("content-encoding", "identity").lower() != "identity":
                     raise HTTPException(502, "Provider did not return a supported response")
                 async for chunk in reply.aiter_bytes(chunk_size=8192):
-                    if len(body) + len(chunk) > MAX_RESPONSE:
+                    if len(body) + len(chunk) > limit:
                         raise HTTPException(502, "Provider response exceeded the limit")
                     body.extend(chunk)
     except (httpx.RequestError, TimeoutError):

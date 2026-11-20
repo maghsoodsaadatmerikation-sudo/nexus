@@ -112,3 +112,18 @@ def test_redirects_are_rejected_without_contacting_destination(monkeypatch):
         result = client.post("/studio-api/connections/read", headers=AUTH, json=read_body("github.pulls"))
         assert result.status_code == 502
         assert calls == ["api.github.com"]
+
+
+def test_large_github_descriptions_are_discarded_instead_of_returned(monkeypatch):
+    def handler(request):
+        assert request.url.params["per_page"] == "8"
+        return httpx.Response(200, json=[
+            {"number": i, "title": f"Draft {i}", "body": "UNREVIEWED " * 3500,
+             "head": {"ref": "topic", "sha": "a" * 40}, "base": {"ref": "main"}}
+            for i in range(1, 9)
+        ])
+    with gateway(monkeypatch, handler) as client:
+        result = client.post("/studio-api/connections/read", headers=AUTH, json=read_body("github.pulls"))
+        assert result.status_code == 200
+        assert len(result.json()["result"]) == 8
+        assert "UNREVIEWED" not in result.text
