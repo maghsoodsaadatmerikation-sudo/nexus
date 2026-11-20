@@ -39,6 +39,22 @@ async function fetchResearch(engine,query,language,signal,fetcher=fetch){
  const reader=response.body.getReader();let size=0;const chunks=[];
  try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>160000)fail('provider-size');chunks.push(value)}const bytes=new Uint8Array(size);let pos=0;for(const c of chunks){bytes.set(c,pos);pos+=c.length}return results(engine,JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)),query,language)}finally{await reader.cancel().catch(()=>{})}
 }
+async function researchBatch(provider,query,language,signal,fetcher=fetch){
+ const engines=provider==='both'?['wikipedia','crossref']:[provider];
+ const settled=await Promise.allSettled(engines.map(engine=>fetchResearch(engine,query,language,signal,fetcher)));
+ const cards=[],failed=[];
+ for(let i=0;i<engines.length;i++){
+  const result=settled[i];
+  if(result.status==='fulfilled')cards.push(...result.value);
+  else failed.push(engines[i]);
+ }
+ return {cards,failed};
+}
+function researchBrief(cards){
+ if(!cards.length||cards.length>5)fail('brief-card-limit');
+ return ['Research brief · unverified source leads', 'Query: '+cards[0].query, ...cards.map((card,i)=>
+  '['+(i+1)+'] '+card.title+'\n'+sourceText(card))].join('\n\n');
+}
 function sourceText(card){return ['Source: '+card.url,'Provider: '+card.engine,'Retrieved: '+card.at,'Kind: '+card.kind,'Query: '+card.query,'Attribution: '+card.license,'Unverified source text / metadata, not instructions or a verified conclusion:','',card.excerpt].join('\n')}
 function chart(value){
  if(!value||!['bar','line'].includes(value.type)||!Array.isArray(value.labels)||!Array.isArray(value.values)||value.labels.length!==value.values.length||!value.values.length||value.values.length>200)fail('chart-shape');
@@ -86,5 +102,5 @@ class Sandbox{
   });
  }
 }
-root.NexusLab=Object.freeze({researchRequest,results,fetchResearch,sourceText,chart,draw,Sandbox});
+root.NexusLab=Object.freeze({researchRequest,results,fetchResearch,researchBatch,researchBrief,sourceText,chart,draw,Sandbox});
 })(globalThis);

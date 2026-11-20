@@ -7,6 +7,17 @@ const wiki={query:{pages:{1:{pageid:1,title:'<img src=x>',extract:'unverified ex
 const c=L.results('crossref',{message:{items:[{DOI:'10.1234/a?b#c',title:['Paper'],author:[{given:'A',family:'B'}],published:{'date-parts':[[2020]]},type:'journal-article'},{DOI:'javascript:bad',title:['bad']}] }},'topic');ok(()=>assert.equal(c.length,1));ok(()=>assert.equal(c[0].kind,'bibliographic-metadata-only'));ok(()=>assert(c[0].url.includes('%3F')&&c[0].url.includes('%23')));ok(()=>assert(!c[0].excerpt.includes('verified finding')));
 let seen;const result=await L.fetchResearch('wikipedia','explicit query','en',undefined,async(url,options)=>{seen={url,options};return new Response(JSON.stringify(wiki))});ok(()=>assert.equal(result.length,1));ok(()=>assert.equal(seen.options.credentials,'omit'));ok(()=>assert.equal(seen.options.redirect,'error'));ok(()=>assert.equal(seen.options.referrerPolicy,'no-referrer'));ok(()=>assert(!('authorization' in (seen.options.headers||{}))));
 await assert.rejects(()=>L.fetchResearch('wikipedia','q','en',undefined,async()=>new Response('x'.repeat(160001))));checks++;
+const batchUrls=[];
+const partial=await L.researchBatch('both','solar fields','en',undefined,async(url,options)=>{
+ batchUrls.push(new URL(url));assert.equal(options.credentials,'omit');
+ return url.includes('wikipedia.org')?Response.json(wiki):new Response('',{status:503});
+});
+ok(()=>assert.deepEqual(partial.failed,['crossref']));
+ok(()=>assert.equal(partial.cards.length,1));
+ok(()=>assert.deepEqual(batchUrls.map(url=>[url.hostname,url.searchParams.get('gsrsearch')||url.searchParams.get('query')]),[['en.wikipedia.org','solar fields'],['api.crossref.org','solar fields']]));
+const brief=L.researchBrief([...w,...c]);
+ok(()=>assert(brief.includes('[1] <img src=x>')&&brief.includes('https://doi.org/')&&brief.includes('bibliographic-metadata-only')));
+ok(()=>assert.throws(()=>L.researchBrief(Array(6).fill(w[0]))));
 for(const v of [null,{type:'pie',labels:['a'],values:[1]},{type:'bar',labels:[],values:[]},{type:'line',labels:['a'],values:[NaN]},{type:'bar',labels:['a'],values:[Infinity]},{type:'bar',labels:['a'],values:[1e13]},{type:'line',labels:['a','b'],values:[1]}])ok(()=>assert.throws(()=>L.chart(v)));
 ok(()=>assert.deepEqual(L.chart({type:'bar',labels:['<script>'],values:[-2]}).values,[-2]));ok(()=>assert.equal(L.chart({type:'line',labels:['a'],values:[0],title:'Safe'}).title,'Safe'));
 console.log(JSON.stringify({status:'PASS',checks,live_provider_tested:false,browser_sandbox_tested:false}));
