@@ -24,6 +24,37 @@ window.addEventListener('load',async()=>{
  try{
   assert(document.documentElement.lang==='en','english-first');
   assert(!snapshot().projects.length&&!$('use-memory').checked,'empty-temporary-session-memory-off');
+  const offer=$('nexus-zen-offer'),compose=$('studio-compose-send');
+  fill('message','/research Old question');compose.click();
+  assert(!offer.hidden,'tool-offer-opens-after-explicit-action');
+  fill('message','Revised question');
+  assert(offer.hidden&&offer.childElementCount===0,'editing-drops-stale-tool-offer');
+  fill('research-query','Preserve existing research draft');
+  fill('message','/research Replacement query');compose.click();offer.querySelector('button').click();
+  assert(NexusStudioFocus.active()==='research-card'&&$('research-query').value==='Preserve existing research draft'&&
+   $('message').value==='/research Replacement query','tool-navigation-preserves-both-drafts');
+  fill('research-query','');$('nexus-zen-home').click();
+  fill('message','/research Exact query');compose.click();offer.querySelector('button').click();
+  assert($('research-query').value==='Exact query','empty-tool-field-receives-reviewed-query');
+  fill('research-query','');$('nexus-zen-home').click();
+  fill('message','/research Guide fallback');compose.click();offer.querySelectorAll('button')[1].click();
+  assert(offer.hidden&&current().threads[0].nodes.length===2&&network===0,
+   'declining-tool-can-continue-with-local-guide');
+  change('studio-compose-mode','model');$('studio-compose-config').click();
+  assert($('nexus-zen-more').getAttribute('aria-expanded')==='true'&&$('studio-model-settings').open,
+   'model-settings-shortcut-expands-chat-options');
+  $('nexus-zen-more').click();
+  assert($('nexus-zen-more').getAttribute('aria-expanded')==='false','chat-options-can-collapse-after-shortcut');
+  change('studio-compose-mode','guide');
+
+  fill('message','/research Synthetic private offer');compose.click();
+  $('nexus-zen-menu').click();fill('nexus-zen-find','Synthetic private search');$('nexus-zen-archived').click();
+  window.confirm=()=>false;$('lock').click();
+  assert(!offer.hidden&&$('nexus-zen-find').value==='Synthetic private search','declined-lock-keeps-chat-and-search');
+  window.confirm=()=>true;$('lock').click();
+  assert(offer.hidden&&offer.childElementCount===0&&$('nexus-zen-drawer').hidden&&
+   !$('nexus-zen-find').value&&!$('nexus-zen-archived').checked&&!$('nexus-zen-history').childElementCount,
+   'accepted-lock-clears-private-chat-overlays');
   fill('project-title','PRIVATE PROJECT');$('new-project').click();$('new-thread').click();
   fill('message','ORIGINAL QUESTION');$('guide').click();
   assert(current().threads[0].nodes.length===2,'local-guide-multi-turn');

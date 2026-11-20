@@ -127,6 +127,7 @@ function toolLifecycle(phase){
   try{if(typeof api[method]!=='function')throw Error('unsupported-lifecycle');api[method]()}
   catch{complete=false} // Continue clearing independent tools even if one fails.
  }
+ if(phase==='private')document.dispatchEvent(new Event('nexus-studio-private-clear'));
  return complete;
 }
 function clearModelReview(){
