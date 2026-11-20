@@ -1723,7 +1723,55 @@ function render(container, text) {
  }
 }
 
-globalThis.NexusReplyFormat = Object.freeze({render});
+const exportStyle = `
+ :root {color-scheme: light dark; font: 17px/1.6 system-ui, sans-serif;}
+ body {margin: 0; padding: clamp(1rem, 4vw, 3rem);}
+ main {max-width: 74ch; margin: auto; overflow-wrap: anywhere; white-space: pre-wrap;}
+ .reply-format {white-space: normal;}
+ .reply-format :is(p,blockquote) {white-space: pre-wrap;}
+ h1 {font-size: 1.5rem;}
+ ul, ol {padding-inline-start: 1.5rem;}
+ blockquote {margin-inline: 0; padding-inline-start: .75rem; border-inline-start: 3px solid;}
+ pre, .reply-table {overflow: auto;}
+ pre {direction: ltr; text-align: left; white-space: pre; border: 1px solid; border-radius: .5rem; padding: .75rem;}
+ pre:focus-visible, .reply-table:focus-visible {outline: 2px solid; outline-offset: 2px;}
+ table {width: 100%; border-collapse: collapse;}
+ th, td {border: 1px solid; text-align: start; padding: .35rem .6rem;}
+ @media print {body {padding: 0;} pre {white-space: pre-wrap;}}
+`;
+
+function exportHtml(sourceDocument, text, {title, format}) {
+ const doc = sourceDocument.implementation.createHTMLDocument(title);
+ doc.documentElement.lang = sourceDocument.documentElement.lang || 'en';
+ doc.documentElement.dir = sourceDocument.documentElement.dir === 'rtl' ? 'rtl' : 'ltr';
+ const charset = doc.createElement('meta');
+ charset.setAttribute('charset', 'utf-8');
+ const policy = doc.createElement('meta');
+ policy.httpEquiv = 'Content-Security-Policy';
+ policy.content = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
+ doc.head.prepend(charset, policy);
+ const viewport = doc.createElement('meta');
+ viewport.name = 'viewport';
+ viewport.content = 'width=device-width, initial-scale=1';
+ const referrer = doc.createElement('meta');
+ referrer.name = 'referrer';
+ referrer.content = 'no-referrer';
+ const style = doc.createElement('style');
+ style.textContent = exportStyle;
+ doc.head.append(viewport, referrer, style);
+ const article = doc.createElement('main');
+ article.dir = 'auto';
+ const heading = doc.createElement('h1');
+ heading.textContent = title;
+ const content = doc.createElement('div');
+ if (format) render(content, text);
+ else content.textContent = text;
+ article.append(heading, content);
+ doc.body.append(article);
+ return '<!doctype html>\n' + doc.documentElement.outerHTML;
+}
+
+globalThis.NexusReplyFormat = Object.freeze({render, exportHtml});
 })();
 </script><script>'use strict';
 const S=NexusStudio,$=id=>document.getElementById(id),vault=new S.Vault(),undoSlot=new S.UndoSlot(),localePacks=new NexusLocales.Registry();
@@ -1781,12 +1829,16 @@ Object.assign(FA,{streamPreview:'پاسخ در حال تولید',streamFailed:'
 Object.assign(EN,{
  chatCopy:'Copy answer',chatCopyDone:'Answer copied to the clipboard.',
  chatCopyFailed:'Clipboard access is unavailable. Select the answer text to copy it.',
+ chatExport:'Download answer',chatExportTitle:'NEXUS answer',
+ chatExportConfirm:'Download this answer as an unencrypted HTML file?',chatExportDone:'HTML download requested.',
  chatPasteName:'Pasted text',chatPasteAdded:'Long paste attached locally. Add a question and review the excerpts before sending.',
  chatPasteLimit:'The draft was kept. Paste less text or remove an attachment to make room.'
 });
 Object.assign(FA,{
  chatCopy:'کپی پاسخ',chatCopyDone:'پاسخ در کلیپ‌بورد کپی شد.',
  chatCopyFailed:'دسترسی به کلیپ‌بورد ممکن نیست. متن پاسخ را انتخاب و کپی کن.',
+ chatExport:'دریافت فایل پاسخ',chatExportTitle:'پاسخ نکسوس',
+ chatExportConfirm:'همین پاسخ را به‌صورت فایل HTML بدون رمزگذاری دانلود می‌کنی؟',chatExportDone:'درخواست دانلود HTML ثبت شد.',
  chatPasteName:'متن چسبانده‌شده',chatPasteAdded:'متن بلند به‌صورت محلی پیوست شد. پرسشت را بنویس و گزیده‌ها را پیش از ارسال بازبینی کن.',
  chatPasteLimit:'پیش‌نویس حفظ شد. متن کوتاه‌تری بچسبان یا یکی از پیوست‌ها را بردار.'
 });
@@ -1949,12 +2001,20 @@ function renderMessage(n){
    try{await navigator.clipboard.writeText(n.text)}catch{result='chatCopyFailed'}
    if(copy.isConnected)status(result);
   };
+  const exportAnswer=el('button',t('chatExport'));
+  exportAnswer.type='button';exportAnswer.className='secondary';exportAnswer.dataset.chatExport='';
+  exportAnswer.onclick=()=>{
+   if(!confirm(t('chatExportConfirm')))return;
+   const html=NexusReplyFormat.exportHtml(document,n.text,{title:t('chatExportTitle'),format:n.origin==='model'});
+   download(html,'nexus-answer.html','text/html;charset=utf-8');
+   status('chatExportDone');
+  };
   const canvas=el('button',t('toCanvas'));
   canvas.disabled=busy;
   canvas.onclick=()=>{if($('editor').value&&!confirm(t('discard')))return;$('editor').value=n.text;editorDirty=true;stop()};
   const speak=el('button',t('speak'));
   speak.onclick=()=>readAloud(n.text);
-  item.append(copy,canvas,speak);
+  item.append(copy,exportAnswer,canvas,speak);
  }
  return item;
 }
@@ -2258,7 +2318,7 @@ $('language-file').onchange=async event=>{
  if(!f||busy)return;if(f.size>NexusLocales.MAX_BYTES)return status('failed');
  const current=()=>task===languageImport&&rev===revision&&!busy;
  try{
-  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{optionalKeys:['storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatPaste'))]});
+  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{optionalKeys:['storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
   if(!$('language').querySelector('option[value="'+pack.code+'"]'))$('language').append(option(pack.code,pack.code));
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}

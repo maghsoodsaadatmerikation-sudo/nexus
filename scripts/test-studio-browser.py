@@ -150,6 +150,31 @@ window.addEventListener('load',async()=>{
   formatted.parentElement.querySelector('[data-chat-copy]').click();
   await wait(()=>copiedReply!==undefined);
   assert(copiedReply===formattedReply&&current().threads[0].nodes.at(-1).text===formattedReply,'copy-and-history-keep-original-markdown');
+  const exportAnswer=formatted.parentElement.querySelector('[data-chat-export]');
+  const previousCreate=URL.createObjectURL,previousClick=HTMLAnchorElement.prototype.click,previousConfirm=window.confirm;
+  const beforeExport=JSON.stringify(snapshot()),beforeExportCalls=network;
+  let exportedBlob,exportName;
+  URL.createObjectURL=blob=>{exportedBlob=blob;return previousCreate.call(URL,blob)};
+  HTMLAnchorElement.prototype.click=function(){exportName=this.download};
+  try{
+   window.confirm=()=>false;exportAnswer.click();
+   assert(!exportedBlob&&!exportName,'declining-export-does-not-produce-a-file');
+   window.confirm=()=>true;exportAnswer.click();
+  }finally{
+   URL.createObjectURL=previousCreate;HTMLAnchorElement.prototype.click=previousClick;window.confirm=previousConfirm;
+  }
+  assert(exportName==='nexus-answer.html'&&exportedBlob.type.startsWith('text/html'),'answer-exports-as-portable-html');
+  const exportedHtml=await exportedBlob.text();
+  const exported=new DOMParser().parseFromString(exportedHtml,'text/html');
+  assert(exported.documentElement.lang==='en'&&exported.querySelector('main h3')?.textContent==='Synthetic answer'&&
+   exported.querySelector('table td')?.textContent==='مثال'&&exported.querySelector('pre code')?.textContent==='<div>literal code</div>',
+   'standalone-answer-keeps-structured-markdown-and-unicode');
+  assert(!exported.querySelector('script,img,iframe,base,link,form')&&exported.querySelectorAll('a').length===1&&
+   exported.querySelector('meta[http-equiv="Content-Security-Policy"]').content.includes("default-src 'none'"),
+   'exported-html-keeps-unsupported-markup-inert');
+  assert(!exportedHtml.includes('orchard trees')&&!exportedHtml.includes('REVIEWED SECRET MEMORY')&&
+   !exportedHtml.includes('TRANSIENT ACCESS TOKEN')&&JSON.stringify(snapshot())===beforeExport&&network===beforeExportCalls,
+   'answer-export-excludes-conversation-context-and-stays-local');
   const regenerate=$('regenerate');
   assert(!regenerate.hidden&&!regenerate.disabled&&getComputedStyle(regenerate).display!=='none','retry-is-visible-in-chat');
   fill('message','Keep this unsent follow-up');
