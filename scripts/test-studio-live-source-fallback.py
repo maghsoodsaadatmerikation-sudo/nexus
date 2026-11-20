@@ -147,8 +147,8 @@ class SourceFallbackTests(unittest.TestCase):
         self.assertEqual(len(fallback.LEGACY_FILES), 13)
         self.assertEqual(len(fallback.gate.OBSERVE), 9)
         self.assertEqual(fallback.SERVICE, "srv-dbrjurc9v7es73cqe0v0")
-        self.assertEqual(fallback.LIVE_COMMIT, "9e05b840fc2d36d7bc268aede2693ab4d6fb08e3")
-        self.assertEqual(fallback.LIVE_DEPLOY, "dep-dbvkuonf3r2c73cj3930")
+        self.assertEqual(fallback.LIVE_COMMIT, "8b5da6a192e6be68283282afcb2ac9b5d0fdcd91")
+        self.assertEqual(fallback.LIVE_DEPLOY, "dep-dbvvvil9fdbs73c6qb80")
 
 
 if __name__ == "__main__":
