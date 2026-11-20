@@ -81,7 +81,7 @@ Two independent real public-origin Chromium sessions are now required in the
 exact-source SHA verification and a separately tested pinned model. Public
 acceptance needs explicit dispatch with the expected commit or the existing
 manual verification marker; ordinary green source CI is not proof of public
-promotion. The public HTML observer uses a 485,000-byte cap shared with the Studio release package,
+promotion. The public HTML observer uses a 490,000-byte cap shared with the Studio release package,
 not the smaller Pilot 12 limit.
 
 All evidence reports are uploaded. No provider credentials or actual user files are used.

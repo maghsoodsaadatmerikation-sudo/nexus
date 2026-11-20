@@ -31,7 +31,7 @@ ID must still be verified in Render independently.
 
 ## Changes
 
-- `scripts/verify-studio-public.py` now sets a **485,000-byte cap shared with the Studio release package**. The observer self-test accepts the current generated Studio HTML and rejects an exact-match response one byte above the shared bound.
+- `scripts/verify-studio-public.py` now sets a **490,000-byte cap shared with the Studio release package**. The observer self-test accepts the current generated Studio HTML and rejects an exact-match response one byte above the shared bound.
 - `studio-static-public.yml` has a fast read-only unit/source job and a separate **22-minute post-promotion acceptance** job. On an ordinary PR it runs source/unit checks but **does not** interrogate or claim the public website was promoted. Full public checks require a manually dispatched run or the existing explicit `[verify-studio-public]` marker.
 - Manual dispatch requires the **exact 40-character Git source commit** expected to have been deployed. It blocks when that input disagrees with the checked-out commit; neither the input nor green CI grants deploy authority.
 - Public acceptance first fetches nine exact fixed-origin HTTPS assets and decoded icon pixels. If any source remains stale or unreachable it fails before browser/model testing.

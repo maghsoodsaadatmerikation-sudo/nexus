@@ -59,7 +59,7 @@ def main():
         provider_env = {name: os.environ[name] for name in provider_names if name in os.environ}
         connector_names = ("NEXUS_CONNECTOR_GITHUB_REPO", "NEXUS_CONNECTOR_GITHUB_TOKEN",
                            "NEXUS_CONNECTOR_RENDER_SERVICE", "NEXUS_CONNECTOR_RENDER_TOKEN",
-                           "NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN")
+                           "NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN", "NEXUS_CONNECTOR_GITHUB_FILE_TOKEN")
         connector_env = {name: os.environ[name] for name in connector_names if name in os.environ}
         # A saved operator credential, not an ambient Studio token, is used below.
         previous = os.environ.get("NEXUS_STUDIO_TOKEN")

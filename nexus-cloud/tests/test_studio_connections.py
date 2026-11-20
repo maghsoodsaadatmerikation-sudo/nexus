@@ -211,3 +211,66 @@ def test_advanced_main_requires_a_new_preview(monkeypatch):
         data = approval(client)
         current = "b" * 40
         assert client.post(BRANCH_WRITE, headers=AUTH, json=data).status_code == 409
+
+
+FILE_BASE = "/studio-api/connections/github/file-base"
+FILE_PREVIEW = "/studio-api/connections/github/file-preview"
+FILE_COMMIT = "/studio-api/connections/github/file-commit"
+FILE_PATH = "docs/intro.md"
+
+
+def test_reviewed_file_edit_is_bound_to_text_and_atomic_head(monkeypatch):
+    import json
+
+    monkeypatch.setenv("NEXUS_CONNECTOR_GITHUB_FILE_TOKEN", "dedicated-file-token")
+    calls = []
+    old = "Hello\n"
+    new = "Hello, Studio\n"
+    current = BASE_SHA
+
+    def provider(request):
+        nonlocal current
+        calls.append((request.method, request.url.path))
+        assert request.url.host == "api.github.com"
+        assert request.headers["authorization"] == "Bearer dedicated-file-token"
+        path = request.url.path
+        if path.endswith("/branches/" + TOPIC):
+            return httpx.Response(200, json={"name": TOPIC, "commit": {"sha": current}})
+        if path.endswith("/git/commits/" + BASE_SHA):
+            return httpx.Response(200, json={"sha": BASE_SHA, "tree": {"sha": "b" * 40}})
+        if path.endswith("/git/trees/" + "b" * 40):
+            return httpx.Response(200, json={"truncated": False, "tree": [
+                {"path": FILE_PATH, "mode": "100644", "type": "blob", "sha": "c" * 40},
+                {"path": "docs/link.md", "mode": "120000", "type": "blob", "sha": "d" * 40},
+            ]})
+        if path.endswith("/contents/" + FILE_PATH):
+            assert request.url.params["ref"] == BASE_SHA
+            return httpx.Response(200, json={"type": "file", "path": FILE_PATH, "encoding": "base64",
+                                             "sha": "c" * 40, "content": base64.b64encode(old.encode()).decode()})
+        assert request.method == "POST" and path == "/graphql"
+        data = json.loads(request.content)["variables"]["input"]
+        assert data["branch"] == {"repositoryNameWithOwner": REPO, "branchName": TOPIC}
+        assert data["expectedHeadOid"] == BASE_SHA
+        assert data["fileChanges"] == {"additions": [{"path": FILE_PATH,
+                                                        "contents": base64.b64encode(new.encode()).decode()}]}
+        if current != data["expectedHeadOid"]:
+            return httpx.Response(200, json={"errors": [{"message": "Head changed"}], "data": {}})
+        current = "e" * 40
+        return httpx.Response(200, json={"data": {"createCommitOnBranch": {"commit": {"oid": current}}}})
+
+    with gateway(monkeypatch, provider) as client:
+        target = {**branch_input(), "path": FILE_PATH}
+        res = client.post(FILE_BASE, headers=AUTH, json=target)
+        assert res.status_code == 200 and res.json()["text"] == old
+        assert client.post(FILE_BASE, headers=AUTH, json={**target, "path": "docs/link.md"}).status_code == 422
+        assert client.post(FILE_BASE, headers=AUTH, json={**target, "path": ".github/check.py"}).status_code == 422
+        draft = {**target, "base_sha": BASE_SHA, "text": new}
+        p = client.post(FILE_PREVIEW, headers=AUTH, json=draft).json()
+        assert "-Hello\n+Hello, Studio\n" in p["diff"]
+        approval_body = {**draft, "consent": True, "review_id": p["review_id"], "expires_at": p["expires_at"]}
+        assert client.post(FILE_COMMIT, headers=AUTH, json={**approval_body, "text": "Changed after review"}).status_code == 409
+        assert client.post(FILE_COMMIT, headers=AUTH, json={**approval_body, "consent": False}).status_code == 422
+        assert all(method == "GET" for method, _ in calls)
+        assert client.post(FILE_COMMIT, headers=AUTH, json=approval_body).json()["commit"] == "e" * 40
+        assert client.post(FILE_COMMIT, headers=AUTH, json=approval_body).status_code == 409
+        assert client.post(FILE_PREVIEW, headers=AUTH, json=draft).status_code == 409

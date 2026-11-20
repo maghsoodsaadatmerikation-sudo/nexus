@@ -2,6 +2,7 @@
 
 import base64
 import binascii
+import difflib
 import hashlib
 import hmac
 import json
@@ -28,6 +29,15 @@ SHA = r"^[a-f0-9]{40}$"
 BRANCH_SLUG = r"^[a-z0-9](?:[a-z0-9-]{1,46})[a-z0-9]$"
 BRANCH_PREFIX = "nexus/studio-"
 REVIEW_SECONDS = 300
+MAX_FILE_REQUEST = 160 * 1024
+MAX_DIFF = 58 * 1024
+MAX_EDIT_LINES = 1800
+FILE_EXTENSIONS = {".md", ".txt", ".py", ".rs", ".js", ".mjs", ".css", ".html", ".toml", ".json"}
+COMMIT_QUERY = """
+mutation($input: CreateCommitOnBranchInput!) {
+  createCommitOnBranch(input: $input) { commit { oid } }
+}
+"""
 SERVICE = re.compile(r"srv-[a-z0-9]{10,40}")
 OPERATIONS = {
     "github.pulls": "github",
@@ -56,6 +66,21 @@ class BranchPreview(BaseModel):
 class BranchApproval(BranchPreview):
     consent: bool
     base_sha: str = Field(pattern=SHA)
+    expires_at: int
+    review_id: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class FileTarget(BranchPreview):
+    path: str = Field(min_length=1, max_length=240)
+
+
+class FileDraft(FileTarget):
+    base_sha: str = Field(pattern=SHA)
+    text: str = Field(max_length=MAX_SOURCE)
+
+
+class FileApproval(FileDraft):
+    consent: bool
     expires_at: int
     review_id: str = Field(pattern=r"^[a-f0-9]{64}$")
 
@@ -135,7 +160,7 @@ def project_result(operation, raw, path):
 
 
 async def provider_json(client, provider, token, url, *, params=None, payload=None,
-                        limit=MAX_RESPONSE):
+                        limit=MAX_RESPONSE, post_status=201):
     headers = {"accept": "application/json", "accept-encoding": "identity"}
     if provider == "github":
         headers.update({"accept": "application/vnd.github+json", "x-github-api-version": "2022-11-28"})
@@ -151,8 +176,8 @@ async def provider_json(client, provider, token, url, *, params=None, payload=No
                 if reply.status_code == 404:
                     raise HTTPException(404, "Provider resource is unavailable")
                 if payload is not None and reply.status_code in {409, 422}:
-                    raise HTTPException(409, "GitHub did not create the branch")
-                expected_status = 200 if payload is None else 201
+                    raise HTTPException(409, "Provider rejected the reviewed change")
+                expected_status = 200 if payload is None else post_status
                 if reply.status_code != expected_status or reply.headers.get("content-encoding", "identity").lower() != "identity":
                     raise HTTPException(502, "Provider did not return a supported response")
                 async for chunk in reply.aiter_bytes(chunk_size=8192):
@@ -179,12 +204,12 @@ async def read_provider(client, data, provider, target, token):
 
 
 
-async def parse_request(request, schema):
+async def parse_request(request, schema, max_bytes=4096):
     operator_auth(request)
     media = request.headers.getlist("content-type")
     if len(media) != 1 or media[0].split(";", 1)[0].strip().lower() != "application/json":
         raise HTTPException(415, "JSON required", headers=NO_STORE)
-    raw = await read_bounded_body(request, max_bytes=4096, timeout_seconds=6,
+    raw = await read_bounded_body(request, max_bytes=max_bytes, timeout_seconds=6,
                                   too_large_detail="Connection request too large",
                                   timeout_detail="Connection request timed out", timeout_status=408)
     try:
@@ -202,11 +227,11 @@ def take_capacity(request):
     return limiter
 
 
-def branch_config(configuration_id):
+def write_config(configuration_id, setting):
     entry = configured().get("github")
-    token = os.getenv("NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN", "").strip()
+    token = os.getenv(setting, "").strip()
     if not entry or not token or configuration_id != target_id("github", entry[0]):
-        raise HTTPException(409, "Branch creation is disabled or the connection changed", headers=NO_STORE)
+        raise HTTPException(409, "GitHub write access is disabled or the connection changed", headers=NO_STORE)
     return entry[0], token
 
 
@@ -215,16 +240,76 @@ def branch_review_id(token, target, slug, sha, expires):
     return hmac.new(token.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
 
-async def main_head(client, target, token):
+async def branch_head(client, target, token, branch):
     result = await provider_json(client, "github", token,
-                                 f"https://api.github.com/repos/{target}/branches/main")
+                                 f"https://api.github.com/repos/{target}/branches/{quote(branch, safe='')}")
     try:
         sha = result["commit"]["sha"]
-        if result["name"] != "main" or not re.fullmatch(SHA, sha):
+        if result["name"] != branch or not re.fullmatch(SHA, sha):
             raise ValueError()
     except (KeyError, TypeError, ValueError):
-        raise HTTPException(502, "GitHub did not identify the main branch") from None
+        raise HTTPException(502, "GitHub did not identify the requested branch") from None
     return sha
+
+
+def editable_path(path):
+    tail = path.rsplit("/", 1)[-1]
+    if any(not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", part) for part in path.split("/")) \
+       or "." + tail.rsplit(".", 1)[-1] not in FILE_EXTENSIONS or "." not in tail:
+        raise HTTPException(422, "Choose an existing supported text file outside hidden directories", headers=NO_STORE)
+
+
+def editable_text(text):
+    try:
+        raw = text.encode("utf-8")
+    except UnicodeError:
+        raise HTTPException(422, "Valid UTF-8 text is required", headers=NO_STORE) from None
+    if len(raw) > MAX_SOURCE or len(text.splitlines()) > MAX_EDIT_LINES or any(c < 32 and c not in (9, 10) for c in raw):
+        raise HTTPException(422, "Use LF text up to 24 KiB and 1800 lines", headers=NO_STORE)
+    return raw
+
+
+async def editable_file(client, target, token, sha, path):
+    base = f"https://api.github.com/repos/{target}"
+    # Verify that GitHub is serving a normal file at this exact path. The
+    # Contents endpoint by itself can dereference a repository symlink.
+    try:
+        commit = await provider_json(client, "github", token, base + "/git/commits/" + sha)
+        tree_sha = commit["tree"]["sha"]
+        if commit["sha"] != sha or not re.fullmatch(SHA, tree_sha):
+            raise ValueError()
+        tree = await provider_json(client, "github", token, base + "/git/trees/" + tree_sha,
+                                   params={"recursive": "1"}, limit=MAX_PULL_RESPONSE)
+        if tree["truncated"] is not False or not isinstance(tree["tree"], list):
+            raise ValueError()
+        entry = next((row for row in tree["tree"] if row["path"] == path), None)
+        if not entry or entry["mode"] != "100644" or entry["type"] != "blob":
+            raise HTTPException(422, "Select an existing regular, non-executable file", headers=NO_STORE)
+        raw = await provider_json(client, "github", token, base + "/contents/" + quote(path, safe="/"),
+                                  params={"ref": sha})
+        found = project_result("github.file", raw, path)
+        if found["blob_sha"] != entry["sha"]:
+            raise ValueError()
+    except (ValueError, KeyError, TypeError, AttributeError, binascii.Error):
+        raise HTTPException(502, "GitHub did not return a verifiable file", headers=NO_STORE) from None
+    editable_text(found["text"])
+    return found["text"]
+
+
+def file_review_id(token, target, data, expires, raw):
+    payload = json.dumps(["studio-commit-file-v1", target, data.slug, data.path, data.base_sha,
+                          hashlib.sha256(raw).hexdigest(), expires], separators=(",", ":"))
+    return hmac.new(token.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+
+def preview_diff(previous, replacement):
+    # Line feeds are retained so a final-newline edit has an explicit marker.
+    changes = difflib.unified_diff(previous.splitlines(keepends=True), replacement.splitlines(keepends=True),
+                                   fromfile="Before", tofile="After", n=2)
+    diff = "".join(line if line.endswith("\n") else line + "\n\\ No newline at end of file\n" for line in changes)
+    if not diff or len(diff.encode()) > MAX_DIFF:
+        raise HTTPException(422, "No change or the diff is too large", headers=NO_STORE)
+    return diff
 
 def register(app):
     @app.get("/studio-api/connections")
@@ -234,7 +319,9 @@ def register(app):
         return JSONResponse({"connections": [
             {"provider": provider, "target": target, "configuration_id": target_id(provider, target),
              **({"branch_creation": True} if provider == "github" and
-                os.getenv("NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN", "").strip() else {})}
+                os.getenv("NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN", "").strip() else {}),
+             **({"file_commit": True} if provider == "github" and
+                os.getenv("NEXUS_CONNECTOR_GITHUB_FILE_TOKEN", "").strip() else {})}
             for provider, (target, _) in targets.items()
         ]}, headers=NO_STORE)
 
@@ -258,10 +345,10 @@ def register(app):
     @app.post("/studio-api/connections/github/branch-preview")
     async def branch_preview(request: Request):
         data = await parse_request(request, BranchPreview)
-        target, token = branch_config(data.configuration_id)
+        target, token = write_config(data.configuration_id, "NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN")
         limiter = take_capacity(request)
         try:
-            sha = await main_head(request.app.state.client, target, token)
+            sha = await branch_head(request.app.state.client, target, token, "main")
         finally:
             limiter.release()
         expires = int(time.time()) + REVIEW_SECONDS
@@ -275,7 +362,7 @@ def register(app):
         data = await parse_request(request, BranchApproval)
         if not data.consent:
             raise HTTPException(422, "Explicit branch approval is required", headers=NO_STORE)
-        target, token = branch_config(data.configuration_id)
+        target, token = write_config(data.configuration_id, "NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN")
         expected = branch_review_id(token, target, data.slug, data.base_sha, data.expires_at)
         if data.expires_at <= time.time() or not hmac.compare_digest(expected, data.review_id):
             raise HTTPException(409, "Branch review expired or changed", headers=NO_STORE)
@@ -291,7 +378,7 @@ def register(app):
             except HTTPException as exc:
                 if exc.status_code != 404:
                     raise
-                if await main_head(client, target, token) != data.base_sha:
+                if await branch_head(client, target, token, "main") != data.base_sha:
                     raise HTTPException(409, "Main changed; review the new commit", headers=NO_STORE) from None
                 result = await provider_json(client, "github", token, base + "/git/refs",
                                              payload={"ref": ref, "sha": data.base_sha})
@@ -307,3 +394,72 @@ def register(app):
             raise HTTPException(409, "Branch could not be confirmed at the reviewed commit", headers=NO_STORE)
         return JSONResponse({"target": target, "branch": branch, "base_sha": data.base_sha,
                              "status": status}, headers=NO_STORE)
+
+    @app.post("/studio-api/connections/github/file-base")
+    async def file_base(request: Request):
+        data = await parse_request(request, FileTarget)
+        target, token = write_config(data.configuration_id, "NEXUS_CONNECTOR_GITHUB_FILE_TOKEN")
+        editable_path(data.path)
+        branch = BRANCH_PREFIX + data.slug
+        client = request.app.state.client
+        limiter = take_capacity(request)
+        try:
+            sha = await branch_head(client, target, token, branch)
+            original = await editable_file(client, target, token, sha, data.path)
+        finally:
+            limiter.release()
+        return JSONResponse({"target": target, "branch": branch, "path": data.path,
+                             "base_sha": sha, "text": original}, headers=NO_STORE)
+
+    @app.post("/studio-api/connections/github/file-preview")
+    async def file_preview(request: Request):
+        data = await parse_request(request, FileDraft, MAX_FILE_REQUEST)
+        target, token = write_config(data.configuration_id, "NEXUS_CONNECTOR_GITHUB_FILE_TOKEN")
+        editable_path(data.path)
+        raw = editable_text(data.text)
+        branch = BRANCH_PREFIX + data.slug
+        client = request.app.state.client
+        limiter = take_capacity(request)
+        try:
+            if await branch_head(client, target, token, branch) != data.base_sha:
+                raise HTTPException(409, "Branch changed; reload the file", headers=NO_STORE)
+            original = await editable_file(client, target, token, data.base_sha, data.path)
+        finally:
+            limiter.release()
+        diff = await anyio.to_thread.run_sync(preview_diff, original, data.text)
+        expires = int(time.time()) + REVIEW_SECONDS
+        return JSONResponse({"target": target, "branch": branch, "path": data.path, "base_sha": data.base_sha,
+                             "diff": diff, "expires_at": expires,
+                             "review_id": file_review_id(token, target, data, expires, raw)},
+                            headers=NO_STORE)
+
+    @app.post("/studio-api/connections/github/file-commit")
+    async def file_commit(request: Request):
+        data = await parse_request(request, FileApproval, MAX_FILE_REQUEST)
+        if not data.consent:
+            raise HTTPException(422, "Explicit file commit approval is required", headers=NO_STORE)
+        target, token = write_config(data.configuration_id, "NEXUS_CONNECTOR_GITHUB_FILE_TOKEN")
+        editable_path(data.path)
+        raw = editable_text(data.text)
+        expected = file_review_id(token, target, data, data.expires_at, raw)
+        if data.expires_at <= time.time() or not hmac.compare_digest(expected, data.review_id):
+            raise HTTPException(409, "File review expired or changed", headers=NO_STORE)
+        branch = BRANCH_PREFIX + data.slug
+        payload = {"query": COMMIT_QUERY, "variables": {"input": {
+            "branch": {"repositoryNameWithOwner": target, "branchName": branch},
+            "expectedHeadOid": data.base_sha, "message": {"headline": f"Studio: update {data.path}"[:120]},
+            "fileChanges": {"additions": [{"path": data.path, "contents": base64.b64encode(raw).decode()}]},
+        }}}
+        limiter = take_capacity(request)
+        try:
+            result = await provider_json(request.app.state.client, "github", token, "https://api.github.com/graphql",
+                                         payload=payload, post_status=200)
+        finally:
+            limiter.release()
+        try:
+            commit = result["data"]["createCommitOnBranch"]["commit"]["oid"]
+            if result.get("errors") or not re.fullmatch(SHA, commit):
+                raise ValueError()
+        except (KeyError, AttributeError, TypeError, ValueError):
+            raise HTTPException(409, "GitHub did not confirm a commit at the reviewed branch head", headers=NO_STORE) from None
+        return JSONResponse({"target": target, "branch": branch, "path": data.path, "commit": commit}, headers=NO_STORE)
