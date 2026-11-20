@@ -15,6 +15,33 @@ const blank=T.parse('g,v\n,1\n(missing),3\n','csv');ok(()=>assert.equal(T.analys
 const project=S.project('Multilingual'),thread=S.thread('History');project.threads=[thread];project.sources=[{id:'source-1',name:'text.txt',text:'The earth is round.\nArt is a craft.\nعلم و دانش؛ داده های علمی.\n星空和月亮\nكیفیت و يادگيری'}];
 ok(()=>assert.equal(S.retrieve(project,'art')[0].line,2));ok(()=>assert.equal(S.retrieve(project,'کیفیت')[0].line,5));ok(()=>assert.equal(S.retrieve(project,'یادگیری')[0].line,5));ok(()=>assert.equal(S.retrieve(project,'月亮')[0].line,4));ok(()=>assert.equal(S.retrieve(project,'missing').length,0));ok(()=>assert(S.retrieve(project,'art')[0].offset>0));
 project.sources=[{id:'dense',name:'dense.txt',text:'word\n'.repeat(13000)}];ok(()=>assert.equal(S.retrieve(project,'word').truncated,true));ok(()=>assert.equal(S.retrieve(project,'word').length,5));
+
+const coverage=S.project('Across sources');
+coverage.sources=[
+ {id:'long-first',name:'long.txt',text:'filler\n'.repeat(13000)},
+ {id:'late-source',name:'later.txt',text:'A unique needle appears here.'},
+];
+const coverageHits=S.retrieve(coverage,'needle');
+ok(()=>assert.equal(coverageHits[0].source_id,'late-source'));
+ok(()=>assert.equal(coverageHits[0].line,1));
+ok(()=>assert.equal(coverageHits.truncated,true));
+const needleThread=S.append(S.thread('Evidence review'),'user','needle','human');
+const partialContext=S.context(coverage,needleThread,{sources:true});
+ok(()=>assert.equal(partialContext.retrieval_truncated,true));
+ok(()=>assert(partialContext.messages[0].content.includes('Search was partial:')));
+ok(()=>assert.equal(partialContext.citations[0].source_id,'late-source'));
+const diverse=S.project('Diverse results');
+diverse.sources=[
+ {id:'one',name:'one.txt',text:'ocean moon\n'.repeat(100)},
+ {id:'two',name:'two.txt',text:'ocean moon\n'.repeat(10)},
+];
+const diverseHits=S.retrieve(diverse,'ocean moon');
+ok(()=>assert.equal(diverseHits.length,5));
+ok(()=>assert.deepEqual(new Set(diverseHits.map(hit=>hit.source_id)),new Set(['one','two'])));
+const exactBudget=S.project('Exactly the budget');
+exactBudget.sources=[{id:'exact',name:'exact.txt',text:'word\n'.repeat(11999)+'word'}];
+ok(()=>assert.equal(S.retrieve(exactBudget,'word').truncated,false));
+
 const before={schema:S.SCHEMA,projects:[S.project('Keep')]},after=S.empty(),undo=new S.UndoSlot();undo.record(before,after,{projectId:before.projects[0].id});const recovered=undo.take(after);ok(()=>assert.deepEqual(recovered.data,before));ok(()=>assert.equal(undo.available,false));bad(()=>undo.take(after));undo.record(before,after,{});bad(()=>undo.take(before));ok(()=>assert.equal(undo.available,false));undo.record(before,after,{});undo.clear();ok(()=>assert(!undo.available));
 const wiki=L.results('wikipedia',{query:{pages:{1:{pageid:1,index:2,title:'Second',extract:'x'},2:{pageid:2,index:1,title:'First',extract:'x'}}}},'query');ok(()=>assert.equal(wiki[0].title,'First'));
 console.log(JSON.stringify({status:'PASS',checks,scope:'shared numerical engine, ranked retrieval and guarded undo',live_model:false}));
