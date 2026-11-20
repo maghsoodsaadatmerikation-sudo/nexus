@@ -445,6 +445,30 @@ window.addEventListener('load',async()=>{
   abandonedSpeech.onend();
   assert(playback.hidden&&cancellations===beforeSwitch+1&&spoken.length===beforeSwitchCount,'chat-switch-stops-playback-and-ignores-late-events');
 
+  $('new-thread').click();fill('message','orchard trees RECALL TEST');$('guide').click();
+  const priorThread=NexusStudioUI.selection();
+  $('new-thread').click();fill('message','orchard trees');$('prepare').click();
+  const plainReview=JSON.parse($('request-context').textContent);
+  assert(plainReview.related_chat_passages.length===0,'other-project-chats-are-opt-in');
+  $('use-related-chats').checked=true;$('use-related-chats').dispatchEvent(new Event('input'));
+  assert($('request-review').hidden,'changing-project-context-invalidates-review');
+  $('prepare').click();
+  const recallReview=JSON.parse($('request-context').textContent);
+  assert(recallReview.related_chat_passages.some(p=>p.thread===priorThread.threadId&&p.turn===1)&&
+   recallReview.messages[0].content.includes('orchard trees RECALL TEST')&&!$('consent').checked,
+   'matching-user-excerpt-in-exact-request-review');
+  fill('message','/temporary');compose.click();
+  const isolatedSelection=NexusStudioUI.selection();
+  const isolated=current().threads.find(t=>t.id===isolatedSelection.threadId);
+  assert(isolated?.temporary&&isolated.isolated&&!$('isolated-chat-note').hidden&&
+   !$('message').value&&$('request-review').hidden&&$('use-related-chats').disabled&&$('use-memory').disabled,
+   'temporary-chat-command-starts-tab-only-thread-without-project-context');
+  fill('message','orchard trees');$('prepare').click();
+  const isolatedReview=JSON.parse($('request-context').textContent);
+  assert(!JSON.stringify(isolatedReview).includes('orchard trees RECALL TEST')&&
+   !JSON.stringify(isolatedReview).includes('CUSTOM PREFERENCE')&&!$('consent').checked,
+   'temporary-model-review-excludes-project-content');
+
   assert(document.documentElement.scrollWidth<=innerWidth+2,'no-horizontal-overflow');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}

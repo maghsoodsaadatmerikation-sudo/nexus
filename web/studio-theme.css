@@ -237,6 +237,7 @@ html.studio-focus-mode{
 .studio-focus-mode #nexus-zen-more{flex:0 0 45px;background:#242632;color:#f0ebfb;border:1px solid #414050}
 .studio-focus-mode:not(.nexus-chat-options-open) #conversation-card label:has(#use-memory),
 .studio-focus-mode:not(.nexus-chat-options-open) #conversation-card label:has(#use-sources),
+.studio-focus-mode:not(.nexus-chat-options-open) #conversation-card label:has(#use-related-chats),
 .studio-focus-mode:not(.nexus-chat-options-open) #studio-model-settings{display:none}
 .studio-focus-mode #studio-install-card{max-width:920px;margin:8px auto}
 #studio-install-card>summary{padding:9px 0;cursor:pointer}
