@@ -16,6 +16,8 @@ import subprocess
 import sys
 import zipfile
 
+from studio_public_assets import MAX_FILE
+
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC = ROOT / "public/studio"
 BUNDLE = "nexus-studio-phone-local"
@@ -123,7 +125,7 @@ import stat
 from urllib.parse import urlsplit
 
 BASE = Path(__file__).resolve().parent
-LIMIT = 475000
+LIMIT = __STUDIO_MAX_FILE__
 MIME = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -242,7 +244,7 @@ def public_assets():
         source = PUBLIC / name
         st = source.lstat()
         if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or source.is_symlink() or \
-           not (0 < st.st_size <= 475000):
+           not (0 < st.st_size <= MAX_FILE):
             raise ValueError("public Studio asset is missing, linked or oversized")
         items[name] = source.read_bytes()
     html = items["index.html"]
@@ -293,7 +295,7 @@ def contents(commit):
     }
     return {
         **assets,
-        "run-local.py": LAUNCHER.encode(),
+        "run-local.py": LAUNCHER.replace("__STUDIO_MAX_FILE__", str(MAX_FILE)).encode(),
         "README.txt": README.encode(),
         "source-manifest.json": (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(),
     }
@@ -309,7 +311,7 @@ def verify(zip_file, exact_commit=None):
         payloads = {}
         for info in infos:
             if info.flag_bits & 1 or info.is_dir() or \
-               info.file_size > 475000 or info.compress_type != zipfile.ZIP_STORED:
+               info.file_size > MAX_FILE or info.compress_type != zipfile.ZIP_STORED:
                 raise ValueError("unsupported ZIP entry")
             prefix = BUNDLE + "/"
             if not info.filename.startswith(prefix):
