@@ -221,7 +221,11 @@ function refresh(){
         'آرشیو رمزگذاری‌شده‌ای باز نیست. با بسته‌شدن برگه ممکن است کار از بین برود.');
 }
 function run({routeTools=true}={}){
- if(running||send.disabled)return;
+ // The send button can briefly lag a newly created first conversation.
+ // Authoritative UI state and the draft, not a stale disabled flag, gate work.
+ const state=window.NexusStudioUI.uiStatus();
+ if(running||!state||state.busy||(state.threadReady&&state.archived)||
+    !$('message').value.trim())return;
  const message=$('message').value,tool=routeTools&&suggestion(message);
  if(tool?.route[0]==='tools'){clearOffer();showDirectory();return}
  if(tool){closeDirectory();offerTool(message,tool);return}
