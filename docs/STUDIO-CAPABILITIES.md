@@ -115,8 +115,8 @@ evidence, uncertainty and consequences against the user's criteria. The
 non-generative local guide uses English and Persian choice cues to offer
 reflection questions when appropriate. Asking whether to use a tool stays in
 chat, while explicit tool commands continue to open the existing review flow.
-The optional on-device model drafts
-short English answers and applies a compact version of the same guidance.
+The optional on-device model drafts short English answers and gets concise
+turn-specific guidance when the question asks for a choice.
 
 The reviewed model request still shows the exact material sent. A reply
 stays a guide or model draft. Recording a judgment remains an explicit

@@ -1,10 +1,10 @@
 /* Reviewed public Studio application code only; model bytes use a separate opt-in cache. */
 'use strict';
-const EXPECTED_SHA256='672e3f2917884e8385dd4acb02dd2f3f0b23cadfe3e9eb1d80b4fd3200c9b905';
-const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'b6fa061194b69251';
+const EXPECTED_SHA256='d691d477ae7ae7a5844bdc7a87c9f209a42d6c61cbbd7627c1b1d2b433b5d4c4';
+const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'57e7a77e5747497f';
 const ENTRY=new URL('./',self.location.href).href;
-const HTML={url:ENTRY,bytes:581339,sha256:EXPECTED_SHA256,kind:'html'};
-const CODE=[{"path":"device/device-engine.js","bytes":5332,"sha256":"aa7efe4d708f854ca35ff863edb602da7a9fb164d62e427c6521ddbd957e9175","kind":"javascript"},{"path":"device/device-worker.js","bytes":7878,"sha256":"cf094c6c64f3532e4271c9a0582f1dfbe592b966d9eff275896dd1f4c2e2f3a3","kind":"javascript"},{"path":"device/device-ui.js","bytes":8683,"sha256":"08343f58bb01d1f26d37f55e1d3842e7f2fd22a02b23f8cfa4b7b7a2583192cd","kind":"javascript"},{"path":"device/model-manifest.json","bytes":3211,"sha256":"5055f8d8bf248707d3765f4ffac516f9e7d23e98636c890c1f34c6f09f544974","kind":"json"},{"path":"pdf/studio-pdf.mjs","bytes":4866,"sha256":"d506e6a2cf1ff9f5ee7849b82d53483980d407af40f0eadba07faa13184a3552","kind":"javascript"},{"path":"pdf/pdf.min.mjs","bytes":474284,"sha256":"3a88402882cfa3e7e72c2c9b5149f52f0f88baf1c5b62aa11a41abdbc2072440","kind":"javascript"},{"path":"pdf/pdf.worker.min.mjs","bytes":1271915,"sha256":"1e64c8240e54735ec5913b37acd5134747799cb8c6bb3777c70adbc01232d2aa","kind":"javascript"}].map(a=>({...a,url:new URL(a.path,ENTRY).href}));
+const HTML={url:ENTRY,bytes:581555,sha256:EXPECTED_SHA256,kind:'html'};
+const CODE=[{"path":"device/device-engine.js","bytes":5332,"sha256":"aa7efe4d708f854ca35ff863edb602da7a9fb164d62e427c6521ddbd957e9175","kind":"javascript"},{"path":"device/device-worker.js","bytes":7863,"sha256":"a2b396fb0fe7a4411ba8a4e678b6c4f79bfc0eed673e1712f445baa8a9c60e85","kind":"javascript"},{"path":"device/device-ui.js","bytes":8683,"sha256":"08343f58bb01d1f26d37f55e1d3842e7f2fd22a02b23f8cfa4b7b7a2583192cd","kind":"javascript"},{"path":"device/model-manifest.json","bytes":3196,"sha256":"49353c4a16f7912fd4251b6d048923fd41d2819f9fab2faf5bfbccab9a7e3983","kind":"json"},{"path":"pdf/studio-pdf.mjs","bytes":4866,"sha256":"d506e6a2cf1ff9f5ee7849b82d53483980d407af40f0eadba07faa13184a3552","kind":"javascript"},{"path":"pdf/pdf.min.mjs","bytes":474284,"sha256":"3a88402882cfa3e7e72c2c9b5149f52f0f88baf1c5b62aa11a41abdbc2072440","kind":"javascript"},{"path":"pdf/pdf.worker.min.mjs","bytes":1271915,"sha256":"1e64c8240e54735ec5913b37acd5134747799cb8c6bb3777c70adbc01232d2aa","kind":"javascript"}].map(a=>({...a,url:new URL(a.path,ENTRY).href}));
 async function verified(response,asset=HTML){
  if(!response||response.status!==200||response.redirected||response.type!=='basic')return false;
  const mime=(response.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
