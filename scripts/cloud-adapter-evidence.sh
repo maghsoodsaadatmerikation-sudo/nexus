@@ -21,13 +21,15 @@ fi
 (
   cd nexus-cloud
   uv sync --frozen
-  uv run --frozen python -m compileall -q main.py studio_model.py studio_vision.py transport_bounds.py tests
+  uv run --frozen python -m compileall -q main.py studio_model.py model_quality_eval.py studio_vision.py transport_bounds.py tests
   uv run --frozen pytest -q
+  uv run --frozen python -m model_quality_eval --self-test
 )
 echo 'NEXUS CLOUD ADAPTER CONTRACT: PASS'
 
 launcher_inputs_sha="$(sha256sum scripts/run-local-studio.py scripts/run-local-pilot.py web/studio.html | sha256sum | awk '{print $1}')"
 studio_model_sha="$(sha256sum nexus-cloud/studio_model.py | awk '{print $1}')"
+quality_eval_sha="$(sha256sum nexus-cloud/model_quality_eval.py | awk '{print $1}')"
 studio_vision_sha="$(sha256sum nexus-cloud/studio_vision.py | awk '{print $1}')"
 main_sha="$(sha256sum nexus-cloud/main.py | awk '{print $1}')"
 transport_bounds_sha="$(sha256sum nexus-cloud/transport_bounds.py | awk '{print $1}')"
@@ -53,6 +55,8 @@ printf '%s\n' \
   'Stage D Claim: NOT SATISFIED' \
   "Local Studio launcher inputs SHA-256: ${launcher_inputs_sha}" \
   "Studio model bridge SHA-256: ${studio_model_sha}" \
+  "Synthetic model quality evaluator SHA-256: ${quality_eval_sha}" \
+  'Model quality evaluation scope: OFFLINE-CANNED-ONLY; LIVE-PROVIDER-NOT-TESTED' \
   "Studio vision bridge SHA-256: ${studio_vision_sha}" \
   "Cloud main.py SHA-256: ${main_sha}" \
   "Cloud admission boundary SHA-256: ${transport_bounds_sha}" \
@@ -72,6 +76,7 @@ grep -Fx 'Epistemic Claim: TRANSPORT-CONTRACT-ONLY' "$manifest"
 grep -Fx 'Stage D Claim: NOT SATISFIED' "$manifest"
 test "$(git rev-parse HEAD)" = "$VERIFIED_COMMIT"
 test "$(sha256sum nexus-cloud/studio_model.py | awk '{print $1}')" = "$studio_model_sha"
+test "$(sha256sum nexus-cloud/model_quality_eval.py | awk '{print $1}')" = "$quality_eval_sha"
 test "$(sha256sum nexus-cloud/studio_vision.py | awk '{print $1}')" = "$studio_vision_sha"
 test "$(sha256sum nexus-cloud/main.py | awk '{print $1}')" = "$main_sha"
 test "$(sha256sum nexus-cloud/transport_bounds.py | awk '{print $1}')" = "$transport_bounds_sha"
@@ -89,6 +94,7 @@ tar -czf "$bundle" \
   "$manifest" \
   nexus-cloud/main.py \
   nexus-cloud/studio_model.py \
+  nexus-cloud/model_quality_eval.py \
   nexus-cloud/studio_vision.py \
   nexus-cloud/transport_bounds.py \
   nexus-cloud/tests \

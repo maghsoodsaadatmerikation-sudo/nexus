@@ -119,6 +119,34 @@ def answer_utf16_units(content: str) -> int:
     return len(content.encode("utf-16-le")) // 2
 
 
+def accepted_buffered_answer(raw: bytes) -> tuple[str, bool]:
+    """Apply the same text-only reply contract used by the public Studio endpoint.
+
+    The optional quality evaluator calls this parser too, so probe results
+    cannot count model responses the actual browser gateway would reject.
+    """
+    try:
+        output = json.loads(raw)
+        choices = output["choices"]
+        if not isinstance(choices, list) or len(choices) != 1:
+            raise ValueError("ambiguous model choices")
+        choice = choices[0]
+        message = choice["message"]
+        content = message["content"]
+        finish_reason = choice.get("finish_reason")
+        if (not isinstance(content, str) or not content.strip()
+            or answer_utf16_units(content) > 24000
+            or message.get("role") not in {None, "assistant"}
+            or message.get("tool_calls") or message.get("function_call")
+            or finish_reason not in {"stop", "length"}):
+            raise ValueError("invalid text-only answer")
+        # JSON may contain escaped lone surrogates, which cannot be sent as UTF-8.
+        content.encode("utf-8")
+        return content, finish_reason == "length"
+    except (KeyError, IndexError, TypeError, ValueError, RecursionError):
+        raise ValueError("Invalid text-only model response") from None
+
+
 async def sse_data(chunks, deadline):
     size = 0
     buffer = bytearray()
@@ -294,24 +322,12 @@ def register(app):
                             raise HTTPException(502, "Model response exceeded limit")
                         raw.extend(chunk)
             try:
-                output = json.loads(raw)
-                choices = output["choices"]
-                if not isinstance(choices, list) or len(choices) != 1:
-                    raise ValueError("ambiguous model choices")
-                choice = choices[0]
-                message = choice["message"]
-                content = message["content"]
-                if (not isinstance(content, str) or not content.strip() or answer_utf16_units(content) > 24000
-                    or message.get("role") not in {None, "assistant"}
-                    or message.get("tool_calls") or message.get("function_call") or choice.get("finish_reason") not in {"stop", "length"}):
-                    raise ValueError()
-                # JSON permits lone surrogate escapes that cannot be sent as UTF-8.
-                content.encode("utf-8")
-            except (KeyError, IndexError, TypeError, ValueError, RecursionError):
+                content, truncated = accepted_buffered_answer(bytes(raw))
+            except ValueError:
                 raise HTTPException(502, "Invalid text-only model response") from None
             return JSONResponse({"text": content, "origin": "model", "model": c[1],
                                  "mode": data.mode, "max_output_tokens": data.max_output_tokens,
-                                 "truncated": choice.get("finish_reason") == "length", "authority": "none"},
+                                 "truncated": truncated, "authority": "none"},
                                 headers={"Cache-Control": "no-store"})
         except TimeoutError:
             raise HTTPException(504, "Model request timed out") from None
