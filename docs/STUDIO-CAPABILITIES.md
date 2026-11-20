@@ -132,15 +132,20 @@ Availability in ChatGPT varies by account, client and plan.
 
 | Workflow | NEXUS Studio implementation | Open work |
 | --- | --- | --- |
-| Compose and use answers | Copy an answer, prepare an alternate answer in the focused chat, and stage a paste that would overflow the draft as temporary reviewed text. The paste can be up to 128 KiB. | Rich-text paste, in-turn response streaming and interactive answer formatting. |
+| Compose and use answers | Copy an answer, prepare an alternate answer in the focused chat, and stage a paste that would overflow the draft as temporary reviewed text. The paste can be up to 128 KiB. Compatible gateways can show streamed answer text after request approval. | Rich-text paste and interactive answer formatting. |
 | History, projects and sharing | Local search, branches, archives and transcript export. Project-level instructions and manually curated memory. | Share links, multi-user access, cross-device sync and opt-in retrieval across project chats. |
 | Files, data and writing | One-turn excerpts from supported text files and selectable PDFs, separate spreadsheet analysis and charts, and a versioned writing canvas. | Scanned PDF OCR, richer Office and audio ingestion, a reusable binary file library and model-assisted editing. |
-| Models and tools | Optional authenticated gateway, local reflection guide and optional limited device model. Tool recommendations require user review. | Hosted model provisioning, streamed replies and reliable model-driven use of approved tools. |
+| Models and tools | Optional authenticated gateway with opt-in streaming, local reflection guide and optional limited device model. Tool recommendations require user review. | Hosted model provisioning and reliable model-driven use of approved tools. |
 
 Short pastes still go into the draft. Studio preserves the draft when staging a
 long paste and requires a separate question and the existing request review.
 Regeneration is disabled while a draft or temporary attachment is open. It
 continues to create an alternate branch after model approval.
+
+An operator can enable streamed answers on a [compatible model gateway](../nexus-cloud/README.md#optional-studio-model-bridge).
+While the answer is arriving, Studio shows it as a preview. Successful completion
+adds the full answer to the current branch. Stop and interrupted delivery discard
+the preview and preserve the user draft.
 
 ## Remaining service prerequisites
 

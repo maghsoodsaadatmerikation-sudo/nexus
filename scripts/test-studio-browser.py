@@ -281,6 +281,52 @@ window.addEventListener('load',async()=>{
    'file-commit-only-sends-the-independently-approved-text');
   $('studio-connections-close').click();
 
+  let stream,streamSignal,streamCalls=0;
+  const encoder=new TextEncoder();
+  const frame=(value)=>stream.enqueue(encoder.encode(JSON.stringify(value)+'\n'));
+  const complete={type:'done',origin:'model',model:'synthetic-stream',authority:'none',truncated:false};
+  window.fetch=async(url,options={})=>{
+   if(String(url).endsWith('/studio-api/status'))return Response.json({
+    configured:true,configuration_id:'d'.repeat(64),model:'synthetic-stream',provider_host:'synthetic.invalid',streaming:true
+   });
+   assert(String(url).endsWith('/studio-api/respond-stream'),'streaming-does-not-resend-to-buffered-route');
+   assert(JSON.parse(options.body).configuration_id==='d'.repeat(64),'stream-send-is-bound-to-reviewed-configuration');
+   streamCalls++;streamSignal=options.signal;
+   return new Response(new ReadableStream({start(controller){stream=controller}}),
+    {headers:{'content-type':'application/x-ndjson'}});
+  };
+  fill('gateway','https://streaming.example');fill('gateway-token','STREAM-ACCESS');
+  $('check-model').click();await wait(()=>$('model-status').textContent.includes('synthetic-stream'));
+  fill('message','Stream a draft step by step');
+  const beforeStream=JSON.stringify(snapshot());
+  $('prepare').click();
+  assert(JSON.parse($('request-context').textContent).response_delivery==='streaming','review-identifies-streaming-delivery');
+  $('send-model').click();assert(streamCalls===0,'streaming-still-requires-explicit-approval');
+  const sendStream=()=>{$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));$('send-model').click()};
+  sendStream();await wait(()=>streamCalls===1&&stream);
+  const chunk=encoder.encode(JSON.stringify({type:'delta',text:'پیش‌نویس 🌙 <b>'})+'\n');
+  stream.enqueue(chunk.slice(0,-8));stream.enqueue(chunk.slice(-8));
+  await wait(()=>$('model-stream-text').textContent.includes('🌙'));
+  assert(!$('model-stream-preview').hidden&&!$('model-stream-text').querySelector('b')&&JSON.stringify(snapshot())===beforeStream,
+   'partial-answer-is-visible-inert-and-uncommitted');
+  frame({type:'delta',text:' finished'});frame(complete);stream.close();
+  await wait(()=>$('messages').textContent.includes('پیش‌نویس 🌙 <b> finished'));
+  assert($('model-stream-preview').hidden&&!$('model-stream-text').textContent,
+   'validated-completion-commits-one-answer-and-clears-preview');
+
+  const committedStream=JSON.stringify(snapshot());
+  fill('message','Retryable draft');$('prepare').click();sendStream();await wait(()=>streamCalls===2);
+  frame({type:'delta',text:'Only one fragment'});stream.close();
+  await wait(()=>$('request-review').hidden);
+  assert($('message').value==='Retryable draft'&&$('model-stream-preview').hidden&&JSON.stringify(snapshot())===committedStream&&
+   $('status').textContent===EN.streamFailed,'interrupted-stream-preserves-draft-and-discards-fragments');
+  $('prepare').click();sendStream();await wait(()=>streamCalls===3);
+  frame({type:'delta',text:'Stop this preview'});await wait(()=>!$('model-stream-preview').hidden);
+  $('stop').click();
+  frame({type:'delta',text:'Late content'});frame(complete);stream.close();await sleep(40);
+  assert(streamSignal.aborted&&$('model-stream-preview').hidden&&$('message').value==='Retryable draft'&&
+   JSON.stringify(snapshot())===committedStream,'stop-aborts-preview-without-saving-late-content');
+
   assert(document.documentElement.scrollWidth<=innerWidth+2,'no-horizontal-overflow');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}

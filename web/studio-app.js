@@ -49,6 +49,8 @@ Object.assign(FA,{
  reminderExport:'دریافت فایل تقویم',reminderDownloaded:'فایل آماده است. آن را در تقویمت وارد و اعلان را بررسی کن.',reminderInvalid:'عنوان یادآور و تاریخ و ساعت معتبر وارد کن.'
 });
 function status(k){$('status').textContent=t(k)}
+Object.assign(EN,{streamPreview:'Answer in progress',streamFailed:'The answer did not finish. Your draft is still available.'});
+Object.assign(FA,{streamPreview:'پاسخ در حال تولید',streamFailed:'پاسخ کامل نشد. پیش‌نویس هنوز در دسترس است.'});
 Object.assign(EN,{
  chatCopy:'Copy answer',chatCopyDone:'Answer copied to the clipboard.',
  chatCopyFailed:'Clipboard access is unavailable. Select the answer text to copy it.',
@@ -163,6 +165,7 @@ function toolLifecycle(phase){
 }
 function clearModelReview(){
  pending=null;$('request-review').hidden=true;$('request-context').textContent='';$('consent').checked=false;
+ $('model-stream-preview').hidden=true;$('model-stream-text').textContent='';
 }
 function stop({refresh=true}={}){
  languageImport++;toolLifecycle('cancel');revision++;controller?.abort();controller=null;busy=false;
@@ -334,9 +337,38 @@ function installThread(next){
  return mutate(v=>{const q=projectIn(v);q.threads[q.threads.findIndex(x=>x.id===next.id)]=next},{afterCommit:clearChatDraft});
 }
 function selectedModelEngine(){return document.getElementById('model-engine')?.value==='device'?'device':'gateway'}
-function prepare(regenerate=false){if(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft()))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked});if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');pending={destination,thread:c,body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,provider_host:modelInfo.provider_host,mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);$('request-review').hidden=false;controls()}catch(error){status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
+function prepare(regenerate=false){if(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft()))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked});if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');const stream=destination==='gateway'&&modelInfo.streaming===true;
+ pending={destination,stream,thread:c,body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);$('request-review').hidden=false;controls()}catch(error){status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
 function gateway(){const value=$('gateway').value.trim();const u=new URL(value||location.origin);if((u.protocol!=='https:'&&!(u.protocol==='http:'&&['127.0.0.1','[::1]'].includes(u.hostname)))||u.username||u.password||u.search||u.hash||!['','/'].includes(u.pathname))throw Error('gateway-url');return u.origin}
 async function boundedJson(response,max=128000){if(!response.ok)throw Error('gateway-status-'+response.status);if(!response.body)throw Error('empty-response');const reader=response.body.getReader(),chunks=[];let size=0;try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>max)throw Error('response-capacity');chunks.push(value)}const bytes=new Uint8Array(size);let offset=0;for(const c of chunks){bytes.set(c,offset);offset+=c.length}return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes))}finally{await reader.cancel().catch(()=>{})}}
+async function streamedAnswer(response,onDelta){
+ const media=response.headers.get('content-type')?.split(';',1)[0].trim().toLowerCase();
+ if(!response.ok||!response.body||media!=='application/x-ndjson')throw Error('model-stream');
+ const reader=response.body.getReader(),decoder=new TextDecoder('utf-8',{fatal:true});
+ let bytes=0,partial='',text='',receipt=null;
+ try{
+  while(true){
+   const {done,value}=await reader.read();
+   if(done)break;
+   bytes+=value.length;
+   if(bytes>256000)throw Error('stream-capacity');
+   const lines=(partial+decoder.decode(value,{stream:true})).split('\n');
+   partial=lines.pop();
+   for(const line of lines){
+    if(receipt)throw Error('stream-after-end');
+    const frame=JSON.parse(line);
+    if(frame.type==='delta'&&typeof frame.text==='string'&&frame.text.length){
+     if(text.length+frame.text.length>24000)throw Error('stream-capacity');
+     text+=frame.text;onDelta(frame.text);
+    }else if(frame.type==='done'&&typeof frame.truncated==='boolean'){
+     receipt=frame;
+    }else throw Error('model-stream-frame');
+   }
+  }
+  if(partial+decoder.decode()||!receipt||!text.trim())throw Error('incomplete-stream');
+  return {...receipt,text};
+ }finally{await reader.cancel().catch(()=>{})}
+}
 $('undo-removal').onclick=()=>{if(busy||!undoSlot.available||!mayReplace())return;try{const restored=undoSlot.take(data);data=restored.data;dirty=true;selectProject(restored.selection.projectId);threadId=p()?.threads.some(x=>x.id===restored.selection.threadId)?restored.selection.threadId:threadId;documentId=p()?.documents.some(x=>x.id===restored.selection.documentId)?restored.selection.documentId:documentId;fillDoc();render();status('undoDone')}catch{status('failed')}};
 $('new-project').onclick=()=>{
  const name=$('project-title').value.trim();
@@ -407,7 +439,39 @@ $('message').addEventListener('paste',event=>{
 $('attach-document').onchange=()=>{stop();renderChatAttachments()};
 $('clear-chat-files').onclick=()=>{if(busy)return;clearChatAttachments();stop()};
 for(const id of ['message','gateway','gateway-token','use-memory','use-sources','use-astrology','astro-historical','sky-tone','study-mode'])$(id).addEventListener('input',stop);
-$('send-model').onclick=async()=>{if(!pending||!$('consent').checked||busy)return;languageImport++;const request=pending,rev=revision;const abort=new AbortController();controller=abort;const timer=setTimeout(()=>abort.abort(),request.destination==='device'?120000:50000);busy=true;controls();try{let out;if(request.destination==='device'){out=await window.NexusDevice.generate(request.body,abort.signal)}else{const response=await fetch(gateway()+'/studio-api/respond',{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',redirect:'error',headers:{'content-type':'application/json','authorization':'Bearer '+$('gateway-token').value},body:JSON.stringify(request.body),signal:abort.signal});out=await boundedJson(response)}if(rev!==revision||request.projectId!==projectId||request.threadId!==threadId)return;if(out.origin!=='model'||out.authority!=='none'||typeof out.text!=='string'||out.model!==modelInfo?.model)throw Error('model-response');busy=false;const installed=installThread(S.append(request.thread,'assistant',(request.destination==='device'?'[On-device draft · SmolLM2-135M · English / limited]\n\n':'')+out.text,'model'));if(installed&&out.truncated)$('status').textContent=language==='fa'?'پاسخ به سقف طول رسیده است.':'The response reached its length limit.'}catch{if(rev===revision)status('failed')}finally{clearTimeout(timer);if(rev===revision){busy=false;clearModelReview();controller=null;controls()}}};
+$('send-model').onclick=async()=>{
+ if(!pending||!$('consent').checked||busy)return;
+ languageImport++;
+ const request=pending,rev=revision,abort=new AbortController();
+ const current=()=>rev===revision&&request.projectId===projectId&&request.threadId===threadId&&!abort.signal.aborted;
+ controller=abort;
+ const timer=setTimeout(()=>abort.abort(),request.destination==='device'?120000:50000);
+ busy=true;controls();
+ try{
+  let out;
+  if(request.destination==='device'){
+   out=await window.NexusDevice.generate(request.body,abort.signal);
+  }else{
+   const endpoint=request.stream?'/studio-api/respond-stream':'/studio-api/respond';
+   const response=await fetch(gateway()+endpoint,{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',redirect:'error',
+    headers:{'content-type':'application/json','authorization':'Bearer '+$('gateway-token').value},
+    body:JSON.stringify(request.body),signal:abort.signal});
+   out=request.stream?await streamedAnswer(response,delta=>{
+    if(!current())return;
+    const preview=$('model-stream-preview');
+    $('model-stream-text').append(delta);
+    if(preview.hidden){preview.hidden=false;preview.scrollIntoView({block:'nearest'})}
+   }):await boundedJson(response);
+  }
+  if(!current())return;
+  if(out.origin!=='model'||out.authority!=='none'||typeof out.text!=='string'||out.model!==modelInfo?.model)throw Error('model-response');
+  busy=false;
+  const label=request.destination==='device'?'[On-device draft · SmolLM2-135M · English / limited]\n\n':'';
+  const installed=installThread(S.append(request.thread,'assistant',label+out.text,'model'));
+  if(installed&&out.truncated)$('status').textContent=language==='fa'?'پاسخ به سقف طول رسیده است.':'The response reached its length limit.';
+ }catch{if(rev===revision)status(request.stream?'streamFailed':'failed')}
+ finally{clearTimeout(timer);if(rev===revision){busy=false;clearModelReview();controller=null;controls()}}
+};
 $('check-model').onclick=()=>operation(async(rev,abort)=>{if(selectedModelEngine()==='device'){const info=window.NexusDevice?.info();modelInfo=info?{...info,configured:true,gateway:'device',provider_host:'this device'}:null;$('model-status').textContent=info?info.model+' · on-device · max 64 output tokens':t('noModel');return}const timer=setTimeout(()=>abort.abort(),10000);try{const out=await boundedJson(await fetch(gateway()+'/studio-api/status',{credentials:'omit',cache:'no-store',redirect:'error',signal:abort.signal}),8000);if(rev===revision){if(out.configured&&(typeof out.model!=='string'||typeof out.provider_host!=='string'||! /^[a-f0-9]{64}$/.test(out.configuration_id)))throw Error('configuration');modelInfo={...out,gateway:gateway()};$('model-status').textContent=out.configured?t('configured')+': '+out.model+' · '+out.provider_host:t('noModel')} }finally{clearTimeout(timer)}});
 $('apply-profile').onclick=()=>{if(!p())return;const instructions=$('instructions').value,memories=$('memories').value.split('\n').map(x=>x.trim()).filter(Boolean);mutate(v=>Object.assign(projectIn(v),{instructions,memories}),{afterCommit:()=>{profileDirty=false}})};
 for(const id of ['instructions','memories'])$(id).addEventListener('input',()=>{profileDirty=true;stop()});$('editor').addEventListener('input',()=>{editorDirty=true;stop()});
@@ -465,7 +529,7 @@ $('language-file').onchange=async event=>{
  if(!f||busy)return;if(f.size>NexusLocales.MAX_BYTES)return status('failed');
  const current=()=>task===languageImport&&rev===revision&&!busy;
  try{
-  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{optionalKeys:['storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatPaste'))]});
+  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{optionalKeys:['storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','streamPreview','streamFailed',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatPaste'))]});
   if(!$('language').querySelector('option[value="'+pack.code+'"]'))$('language').append(option(pack.code,pack.code));
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}

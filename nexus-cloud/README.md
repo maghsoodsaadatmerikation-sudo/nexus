@@ -91,6 +91,20 @@ use is disabled unless `NEXUS_MODEL_URL`, `NEXUS_MODEL_ID` and the separate
 `NEXUS_MODEL_API_KEY` remains on the server. The endpoint accepts only reviewed
 text messages and has no tools. See [Studio setup and limits](../docs/STUDIO-CAPABILITIES.md).
 
+Set `NEXUS_MODEL_STREAMING=1` only on a gateway whose configured Chat
+Completions provider supports SSE. Studio lists streaming delivery in the
+request review and sends approved requests to `/studio-api/respond-stream`.
+The endpoint returns UTF-8 newline-delimited JSON. `delta` frames carry visible
+answer text, `done` confirms an accepted provider finish, and `error` means no
+answer was completed. Provider reasoning fields stay on the gateway. Older
+clients and gateways can continue using the buffered `/studio-api/respond`.
+
+Streaming uses the existing four-request model capacity, a 45-second total
+provider deadline and a 128,000-byte upstream limit. The browser keeps the
+original draft if the user stops the stream or if it fails. It adds an answer
+to the conversation only when a valid stream completes. A stopped or failed
+request can still count against the provider's usage.
+
 Deploy from the repository root to include the optional `/studio` HTML page.
 A gateway-only deployment may use an explicitly configured `NEXUS_STUDIO_ORIGIN`
 with Studio hosted separately. There is no provisioned model or live provider
