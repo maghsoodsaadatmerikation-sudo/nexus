@@ -94,9 +94,9 @@ def test_github_file_rejects_content_that_does_not_match_its_blob_id(monkeypatch
         calls.append(request.url.path)
         return httpx.Response(200, json={
             "type": "file", "encoding": "base64", "path": "docs/intro.md",
-            # Real Git blob SHA-1 of "Hello\\n", NOT the bytes supplied below.
+            # Real Git blob SHA-1 of "Hello\n", NOT the bytes supplied below.
             "sha": "e965047ad7c57865823c7d992b1d046ea66edf78",
-            "content": base64.b64encode("Altered note\\n".encode()).decode(),
+            "content": base64.b64encode("Altered note\n".encode()).decode(),
         })
     with gateway(monkeypatch, handler) as client:
         result = client.post("/studio-api/connections/read", headers=AUTH,
@@ -108,7 +108,7 @@ def test_github_file_rejects_content_that_does_not_match_its_blob_id(monkeypatch
 
 
 def test_github_blob_identity_covers_exact_line_endings(monkeypatch):
-    source = "Hello\\r\\n"
+    source = "Hello\r\n"
     import hashlib
     raw = source.encode("utf-8")
     expected = hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + bytes([0]) + raw).hexdigest()
