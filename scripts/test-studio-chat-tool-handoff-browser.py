@@ -161,7 +161,14 @@ window.addEventListener('load',async()=>{
   assert($('studio-connections').open,'render-proposal-opens-review-dialog');
   assert(catalogCalls===1,'render-preview-does-not-auto-load-catalog');
   $('studio-connections-load').click();
-  await wait(()=>$('studio-connections').querySelector('select').options.length===1);
+  await wait(()=>$('studio-connections').querySelector('select').options.length===1)
+   .catch(()=>{throw Error('render-catalog-state:'+JSON.stringify({
+    options:[...$('studio-connections').querySelector('select').options].map(x=>x.value),
+    catalogCalls,connectionActions,dialogOpen:$('studio-connections').open,
+    loadDisabled:$('studio-connections-load').disabled,
+    hasToken:Boolean($('gateway-token').value),
+    status:$('studio-connections').querySelector('[role="status"]')?.textContent
+   }))});
   operations=$('studio-connections').querySelector('select');
   assert(operations.value==='render.deploys'&&catalogCalls===2,'render-deployments-preselected');
   assert(providerCalls===2&&searchCalls===1&&connectionActions===1,'connection-routing-has-no-hidden-provider-side-effects');
