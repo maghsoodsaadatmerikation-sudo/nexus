@@ -75,6 +75,7 @@ window.addEventListener('load',async()=>{
   fill('studio-vision-question','Changed question');
   assert($('studio-vision-review-box').hidden&&$('studio-vision-send').disabled,
    'editing-reviewed-question-revokes-consent');
+  window.confirm=()=>true;
   $('lock').click();
   assert(!NexusStudioVision.hasTransientWork()&&$('studio-vision-question').value===''&&
     $('studio-vision-preview').hidden,'private-lock-clears-image-and-preview');
