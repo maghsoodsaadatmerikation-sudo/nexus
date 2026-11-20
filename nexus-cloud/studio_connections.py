@@ -132,6 +132,11 @@ def text_value(value, limit=240):
     return value[:limit].encode("utf-8", errors="replace").decode()
 
 
+def git_blob_sha(content: bytes) -> str:
+    """Compute Git's SHA-1 blob object ID (identity check, not a trust signature)."""
+    return hashlib.sha1(b"blob " + str(len(content)).encode("ascii") + b"\\0" + content).hexdigest()
+
+
 def project_result(operation, raw, path):
     if operation == "github.file":
         if raw["type"] != "file" or raw["encoding"] != "base64" or raw["path"] != path:
@@ -142,6 +147,8 @@ def project_result(operation, raw, path):
         content = base64.b64decode(raw["content"].replace("\n", ""), validate=True)
         if len(content) > MAX_SOURCE or b"\x00" in content:
             raise ValueError("unsupported source")
+        if git_blob_sha(content) != blob:
+            raise ValueError("Git blob identifier does not match supplied bytes")
         return {"path": path, "blob_sha": blob, "text": content.decode("utf-8")}
     if not isinstance(raw, list):
         raise ValueError("expected list")
