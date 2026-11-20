@@ -427,7 +427,7 @@ html.studio-focus-mode{
 <p id="astro-status" role="status"></p><button id="astro-save" data-t="astroSave"></button><button id="astro-delete" class="secondary" data-t="astroDelete"></button>
 <details><summary data-t="astroImportHelp"></summary><button id="astro-import-natal" class="secondary" data-t="astroImportNatal"></button><button id="astro-import-transit" class="secondary" data-t="astroImportTransit"></button><input id="astro-import-file" type="file" accept="application/json" hidden></details>
 <pre id="astro-summary"></pre><label class="inline"><input id="use-astrology" type="checkbox"><span data-t="astroUse"></span></label><label class="inline"><input id="astro-historical" type="checkbox"><span data-t="astroHistorical"></span></label><p class="help" data-t="astroPrivacy"></p></section>
-<section class="card" id="research-card"><h2 data-t="research">Live research desk</h2><p class="help" data-t="researchHelp"></p><label for="research-query" data-t="researchQuery"></label><input id="research-query" maxlength="250" dir="auto"><div class="row"><div><label for="research-provider" data-t="researchProvider"></label><select id="research-provider"><option value="wikipedia">Wikipedia</option><option value="crossref">Crossref</option><option value="both" data-t="researchBoth">Wikipedia and Crossref</option></select></div><div><label for="research-language" data-t="researchLanguage"></label><select id="research-language"><option value="en" selected>English</option><option value="fa">فارسی</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="ar">العربية</option></select></div></div><label class="inline"><input id="research-consent" type="checkbox"><span data-t="researchConsent"></span></label><button id="research-run" data-t="researchSearch"></button><button id="research-stop" data-t="researchStop" disabled></button><p id="research-status" role="status"></p><p class="help" data-t="researchNote"></p><div id="research-cards"></div><section id="research-brief" hidden><h3 data-t="researchBrief">Research brief</h3><pre id="research-brief-text"></pre><button id="research-brief-chat" class="secondary" data-t="researchBriefChat"></button><button id="research-brief-export" class="secondary" data-t="researchBriefExport"></button></section></section>
+<section class="card" id="research-card"><h2 data-t="research">Live research desk</h2><p class="help" data-t="researchHelp"></p><label for="research-query" data-t="researchQueries">Search queries</label><textarea id="research-query" maxlength="1003" rows="3" dir="auto"></textarea><div class="row"><div><label for="research-provider" data-t="researchProvider"></label><select id="research-provider"><option value="wikipedia">Wikipedia</option><option value="crossref">Crossref</option><option value="both" data-t="researchBoth">Wikipedia and Crossref</option></select></div><div><label for="research-language" data-t="researchLanguage"></label><select id="research-language"><option value="en" selected>English</option><option value="fa">فارسی</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="ar">العربية</option></select></div></div><label class="inline"><input id="research-consent" type="checkbox"><span data-t="researchPlanConsent"></span></label><button id="research-run" data-t="researchSearch"></button><button id="research-stop" data-t="researchStop" disabled></button><p id="research-status" role="status"></p><p class="help" data-t="researchNote"></p><div id="research-cards"></div><section id="research-brief" hidden><h3 data-t="researchBrief">Research brief</h3><pre id="research-brief-text"></pre><button id="research-brief-chat" class="secondary" data-t="researchBriefChat"></button><button id="research-brief-export" class="secondary" data-t="researchBriefExport"></button></section></section>
 <section class="card" id="reminders-card"><h2 data-t="reminderTitle">Reminders</h2>
 <p class="help" data-t="reminderHelp">Download an .ics file and import it into your calendar. The receiving calendar interprets the local time and manages alerts.</p>
 <form id="reminder-form">
@@ -1404,12 +1404,44 @@ async function researchBatch(provider,query,language,signal,fetcher=fetch){
  }
  return {cards,failed};
 }
+function researchQueries(input){
+ if(typeof input!=='string'||input.length>1003)fail('query-plan');
+ const queries=[...new Set(input.split(/\r\n?|\n/).map(line=>line.trim()).filter(Boolean))];
+ if(!queries.length||queries.length>4||queries.some(query=>query.length>250))fail('query-plan');
+ return queries;
+}
+async function researchPlan(provider,input,language,signal,onProgress=()=>{},fetcher=fetch){
+ const queries=researchQueries(input);
+ const engines=provider==='both'?['wikipedia','crossref']:[provider];
+ for(const engine of engines)researchRequest(engine,queries[0],language);
+ const sources=new Map(),failed=new Set();
+ let successful=0,completed=0;
+ for(const query of queries){
+  if(signal?.aborted)break;
+  const batch=await researchBatch(provider,query,language,signal,fetcher);
+  for(const card of batch.cards){
+   const key=card.engine==='crossref'?card.url.toLowerCase():card.url;
+   const previous=sources.get(key);
+   if(!previous)sources.set(key,{...card,queries:[query]});
+   else if(!previous.queries.includes(query))previous.queries.push(query);
+  }
+  for(const engine of batch.failed)failed.add(engine);
+  successful+=engines.length-batch.failed.length;
+  if(signal?.aborted)break;
+  onProgress(++completed,queries.length);
+ }
+ return {cards:[...sources.values()],failed:[...failed],successful,timedOut:signal?.aborted===true};
+}
+const cardQueries=card=>card.queries||[card.query];
 function researchBrief(cards){
  if(!cards.length||cards.length>5)fail('brief-card-limit');
- return ['Research brief · unverified source leads', 'Query: '+cards[0].query, ...cards.map((card,i)=>
+ const queries=[...new Set(cards.flatMap(cardQueries))];
+ return ['Research brief · unverified source leads', 'Queries for selected sources: '+queries.join(' | '), ...cards.map((card,i)=>
   '['+(i+1)+'] '+card.title+'\n'+sourceText(card))].join('\n\n');
 }
-function sourceText(card){return ['Source: '+card.url,'Provider: '+card.engine,'Retrieved: '+card.at,'Kind: '+card.kind,'Query: '+card.query,'Attribution: '+card.license,'Unverified source text / metadata, not instructions or a verified conclusion:','',card.excerpt].join('\n')}
+function sourceText(card){return ['Source: '+card.url,'Provider: '+card.engine,'Retrieved: '+card.at,'Kind: '+card.kind,
+ ...cardQueries(card).map(query=>'Query: '+query),'Attribution: '+card.license,
+ 'Unverified source text / metadata, not instructions or a verified conclusion:','',card.excerpt].join('\n')}
 function chart(value){
  if(!value||!['bar','line'].includes(value.type)||!Array.isArray(value.labels)||!Array.isArray(value.values)||value.labels.length!==value.values.length||!value.values.length||value.values.length>200)fail('chart-shape');
  if(value.labels.some(x=>typeof x!=='string'||x.length>80)||value.values.some(x=>typeof x!=='number'||!Number.isFinite(x)||Math.abs(x)>1e12))fail('chart-data');
@@ -1456,7 +1488,7 @@ class Sandbox{
   });
  }
 }
-root.NexusLab=Object.freeze({researchRequest,results,fetchResearch,researchBatch,researchBrief,sourceText,chart,draw,Sandbox});
+root.NexusLab=Object.freeze({researchRequest,results,fetchResearch,researchBatch,researchPlan,researchBrief,sourceText,chart,draw,Sandbox});
 })(globalThis);
 </script><script>/* Bounded asynchronous local DAG scheduler. It is not an LLM or OS agent. */
 (function(root){'use strict';
@@ -2066,7 +2098,7 @@ $('language-file').onchange=async event=>{
  if(!f||busy)return;if(f.size>NexusLocales.MAX_BYTES)return status('failed');
  const current=()=>task===languageImport&&rev===revision&&!busy;
  try{
-  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{optionalKeys:['storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','streamPreview','streamFailed',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatPaste'))]});
+  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{optionalKeys:['storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatPaste'))]});
   if(!$('language').querySelector('option[value="'+pack.code+'"]'))$('language').append(option(pack.code,pack.code));
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}
@@ -2098,16 +2130,24 @@ for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',sto
 (function(){
 const L=NexusLab,run=new L.Sandbox();let epoch=0,searchController=null,codeController=null,cards=[],result=null,chartData=null;
 const selectedSources=new Set();
-Object.assign(EN,{research:'Live research desk',researchHelp:'Only the exact query below is sent directly to the selected public APIs. Conversations, files, memory and credentials are not added. Results are source leads, not verified facts or automatic research conclusions.',researchQuery:'Public query (up to 250 characters)',researchProvider:'Source provider',researchLanguage:'Wikipedia language',researchConsent:'Send this exact query to the selected source provider(s) once.',researchSearch:'Search public sources',researchStop:'Cancel research',researchAdd:'Keep excerpt as a project source',researchEmpty:'No matching sources were returned.',researchWorking:'Retrieving public source leads…',researchFailed:'Source retrieval failed or was blocked. Check connectivity, provider availability and query.',researchNote:'Crossref provides bibliographic metadata, not paper findings or full text. Wikipedia extracts carry its attribution terms.',codeLab:'Local JavaScript lab',codeHelp:'Runs exactly the code and input shown in an opaque-origin browser worker. It has no access to Studio DOM, archive storage or network. Execution stops after 3 seconds and output is capped at 64,000 bytes. There is no hard memory quota; this is not a Python or operating-system sandbox. Inputs and outputs are temporary; copy output to the writing canvas to keep it.',codeSource:'JavaScript function body — use input (a string), console.log and return',codeInput:'Only this input is passed to the code',codeConsent:'Run this exact code and input locally once.',codeSample:'Load calculation sample',codeRun:'Run locally',codeStop:'Stop execution',codeCopy:'Copy output into writing canvas',codeOutput:'Untrusted local program output',codeWorking:'Running locally…',codeFailed:'Execution failed, exceeded a limit, or was cancelled.',chartLab:'Local data chart',chartHelp:'Provide JSON: type (bar or line), title, labels and numeric values. At most 200 points; finite values up to ±10¹². No model, upload or code execution is used to draw the chart.',chartDraw:'Draw chart',chartUse:'Use code result',chartExport:'Export PNG',chartJson:'Chart data JSON',chartFailed:'Invalid chart data. Check type, matching labels/values and numeric limits.'});
-Object.assign(FA,{research:'میز پژوهش زنده',researchHelp:'فقط عبارت دقیق زیر مستقیماً به APIهای عمومی انتخاب‌شده فرستاده می‌شود. گفتگو، فایل، حافظه و توکن‌ها اضافه نمی‌شوند. نتیجه‌ها سرنخ منبع‌اند، نه حقیقت تأییدشده یا نتیجه‌گیری خودکار.',researchQuery:'عبارت عمومی — حداکثر ۲۵۰ نویسه',researchProvider:'ارائه‌دهندهٔ منبع',researchLanguage:'زبان ویکی‌پدیا',researchConsent:'این عبارت دقیق را یک بار به منابع انتخاب‌شده بفرست.',researchSearch:'جست‌وجوی منابع عمومی',researchStop:'لغو پژوهش',researchAdd:'نگهداری گزیده به‌عنوان منبع پروژه',researchEmpty:'منبع مطابق پیدا نشد.',researchWorking:'در حال دریافت سرنخ‌های منابع عمومی…',researchFailed:'دریافت منبع ناموفق یا مسدود شد. اتصال، دسترس‌پذیری سرویس و عبارت را بررسی کن.',researchNote:'Crossref اطلاعات کتاب‌شناختی می‌دهد، نه یافته یا متن کامل مقاله. گزیده‌های ویکی‌پدیا تابع شرایط انتساب آن هستند.',codeLab:'آزمایشگاه محلی JavaScript',codeHelp:'فقط کد و ورودی نمایش‌داده‌شده در یک Worker مرورگر با مبدأ ایزوله اجرا می‌شوند. به صفحه، آرشیو و شبکهٔ Studio دسترسی ندارد. پس از ۳ ثانیه متوقف می‌شود و خروجی تا ۶۴٬۰۰۰ بایت محدود است. سقف سخت حافظه ندارد؛ محیط Python یا سیستم‌عامل نیست. ورودی و خروجی موقت‌اند؛ برای نگهداری، خروجی را به ویرایشگر نوشته کپی کن.',codeSource:'بدنهٔ تابع JavaScript — از input به‌صورت رشته، console.log و return استفاده کن',codeInput:'فقط همین ورودی به کد داده می‌شود',codeConsent:'این کد و ورودی دقیق را یک بار محلی اجرا کن.',codeSample:'بارگذاری نمونهٔ محاسبه',codeRun:'اجرای محلی',codeStop:'توقف اجرا',codeCopy:'کپی خروجی به ویرایشگر نوشته',codeOutput:'خروجی تأییدنشدهٔ برنامهٔ محلی',codeWorking:'در حال اجرای محلی…',codeFailed:'اجرا ناموفق، لغو یا متوقف شد یا از محدودیت گذشت.',chartLab:'نمودار دادهٔ محلی',chartHelp:'JSON شامل type برابر bar یا line، عنوان title، برچسب‌های labels و مقادیر عددی values بده. حداکثر ۲۰۰ نقطه و عدد متناهی تا ±۱۰¹². رسم نمودار به مدل، ارسال داده یا اجرای کد نیاز ندارد.',chartDraw:'رسم نمودار',chartUse:'استفاده از نتیجهٔ کد',chartExport:'خروجی PNG',chartJson:'دادهٔ JSON نمودار',chartFailed:'دادهٔ نمودار معتبر نیست. نوع، تعداد برابر برچسب و مقدار و محدودیت عددی را بررسی کن.'});
+Object.assign(EN,{research:'Live research desk',researchHelp:'Only the exact queries below are sent directly to the selected public APIs. Conversations, files, memory and credentials are not added. Results are source leads, not verified facts or automatic research conclusions.',researchQuery:'Public query (up to 250 characters)',researchProvider:'Source provider',researchLanguage:'Wikipedia language',researchConsent:'Send this exact query to the selected source provider(s) once.',researchSearch:'Search public sources',researchStop:'Cancel research',researchAdd:'Keep excerpt as a project source',researchEmpty:'No matching sources were returned.',researchWorking:'Retrieving public source leads…',researchFailed:'Source retrieval failed or was blocked. Check connectivity, provider availability and query.',researchNote:'Crossref provides bibliographic metadata, not paper findings or full text. Wikipedia extracts carry its attribution terms.',codeLab:'Local JavaScript lab',codeHelp:'Runs exactly the code and input shown in an opaque-origin browser worker. It has no access to Studio DOM, archive storage or network. Execution stops after 3 seconds and output is capped at 64,000 bytes. There is no hard memory quota; this is not a Python or operating-system sandbox. Inputs and outputs are temporary; copy output to the writing canvas to keep it.',codeSource:'JavaScript function body — use input (a string), console.log and return',codeInput:'Only this input is passed to the code',codeConsent:'Run this exact code and input locally once.',codeSample:'Load calculation sample',codeRun:'Run locally',codeStop:'Stop execution',codeCopy:'Copy output into writing canvas',codeOutput:'Untrusted local program output',codeWorking:'Running locally…',codeFailed:'Execution failed, exceeded a limit, or was cancelled.',chartLab:'Local data chart',chartHelp:'Provide JSON: type (bar or line), title, labels and numeric values. At most 200 points; finite values up to ±10¹². No model, upload or code execution is used to draw the chart.',chartDraw:'Draw chart',chartUse:'Use code result',chartExport:'Export PNG',chartJson:'Chart data JSON',chartFailed:'Invalid chart data. Check type, matching labels/values and numeric limits.'});
+Object.assign(FA,{research:'میز پژوهش زنده',researchHelp:'فقط عبارت‌های دقیق زیر مستقیماً به APIهای عمومی انتخاب‌شده فرستاده می‌شوند. گفتگو، فایل، حافظه و توکن‌ها اضافه نمی‌شوند. نتیجه‌ها سرنخ منبع‌اند، نه حقیقت تأییدشده یا نتیجه‌گیری خودکار.',researchQuery:'عبارت عمومی — حداکثر ۲۵۰ نویسه',researchProvider:'ارائه‌دهندهٔ منبع',researchLanguage:'زبان ویکی‌پدیا',researchConsent:'این عبارت دقیق را یک بار به منابع انتخاب‌شده بفرست.',researchSearch:'جست‌وجوی منابع عمومی',researchStop:'لغو پژوهش',researchAdd:'نگهداری گزیده به‌عنوان منبع پروژه',researchEmpty:'منبع مطابق پیدا نشد.',researchWorking:'در حال دریافت سرنخ‌های منابع عمومی…',researchFailed:'دریافت منبع ناموفق یا مسدود شد. اتصال، دسترس‌پذیری سرویس و عبارت را بررسی کن.',researchNote:'Crossref اطلاعات کتاب‌شناختی می‌دهد، نه یافته یا متن کامل مقاله. گزیده‌های ویکی‌پدیا تابع شرایط انتساب آن هستند.',codeLab:'آزمایشگاه محلی JavaScript',codeHelp:'فقط کد و ورودی نمایش‌داده‌شده در یک Worker مرورگر با مبدأ ایزوله اجرا می‌شوند. به صفحه، آرشیو و شبکهٔ Studio دسترسی ندارد. پس از ۳ ثانیه متوقف می‌شود و خروجی تا ۶۴٬۰۰۰ بایت محدود است. سقف سخت حافظه ندارد؛ محیط Python یا سیستم‌عامل نیست. ورودی و خروجی موقت‌اند؛ برای نگهداری، خروجی را به ویرایشگر نوشته کپی کن.',codeSource:'بدنهٔ تابع JavaScript — از input به‌صورت رشته، console.log و return استفاده کن',codeInput:'فقط همین ورودی به کد داده می‌شود',codeConsent:'این کد و ورودی دقیق را یک بار محلی اجرا کن.',codeSample:'بارگذاری نمونهٔ محاسبه',codeRun:'اجرای محلی',codeStop:'توقف اجرا',codeCopy:'کپی خروجی به ویرایشگر نوشته',codeOutput:'خروجی تأییدنشدهٔ برنامهٔ محلی',codeWorking:'در حال اجرای محلی…',codeFailed:'اجرا ناموفق، لغو یا متوقف شد یا از محدودیت گذشت.',chartLab:'نمودار دادهٔ محلی',chartHelp:'JSON شامل type برابر bar یا line، عنوان title، برچسب‌های labels و مقادیر عددی values بده. حداکثر ۲۰۰ نقطه و عدد متناهی تا ±۱۰¹². رسم نمودار به مدل، ارسال داده یا اجرای کد نیاز ندارد.',chartDraw:'رسم نمودار',chartUse:'استفاده از نتیجهٔ کد',chartExport:'خروجی PNG',chartJson:'دادهٔ JSON نمودار',chartFailed:'دادهٔ نمودار معتبر نیست. نوع، تعداد برابر برچسب و مقدار و محدودیت عددی را بررسی کن.'});
 Object.assign(EN,{researchChat:'Use source excerpt in next chat',codeChat:'Use code result in next chat'});Object.assign(FA,{researchChat:'استفاده از گزیدهٔ منبع در پیام بعدی',codeChat:'استفاده از نتیجهٔ کد در پیام بعدی'});
 Object.assign(EN,{
  researchBoth:'Wikipedia and Crossref',researchPartial:'Some providers failed: ',researchPick:'Include in brief',
- researchBrief:'Research brief',researchBriefChat:'Attach brief excerpts to chat',researchBriefExport:'Download brief'
+ researchBrief:'Research brief',researchBriefChat:'Attach brief excerpts to chat',researchBriefExport:'Download brief',
+ researchQueries:'Search queries (up to four, one per line, 250 characters each)',
+ researchPlanConsent:'Send these exact queries once to the selected providers.',
+ researchProgress:'Queries completed',researchTimeLimit:'The search reached its time limit. Available results are shown below.',
+ researchCardQueries:'Matched queries',researchInvalidPlan:'Enter up to four queries, one per line, with 250 characters or fewer per query.'
 });
 Object.assign(FA,{
  researchBoth:'ویکی‌پدیا و کراس‌رف',researchPartial:'دریافت از بعضی منابع ناموفق بود: ',researchPick:'افزودن به پرونده',
- researchBrief:'پروندهٔ پژوهشی',researchBriefChat:'پیوست گزیدهٔ پرونده به گفتگو',researchBriefExport:'دریافت پرونده'
+ researchBrief:'پروندهٔ پژوهشی',researchBriefChat:'پیوست گزیدهٔ پرونده به گفتگو',researchBriefExport:'دریافت پرونده',
+ researchQueries:'عبارت‌های جست‌وجو (حداکثر چهار عبارت، هر خط یک عبارت تا ۲۵۰ نویسه)',
+ researchPlanConsent:'همین عبارت‌ها را یک بار به ارائه‌دهندگان انتخاب‌شده بفرست.',
+ researchProgress:'عبارت‌های بررسی‌شده',researchTimeLimit:'مهلت جست‌وجو پایان یافت. نتایج دریافت‌شده در پایین آمده‌اند.',
+ researchCardQueries:'عبارت‌های مرتبط',researchInvalidPlan:'حداکثر چهار عبارت وارد کن؛ هر عبارت در یک خط و تا ۲۵۰ نویسه.'
 });
 function renderBrief(){
  const picked=cards.filter(card=>selectedSources.has(card));
@@ -2129,6 +2169,7 @@ function renderCards(){
  $('research-cards').replaceChildren();for(const card of cards){const box=el('article','');box.className='message';const link=el('a',card.title);link.href=card.url;link.target='_blank';link.rel='noopener noreferrer';box.append(link,el('p',card.kind+' · '+card.at),el('p',card.excerpt),el('p',card.license));const add=el('button',t('researchAdd'));add.disabled=!p();add.onclick=()=>{if(!p())return;const source={id:S.uid(),name:(card.engine+' · '+card.title).slice(0,160),text:L.sourceText(card)};mutate(v=>projectIn(v).sources.push(source))};const use=el('button',t('researchChat'));use.className='secondary';use.onclick=()=>{window.NexusStudioUI?.stageChatContext((card.engine+' · '+card.title).slice(0,160),L.sourceText(card))};const pick=el('input','');pick.type='checkbox';pick.checked=selectedSources.has(card);
  const label=el('label','');label.className='inline';label.append(pick,' '+t('researchPick'));
  pick.onchange=()=>{if(pick.checked)selectedSources.add(card);else selectedSources.delete(card);renderBrief()};
+ box.append(el('p',t('researchCardQueries')+' · '+card.queries.join(' | ')));
  box.append(add,use,label);$('research-cards').append(box)}
  renderBrief();
 }
@@ -2137,12 +2178,14 @@ $('research-run').onclick=async()=>{
  if(!$('research-consent').checked||searchController)return;
  const query=$('research-query').value.trim(),provider=$('research-provider').value,lang=$('research-language').value,scope=epoch;const abort=new AbortController();searchController=abort;$('research-consent').checked=false;$('research-run').disabled=true;$('research-stop').disabled=false;$('research-status').textContent=t('researchWorking');cards=[];selectedSources.clear();renderCards();const timer=setTimeout(()=>abort.abort(),20000);
  try{
-  const {cards:found,failed}=await L.researchBatch(provider,query,lang,abort.signal);
+  const {cards:found,failed,successful,timedOut}=await L.researchPlan(provider,query,lang,abort.signal,(completed,total)=>{
+   if(scope===epoch&&total>1)$('research-status').textContent=t('researchProgress')+' · '+completed+'/'+total;
+  });
   if(scope!==epoch)return;
   cards=found;renderCards();
-  $('research-status').textContent=failed.length===(provider==='both'?2:1)?t('researchFailed'):
+  $('research-status').textContent=timedOut?t('researchTimeLimit'):!successful?t('researchFailed'):
    failed.length?t('researchPartial')+failed.join(', '):cards.length?'':t('researchEmpty');
- }catch{if(scope===epoch)$('research-status').textContent=t('researchFailed')}finally{clearTimeout(timer);if(scope===epoch){searchController=null;$('research-run').disabled=false;$('research-stop').disabled=true}}
+ }catch(error){if(scope===epoch)$('research-status').textContent=t(error?.message==='query-plan'?'researchInvalidPlan':'researchFailed')}finally{clearTimeout(timer);if(scope===epoch){searchController=null;$('research-run').disabled=false;$('research-stop').disabled=true}}
 };
 $('research-stop').onclick=cancel;
 for(const id of ['code','code-input'])$(id).addEventListener('input',()=>{cancel();result=null;$('code-result').textContent='';$('code-console').textContent=''});
@@ -2827,7 +2870,8 @@ function offerTool(message,result){
   clearOffer();
   const input=field?$(field):null;
   if(input&&!input.value&&result.query){
-   input.value=result.query.slice(0,input.maxLength>0?input.maxLength:480);
+   const limit=field==='research-query'?250:input.maxLength;
+   input.value=result.query.slice(0,limit>0?limit:480);
    input.dispatchEvent(new Event('input',{bubbles:true}));
   }
   if(panel==='studio-connections'){

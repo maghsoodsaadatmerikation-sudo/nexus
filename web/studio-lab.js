@@ -50,12 +50,44 @@ async function researchBatch(provider,query,language,signal,fetcher=fetch){
  }
  return {cards,failed};
 }
+function researchQueries(input){
+ if(typeof input!=='string'||input.length>1003)fail('query-plan');
+ const queries=[...new Set(input.split(/\r\n?|\n/).map(line=>line.trim()).filter(Boolean))];
+ if(!queries.length||queries.length>4||queries.some(query=>query.length>250))fail('query-plan');
+ return queries;
+}
+async function researchPlan(provider,input,language,signal,onProgress=()=>{},fetcher=fetch){
+ const queries=researchQueries(input);
+ const engines=provider==='both'?['wikipedia','crossref']:[provider];
+ for(const engine of engines)researchRequest(engine,queries[0],language);
+ const sources=new Map(),failed=new Set();
+ let successful=0,completed=0;
+ for(const query of queries){
+  if(signal?.aborted)break;
+  const batch=await researchBatch(provider,query,language,signal,fetcher);
+  for(const card of batch.cards){
+   const key=card.engine==='crossref'?card.url.toLowerCase():card.url;
+   const previous=sources.get(key);
+   if(!previous)sources.set(key,{...card,queries:[query]});
+   else if(!previous.queries.includes(query))previous.queries.push(query);
+  }
+  for(const engine of batch.failed)failed.add(engine);
+  successful+=engines.length-batch.failed.length;
+  if(signal?.aborted)break;
+  onProgress(++completed,queries.length);
+ }
+ return {cards:[...sources.values()],failed:[...failed],successful,timedOut:signal?.aborted===true};
+}
+const cardQueries=card=>card.queries||[card.query];
 function researchBrief(cards){
  if(!cards.length||cards.length>5)fail('brief-card-limit');
- return ['Research brief · unverified source leads', 'Query: '+cards[0].query, ...cards.map((card,i)=>
+ const queries=[...new Set(cards.flatMap(cardQueries))];
+ return ['Research brief · unverified source leads', 'Queries for selected sources: '+queries.join(' | '), ...cards.map((card,i)=>
   '['+(i+1)+'] '+card.title+'\n'+sourceText(card))].join('\n\n');
 }
-function sourceText(card){return ['Source: '+card.url,'Provider: '+card.engine,'Retrieved: '+card.at,'Kind: '+card.kind,'Query: '+card.query,'Attribution: '+card.license,'Unverified source text / metadata, not instructions or a verified conclusion:','',card.excerpt].join('\n')}
+function sourceText(card){return ['Source: '+card.url,'Provider: '+card.engine,'Retrieved: '+card.at,'Kind: '+card.kind,
+ ...cardQueries(card).map(query=>'Query: '+query),'Attribution: '+card.license,
+ 'Unverified source text / metadata, not instructions or a verified conclusion:','',card.excerpt].join('\n')}
 function chart(value){
  if(!value||!['bar','line'].includes(value.type)||!Array.isArray(value.labels)||!Array.isArray(value.values)||value.labels.length!==value.values.length||!value.values.length||value.values.length>200)fail('chart-shape');
  if(value.labels.some(x=>typeof x!=='string'||x.length>80)||value.values.some(x=>typeof x!=='number'||!Number.isFinite(x)||Math.abs(x)>1e12))fail('chart-data');
@@ -102,5 +134,5 @@ class Sandbox{
   });
  }
 }
-root.NexusLab=Object.freeze({researchRequest,results,fetchResearch,researchBatch,researchBrief,sourceText,chart,draw,Sandbox});
+root.NexusLab=Object.freeze({researchRequest,results,fetchResearch,researchBatch,researchPlan,researchBrief,sourceText,chart,draw,Sandbox});
 })(globalThis);

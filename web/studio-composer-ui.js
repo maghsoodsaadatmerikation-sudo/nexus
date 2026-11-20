@@ -173,7 +173,8 @@ function offerTool(message,result){
   clearOffer();
   const input=field?$(field):null;
   if(input&&!input.value&&result.query){
-   input.value=result.query.slice(0,input.maxLength>0?input.maxLength:480);
+   const limit=field==='research-query'?250:input.maxLength;
+   input.value=result.query.slice(0,limit>0?limit:480);
    input.dispatchEvent(new Event('input',{bubbles:true}));
   }
   if(panel==='studio-connections'){

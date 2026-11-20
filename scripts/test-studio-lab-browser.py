@@ -25,6 +25,22 @@ window.addEventListener('load',async()=>{
   $('research-consent').checked=true;fill('research-query','new query');assert(!$('research-consent').checked,'query-change-revokes-consent');
   late=true;$('research-consent').checked=true;$('research-run').click();await wait(()=>release);fill('research-query','different query');release();await new Promise(r=>setTimeout(r,40));assert(!$('research-cards').children.length,'late-research-result-discarded');late=false;
   $('research-provider').value='crossref';$('research-provider').dispatchEvent(new Event('change'));$('research-consent').checked=true;$('research-run').click();await wait(()=>$('research-cards').children.length===1);assert($('research-cards').textContent.includes('bibliographic-metadata-only'),'article-metadata-not-claimed-full-text');
+  $('research-provider').value='both';$('research-provider').dispatchEvent(new Event('change'));
+  fill('research-query','first topic\nsecond topic\nfirst topic');const beforePlan=searches;
+  $('research-run').click();
+  assert(searches===beforePlan,'multi-query-research-requires-consent');
+  $('research-consent').checked=true;$('research-run').click();
+  await wait(()=>!$('research-run').disabled&&$('research-cards').children.length===2);
+  assert(searches===beforePlan+4&&$('research-cards').textContent.includes('first topic | second topic'),
+   'multi-query-runs-only-unique-approved-searches-and-merges-duplicate-results');
+  const selected=$('research-cards').querySelectorAll('input[type="checkbox"]');
+  selected[0].click();selected[1].click();
+  assert(!$('research-brief').hidden&&$('research-brief-text').textContent.includes('Query: first topic')&&
+   $('research-brief-text').textContent.includes('Query: second topic'),'research-brief-keeps-each-search-query');
+  fill('research-query','a\nb\nc\nd\ne');
+  $('research-consent').checked=true;$('research-run').click();
+  await wait(()=>$('research-status').textContent===EN.researchInvalidPlan);
+  assert(searches===beforePlan+4&&$('research-brief').hidden,'invalid-plan-sends-nothing-and-clears-old-brief');
   $('code-sample').click();$('code-run').click();assert(!$('code-result').textContent,'no-code-execution-without-consent');$('code-consent').checked=true;$('code-run').click();await wait(()=>$('code-result').textContent.includes('Local calculation'));assert($('code-console').textContent.includes('sum'),'local-code-really-computes');
   $('chart-use').click();$('chart-draw').click();assert(!$('chart').hidden&&$('chart').width===1200,'code-result-renders-chart');const color=$('chart').getContext('2d').getImageData(600,200,1,1).data;assert(color[1]>color[0]&&color[3]===255,'chart-has-rendered-data-pixels');
   $('code-sample').click();assert(!$('code-result').textContent&&!$('code-console').textContent,'loading-new-code-clears-old-result');$('code-copy').click();assert(!$('editor').value,'old-result-cannot-be-copied-after-code-change');
