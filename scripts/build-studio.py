@@ -4,6 +4,7 @@ from pathlib import Path
 import argparse
 import base64
 import hashlib
+from textwrap import dedent
 from studio_module_graph import validate_module_graph
 from studio_template_contract import replace_exact
 root = Path(__file__).resolve().parents[1]
@@ -21,6 +22,16 @@ shell = replace_exact(shell, '__NEXUS_BRAND_PNG__', brand)
 for item in modules:
     marker, filename = item.marker, item.filename
     code = (root/'web'/filename).read_text()
+    if filename == 'studio-office-zip.js':
+        # Reuse the static offline file desk reader. The public pilot keeps its
+        # reviewed bytes while Studio supplies its own smaller expansion limit.
+        pilot = (root/'web/offline-pilot.html').read_text()
+        start = pilot.index('  function decodeFileText(bytes){')
+        helpers = pilot.index('  const xmlElements=', start)
+        crc = pilot.index('  const ZIP_CRC_TABLE=', helpers)
+        end = pilot.index('  async function officeText(', crc)
+        reader = dedent(pilot[start:helpers]) + dedent(pilot[crc:end])
+        code = replace_exact(code, '/* OFFICE_ZIP_READER */', reader.rstrip())
     if '</script' in code.lower():
         raise ValueError('script closing sequence is not permitted in bundled sources')
     shell = replace_exact(shell, marker, code)

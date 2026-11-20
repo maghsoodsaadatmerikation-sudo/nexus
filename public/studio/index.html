@@ -1775,6 +1775,7 @@ globalThis.NexusReplyFormat = Object.freeze({render, exportHtml});
 })();
 </script><script>/* Bounded ZIP and XML readers reused by Studio and the offline file desk. */
 (function(root){'use strict';
+const PREVIEW_LIMIT=512*1024;
 function decodeFileText(bytes){
   if(bytes[0]===0xff&&bytes[1]===0xfe)return new TextDecoder('utf-16le',{fatal:true}).decode(bytes.subarray(2));
   if(bytes[0]===0xfe&&bytes[1]===0xff)return new TextDecoder('utf-16be',{fatal:true}).decode(bytes.subarray(2));
@@ -1785,14 +1786,12 @@ function xmlDocument(bytes){
   const doc=new DOMParser().parseFromString(text,'application/xml');
   if(doc.getElementsByTagName('parsererror').length)throw Error('invalid-xml');return doc;
 }
-const xmlElements=(node,name)=>Array.from(node.getElementsByTagNameNS('*',name));
-const xmlText=(node,name)=>xmlElements(node,name).map(n=>n.textContent).join('');
 const ZIP_CRC_TABLE=Uint32Array.from({length:256},(_,value)=>{let c=value;for(let i=0;i<8;i++)c=(c>>>1)^((c&1)?0xedb88320:0);return c>>>0;});
 function crc32(bytes){
   let crc=0xffffffff;for(const byte of bytes)crc=(crc>>>8)^ZIP_CRC_TABLE[(crc^byte)&255];
   return (crc^0xffffffff)>>>0;
 }
-function zipReader(bytes, maxEntryBytes){
+function zipReader(bytes){
   const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),size=bytes.length;
   const u16=at=>view.getUint16(at,true),u32=at=>view.getUint32(at,true);
   let end=-1;
@@ -1809,7 +1808,7 @@ function zipReader(bytes, maxEntryBytes){
   }
   if(at!==end)throw Error('zip-directory-size');
   return {names:Array.from(map.keys()),read:async name=>{
-    const entry=map.get(name);if(!entry||entry.raw>maxEntryBytes||(expanded+=entry.raw)>3*maxEntryBytes||![0,8].includes(entry.method))throw Error('zip-budget');
+    const entry=map.get(name);if(!entry||entry.raw>PREVIEW_LIMIT||(expanded+=entry.raw)>3*PREVIEW_LIMIT||![0,8].includes(entry.method))throw Error('zip-budget');
     const o=entry.offset;
     if(o+30>directory||u32(o)!==0x04034b50||(u16(o+6)&1)||u16(o+8)!==entry.method)throw Error('zip-local');
     const n=u16(o+26),extra=u16(o+28),start=o+30+n+extra;
@@ -1818,7 +1817,7 @@ function zipReader(bytes, maxEntryBytes){
     if(entry.method===0)data=compressed;
     else{
       const stream=new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader(),parts=[];let length=0;
-      try{while(true){const step=await stream.read();if(step.done)break;length+=step.value.length;if(length>entry.raw||length>maxEntryBytes)throw Error('zip-inflation');parts.push(step.value);}}
+      try{while(true){const step=await stream.read();if(step.done)break;length+=step.value.length;if(length>entry.raw||length>PREVIEW_LIMIT)throw Error('zip-inflation');parts.push(step.value);}}
       catch(error){try{await stream.cancel()}catch{}throw error;}
       data=new Uint8Array(length);let p=0;for(const part of parts){data.set(part,p);p+=part.length;}
     }
@@ -1835,7 +1834,7 @@ async function readDocx(file){
  if(!Number.isSafeInteger(file.size)||file.size<1||file.size>DOCX_MAX_BYTES)throw Error('docx-size');
  const bytes=new Uint8Array(await file.arrayBuffer());
  if(bytes.length!==file.size)throw Error('docx-size');
- const zip=zipReader(bytes,512*1024);
+ const zip=zipReader(bytes);
  const document=xmlDocument(await zip.read('word/document.xml'));
  const main=document.documentElement,ns=main.namespaceURI;
  const bodies=Array.from(main.children).filter(node=>node.namespaceURI===ns&&node.localName==='body');
@@ -1855,7 +1854,7 @@ async function readDocx(file){
  return text;
 }
 
-root.NexusOfficeZip=Object.freeze({decodeFileText,xmlDocument,xmlElements,xmlText,crc32,zipReader,readDocx,DOCX_MAX_BYTES});
+root.NexusOfficeZip=Object.freeze({readDocx,DOCX_MAX_BYTES});
 })(globalThis);
 </script><script>'use strict';
 const S=NexusStudio,$=id=>document.getElementById(id),vault=new S.Vault(),undoSlot=new S.UndoSlot(),localePacks=new NexusLocales.Registry();
