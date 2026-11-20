@@ -3,8 +3,8 @@
 from pathlib import Path
 import stat
 
-# Bounded standalone HTML budget, including the combined research brief.
-MAX_FILE = 520_000
+# Bounded standalone HTML budget, including the calendar reminder panel.
+MAX_FILE = 530_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000

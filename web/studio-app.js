@@ -36,6 +36,18 @@ const forms=()=>profileDirty||editorDirty||window.NexusAstrologyUI?.hasDraft()==
 const t=k=>(localePacks.get(language)?.messages||(language==='fa'?FA:EN))[k]||EN[k]||k,el=(tag,text)=>{const n=document.createElement(tag);n.textContent=text;return n},p=()=>data.projects.find(x=>x.id===projectId),chat=()=>p()?.threads.find(x=>x.id===threadId),doc=()=>p()?.documents.find(x=>x.id===documentId);
 Object.assign(EN,{studyMode:'Study mode',modelMode:'Provider execution mode (requires a supporting gateway)',modeDefault:'Provider default',modeThinking:'Thinking',modeFast:'Non-thinking',modelBudget:'Maximum generated tokens (1–8192; existing response and time limits still apply)'});
 Object.assign(FA,{studyMode:'حالت مطالعه',modelMode:'حالت اجرای مدل — نیازمند درگاه پشتیبان',modeDefault:'پیش‌فرض ارائه‌دهنده',modeThinking:'تفکر',modeFast:'بدون تفکر',modelBudget:'حداکثر توکن تولیدی — ۱ تا ۸۱۹۲؛ محدودیت زمان و حجم پاسخ همچنان برقرار است'});
+Object.assign(EN,{
+ reminderTitle:'Reminders',reminderHelp:'Download an .ics file and import it into your calendar. The receiving calendar interprets the local time and manages alerts.',
+ reminderName:'Reminder',reminderStart:'Local date and time',reminderRepeat:'Repeat',reminderOnce:'Once',reminderDaily:'Daily',reminderWeekly:'Weekly',
+ reminderAlert:'Alert',reminderAtStart:'At the event time',reminderFive:'5 minutes before',reminderFifteen:'15 minutes before',reminderHour:'1 hour before',
+ reminderExport:'Download calendar file',reminderDownloaded:'Calendar file ready. Import it into your calendar and check its alert.',reminderInvalid:'Enter a reminder and a valid local date and time.'
+});
+Object.assign(FA,{
+ reminderTitle:'یادآورها',reminderHelp:'فایل .ics را بگیر و در تقویمت وارد کن. تقویم مقصد ساعت محلی را تفسیر می‌کند و اعلان‌ها را مدیریت می‌کند.',
+ reminderName:'یادآور',reminderStart:'تاریخ و ساعت محلی',reminderRepeat:'تکرار',reminderOnce:'یک‌بار',reminderDaily:'روزانه',reminderWeekly:'هفتگی',
+ reminderAlert:'اعلان',reminderAtStart:'در زمان رویداد',reminderFive:'۵ دقیقه قبل',reminderFifteen:'۱۵ دقیقه قبل',reminderHour:'یک ساعت قبل',
+ reminderExport:'دریافت فایل تقویم',reminderDownloaded:'فایل آماده است. آن را در تقویمت وارد و اعلان را بررسی کن.',reminderInvalid:'عنوان یادآور و تاریخ و ساعت معتبر وارد کن.'
+});
 function status(k){$('status').textContent=t(k)}
 function selectedAttachments(){
  const saved=$('attach-document').checked&&doc()?.versions.at(-1)?.text?.trim();
@@ -74,8 +86,8 @@ function renderChatAttachments(){
 const TOOL_LIFECYCLE=Object.freeze({
  version:'nexus.studio.tool-lifecycle.v1',
  cancel:Object.freeze([['NexusQualityUI','cancel'],['NexusAstrologyUI','cancel'],['NexusLabUI','cancel']]),
- project:Object.freeze([['NexusTasksUI','clear'],['NexusQualityUI','clear'],['NexusAstrologyUI','clear'],['NexusLabUI','clear']]),
- private:Object.freeze([['NexusDevice','unload'],['NexusTasksUI','clear'],['NexusQualityUI','clear'],
+ project:Object.freeze([['NexusCalendar','clear'],['NexusTasksUI','clear'],['NexusQualityUI','clear'],['NexusAstrologyUI','clear'],['NexusLabUI','clear']]),
+ private:Object.freeze([['NexusDevice','unload'],['NexusCalendar','clear'],['NexusTasksUI','clear'],['NexusQualityUI','clear'],
   ['NexusAstrologyUI','clear'],['NexusLabUI','clear'],['NexusMusicUI','clear'],['NexusOrchestraUI','clear']])
 });
 function unsavedLocalMedia(){
@@ -84,7 +96,8 @@ function unsavedLocalMedia(){
   window.NexusOrchestraUI?.hasTransientWork?.()===true;
 }
 function hasToolWork(){
- return window.NexusLabUI?.hasTransientWork?.()===true||
+ return window.NexusCalendar?.hasTransientWork?.()===true||
+  window.NexusLabUI?.hasTransientWork?.()===true||
   window.NexusTasksUI?.hasTransientWork?.()===true||
   window.NexusQualityUI?.hasTransientWork?.()===true;
 }
@@ -390,7 +403,7 @@ $('language-file').onchange=async event=>{
  if(!f||busy)return;if(f.size>NexusLocales.MAX_BYTES)return status('failed');
  const current=()=>task===languageImport&&rev===revision&&!busy;
  try{
-  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{optionalKeys:['storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport']});
+  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{optionalKeys:['storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport',...Object.keys(EN).filter(key=>key.startsWith('reminder'))]});
   if(!$('language').querySelector('option[value="'+pack.code+'"]'))$('language').append(option(pack.code,pack.code));
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}

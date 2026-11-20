@@ -58,6 +58,16 @@ See [the operational and security contract](STUDIO-CHAT-ATTACHMENTS.md).
 This is *not* multimodal model vision, PDF/OCR parsing, unrestricted file
 uploads, source verification or a substitute for real ChatGPT model quality.
 
+## Calendar reminders
+
+In focused chat, enter `/remind Review the next mix` and open **Reminders**.
+Choose the date, local clock time, one-time/daily/weekly recurrence, and the
+alert lead time. **Download calendar file** exports an iCalendar event and
+display alarm. Import the file into your calendar and check its time zone and
+alert settings. The receiving calendar interprets the local clock time and
+handles recurrence and alerts. Studio builds the file locally and clears the
+reminder form when switching projects or locking the workspace.
+
 ## PDF text attachments
 
 In the public or phone-local Studio, open **Attach text files to this message**
@@ -124,7 +134,7 @@ reference for the consumer-plan features below.
 | Image/video generation | Not implemented | A connected generation provider, usage authorization and media QA |
 | Real-time voice conversation | Opt-in microphone dictation and local read-aloud | A real-time audio provider, microphone permissions, interruption tests and device QA |
 | Sandboxed Python/code execution | JavaScript Worker lab available; no Python or OS execution | An isolated Python/OS execution service with resource/network limits and reproducibility checks |
-| Scheduled unattended work and push notifications | Reviewed one-off local job plans. Background scheduling and push delivery are pending | A durable job runner, delivery channel and user-specific authorization |
+| Scheduled unattended work and push notifications | Calendar export for reminders. In-app background jobs and push delivery are pending | A durable job runner, delivery channel and user-specific authorization |
 | Third-party app actions/MCP | Configured gateways can expose reviewed GitHub and Render operations. A general-purpose app catalog is pending | Per-service OAuth, scoped tokens, concrete tools, revocation and action review |
 | Shared projects and live collaboration | Single browser owner only | User accounts, tenancy, encrypted sync, access control and conflict resolution |
 | Cross-device automatic history sync | Portable encrypted file only | An authenticated sync service and account recovery design |
