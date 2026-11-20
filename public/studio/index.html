@@ -2989,8 +2989,15 @@ checkButton.addEventListener('click',async()=>{
   if(current!==epoch)return;
   if(info.authority!=='none'||typeof info.configured!=='boolean')throw Error('invalid-status');
   if(!info.configured){
-   msg('Gateway reached. Vision is not enabled or no model is configured; no image was sent.',
-    'درگاه در دسترس است؛ مدل بینایی فعال یا پیکربندی نشده است. تصویری ارسال نشد.');
+   if(info.reason==='limit-reached')
+    msg('The vision attempt limit for this server process has been reached. Operator action is required; no image was sent.',
+     'سقف تلاش‌های تحلیل تصویر در این فرایند سرور تکمیل شده است. به اقدام اپراتور نیاز است؛ تصویری ارسال نشد.');
+   else if(info.reason==='limit-unconfigured')
+    msg('The operator has not configured a bounded vision request limit. No image was sent.',
+     'سقف محدود درخواست‌های بینایی توسط اپراتور پیکربندی نشده است. تصویری ارسال نشد.');
+   else
+    msg('Gateway reached. Vision is not enabled or no model is configured; no image was sent.',
+     'درگاه در دسترس است؛ مدل بینایی فعال یا پیکربندی نشده است. تصویری ارسال نشد.');
   }else if(typeof info.model==='string'&&info.model.trim()&&typeof info.provider_host==='string'&&info.provider_host.trim()){
    msg('Gateway reports '+info.model+' at '+info.provider_host+' configured. No image was sent; real vision quality is not verified.',
     'درگاه پیکربندی مدل '+info.model+' را گزارش می‌کند. تصویری ارسال نشد و کیفیت تحلیل هنوز تأیید نشده است.');
