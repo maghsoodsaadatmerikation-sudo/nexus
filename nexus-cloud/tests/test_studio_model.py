@@ -91,6 +91,55 @@ def test_tool_calls_and_invalid_outputs_are_not_executed(monkeypatch,choice):
         assert c.post('/studio-api/respond',json=BODY,headers=AUTH).status_code==502
 
 
+
+@pytest.mark.parametrize("role", ["user", "system", "tool"])
+def test_provider_cannot_masquerade_as_non_assistant_role(monkeypatch, role):
+    with configured(monkeypatch, lambda _: httpx.Response(200, json={
+        "choices": [{"message": {"role": role, "content": "Untrusted role"}, "finish_reason": "stop"}],
+    })) as c:
+        assert c.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 502
+
+
+def test_ambiguous_provider_choices_are_rejected(monkeypatch):
+    choice = {"message": {"role": "assistant", "content": "Draft"}, "finish_reason": "stop"}
+    with configured(monkeypatch, lambda _: httpx.Response(200, json={
+        "choices": [choice, choice],
+    })) as c:
+        response = c.post("/studio-api/respond", json=BODY, headers=AUTH)
+        assert response.status_code == 502
+        assert response.json()["detail"] == "Invalid text-only model response"
+
+
+@pytest.mark.parametrize("content,code", [
+    ("🌙" * 12000, 200),  # 24,000 UTF-16 code units, but 12,000 Python code points.
+    ("🌙" * 12001, 502),  # 24,002 UTF-16 code units; reject before browser storage.
+    ("a" * 24000, 200),
+    ("a" * 24001, 502),
+])
+def test_buffered_model_reply_matches_browser_unicode_limit(monkeypatch, content, code):
+    # UTF-8 bytes avoid JSON's optional ASCII escaping inflating the mock provider body.
+    raw = json.dumps({"choices": [{"message": {"role": "assistant", "content": content},
+                                  "finish_reason": "stop"}]}, ensure_ascii=False).encode("utf-8")
+    with configured(monkeypatch, lambda _: httpx.Response(
+        200, content=raw, headers={"content-type": "application/json"},
+    )) as c:
+        response = c.post("/studio-api/respond", json=BODY, headers=AUTH)
+        assert response.status_code == code
+        if code == 200:
+            assert response.json()["text"] == content
+
+
+def test_policy_requires_direct_answers_and_honest_source_limits(monkeypatch):
+    assert "user's language" in model.POLICY
+    assert "concrete, checkable steps" in model.POLICY
+    assert "excerpts are incomplete" in model.POLICY
+    with configured(monkeypatch, lambda req: httpx.Response(200, json={
+        "choices": [{"message": {"role": "assistant", "content": "Reviewed draft"},
+                     "finish_reason": "stop"}],
+    })) as c:
+        assert c.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 200
+
+
 def test_oversized_input_is_rejected(monkeypatch):
     with configured(monkeypatch,lambda _:pytest.fail('oversized forward')) as c:
         assert c.post('/studio-api/respond',content=b'x'*96001,headers={**AUTH,'content-type':'application/json'}).status_code==413
