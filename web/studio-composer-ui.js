@@ -167,8 +167,11 @@ function offerTool(message,result){
  proceed.textContent=select.value==='model'?words('Review as model message','بازبینی برای ارسال به مدل'):
   words('Continue with local guide','ادامه با راهنمای محلی');
  proceed.addEventListener('click',()=>{
-  const current=$('message').value===offeredDraft;clearOffer();
-  if(current)run({routeTools:false});
+  // Bind continuation to this exact reviewed proposal, not a mutable
+  // suggestion slot that may have been invalidated by unrelated UI updates.
+  const current=$('message').value===message;
+  clearOffer();
+  if(current){refresh();run({routeTools:false})}
  });
  offer.append(p,open,proceed,dismiss);
 }
