@@ -3,8 +3,9 @@
 from pathlib import Path
 import stat
 
-# Bounded standalone HTML budget, including local Office text extraction.
-# User-selected images are never part of the bundle.
+# Keep a separate bound for the standalone HTML, including local Office
+# text extraction and the bilingual decision guide.
+MAX_HTML = 584_000
 MAX_FILE = 580_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
@@ -27,7 +28,11 @@ LEGACY_FILES = (
 FILES = LEGACY_FILES + PDF_FILES
 
 def asset_limit(name):
-    return WORKER_LIMIT if name == 'pdf/pdf.worker.min.mjs' else MAX_FILE
+    if name == "index.html":
+        return MAX_HTML
+    if name == "pdf/pdf.worker.min.mjs":
+        return WORKER_LIMIT
+    return MAX_FILE
 
 
 def check_public_tree(root):

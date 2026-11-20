@@ -11,7 +11,7 @@ from studio_public_assets import PDF_MODULES, check_public_tree
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_ORIGIN = "https://nexus-studio-merikation.onrender.com"
-PUBLIC_DESCRIPTION = "Chat, research, analyze files and make music in a bilingual workspace. No NEXUS account required."
+PUBLIC_DESCRIPTION = "Chat, research, analyze files, make music and weigh decisions with NEXUS, an AI assistant built to support human judgment."
 PUBLIC_METADATA = (
     f'<link rel="canonical" href="{PUBLIC_ORIGIN}/">'
     f'<meta name="description" content="{PUBLIC_DESCRIPTION}">'

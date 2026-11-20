@@ -107,6 +107,21 @@ before the learner approves the send. Changing the option invalidates a
 pending review. The option resets when switching conversations or clearing
 private state.
 
+## Decision support in chat
+
+Turn on **Decision support** when you want help making a choice. The local guide
+prompts you to name your criteria, compare realistic options and consequences,
+identify gaps in the evidence, and find a reversible next step. With a model,
+the same request appears in the exact context preview before you approve it.
+The configured gateway also asks text and image models to apply this approach
+to consequential choices in ordinary conversation.
+
+Decision support and Study mode are mutually exclusive. Changing either
+invalidates a pending model review. A reply stays a guide or a model draft.
+The decision workspace records a human judgment through its explicit
+human-authored action. Any tool use still follows that tool's review and
+authorization rules.
+
 ## Chat dictation
 
 Open **Dictate** from the conversation composer. Studio shows a disclosure before
