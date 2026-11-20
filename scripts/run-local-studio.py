@@ -57,6 +57,9 @@ def main():
             raise ValueError("Studio HTML is missing; use a complete repository checkout")
         provider_names = ("NEXUS_MODEL_URL", "NEXUS_MODEL_ID", "NEXUS_MODEL_API_KEY", "NEXUS_MODEL_ADAPTER")
         provider_env = {name: os.environ[name] for name in provider_names if name in os.environ}
+        connector_names = ("NEXUS_CONNECTOR_GITHUB_REPO", "NEXUS_CONNECTOR_GITHUB_TOKEN",
+                           "NEXUS_CONNECTOR_RENDER_SERVICE", "NEXUS_CONNECTOR_RENDER_TOKEN")
+        connector_env = {name: os.environ[name] for name in connector_names if name in os.environ}
         # A saved operator credential, not an ambient Studio token, is used below.
         previous = os.environ.get("NEXUS_STUDIO_TOKEN")
         try:
@@ -91,7 +94,7 @@ def main():
         # Do not inherit core authority tokens, proxy settings, Python injection,
         # external CORS origins or unrelated service credentials into this child.
         env = {"PATH": os.defpath, "LANG": "C.UTF-8", "PYTHONNOUSERSITE": "1",
-               "PYTHONDONTWRITEBYTECODE": "1", "NEXUS_STUDIO_TOKEN": token, **provider_env}
+               "PYTHONDONTWRITEBYTECODE": "1", "NEXUS_STUDIO_TOKEN": token, **provider_env, **connector_env}
         signal.signal(signal.SIGTERM, stop)
         signal.signal(signal.SIGINT, stop)
         process = subprocess.Popen(

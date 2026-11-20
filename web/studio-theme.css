@@ -289,3 +289,7 @@ html.studio-focus-mode{
  #nexus-zen-bar #nexus-zen-home{font-size:.9rem;letter-spacing:.08em}
  #nexus-zen-storage-indicator{font-size:.67rem}
 }
+
+#studio-connections{width:min(94vw,680px);max-height:84vh;padding:16px;border:1px solid var(--studio-line);border-radius:14px;background:var(--studio-card);color:var(--studio-ink)}
+#studio-connections::backdrop{background:#0009}
+#studio-connections pre{max-height:30vh;white-space:pre-wrap;overflow-wrap:anywhere}

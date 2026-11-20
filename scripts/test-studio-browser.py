@@ -171,6 +171,35 @@ window.addEventListener('load',async()=>{
   assert(transcript.scrollTop>0,'new-replies-reveal-latest-turn-in-long-transcript');
   transcript.scrollTop=0;fill('search','Long local turn');await sleep(40);
   assert(transcript.scrollTop===0,'unrelated-search-keeps-reader-position');
+  const requests=[];
+  window.fetch=async(url,options)=>{
+   requests.push({url,options});
+   const body=options.body?JSON.parse(options.body):null;
+   if(!body)return new Response(JSON.stringify({connections:[{provider:'github',target:'example/nexus',configuration_id:'b'.repeat(64)}]}));
+   return new Response(JSON.stringify({provider:'github',target:'example/nexus',operation:body.operation,
+    provenance:'external-untrusted',result:{path:body.path,blob_sha:'a'.repeat(40),text:'Synthetic repository source'}}));
+  };
+  fill('gateway','https://synthetic-gateway.example');fill('gateway-token','synthetic-operator-token');
+  const draft='Keep this draft while reading the repository';fill('message',draft);
+  assert($('studio-connections-open').textContent==='Connections','connections-shortcut-keeps-its-label');
+  $('studio-connections-open').click();
+  assert($('studio-connections').open&&requests.length===0,'opening-connections-does-not-contact-gateway');
+  $('studio-connections-load').click();
+  const actions=$('studio-connections').querySelector('select');
+  await wait(()=>actions.options.length===2);
+  actions.value='github.file';actions.dispatchEvent(new Event('change',{bubbles:true}));
+  const filePath=$('studio-connections').querySelector('input');
+  filePath.value='README.md';filePath.dispatchEvent(new Event('input',{bubbles:true}));
+  assert($('studio-connections').textContent.includes('example/nexus / README.md')&&requests.length===1,
+   'connection-target-and-path-visible-before-approved-read');
+  $('studio-connections-read').click();
+  await wait(()=>!$('studio-connections-use').hidden);
+  assert(requests.length===2&&JSON.parse(requests[1].options.body).consent===true&&
+   $('studio-connections').textContent.includes('Synthetic repository source'),'reviewed-result-is-visible');
+  $('studio-connections-use').click();
+  assert(!$('studio-connections').open&&$('message').value===draft&&
+   $('chat-attachment-tray').textContent.includes('README.md')&&!NexusStudioUI.uiStatus().pendingReview&&requests.length===2,
+   'selected-file-attachment-preserves-draft-and-does-not-call-model');
   assert(document.documentElement.scrollWidth<=innerWidth+2,'no-horizontal-overflow');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
