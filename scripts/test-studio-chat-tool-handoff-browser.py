@@ -101,6 +101,10 @@ window.addEventListener('load',async()=>{
   assert($('studio-connections').open,'github-proposal-opens-connection-review');
   assert($('message').value==='/github list open pull requests','github-draft-retained');
   $('studio-connections-close').click();
+  // Natural-language discovery is opt-in through the local-guide composer.
+  // Explicit slash commands remain available in model mode.
+  const chooser=$('studio-compose-mode');
+  chooser.value='guide';chooser.dispatchEvent(new Event('change',{bubbles:true}));
   fill('message','بررسی وضعیت انتشار در رندر');
   assert(chatSend.textContent.includes('Render'),'persian-render-intent-discovered');
   chatSend.click();
