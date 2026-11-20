@@ -175,7 +175,11 @@ window.addEventListener('load',async()=>{
   window.fetch=async(url,options)=>{
    requests.push({url,options});
    const body=options.body?JSON.parse(options.body):null;
-   if(!body)return new Response(JSON.stringify({connections:[{provider:'github',target:'example/nexus',configuration_id:'b'.repeat(64)}]}));
+   if(!body)return new Response(JSON.stringify({connections:[{provider:'github',target:'example/nexus',configuration_id:'b'.repeat(64),branch_creation:true}]}));
+   if(url.endsWith('/github/branch-preview'))return new Response(JSON.stringify({target:'example/nexus',
+    branch:'nexus/studio-'+body.slug,base_sha:'a'.repeat(40),expires_at:2000000000,review_id:'c'.repeat(64)}));
+   if(url.endsWith('/github/branch'))return new Response(JSON.stringify({target:'example/nexus',
+    branch:'nexus/studio-'+body.slug,base_sha:body.base_sha,status:'created'}));
    return new Response(JSON.stringify({provider:'github',target:'example/nexus',operation:body.operation,
     provenance:'external-untrusted',result:{path:body.path,blob_sha:'a'.repeat(40),text:'Synthetic repository source'}}));
   };
@@ -186,7 +190,7 @@ window.addEventListener('load',async()=>{
   assert($('studio-connections').open&&requests.length===0,'opening-connections-does-not-contact-gateway');
   $('studio-connections-load').click();
   const actions=$('studio-connections').querySelector('select');
-  await wait(()=>actions.options.length===2);
+  await wait(()=>actions.options.length===3);
   actions.value='github.file';actions.dispatchEvent(new Event('change',{bubbles:true}));
   const filePath=$('studio-connections').querySelector('input');
   filePath.value='README.md';filePath.dispatchEvent(new Event('input',{bubbles:true}));
@@ -200,6 +204,26 @@ window.addEventListener('load',async()=>{
   assert(!$('studio-connections').open&&$('message').value===draft&&
    $('chat-attachment-tray').textContent.includes('README.md')&&!NexusStudioUI.uiStatus().pendingReview&&requests.length===2,
    'selected-file-attachment-preserves-draft-and-does-not-call-model');
+  await sleep(40);
+  $('studio-connections-open').click();$('studio-connections-load').click();
+  await wait(()=>actions.options.length===3);
+  actions.value='github.branch';actions.dispatchEvent(new Event('change',{bubbles:true}));
+  filePath.value='example-change';filePath.dispatchEvent(new Event('input',{bubbles:true}));
+  const create=$('studio-connections-create');
+  assert(create.hidden,'branch-write-hidden-until-preview');
+  $('studio-connections-read').click();await wait(()=>!create.hidden);
+  assert(requests.every(x=>!x.url.endsWith('/github/branch'))&&
+   $('studio-connections').textContent.includes('main @ '+'a'.repeat(40)),
+   'branch-preview-shows-exact-main-with-no-write');
+  filePath.value='other-change';filePath.dispatchEvent(new Event('input',{bubbles:true}));
+  assert(create.hidden,'changing-branch-name-clears-approval');
+  $('studio-connections-read').click();await wait(()=>!create.hidden);
+  create.click();await wait(()=>$('studio-connections').textContent.includes('Branch created'));
+  const writes=requests.filter(x=>x.url.endsWith('/github/branch')).map(x=>JSON.parse(x.options.body));
+  assert(writes.length===1&&writes[0].slug==='other-change'&&writes[0].base_sha==='a'.repeat(40)&&
+   writes[0].consent===true&&$('message').value===draft,'separate-approval-creates-only-reviewed-branch');
+  $('studio-connections-close').click();
+
   assert(document.documentElement.scrollWidth<=innerWidth+2,'no-horizontal-overflow');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}

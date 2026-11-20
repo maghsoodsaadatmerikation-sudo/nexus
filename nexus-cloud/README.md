@@ -142,6 +142,7 @@ except the Studio operator token when the API is used.
 | `NEXUS_STUDIO_TOKEN` | Operator authentication (at least 32 characters). The local launcher creates its own token file. |
 | `NEXUS_CONNECTOR_GITHUB_REPO` | One repository, in `owner/repository` form. |
 | `NEXUS_CONNECTOR_GITHUB_TOKEN` | Optional fine-grained token for the selected repo. Use Contents read and Pull requests read permissions. Public repositories can be read without a provider token. |
+| `NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN` | Optional separate token for the selected repository, with Contents write permission. Enables reviewed branch creation. |
 | `NEXUS_CONNECTOR_RENDER_SERVICE` | One Render service ID. |
 | `NEXUS_CONNECTOR_RENDER_TOKEN` | Server-side token with the narrowest available deployments read scope. |
 | `NEXUS_STUDIO_ORIGIN` | Exact public Studio origin when the UI and adapter run on different origins. |
@@ -157,5 +158,11 @@ The GitHub actions read open pull requests and UTF-8 files up to 24 KiB. The API
 also accepts an optional full Git commit SHA when reading a file. Render reads
 the latest eight deployments and returns only their identifiers, states, commit
 SHAs and creation times. Provider output is external context for review. This
-initial registry uses server-side credentials, and does not include an OAuth
-catalogue, code writes, pull-request creation or deployment triggers.
+registry uses server-side credentials. With the separate branch token, Studio
+can review the current `main` commit and create `nexus/studio-<name>` at that
+exact commit after a second confirmation. Reviews expire after five minutes.
+Changing the base or branch name requires a fresh review. Existing branches are
+never moved. A retry can recognize the same branch and commit. Branch creation
+can trigger GitHub workflows configured to run on branch pushes. File updates,
+pull-request creation, OAuth and deployment triggers remain outside these
+endpoints.

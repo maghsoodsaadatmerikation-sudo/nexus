@@ -1,4 +1,4 @@
-"""Operator-configured, read-only connections for the Studio workspace."""
+"""Operator-configured connections with reviewed operations for the Studio workspace."""
 
 import base64
 import binascii
@@ -7,6 +7,7 @@ import hmac
 import json
 import os
 import re
+import time
 from urllib.parse import quote
 
 import anyio
@@ -23,6 +24,10 @@ MAX_RESPONSE = 128 * 1024
 MAX_PULL_RESPONSE = 1024 * 1024
 NO_STORE = {"Cache-Control": "no-store"}
 REPO = re.compile(r"[A-Za-z0-9-]{1,39}/[A-Za-z0-9_.-]{1,100}")
+SHA = r"^[a-f0-9]{40}$"
+BRANCH_SLUG = r"^[a-z0-9](?:[a-z0-9-]{1,46})[a-z0-9]$"
+BRANCH_PREFIX = "nexus/studio-"
+REVIEW_SECONDS = 300
 SERVICE = re.compile(r"srv-[a-z0-9]{10,40}")
 OPERATIONS = {
     "github.pulls": "github",
@@ -39,6 +44,20 @@ class ReadRequest(BaseModel):
     configuration_id: str = Field(pattern=r"^[a-f0-9]{64}$")
     path: str = Field(default="", max_length=300)
     revision: str = Field(default="", pattern=r"^(?:[a-f0-9]{40})?$")
+
+
+class BranchPreview(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    configuration_id: str = Field(pattern=r"^[a-f0-9]{64}$")
+    slug: str = Field(pattern=BRANCH_SLUG)
+
+
+class BranchApproval(BranchPreview):
+    consent: bool
+    base_sha: str = Field(pattern=SHA)
+    expires_at: int
+    review_id: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
 def operator_auth(request: Request):
@@ -115,25 +134,26 @@ def project_result(operation, raw, path):
             for row in raw[:8]]
 
 
-async def read_provider(client, data, provider, target, token):
-    url, params = provider_request(data, target)
+async def provider_json(client, provider, token, url, *, params=None, payload=None,
+                        limit=MAX_RESPONSE):
     headers = {"accept": "application/json", "accept-encoding": "identity"}
     if provider == "github":
         headers.update({"accept": "application/vnd.github+json", "x-github-api-version": "2022-11-28"})
     if token:
         headers["authorization"] = "Bearer " + token
     body = bytearray()
-    # GitHub includes each full PR description even though Studio only needs metadata.
-    limit = MAX_PULL_RESPONSE if data.operation == "github.pulls" else MAX_RESPONSE
     try:
         with anyio.fail_after(12):
-            async with client.stream("GET", url, params=params, headers=headers,
-                                     follow_redirects=False) as reply:
+            async with client.stream("GET" if payload is None else "POST", url, params=params,
+                                     json=payload, headers=headers, follow_redirects=False) as reply:
                 if reply.status_code in {401, 403}:
                     raise HTTPException(502, "Provider access was denied")
                 if reply.status_code == 404:
                     raise HTTPException(404, "Provider resource is unavailable")
-                if reply.status_code != 200 or reply.headers.get("content-encoding", "identity").lower() != "identity":
+                if payload is not None and reply.status_code in {409, 422}:
+                    raise HTTPException(409, "GitHub did not create the branch")
+                expected_status = 200 if payload is None else 201
+                if reply.status_code != expected_status or reply.headers.get("content-encoding", "identity").lower() != "identity":
                     raise HTTPException(502, "Provider did not return a supported response")
                 async for chunk in reply.aiter_bytes(chunk_size=8192):
                     if len(body) + len(chunk) > limit:
@@ -142,10 +162,69 @@ async def read_provider(client, data, provider, target, token):
     except (httpx.RequestError, TimeoutError):
         raise HTTPException(504, "Provider did not respond in time") from None
     try:
-        return project_result(data.operation, json.loads(body), data.path)
+        return json.loads(body)
+    except (ValueError, RecursionError):
+        raise HTTPException(502, "Provider returned invalid JSON") from None
+
+
+async def read_provider(client, data, provider, target, token):
+    url, params = provider_request(data, target)
+    # GitHub includes each full PR description even though Studio only needs metadata.
+    limit = MAX_PULL_RESPONSE if data.operation == "github.pulls" else MAX_RESPONSE
+    raw = await provider_json(client, provider, token, url, params=params, limit=limit)
+    try:
+        return project_result(data.operation, raw, data.path)
     except (ValueError, KeyError, AttributeError, TypeError, RecursionError, binascii.Error):
         raise HTTPException(502, "Provider result is not supported text or metadata") from None
 
+
+
+async def parse_request(request, schema):
+    operator_auth(request)
+    media = request.headers.getlist("content-type")
+    if len(media) != 1 or media[0].split(";", 1)[0].strip().lower() != "application/json":
+        raise HTTPException(415, "JSON required", headers=NO_STORE)
+    raw = await read_bounded_body(request, max_bytes=4096, timeout_seconds=6,
+                                  too_large_detail="Connection request too large",
+                                  timeout_detail="Connection request timed out", timeout_status=408)
+    try:
+        return schema.model_validate_json(raw)
+    except ValidationError:
+        raise HTTPException(422, "Invalid connection request", headers=NO_STORE) from None
+
+
+def take_capacity(request):
+    limiter = request.app.state.connections_limiter
+    try:
+        limiter.acquire_nowait()
+    except anyio.WouldBlock:
+        raise HTTPException(429, "Connections are busy", headers=NO_STORE) from None
+    return limiter
+
+
+def branch_config(configuration_id):
+    entry = configured().get("github")
+    token = os.getenv("NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN", "").strip()
+    if not entry or not token or configuration_id != target_id("github", entry[0]):
+        raise HTTPException(409, "Branch creation is disabled or the connection changed", headers=NO_STORE)
+    return entry[0], token
+
+
+def branch_review_id(token, target, slug, sha, expires):
+    payload = f"studio-create-branch-v1\n{target}\n{slug}\n{sha}\n{expires}"
+    return hmac.new(token.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+
+async def main_head(client, target, token):
+    result = await provider_json(client, "github", token,
+                                 f"https://api.github.com/repos/{target}/branches/main")
+    try:
+        sha = result["commit"]["sha"]
+        if result["name"] != "main" or not re.fullmatch(SHA, sha):
+            raise ValueError()
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(502, "GitHub did not identify the main branch") from None
+    return sha
 
 def register(app):
     @app.get("/studio-api/connections")
@@ -153,37 +232,78 @@ def register(app):
         operator_auth(request)
         targets = configured()
         return JSONResponse({"connections": [
-            {"provider": provider, "target": target, "configuration_id": target_id(provider, target)}
+            {"provider": provider, "target": target, "configuration_id": target_id(provider, target),
+             **({"branch_creation": True} if provider == "github" and
+                os.getenv("NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN", "").strip() else {})}
             for provider, (target, _) in targets.items()
         ]}, headers=NO_STORE)
 
     @app.post("/studio-api/connections/read")
     async def read(request: Request):
-        operator_auth(request)
-        media = request.headers.getlist("content-type")
-        if len(media) != 1 or media[0].split(";", 1)[0].strip().lower() != "application/json":
-            raise HTTPException(415, "JSON required", headers=NO_STORE)
-        raw = await read_bounded_body(request, max_bytes=4096, timeout_seconds=6,
-                                      too_large_detail="Connection request too large",
-                                      timeout_detail="Connection request timed out", timeout_status=408)
-        try:
-            data = ReadRequest.model_validate_json(raw)
-        except ValidationError:
-            raise HTTPException(422, "Invalid connection request", headers=NO_STORE) from None
+        data = await parse_request(request, ReadRequest)
         if not data.consent or (data.operation != "github.file" and (data.path or data.revision)):
             raise HTTPException(422, "Review the exact connection request", headers=NO_STORE)
         provider = OPERATIONS[data.operation]
         entry = configured().get(provider)
         if entry is None or data.configuration_id != target_id(provider, entry[0]):
             raise HTTPException(409, "Connection changed or is disabled", headers=NO_STORE)
-        limiter = request.app.state.connections_limiter
-        try:
-            limiter.acquire_nowait()
-        except anyio.WouldBlock:
-            raise HTTPException(429, "Connections are busy", headers=NO_STORE) from None
+        limiter = take_capacity(request)
         try:
             result = await read_provider(request.app.state.client, data, provider, *entry)
         finally:
             limiter.release()
         return JSONResponse({"provider": provider, "target": entry[0], "operation": data.operation,
                              "provenance": "external-untrusted", "result": result}, headers=NO_STORE)
+
+    @app.post("/studio-api/connections/github/branch-preview")
+    async def branch_preview(request: Request):
+        data = await parse_request(request, BranchPreview)
+        target, token = branch_config(data.configuration_id)
+        limiter = take_capacity(request)
+        try:
+            sha = await main_head(request.app.state.client, target, token)
+        finally:
+            limiter.release()
+        expires = int(time.time()) + REVIEW_SECONDS
+        return JSONResponse({"target": target, "branch": BRANCH_PREFIX + data.slug,
+                             "base_sha": sha, "expires_at": expires,
+                             "review_id": branch_review_id(token, target, data.slug, sha, expires)},
+                            headers=NO_STORE)
+
+    @app.post("/studio-api/connections/github/branch")
+    async def create_branch(request: Request):
+        data = await parse_request(request, BranchApproval)
+        if not data.consent:
+            raise HTTPException(422, "Explicit branch approval is required", headers=NO_STORE)
+        target, token = branch_config(data.configuration_id)
+        expected = branch_review_id(token, target, data.slug, data.base_sha, data.expires_at)
+        if data.expires_at <= time.time() or not hmac.compare_digest(expected, data.review_id):
+            raise HTTPException(409, "Branch review expired or changed", headers=NO_STORE)
+        base = f"https://api.github.com/repos/{target}"
+        branch = BRANCH_PREFIX + data.slug
+        ref = "refs/heads/" + branch
+        client = request.app.state.client
+        limiter = take_capacity(request)
+        try:
+            try:
+                result = await provider_json(client, "github", token, base + "/git/ref/heads/" + branch)
+                status = "already_exists"
+            except HTTPException as exc:
+                if exc.status_code != 404:
+                    raise
+                if await main_head(client, target, token) != data.base_sha:
+                    raise HTTPException(409, "Main changed; review the new commit", headers=NO_STORE) from None
+                result = await provider_json(client, "github", token, base + "/git/refs",
+                                             payload={"ref": ref, "sha": data.base_sha})
+                status = "created"
+        finally:
+            limiter.release()
+        try:
+            matches = (result["ref"] == ref and result["object"]["type"] == "commit"
+                       and result["object"]["sha"] == data.base_sha)
+        except (KeyError, TypeError):
+            matches = False
+        if not matches:
+            raise HTTPException(409, "Branch could not be confirmed at the reviewed commit", headers=NO_STORE)
+        return JSONResponse({"target": target, "branch": branch, "base_sha": data.base_sha,
+                             "status": status}, headers=NO_STORE)
