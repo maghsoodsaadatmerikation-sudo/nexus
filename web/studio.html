@@ -377,7 +377,16 @@ html.studio-focus-mode{
 <div class="grid"><aside>
 <section class="card" id="projects-card"><h2 data-t="projects">Projects</h2><select id="projects" aria-label="Project"></select><label for="project-title" data-t="projectName">New project name</label><input id="project-title" maxlength="120"><button id="new-project" data-t="createProject">Create project</button><button id="delete-project" class="secondary" data-t="deleteProject">Delete project</button>
 <h2 data-t="history">Conversation history</h2><input id="search" maxlength="200" data-placeholder="search" aria-label="Search conversations"><label class="inline"><input id="archived" type="checkbox"><span data-t="showArchived">Include archived</span></label><button id="new-thread" data-t="newChat">New conversation</button><div id="history"></div></section>
-<section class="card" id="vault-card"><h2 data-t="archive">Private archive</h2><p class="help" data-t="archiveHelp">Saving is explicit and encrypted in this browser. Keep an encrypted backup and its passphrase separately.</p><input id="passphrase" type="password" autocomplete="off" data-placeholder="pass" aria-label="Archive passphrase"><input id="repeat-passphrase" type="password" autocomplete="off" data-placeholder="repeat" aria-label="Repeat archive passphrase"><div class="row"><button id="create-vault" data-t="createVault">Create archive</button><button id="unlock" data-t="unlock">Unlock</button><button id="lock" data-t="lock">Lock & clear</button><button id="save" data-t="save">Save session</button><button id="backup" data-t="backup">Encrypted backup</button><button id="restore" data-t="restore">Open encrypted file</button><button id="erase" class="secondary" data-t="erase">Erase archive</button></div><input id="restore-file" type="file" accept="application/json" hidden></section>
+<section class="card" id="vault-card"><h2 data-t="archive">Private archive</h2><p class="help" data-t="archiveHelp">Saving is explicit and encrypted in this browser. Keep an encrypted backup and its passphrase separately.</p><input id="passphrase" type="password" autocomplete="off" data-placeholder="pass" aria-label="Archive passphrase"><input id="repeat-passphrase" type="password" autocomplete="off" data-placeholder="repeat" aria-label="Repeat archive passphrase"><div class="row"><button id="create-vault" data-t="createVault">Create archive</button><button id="unlock" data-t="unlock">Unlock</button><button id="lock" data-t="lock">Lock & clear</button><button id="save" data-t="save">Save session</button><button id="backup" data-t="backup">Encrypted backup</button><button id="restore" data-t="restore">Open encrypted file</button><button id="erase" class="secondary" data-t="erase">Erase archive</button></div><details id="privacy-settings"><summary data-t="privacySettings">Privacy settings</summary>
+<label for="history-days" data-t="historyDays">Keep chat history</label>
+<select id="history-days"><option value="" data-t="historyManual">Until I delete it</option><option value="0" data-t="historyOff">Off — this tab only</option><option value="30" data-t="history30">30 days</option><option value="90" data-t="history90">90 days</option><option value="365" data-t="history365">365 days</option></select>
+<p class="help" data-t="historyHelp"></p>
+<label class="inline"><input id="training-opt-in" type="checkbox"><span data-t="trainingOptIn"></span></label>
+<p class="help" data-t="trainingHelp"></p>
+<button id="training-review" type="button" class="secondary" data-t="trainingReview"></button>
+<pre id="training-preview" tabindex="0" hidden></pre>
+<button id="training-download" type="button" data-t="trainingDownload" hidden></button>
+</details><input id="restore-file" type="file" accept="application/json" hidden></section>
 </aside><div>
 <section class="card" id="conversation-card"><div class="row"><h2 data-t="conversation">Conversation</h2><button id="rename-thread" class="secondary" data-t="rename">Rename</button><button id="archive-thread" class="secondary" data-t="archiveChat">Archive / reopen</button><button id="delete-thread" class="secondary" data-t="deleteChat">Delete chat</button><button id="export-thread" class="secondary" data-t="exportChat">Export transcript</button></div><p class="help" data-t="temporary">Until you explicitly save, this session exists only in this tab. Closing it can lose your work.</p><select id="branch" aria-label="Conversation branch"></select><div id="messages" role="log" aria-live="polite"></div>
 <section id="model-stream-preview" class="message assistant" aria-labelledby="model-stream-title" hidden><strong id="model-stream-title" data-t="streamPreview">Answer in progress</strong><div id="model-stream-text" class="body" dir="auto"></div></section>
@@ -1086,6 +1095,7 @@ root.NexusSky=Object.freeze({VERSION,snapshot,current,style,presentation,opening
 (function(root){'use strict';
 const SCHEMA='nexus.studio.v1',MAX=4*1024*1024,enc=new TextEncoder(),dec=new TextDecoder('utf-8',{fatal:true});
 const MAX_SOURCES=12,MAX_SOURCE_BYTES=262144,MAX_CHAT_ATTACHMENTS=5;
+const HISTORY_DAYS=[null,0,30,90,365],DAY_MS=86400000;
 const fail=code=>{throw Error(code)},copy=x=>JSON.parse(JSON.stringify(x)),uid=()=>root.crypto.randomUUID();
 function text(s,n,required=false){if(typeof s!=='string'||s.length>n||(required&&!s.trim()))fail('invalid-text');return s}
 function id(s){if(typeof s!=='string'||!/^[a-zA-Z0-9-]{1,80}$/.test(s))fail('invalid-id');return s}
@@ -1093,6 +1103,7 @@ function array(v,n){if(!Array.isArray(v)||v.length>n)fail('capacity');return v}
 function unique(xs){if(new Set(xs).size!==xs.length)fail('duplicate-id')}
 function state(v){
  if(!v||v.schema!==SCHEMA)fail('schema');
+ const days=v.history_days;if(days!==undefined&&!HISTORY_DAYS.includes(days))fail('history-days');
  const projects=array(v.projects,12).map(p=>{
   const sources=array(p.sources,MAX_SOURCES).map(s=>({id:id(s.id),name:text(s.name,160,true),text:text(s.text,MAX_SOURCE_BYTES,true)}));unique(sources.map(s=>s.id));
   const threads=array(p.threads,60).map(t=>{
@@ -1106,13 +1117,29 @@ function state(v){
     const out={id:n.id,parent:n.parent,role:n.role,origin:n.origin,text:text(n.text,24000,true),...(attached.length?{attached_files:attached}:{})};seen.set(n.id,out);return out;
    });
    if(t.head!==null&&!seen.has(t.head))fail('head');
-   return {id:id(t.id),title:text(t.title,120,true),archived:t.archived===true,head:t.head,nodes};
+   const last=t.last_activity;
+   if(last!==undefined&&(!Number.isSafeInteger(last)||last<0))fail('history-date');
+   return {id:id(t.id),title:text(t.title,120,true),archived:t.archived===true,head:t.head,nodes,
+    ...(last===undefined?{}:{last_activity:last}),...(t.temporary===true?{temporary:true}:{})};
   });unique(threads.map(t=>t.id));
   const documents=array(p.documents,20).map(d=>({id:id(d.id),title:text(d.title,120,true),versions:array(d.versions,30).map(x=>({id:id(x.id),text:text(x.text,100000),at:text(x.at,40,true)}))}));unique(documents.map(d=>d.id));for(const d of documents)unique(d.versions.map(x=>x.id));
   const astrology=p.astrology===undefined?{}:{astrology:(root.NexusAstrology||fail('astrology-not-loaded')).profile(p.astrology)};
   return {id:id(p.id),title:text(p.title,120,true),instructions:text(p.instructions,2000),memories:array(p.memories,30).map(m=>text(m,500,true)),threads,sources,documents,...astrology};
  });unique(projects.map(p=>p.id));
- const clean={schema:SCHEMA,projects};if(enc.encode(JSON.stringify(clean)).length>MAX)fail('capacity');return clean;
+ const clean={schema:SCHEMA,projects,...(days===undefined?{}:{history_days:days})};if(enc.encode(JSON.stringify(clean)).length>MAX)fail('capacity');return clean;
+}
+function retainHistory(value,{now=Date.now(),inSession=false}={}){
+ const data=state(value),days=data.history_days;
+ for(const project of data.projects){
+  project.threads=project.threads.filter(thread=>{
+   if(days===0||thread.temporary)return inSession;
+   if(days==null)return true;
+   // Older archives have no timestamps. Start their retention clock at first application.
+   if(thread.last_activity===undefined||thread.last_activity>now)thread.last_activity=now;
+   return thread.last_activity>now-days*DAY_MS;
+  });
+ }
+ return data;
 }
 function empty(){return {schema:SCHEMA,projects:[]}}
 function project(title){return {id:uid(),title:text(title,120,true),instructions:'',memories:[],threads:[],sources:[],documents:[]}}
@@ -1139,7 +1166,7 @@ function append(t,role,body,origin,parent=t.head,attachedFiles=[]){
  const labels=array(attachedFiles,MAX_CHAT_ATTACHMENTS).map(label=>text(label,160,true));
  if(role!=='user'&&labels.length)fail('attached-files-role');
  const n={id:uid(),parent,role,text:text(body,24000,true),origin,...(labels.length?{attached_files:labels}:{})};
- const updated={...copy(t),head:n.id,nodes:[...copy(t.nodes),n]};
+ const updated={...copy(t),head:n.id,nodes:[...copy(t.nodes),n],last_activity:Date.now()};
  // Validate the complete graph before exposing the mutation.
  const p=project('validation');p.threads=[updated];state({schema:SCHEMA,projects:[p]});return updated;
 }
@@ -1364,15 +1391,22 @@ class Vault{
  },{signal})}
  async unlock(pass,{signal}={}){return this.run(async(check,current)=>{
   const raw=await this.store.read();current();if(!raw)fail('archive-missing');const opened=await decrypt(raw,pass,{signal});current();
-  Object.assign(this,{key:opened.key,salt:opened.salt,raw:opened.raw});return copy(opened.data);
+  const kept=retainHistory(opened.data);
+  let updated=opened.raw;
+  if(JSON.stringify(kept)!==JSON.stringify(opened.data)){
+   updated=await encrypt(kept,opened.key,opened.salt);current();
+   await this.store.commit(envelope(raw).revision,updated,()=>{try{current();return true}catch{return false}});
+   current();
+  }
+  Object.assign(this,{key:opened.key,salt:opened.salt,raw:updated});return kept;
  },{signal})}
- async save(value,{signal}={}){const data=state(value);return this.run(async(check,current)=>{
+ async save(value,{signal,now=Date.now()}={}){const data=retainHistory(value,{now});return this.run(async(check,current)=>{
   if(!this.unlocked)fail('locked');const raw=await encrypt(data,this.key,this.salt);current();
   await this.store.commit(envelope(this.raw).revision,raw,()=>{try{current();return true}catch{return false}});
   // Once committed, keep the real revision even if cancellation arrived late.
   check();this.raw=raw;
  },{signal})}
- async export(value,pass,{signal}={}){const data=state(value);return this.run(async(check,current)=>{
+ async export(value,pass,{signal}={}){const data=retainHistory(value);return this.run(async(check,current)=>{
   const salt=crypto.getRandomValues(new Uint8Array(16)),key=await keyFor(pass,salt);current();const raw=await encrypt(data,key,salt);current();return raw;
  },{signal})}
  async erase({signal}={}){return this.run(async(check,current)=>{
@@ -1382,7 +1416,7 @@ class Vault{
   check();if(signal?.aborted)Object.assign(this,{key:null,salt:null,raw:null,data:null});else this.lock();
  },{signal})}
 }
-root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,empty,project,thread,readSources,path,append,context,search,retrieve,guide,asksForChoice,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
+root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,retainHistory,empty,project,thread,readSources,path,append,context,search,retrieve,guide,asksForChoice,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
 })(globalThis);
 </script><script>/* Explicit public research, isolated local JavaScript, and inert chart data. */
 (function(root){'use strict';
@@ -1949,7 +1983,7 @@ root.NexusOfficeZip=Object.freeze({readDocx,readPptx,OFFICE_MAX_BYTES});
 </script><script>'use strict';
 const S=NexusStudio,$=id=>document.getElementById(id),vault=new S.Vault(),undoSlot=new S.UndoSlot(),localePacks=new NexusLocales.Registry();
 let data=S.empty(),projectId=null,threadId=null,documentId=null,dirty=false,profileDirty=false,editorDirty=false,revision=0,branchBase=undefined,pending=null,controller=null,busy=false,language='en',modelInfo=null,languageImport=0,sourceViewStamp='';
-let chatAttachments=[],attachmentEpoch=0;
+let chatAttachments=[],attachmentEpoch=0,trainingReview=null;
 const EN={subtitle:'An AI assistant built to support human judgment.',projects:'Projects',projectName:'New project name',createProject:'Create project',deleteProject:'Delete project',history:'Conversation history',search:'Search all conversations',showArchived:'Include archived',newChat:'New conversation',archive:'Private archive',archiveHelp:'Saving is explicit and encrypted in this browser. Keep an encrypted backup and its passphrase separately.',pass:'Passphrase: at least 12 characters',repeat:'Repeat for a new archive or backup',createVault:'Create archive',unlock:'Unlock',lock:'Lock & clear',save:'Save session',backup:'Encrypted backup',restore:'Open encrypted file',erase:'Erase archive',conversation:'Conversation',rename:'Rename',archiveChat:'Archive / reopen',deleteChat:'Delete chat',exportChat:'Export transcript',temporary:'Until you explicitly save, this session exists only in this tab. Closing it can lose your work.',message:'Your message',useMemory:"Include this project's reviewed memory",useSources:'Include relevant project source excerpts',guide:'Use local reflection guide',prepare:'Prepare model request',regenerate:'Prepare another answer',stop:'Stop',modelSettings:'Optional generative model connection',modelHelp:'An operator must configure a model gateway. A ChatGPT subscription is not an API credential. Provider keys stay on the gateway; only its access token is entered here, for this tab.',checkModel:'Check configured model',requestReview:'Exact context to send',consent:'Send this exact context to the configured provider once.',send:'Send approved request',profile:'Project assistant & memory',instructions:'Custom instructions (preferences, not authority)',memories:'Reviewed memory — one item per line, up to 30',applyProfile:'Apply project preferences',memoryHelp:'Nothing is learned automatically. Memory is isolated to this project and sent only when selected. Removing memory does not remove earlier transcript text.',sources:'Local source search',sourceHelp:'Select UTF-8 TXT, Markdown, CSV, TSV or JSON files together, up to 256 KiB each and 12 per project. A batch is added only if every file is valid. Excerpts are local lexical search results, not verified facts. Files are never executed.',sourceQuery:'Words to find in project sources',searchSources:'Search sources',canvas:'Versioned writing canvas',documentTitle:'Document title',newDocument:'New document',saveVersion:'Save new version',exportDocument:'Export Markdown',deleteDocument:'Delete document',loadVersion:'Load version into editor',canvasHelp:'Every saved version remains available, up to 30 per document. Text and code are edited as inert text and never executed.',boundary:'NEXUS assists judgment. It cannot make a human decision or take external actions from a conversation.',unsaved:'Temporary session / unsaved changes',saved:'Applied session saved as encrypted data. Unapplied form text is excluded.',failed:'Operation failed. Check input, capacity, passphrase or archive conflicts. Work has not been silently overwritten.',discard:'Replace or delete this work? Unsaved work and form text can be lost.',plain:'Export unencrypted text? It may include private information.',needApply:'Apply preferences / astrology profiles and save document versions before saving/exporting the session.',branching:'Your next message creates a new branch; the original remains available.',local:'Guide — not a generative model',human:'You',model:'Model draft',edit:'Edit into a new branch',toCanvas:'Copy to canvas',speak:'Read aloud (device voice)',empty:'Create a project, then choose New conversation.',noModel:'No model configured. Local guide remains available.',configured:'Configured model',apply:'Applied locally. Save explicitly to retain this change.'};
 Object.assign(EN,{languagePacks:'Interface language packs',languageHelp:'Up to eight complete translation packs can be kept in this tab. They contain labels only, not your projects.',languageTemplate:'Download English label template',gatewayOrigin:'Model gateway origin',gatewayAccess:'Gateway access token (not the provider API key)'});
 const FA={subtitle:'دستیار هوش مصنوعی برای کمک به قضاوت انسانی.',projects:'پروژه‌ها',projectName:'نام پروژهٔ جدید',createProject:'ساخت پروژه',deleteProject:'حذف پروژه',history:'تاریخچهٔ گفتگو',search:'جست‌وجو در همهٔ گفتگوها',showArchived:'نمایش بایگانی‌شده‌ها',newChat:'گفتگوی جدید',archive:'آرشیو خصوصی',archiveHelp:'ذخیره‌سازی دستی و رمزگذاری‌شده در همین مرورگر است. پشتیبان رمزگذاری‌شده و گذرواژه را جدا نگه دار.',pass:'گذرواژه: حداقل ۱۲ نویسه',repeat:'تکرار برای آرشیو یا پشتیبان جدید',createVault:'ساخت آرشیو',unlock:'بازکردن قفل',lock:'قفل و پاک‌کردن صفحه',save:'ذخیرهٔ نشست',backup:'پشتیبان رمزگذاری‌شده',restore:'بازکردن فایل رمزگذاری‌شده',erase:'حذف آرشیو',conversation:'گفتگو',rename:'تغییر نام',archiveChat:'بایگانی / بازگردانی',deleteChat:'حذف گفتگو',exportChat:'خروجی گفتگو',temporary:'تا وقتی خودت ذخیره نکنی، این نشست فقط در همین برگه است. بستن آن ممکن است کار را از بین ببرد.',message:'پیام تو',useMemory:'حافظهٔ بازبینی‌شدهٔ همین پروژه را اضافه کن',useSources:'بخش‌های مرتبط منابع پروژه را اضافه کن',guide:'استفاده از راهنمای تأمل محلی',prepare:'آماده‌سازی درخواست مدل',regenerate:'آماده‌سازی پاسخ دیگر',stop:'توقف',modelSettings:'اتصال اختیاری مدل مولد',modelHelp:'مدیر سرور باید درگاه مدل را پیکربندی کند. اشتراک ChatGPT کلید API نیست. کلید مدل روی سرور می‌ماند؛ فقط توکن دسترسی درگاه در همین برگه وارد می‌شود.',checkModel:'بررسی مدل پیکربندی‌شده',requestReview:'متن دقیق ارسالی',consent:'این متن دقیق را یک بار به ارائه‌دهندهٔ پیکربندی‌شده بفرست.',send:'ارسال درخواست تأییدشده',profile:'دستیار و حافظهٔ پروژه',instructions:'دستورهای سفارشی — ترجیح، نه اختیار',memories:'حافظهٔ بازبینی‌شده — هر مورد یک خط، حداکثر ۳۰ مورد',applyProfile:'اعمال ترجیحات پروژه',memoryHelp:'یادگیری خودکار انجام نمی‌شود. حافظه فقط به همین پروژه تعلق دارد و با انتخاب تو ارسال می‌شود. حذف حافظه متن گفتگوهای قبلی را حذف نمی‌کند.',sources:'جست‌وجوی منابع محلی',sourceHelp:'فایل‌های متنی UTF-8 با قالب TXT، Markdown، CSV، TSV و JSON را گروهی انتخاب کن؛ هر فایل تا ۲۵۶ کیبی‌بایت و حداکثر ۱۲ فایل در پروژه. گروه فقط وقتی وارد می‌شود که همهٔ فایل‌ها معتبر باشند. نتیجهٔ جست‌وجوی واژگانی تأیید حقیقت نیست. فایل‌ها اجرا نمی‌شوند.',sourceQuery:'عبارت جست‌وجو در منابع پروژه',searchSources:'جست‌وجوی منابع',canvas:'ویرایشگر نسخه‌دار نوشته',documentTitle:'عنوان سند',newDocument:'سند جدید',saveVersion:'ذخیرهٔ نسخهٔ جدید',exportDocument:'خروجی Markdown',deleteDocument:'حذف سند',loadVersion:'بازکردن نسخه در ویرایشگر',canvasHelp:'هر نسخهٔ ذخیره‌شده تا سقف ۳۰ نسخه حفظ می‌شود. متن و کد اجرا نمی‌شوند.',boundary:'نکسوس به قضاوت کمک می‌کند؛ از داخل گفتگو تصمیم انسانی نمی‌گیرد و اقدام خارجی انجام نمی‌دهد.',unsaved:'نشست موقت / تغییرات ذخیره‌نشده',saved:'نشست اعمال‌شده رمزگذاری و ذخیره شد. متن فرم‌های اعمال‌نشده ذخیره نمی‌شود.',failed:'عملیات ناموفق بود. ورودی، ظرفیت، گذرواژه یا تداخل آرشیو را بررسی کن. کار بدون اطلاع بازنویسی نشده است.',discard:'این کار جایگزین یا حذف شود؟ تغییرات ذخیره‌نشده ممکن است از دست بروند.',plain:'خروجی متن بدون رمزگذاری تهیه شود؟ ممکن است شامل اطلاعات خصوصی باشد.',needApply:'پیش از ذخیره یا خروجی نشست، پروفایل‌ها و ترجیحات را اعمال و نسخهٔ سند را ذخیره کن.',branching:'پیام بعدی شاخهٔ تازه می‌سازد؛ شاخهٔ اصلی باقی می‌ماند.',local:'راهنما — پاسخ مدل مولد نیست',human:'تو',model:'پیش‌نویس مدل',edit:'ویرایش در شاخهٔ تازه',toCanvas:'کپی به ویرایشگر',speak:'خواندن با صدای دستگاه',empty:'یک پروژه بساز، سپس گفتگوی جدید را انتخاب کن.',noModel:'مدل پیکربندی نشده؛ راهنمای محلی در دسترس است.',configured:'مدل پیکربندی‌شده',apply:'محلی اعمال شد. برای نگهداری، خودت ذخیره کن.'};
@@ -2014,6 +2048,27 @@ Object.assign(FA,{
  chatExportConfirm:'همین پاسخ را به‌صورت فایل HTML بدون رمزگذاری دانلود می‌کنی؟',chatExportDone:'درخواست دانلود HTML ثبت شد.',
  chatPasteName:'متن چسبانده‌شده',chatPasteAdded:'متن بلند به‌صورت محلی پیوست شد. پرسشت را بنویس و گزیده‌ها را پیش از ارسال بازبینی کن.',
  chatPasteLimit:'پیش‌نویس حفظ شد. متن کوتاه‌تری بچسبان یا یکی از پیوست‌ها را بردار.'
+});
+const PRIVACY_EN={
+ privacySettings:'Privacy settings',historyDays:'Keep chat history',historyManual:'Until I delete it',
+ historyOff:'Off — this tab only',history30:'30 days',history90:'90 days',history365:'365 days',
+ historyHelp:'Save the encrypted session to apply. Expired chats are removed on save or unlock, based on their last message. Previously downloaded copies are separate.',
+ historyConfirm:'Turn history off? This keeps chats in this tab only and removes them from the browser archive at the next save.',
+ temporaryChats:'Temporary conversations are only in this tab',
+ trainingOptIn:'Allow me to prepare a conversation for AI training',
+ trainingHelp:'Off by default and resets when you lock. NEXUS training is not connected. You can review one branch and download a local copy. Files and audio are excluded. Online providers apply their own policies.',
+ trainingReview:'Review conversation for training',trainingDownload:'Download reviewed text',trainingConfirm:'Download the reviewed text as an unencrypted file for training?'
+};
+Object.assign(EN,PRIVACY_EN);
+Object.assign(FA,{
+ privacySettings:'تنظیمات حریم خصوصی',historyDays:'نگهداری تاریخچهٔ گفتگو',historyManual:'تا زمانی که خودم پاک کنم',
+ historyOff:'خاموش — فقط در همین برگه',history30:'۳۰ روز',history90:'۹۰ روز',history365:'۳۶۵ روز',
+ historyHelp:'برای اعمال، نشست رمزگذاری‌شده را ذخیره کن. گفتگوهای منقضی بر اساس زمان آخرین پیام، هنگام ذخیره یا بازکردن آرشیو پاک می‌شوند. نسخه‌هایی که قبلاً دانلود کرده‌ای جدا هستند.',
+ historyConfirm:'تاریخچه خاموش شود؟ گفتگوها فقط در همین برگه می‌مانند و با ذخیرهٔ بعدی از آرشیو مرورگر حذف می‌شوند.',
+ temporaryChats:'گفتگوهای موقت فقط در همین برگه‌اند',
+ trainingOptIn:'اجازهٔ آماده‌سازی گفتگو برای آموزش هوش مصنوعی',
+ trainingHelp:'پیش‌فرض خاموش است و هنگام قفل‌کردن دوباره خاموش می‌شود. سامانهٔ آموزش نکسوس متصل نیست. می‌توانی یک شاخه از گفتگو را بازبینی کنی و نسخهٔ محلی آن را دانلود کنی. فایل و صدا در خروجی نیستند. ارائه‌دهندگان آنلاین سیاست خودشان را دارند.',
+ trainingReview:'بازبینی گفتگو برای آموزش',trainingDownload:'دانلود متن بازبینی‌شده',trainingConfirm:'متن بازبینی‌شده برای آموزش به‌صورت فایل بدون رمزگذاری دانلود شود؟'
 });
 function selectedAttachments(){
  const saved=$('attach-document').checked&&doc()?.versions.at(-1)?.text?.trim();
@@ -2080,11 +2135,12 @@ function storageSnapshot(){
   music:window.NexusMusicUI?.hasTransientWork?.()===true,
   orchestra:window.NexusOrchestraUI?.hasTransientWork?.()===true
  });
- const risk=dirty||Object.values(drafts).some(Boolean);
+ const temporary=data.projects.some(p=>p.threads.some(c=>c.nodes.length&&(c.temporary||data.history_days===0)));
+ const risk=dirty||temporary||Object.values(drafts).some(Boolean);
  return Object.freeze({
   schema:'nexus.studio.storage-status.v1',
   archive:!vault.unlocked?'tab-only':dirty?'applied-unsaved':'encrypted-current',
-  appliedUnsaved:dirty,
+  appliedUnsaved:dirty,temporaryChats:temporary,
   drafts,
   lossRisk:risk
  });
@@ -2093,7 +2149,7 @@ function renderStorage(){
  const state=storageSnapshot();
  $('storage-summary').textContent=t(state.lossRisk?'storageSummaryRisk':'storageSummarySafe');
  $('storage-archive-state').textContent=t(state.archive==='tab-only'?'storageLocked':state.archive==='applied-unsaved'?'storageChanged':'storageCurrent');
- $('storage-chat-state').textContent=t(state.drafts.chat?'storageChatDraft':'storageChatNone');
+ $('storage-chat-state').textContent=t(state.drafts.chat?'storageChatDraft':state.temporaryChats?'temporaryChats':'storageChatNone');
  $('storage-writing-state').textContent=t(state.drafts.writing||state.drafts.preferences?'storageWritingDraft':'storageWritingNone');
  $('storage-tools-state').textContent=t(state.drafts.tools?'storageToolsDraft':'storageToolsNone');
  $('storage-media-state').textContent=t(state.drafts.music||state.drafts.orchestra?'storageMediaDraft':'storageMediaNone');
@@ -2111,6 +2167,7 @@ function toolLifecycle(phase){
  }
  if(phase==='private'){
   $('study-mode').checked=false;
+  $('training-opt-in').checked=false;clearTrainingReview();
   document.dispatchEvent(new Event('nexus-studio-private-clear'));
  }
  return complete;
@@ -2123,7 +2180,18 @@ function stop({refresh=true}={}){
  languageImport++;toolLifecycle('cancel');revision++;controller?.abort();controller=null;busy=false;
  clearModelReview();window.NexusSpeechPlayback?.stop();if(refresh)controls();
 }
+function clearTrainingReview(){
+ trainingReview=null;
+ $('training-preview').textContent='';$('training-preview').hidden=true;$('training-download').hidden=true;
+}
 function controls(){
+ $('history-days').value=String(data.history_days??'');
+ $('history-days').disabled=busy;
+ $('training-opt-in').disabled=busy;
+ $('training-review').disabled=busy||!$('training-opt-in').checked||!chat()?.head;
+ if(trainingReview&&(trainingReview.thread!==threadId||trainingReview.head!==chat()?.head||!$('training-opt-in').checked))clearTrainingReview();
+ $('training-download').disabled=busy;
+
  $('study-mode').disabled=busy||Boolean(chat()?.archived);
  for(const id of ['new-project','delete-project','new-thread','rename-thread','archive-thread','delete-thread','guide','prepare','apply-profile','new-document','save-version','delete-document','projects','branch','documents','create-vault','unlock','save','backup','restore','erase','language-file'])$(id).disabled=busy;
  $('chat-file').disabled=busy||!chat()||chat().archived;
@@ -2221,6 +2289,7 @@ function selectDocument(id){
  documentId=id;editorDirty=false;$('attach-document').checked=false;fillDoc();
 }
 function resetConversation(id){
+ clearTrainingReview();
  window.NexusSpeechPlayback?.stop();
  // Private image input belongs to the thread where it was selected.
  // Only first-chat setup may preserve a selected image when there is no prior thread.
@@ -2265,6 +2334,11 @@ async function operation(fn,success='apply'){
 }
 // Create a local first conversation on the user's explicit action, retaining the typed draft.
 // No model request, archive write, or network activity happens here.
+function newThread(){
+ const thread=S.thread(t('newChat'));
+ if(data.history_days===0)thread.temporary=true;
+ return thread;
+}
 function startConversation(fresh=false){
  if(busy)return false;
  const current=chat();
@@ -2287,12 +2361,12 @@ function startConversation(fresh=false){
   let ok=false;
   if(!p()){
    const project=S.project(language==='fa'?'گفتگوهای من':'My conversations');
-   const thread=S.thread(t('newChat'));
+   const thread=newThread();
    ok=mutate(v=>{project.threads.push(thread);v.projects.push(project)},{
     afterCommit:()=>{projectId=project.id;openWithDraft(thread.id)}
    });
   }else{
-   const thread=S.thread(t('newChat'));
+   const thread=newThread();
    ok=mutate(v=>projectIn(v).threads.push(thread),{
     afterCommit:()=>openWithDraft(thread.id)
    });
@@ -2361,7 +2435,7 @@ $('delete-project').onclick=()=>{
 };
 $('new-thread').onclick=()=>{
  if(!p()||!mayReplaceChat())return;
- const c=S.thread(t('newChat'));
+ const c=newThread();
  mutate(v=>projectIn(v).threads.push(c),{afterCommit:()=>resetConversation(c.id)});
 };
 $('rename-thread').onclick=()=>{if(!chat())return;const name=prompt(t('rename'),chat().title);if(name?.trim())mutate(v=>projectIn(v).threads.find(x=>x.id===threadId).title=name.trim())};
@@ -2490,11 +2564,48 @@ $('load-version').onclick=()=>{if(forms()&&!confirm(t('discard')))return;const v
 $('export-document').onclick=()=>{if(doc()&&confirm(t('plain')))download($('editor').value,'nexus-document.md','text/markdown')};
 $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+chat().title+'\n\n'+S.path(chat()).map(n=>'## '+t(n.origin==='human'?'human':n.origin==='model'?'model':'local')+'\n\n'+n.text+(n.attached_files?.length?'\n\n'+t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' — '+t('chatFilesNotSaved'):'')).join('\n\n'),'nexus-conversation.md','text/markdown')};
 $('create-vault').onclick=()=>{const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation((rev,abort)=>vault.create(pass,{signal:abort.signal}))};
-$('unlock').onclick=()=>{if((dirty||forms()||hasChatDraft()||hasToolWork())&&!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const next=await vault.unlock(pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=next;dirty=false;selectProject(data.projects[0]?.id||null);render()})};
-$('save').onclick=()=>{if(!noForms())return;const snapshot=S.state(data);operation(async(rev,abort)=>{await vault.save(snapshot,{signal:abort.signal});if(rev===revision)dirty=false},'saved')};
+$('unlock').onclick=()=>{if(storageSnapshot().lossRisk&&!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const next=await vault.unlock(pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=next;dirty=false;selectProject(data.projects[0]?.id||null);render()})};
+$('history-days').onchange=()=>{
+ const value=$('history-days').value,days=value===''?null:Number(value);
+ if(days===0&&!confirm(t('historyConfirm'))){controls();return}
+ if(!mutate(next=>{
+  next.history_days=days;
+  if(days===0)for(const project of next.projects)for(const thread of project.threads)thread.temporary=true;
+ }))controls();
+};
+$('training-opt-in').onchange=()=>{clearTrainingReview();controls()};
+$('training-review').onclick=()=>{
+ const thread=chat();
+ if(busy||!$('training-opt-in').checked||!thread?.head)return;
+ const messages=S.path(thread).map(({role,text})=>({role,text}));
+ const payload=JSON.stringify({schema:'nexus.studio.training-export.v1',messages},null,2);
+ trainingReview={thread:thread.id,head:thread.head,payload};
+ $('training-preview').textContent=payload;$('training-preview').hidden=false;$('training-download').hidden=false;
+};
+$('training-download').onclick=()=>{
+ const reviewed=trainingReview;
+ if(busy||!$('training-opt-in').checked||!reviewed||reviewed.thread!==threadId||reviewed.head!==chat()?.head)return;
+ if(confirm(t('trainingConfirm')))download(reviewed.payload,'nexus-training-text.json','application/json');
+};
+$('save').onclick=()=>{
+ if(!noForms())return;
+ const now=Date.now(),snapshot=S.retainHistory(data,{now,inSession:true});
+ operation(async(rev,abort)=>{
+  await vault.save(snapshot,{signal:abort.signal,now});if(rev!==revision)return;
+  if(JSON.stringify(data)!==JSON.stringify(snapshot)){
+   data=snapshot;undoSlot.clear();
+   if(!chat())resetConversation(p()?.threads.find(c=>!c.archived)?.id||null);
+   render();
+  }
+  dirty=false;
+ },'saved');
+};
 $('lock').onclick=()=>{if(storageSnapshot().lossRisk&&!confirm(t('discard')))return;const clean=toolLifecycle('private');undoSlot.clear();stop({refresh:false});clearChatDraft();modelInfo=null;vault.lock();data=S.empty();projectId=threadId=documentId=null;dirty=profileDirty=editorDirty=false;for(const id of ['passphrase','repeat-passphrase','gateway-token','project-title','document-title','instructions','memories','editor','source-query','search'])$(id).value='';$('model-status').textContent='';$('source-results').textContent='';renderVersions();render();if(!clean)location.reload()};
 $('backup').onclick=()=>{if(!noForms())return;const pass=$('passphrase').value;if(pass!==$('repeat-passphrase').value)return status('failed');$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await vault.export(data,pass,{signal:abort.signal});if(rev===revision)download(raw,'nexus-studio.encrypted.json','application/json')})};
-$('restore').onclick=()=>$('restore-file').click();$('restore-file').onchange=event=>{const f=event.target.files[0];event.target.value='';if(!f||f.size>6*1024*1024||!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await f.text();if(rev!==revision||abort.signal.aborted)return;const opened=await S.decrypt(raw,pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();data=opened.data;dirty=true;selectProject(data.projects[0]?.id||null);render()})};
+$('restore').onclick=()=>$('restore-file').click();$('restore-file').onchange=event=>{const f=event.target.files[0];event.target.value='';if(!f||f.size>6*1024*1024||!confirm(t('discard')))return;const pass=$('passphrase').value;$('passphrase').value='';$('repeat-passphrase').value='';operation(async(rev,abort)=>{const raw=await f.text();if(rev!==revision||abort.signal.aborted)return;const opened=await S.decrypt(raw,pass,{signal:abort.signal});if(rev!==revision)return;undoSlot.clear();
+ const imported=opened.data;
+ if(data.history_days!==undefined)imported.history_days=data.history_days;
+ data=S.retainHistory(imported);dirty=true;selectProject(data.projects[0]?.id||null);render()})};
 $('erase').onclick=()=>{if(confirm(t('discard')))operation(async(rev,abort)=>{
   window.NexusDevice?.unload();await vault.erase({signal:abort.signal});
   if(rev!==revision){if(!vault.unlocked&&data.projects.length)dirty=true;return}
@@ -2506,7 +2617,7 @@ $('language-file').onchange=async event=>{
  if(!f||busy)return;if(f.size>NexusLocales.MAX_BYTES)return status('failed');
  const current=()=>task===languageImport&&rev===revision&&!busy;
  try{
-  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:['storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
+  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:[...Object.keys(PRIVACY_EN),'storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
   if(!$('language').querySelector('option[value="'+pack.code+'"]'))$('language').append(option(pack.code,pack.code));
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}

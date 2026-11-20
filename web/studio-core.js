@@ -2,6 +2,7 @@
 (function(root){'use strict';
 const SCHEMA='nexus.studio.v1',MAX=4*1024*1024,enc=new TextEncoder(),dec=new TextDecoder('utf-8',{fatal:true});
 const MAX_SOURCES=12,MAX_SOURCE_BYTES=262144,MAX_CHAT_ATTACHMENTS=5;
+const HISTORY_DAYS=[null,0,30,90,365],DAY_MS=86400000;
 const fail=code=>{throw Error(code)},copy=x=>JSON.parse(JSON.stringify(x)),uid=()=>root.crypto.randomUUID();
 function text(s,n,required=false){if(typeof s!=='string'||s.length>n||(required&&!s.trim()))fail('invalid-text');return s}
 function id(s){if(typeof s!=='string'||!/^[a-zA-Z0-9-]{1,80}$/.test(s))fail('invalid-id');return s}
@@ -9,6 +10,7 @@ function array(v,n){if(!Array.isArray(v)||v.length>n)fail('capacity');return v}
 function unique(xs){if(new Set(xs).size!==xs.length)fail('duplicate-id')}
 function state(v){
  if(!v||v.schema!==SCHEMA)fail('schema');
+ const days=v.history_days;if(days!==undefined&&!HISTORY_DAYS.includes(days))fail('history-days');
  const projects=array(v.projects,12).map(p=>{
   const sources=array(p.sources,MAX_SOURCES).map(s=>({id:id(s.id),name:text(s.name,160,true),text:text(s.text,MAX_SOURCE_BYTES,true)}));unique(sources.map(s=>s.id));
   const threads=array(p.threads,60).map(t=>{
@@ -22,13 +24,29 @@ function state(v){
     const out={id:n.id,parent:n.parent,role:n.role,origin:n.origin,text:text(n.text,24000,true),...(attached.length?{attached_files:attached}:{})};seen.set(n.id,out);return out;
    });
    if(t.head!==null&&!seen.has(t.head))fail('head');
-   return {id:id(t.id),title:text(t.title,120,true),archived:t.archived===true,head:t.head,nodes};
+   const last=t.last_activity;
+   if(last!==undefined&&(!Number.isSafeInteger(last)||last<0))fail('history-date');
+   return {id:id(t.id),title:text(t.title,120,true),archived:t.archived===true,head:t.head,nodes,
+    ...(last===undefined?{}:{last_activity:last}),...(t.temporary===true?{temporary:true}:{})};
   });unique(threads.map(t=>t.id));
   const documents=array(p.documents,20).map(d=>({id:id(d.id),title:text(d.title,120,true),versions:array(d.versions,30).map(x=>({id:id(x.id),text:text(x.text,100000),at:text(x.at,40,true)}))}));unique(documents.map(d=>d.id));for(const d of documents)unique(d.versions.map(x=>x.id));
   const astrology=p.astrology===undefined?{}:{astrology:(root.NexusAstrology||fail('astrology-not-loaded')).profile(p.astrology)};
   return {id:id(p.id),title:text(p.title,120,true),instructions:text(p.instructions,2000),memories:array(p.memories,30).map(m=>text(m,500,true)),threads,sources,documents,...astrology};
  });unique(projects.map(p=>p.id));
- const clean={schema:SCHEMA,projects};if(enc.encode(JSON.stringify(clean)).length>MAX)fail('capacity');return clean;
+ const clean={schema:SCHEMA,projects,...(days===undefined?{}:{history_days:days})};if(enc.encode(JSON.stringify(clean)).length>MAX)fail('capacity');return clean;
+}
+function retainHistory(value,{now=Date.now(),inSession=false}={}){
+ const data=state(value),days=data.history_days;
+ for(const project of data.projects){
+  project.threads=project.threads.filter(thread=>{
+   if(days===0||thread.temporary)return inSession;
+   if(days==null)return true;
+   // Older archives have no timestamps. Start their retention clock at first application.
+   if(thread.last_activity===undefined||thread.last_activity>now)thread.last_activity=now;
+   return thread.last_activity>now-days*DAY_MS;
+  });
+ }
+ return data;
 }
 function empty(){return {schema:SCHEMA,projects:[]}}
 function project(title){return {id:uid(),title:text(title,120,true),instructions:'',memories:[],threads:[],sources:[],documents:[]}}
@@ -55,7 +73,7 @@ function append(t,role,body,origin,parent=t.head,attachedFiles=[]){
  const labels=array(attachedFiles,MAX_CHAT_ATTACHMENTS).map(label=>text(label,160,true));
  if(role!=='user'&&labels.length)fail('attached-files-role');
  const n={id:uid(),parent,role,text:text(body,24000,true),origin,...(labels.length?{attached_files:labels}:{})};
- const updated={...copy(t),head:n.id,nodes:[...copy(t.nodes),n]};
+ const updated={...copy(t),head:n.id,nodes:[...copy(t.nodes),n],last_activity:Date.now()};
  // Validate the complete graph before exposing the mutation.
  const p=project('validation');p.threads=[updated];state({schema:SCHEMA,projects:[p]});return updated;
 }
@@ -280,15 +298,22 @@ class Vault{
  },{signal})}
  async unlock(pass,{signal}={}){return this.run(async(check,current)=>{
   const raw=await this.store.read();current();if(!raw)fail('archive-missing');const opened=await decrypt(raw,pass,{signal});current();
-  Object.assign(this,{key:opened.key,salt:opened.salt,raw:opened.raw});return copy(opened.data);
+  const kept=retainHistory(opened.data);
+  let updated=opened.raw;
+  if(JSON.stringify(kept)!==JSON.stringify(opened.data)){
+   updated=await encrypt(kept,opened.key,opened.salt);current();
+   await this.store.commit(envelope(raw).revision,updated,()=>{try{current();return true}catch{return false}});
+   current();
+  }
+  Object.assign(this,{key:opened.key,salt:opened.salt,raw:updated});return kept;
  },{signal})}
- async save(value,{signal}={}){const data=state(value);return this.run(async(check,current)=>{
+ async save(value,{signal,now=Date.now()}={}){const data=retainHistory(value,{now});return this.run(async(check,current)=>{
   if(!this.unlocked)fail('locked');const raw=await encrypt(data,this.key,this.salt);current();
   await this.store.commit(envelope(this.raw).revision,raw,()=>{try{current();return true}catch{return false}});
   // Once committed, keep the real revision even if cancellation arrived late.
   check();this.raw=raw;
  },{signal})}
- async export(value,pass,{signal}={}){const data=state(value);return this.run(async(check,current)=>{
+ async export(value,pass,{signal}={}){const data=retainHistory(value);return this.run(async(check,current)=>{
   const salt=crypto.getRandomValues(new Uint8Array(16)),key=await keyFor(pass,salt);current();const raw=await encrypt(data,key,salt);current();return raw;
  },{signal})}
  async erase({signal}={}){return this.run(async(check,current)=>{
@@ -298,5 +323,5 @@ class Vault{
   check();if(signal?.aborted)Object.assign(this,{key:null,salt:null,raw:null,data:null});else this.lock();
  },{signal})}
 }
-root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,empty,project,thread,readSources,path,append,context,search,retrieve,guide,asksForChoice,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
+root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,retainHistory,empty,project,thread,readSources,path,append,context,search,retrieve,guide,asksForChoice,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
 })(globalThis);

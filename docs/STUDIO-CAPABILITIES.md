@@ -192,6 +192,29 @@ reference for the consumer-plan features below.
 
 ## Privacy and persistence
 
+Open **Private archive → Privacy settings** to control retention separately
+from preparing text for training. With an unlocked archive, explicitly save
+to apply the selected policy. The choices are tab-only, 30, 90 or 365 days,
+and keeping chats until you delete them. Timed policies count from the last
+message. A conversation without a timestamp in a legacy archive starts its
+retention clock on first application. Expired conversations, including their
+branches, are removed from browser ciphertext on save or unlock. The browser
+must be open with access to the archive to run that cleanup. Turning history
+off keeps chats visible in the open tab only and removes archived chats on the
+next save. Chats marked temporary stay out of future archives even after
+history is re-enabled. Projects, independent writing and manually curated
+sources and memory have separate lifecycles. Exported copies need their own
+cleanup.
+
+The separate training choice starts off and resets when the tab is locked
+or closed. There is no NEXUS model training service. Opting in lets you review
+and manually download the current branch as a plain JSON text file, including
+only speaker roles and message text. Original attachments, audio, project
+memory and source records are excluded. NEXUS sends no training data.
+Online inference still requires its existing review and approval and is
+subject to the provider's policy.
+
+
 All projects, graph nodes, memories, source text and document versions remain in
 the current browser tab until explicitly saved or exported. Saving uses a
 separate IndexedDB database (`nexus-studio-v1`), AES-256-GCM with fresh IVs and
