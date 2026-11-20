@@ -94,3 +94,20 @@ The new real Chromium acceptance script checks local preview/no upload on
 selection, explicit model-provider/sha review, image absence from stored chat,
 and invalidation on edits/lock. The cloud adapter's synthetic tests check
 the network contract separately.
+
+## Connection readiness and image removal controls
+
+The Studio image panel has an explicit **Check vision connection (no image sent)**
+button. It queries only the configured gateway's read-only vision status; it
+never includes any selected image, question, bearer token, or model request.
+The status distinguishes an unavailable gateway, an operator-disabled vision
+provider, and a provider configuration reported as ready. A configured status
+is **not** a real provider test or a promise of image analysis quality. The
+separate **Model connection settings** button opens the existing secure
+configuration controls without storing gateway credentials in the archive.
+
+**Remove image and clear** now actively clears the selected image and question,
+revokes any prior approval, and removes the preview from the page. Browser
+regressions cover hidden preview rendering, no-upload status checks and local
+removal. These tests are synthetic and cannot establish production-provider
+readiness or permission to send private images.
