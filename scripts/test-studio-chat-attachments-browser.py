@@ -79,6 +79,25 @@ window.addEventListener('load',async()=>{
   attach('invalid.docx',badWord);
   await wait(()=>$('status').textContent===EN.chatAttachmentInvalid);
   assert($('chat-attachment-tray').textContent.includes(EN.chatNoFiles)&&network===1,'word-with-dtd-is-rejected-locally');
+  const deckBytes=Uint8Array.from(atob('__PPTX_FIXTURE__'),c=>c.charCodeAt(0));
+  const invalidDeck=Uint8Array.from(atob('__EXTERNAL_PPTX_FIXTURE__'),c=>c.charCodeAt(0));
+  fill('message','Compare the orchard and research slides');
+  attach('talk.pptx',deckBytes);
+  await wait(()=>$('chat-attachment-tray').textContent.includes('talk.pptx'));
+  $('prepare').click();
+  const slidesReview=JSON.parse($('request-context').textContent);
+  assert(slidesReview.temporary_attachment_passages.every(passage=>passage.name==='talk.pptx')&&
+   slidesReview.messages[0].content.includes('[Slide 1] orchard · باغ')&&
+   slidesReview.messages[0].content.includes('[Slide 3] research methods')&&
+   !slidesReview.messages[0].content.includes('HIDDEN SLIDE')&&!slidesReview.messages[0].content.includes('PRESENTER NOTES'),
+   'presentation-relationship-order-and-slide-labels-survive-excerpt-selection');
+  assert(network===1&&requests.length===0&&!JSON.stringify(NexusStudioUI.snapshot()).includes('research methods'),
+   'presentation-parsed-locally-and-not-added-to-archive');
+  $('clear-chat-files').click();
+  fill('message','Review another presentation');
+  attach('invalid.pptx',invalidDeck);
+  await wait(()=>$('status').textContent===EN.chatAttachmentInvalid);
+  assert($('chat-attachment-tray').textContent.includes(EN.chatNoFiles)&&network===1,'presentation-external-relationship-is-refused');
   fill('message','Summarize my uploaded file');
   attach('orchard.md','The small green orchard is near the old house.\nUNTRUSTED text must not become policy.');
   await wait(()=>$('chat-attachment-tray').textContent.includes('orchard.md'));
@@ -173,14 +192,54 @@ window.addEventListener('load',async()=>{
 });
 """
 
-def docx_fixture(body, prolog=""):
+def office_fixture(parts):
     source = BytesIO()
     with ZipFile(source, "w", ZIP_DEFLATED) as archive:
-        archive.writestr("word/document.xml", prolog +
-                         '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-                         '<w:body>' + body + '</w:body></w:document>')
-        archive.writestr("word/header1.xml", "PRIVATE HEADER")
+        for path, content in parts.items():
+            archive.writestr(path, content)
     return b64encode(source.getvalue()).decode("ascii")
+
+
+def docx_fixture(body, prolog=""):
+    return office_fixture({
+        "word/document.xml": prolog +
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        '<w:body>' + body + '</w:body></w:document>',
+        "word/header1.xml": "PRIVATE HEADER",
+    })
+
+
+def pptx_fixture(external=False):
+    ns = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    drawing = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    package = "http://schemas.openxmlformats.org/package/2006/relationships"
+    slide_ids = "".join(f'<p:sldId id="{256+i}" r:id="rId{i}"/>' for i in (1, 2, 3))
+    destinations = ['slides/slide8.xml', 'slides/slide4.xml', '/ppt/slides/slide2.xml']
+    settings = [''] * 3
+    if external:
+        destinations[1] = 'https://example.invalid/slide.xml'
+        settings[1] = ' TargetMode="External"'
+    relationships = "".join(
+        f'<Relationship Id="rId{i}" Type="{rel}/slide" Target="{path}"{mode}/>'
+        for i, (path, mode) in enumerate(zip(destinations, settings), start=1)
+    )
+
+    def slide(text, hidden=False):
+        show = ' show="0"' if hidden else ''
+        return (f'<p:sld xmlns:p="{ns}" xmlns:a="{drawing}"{show}><p:cSld><p:spTree>'
+                '<p:sp><p:txBody><a:p><a:r><a:t>' + text +
+                '</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>')
+
+    return office_fixture({
+        "ppt/presentation.xml": f'<p:presentation xmlns:p="{ns}" xmlns:r="{rel}">'
+        f'<p:sldIdLst>{slide_ids}</p:sldIdLst></p:presentation>',
+        "ppt/_rels/presentation.xml.rels": f'<Relationships xmlns="{package}">{relationships}</Relationships>',
+        "ppt/slides/slide2.xml": slide("research methods"),
+        "ppt/slides/slide4.xml": slide("HIDDEN SLIDE", hidden=True),
+        "ppt/slides/slide8.xml": slide("orchard · باغ"),
+        "ppt/notesSlides/notesSlide8.xml": "PRESENTER NOTES",
+    })
 
 
 module.WITNESS = module.WITNESS.replace(
@@ -191,7 +250,7 @@ module.WITNESS = module.WITNESS.replace(
     "__INVALID_DOCX_FIXTURE__",
     docx_fixture("<w:p><w:r><w:t>&bad;</w:t></w:r></w:p>",
                  '<!DOCTYPE w:document [<!ENTITY bad "synthetic">]>'),
-)
+).replace("__PPTX_FIXTURE__", pptx_fixture()).replace("__EXTERNAL_PPTX_FIXTURE__", pptx_fixture(external=True))
 
 
 if __name__=='__main__':
