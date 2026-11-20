@@ -9,6 +9,7 @@ function resetResult(){analysis=sourceStamp=null;summary='';$('data-summary').te
 function clear(){cancel();file=null;$('data-file').value='';$('data-source').value='';resetResult();$('data-status').textContent=''}
 function render(){
  const selected=$('data-source').value,source=p()?.sources.find(s=>s.id===sourceStamp?.id);
+ if(sourceStamp?.project===null&&!sourceStamp.id)sourceStamp.project=projectId;
  if(sourceStamp&&(sourceStamp.project!==projectId||(sourceStamp.id&&(!source||source.text!==sourceStamp.text))))resetResult();
  $('data-source').replaceChildren(option('',t('dataFileOption')),...(p()?.sources||[]).filter(s=>/\.(csv|tsv|json)$/i.test(s.name)).map(s=>option(s.id,s.name)));
  if([...$('data-source').options].some(o=>o.value===selected))$('data-source').value=selected;

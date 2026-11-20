@@ -25,6 +25,17 @@ window.addEventListener('load',async()=>{
   assert(document.documentElement.lang==='en','english-first');
   assert(!snapshot().projects.length&&!$('use-memory').checked,'empty-temporary-session-memory-off');
   const offer=$('nexus-zen-offer'),compose=$('studio-compose-send');
+  $('nexus-zen-suggestions').querySelector('button').click();
+  assert(NexusStudioFocus.active()==='music-card'&&!$('message').value&&snapshot().projects.length===0,
+   'empty-chat-chip-opens-tool-in-one-step');
+  $('nexus-zen-home').click();
+  change('studio-compose-mode','model');fill('message','/research Explicit tool');
+  assert(compose.textContent==='Review Research','explicit-tool-discoverable-in-model-mode');
+  compose.click();
+  assert(!offer.hidden&&$('request-review').hidden&&network===0,'explicit-tool-does-not-start-model-review');
+  change('studio-compose-mode','guide');
+  fill('message','تحليل فايل CSV');
+  assert(compose.textContent==='Review Data analysis','persian-intent-shows-tool-before-submit');
   fill('message','/research Old question');compose.click();
   assert(!offer.hidden,'tool-offer-opens-after-explicit-action');
   fill('message','Revised question');
@@ -33,6 +44,10 @@ window.addEventListener('load',async()=>{
   fill('message','/research Replacement query');compose.click();offer.querySelector('button').click();
   assert(NexusStudioFocus.active()==='research-card'&&$('research-query').value==='Preserve existing research draft'&&
    $('message').value==='/research Replacement query','tool-navigation-preserves-both-drafts');
+  fill('research-query','');$('nexus-zen-home').click();
+  fill('message','جست‌وجو کن دربارهٔ پژوهش خواب');compose.click();offer.querySelector('button').click();
+  assert($('research-query').value==='دربارهٔ پژوهش خواب'&&network===0,
+   'natural-language-research-query-prefills-for-review');
   fill('research-query','');$('nexus-zen-home').click();
   fill('message','/research Exact query');compose.click();offer.querySelector('button').click();
   assert($('research-query').value==='Exact query','empty-tool-field-receives-reviewed-query');
@@ -147,6 +162,15 @@ window.addEventListener('load',async()=>{
   await wait(()=>document.documentElement.lang==='es');assert($('conversation-card').textContent.includes('Conversación'),'complete-local-language-pack');assert(JSON.stringify(snapshot())===unchanged,'language-import-does-not-touch-projects');
   const nativeBuffer=File.prototype.arrayBuffer;let rejectFile;File.prototype.arrayBuffer=()=>new Promise((_,reject)=>rejectFile=reject);const pendingFile=new DataTransfer();pendingFile.items.add(new File(['pending'],'late.txt'));$('source-file').files=pendingFile.files;$('source-file').dispatchEvent(new Event('change'));await wait(()=>rejectFile);$('lock').click();const lockedFileStatus=$('status').textContent;rejectFile(Error('late file failure'));await sleep(40);File.prototype.arrayBuffer=nativeBuffer;assert($('status').textContent===lockedFileStatus&&snapshot().projects.length===0,'late-file-failure-cannot-change-locked-session-status');
   let rejectStatus;window.fetch=()=>new Promise((_,reject)=>rejectStatus=reject);$('check-model').click();await wait(()=>rejectStatus);$('lock').click();const lockedStatus=$('status').textContent;rejectStatus(Error('late network failure'));await sleep(40);assert($('status').textContent===lockedStatus&&snapshot().projects.length===0,'late-failure-cannot-change-locked-session-status');
+  const transcript=$('messages');
+  for(let i=0;i<3;i++){
+   fill('message',('Long local turn '+i+' ').repeat(170));compose.click();
+  }
+  await wait(()=>transcript.scrollHeight>transcript.clientHeight&&
+   transcript.scrollHeight-transcript.scrollTop-transcript.clientHeight<2);
+  assert(transcript.scrollTop>0,'new-replies-reveal-latest-turn-in-long-transcript');
+  transcript.scrollTop=0;fill('search','Long local turn');await sleep(40);
+  assert(transcript.scrollTop===0,'unrelated-search-keeps-reader-position');
   assert(document.documentElement.scrollWidth<=innerWidth+2,'no-horizontal-overflow');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
