@@ -18,12 +18,12 @@ window.addEventListener('load',async()=>{
  const bytes=Uint8Array.from(atob(png),x=>x.charCodeAt(0));
  const choose=()=>{const dt=new DataTransfer();dt.items.add(new File([bytes],'sample.png',{type:'image/png'}));
   $('studio-vision-file').files=dt.files;$('studio-vision-file').dispatchEvent(new Event('change'))};
- let statusCalls=0,uploads=0,seen=null,disabled=false,broken=false;
+ let statusCalls=0,uploads=0,seen=null,disabled=false,broken=false,statusReason='';
  const originalFetch=window.fetch;
  window.fetch=async (url,opts={})=>{
   if(String(url).endsWith('/studio-api/vision-status')){
    statusCalls++;
-   return Response.json(disabled?{configured:false,authority:'none'}:{
+   return Response.json(statusReason?{configured:false,reason:statusReason,authority:'none'}:disabled?{configured:false,reason:'disabled',authority:'none'}:{
     configured:true,model:'synthetic-vision',provider_host:'provider.example',
     configuration_id:'a'.repeat(64),authority:'none'});
   }
@@ -89,6 +89,16 @@ window.addEventListener('load',async()=>{
   $('studio-vision-review').click();await wait(()=>$('studio-vision-status').textContent.includes('unavailable'));
   assert(uploads===1&&$('studio-vision-review-box').hidden,'disabled-provider-prevents-image-upload');
   disabled=false;
+  statusReason='limit-reached';
+  $('studio-vision-check').click();
+  await wait(()=>$('studio-vision-status').textContent.includes('attempt limit'));
+  assert(uploads===1&&!$('studio-vision-status').textContent.includes('configured'),
+   'exhausted-process-guard-is-visible-and-no-upload');
+  statusReason='limit-unconfigured';
+  $('studio-vision-check').click();
+  await wait(()=>$('studio-vision-status').textContent.includes('not configured a bounded'));
+  assert(uploads===1,'missing-operator-guard-is-visible-and-no-upload');
+  statusReason='';
   $('studio-vision-review').click();await wait(()=>$('studio-vision-review-box').hidden===false);
   fill('studio-vision-question','Changed question');
   assert($('studio-vision-review-box').hidden&&$('studio-vision-send').disabled,
