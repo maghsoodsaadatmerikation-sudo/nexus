@@ -2835,11 +2835,15 @@ const panel = document.createElement('details'); panel.id = 'studio-vision-panel
 panel.className = 'studio-vision-panel';
 const title = document.createElement('summary');
 const help = document.createElement('p'); help.className = 'help';
+const connectionActions=document.createElement('div');connectionActions.className='row';
+const checkButton=document.createElement('button');checkButton.type='button';checkButton.className='secondary';checkButton.id='studio-vision-check';
+const settingsButton=document.createElement('button');settingsButton.type='button';settingsButton.className='secondary';settingsButton.id='studio-vision-settings';
+connectionActions.append(checkButton,settingsButton);
 const label = document.createElement('label');
 const picker = document.createElement('input'); picker.type = 'file'; picker.id = 'studio-vision-file';
 picker.accept = '.png,.jpg,.jpeg,image/png,image/jpeg';
 const preview = document.createElement('img'); preview.id = 'studio-vision-preview'; preview.alt = '';
-preview.hidden = true; preview.style.cssText = 'display:block;max-width:min(100%,430px);max-height:320px;object-fit:contain;margin:12px 0;border-radius:12px';
+preview.hidden = true; preview.style.cssText = 'max-width:min(100%,430px);max-height:320px;object-fit:contain;margin:12px 0;border-radius:12px';
 const fileDetail = document.createElement('p'); fileDetail.className = 'help';
 const questionLabel = document.createElement('label');
 const question = document.createElement('textarea'); question.id = 'studio-vision-question'; question.maxLength = 4000;
@@ -2860,7 +2864,7 @@ clearButton.id = 'studio-vision-clear';
 const status = document.createElement('p'); status.id = 'studio-vision-status'; status.setAttribute('role','status');
 status.setAttribute('aria-live','polite'); status.className = 'help';
 label.append(picker); questionLabel.append(question);
-panel.append(title, help, label, preview, fileDetail, questionLabel, reviewButton, clearButton, reviewBox, status);
+panel.append(title, help, connectionActions, label, preview, fileDetail, questionLabel, reviewButton, clearButton, reviewBox, status);
 $('studio-compose').after(panel);
 const quick = document.createElement('button'); quick.type = 'button'; quick.id = 'studio-vision-open';
 quick.className = 'secondary';
@@ -2886,6 +2890,7 @@ function refresh(){
  const blocked = sending || reading || window.NexusStudioUI.uiStatus().busy;
  picker.disabled = blocked;
  question.disabled = blocked;
+ checkButton.disabled = blocked;
  reviewButton.disabled = blocked || !image || !question.value.trim();
  clearButton.disabled = blocked;
  consent.disabled = blocked || !pending;
@@ -2911,6 +2916,8 @@ function relabel(){
  questionLabel.firstChild && (questionLabel.firstChild.nodeType===3) && questionLabel.firstChild.remove();
  questionLabel.insertBefore(document.createTextNode(words('Question about the image','پرسش دربارهٔ تصویر')),question);
  question.placeholder = words('What is visible in this image?','در این تصویر چه دیده می‌شود؟');
+ checkButton.textContent = words('Check vision connection (no image sent)','بررسی اتصال بینایی (بدون ارسال تصویر)');
+ settingsButton.textContent = words('Model connection settings','تنظیمات اتصال مدل');
  reviewButton.textContent = words('Review image and provider','بازبینی تصویر و ارائه‌دهنده');
  clearButton.textContent = words('Remove image and clear','حذف تصویر و پاک‌سازی');
  consentText.textContent = words('I have inspected this exact image and question. Send them once to the named model provider; its own retention and usage policies may apply.',
@@ -2955,8 +2962,44 @@ picker.addEventListener('change',async () => {
    msg('Image could not be decoded safely.','تصویر به شکل ایمن قابل بازخوانی نیست.')}
  } finally {if(current===epoch){reading=false;refresh();document.dispatchEvent(new Event('nexus-studio-media-state'))}}
 });
+clearButton.addEventListener('click',()=>{if(!clearButton.disabled){clear();msg('Image and question removed from this tab.','تصویر و پرسش از این تب پاک شدند.')}});
+settingsButton.addEventListener('click',()=>{
+ const settings=$('studio-model-settings');if(!settings)return;
+ if(document.documentElement.classList.contains('studio-focus-mode')&&
+    !document.documentElement.classList.contains('nexus-chat-options-open'))$('nexus-zen-more')?.click();
+ settings.open=true;settings.scrollIntoView({block:'nearest'});$('gateway').focus({preventScroll:true});
+});
 question.addEventListener('input',()=>{cancel();refresh()});
 consent.addEventListener('change',refresh);
+checkButton.addEventListener('click',async()=>{
+ if(checkButton.disabled)return;
+ cancel();const current=++epoch;
+ let origin;
+ try{origin=chosenOrigin()}catch{
+  msg('Open Model connection settings and enter a valid HTTPS gateway.','تنظیمات اتصال مدل را باز کن و درگاه HTTPS معتبر وارد کن.');return;
+ }
+ const abort=new AbortController();controller=abort;
+ const timer=setTimeout(()=>abort.abort(),10000);
+ try{
+  const response=await fetch(origin+'/studio-api/vision-status',
+   {credentials:'omit',cache:'no-store',redirect:'error',signal:abort.signal});
+  if(!response.ok)throw Error('status-'+response.status);
+  const body=await response.text();if(body.length>8000)throw Error('status-too-large');
+  const info=JSON.parse(body);
+  if(current!==epoch)return;
+  if(info.authority!=='none'||typeof info.configured!=='boolean')throw Error('invalid-status');
+  if(!info.configured){
+   msg('Gateway reached. Vision is not enabled or no model is configured; no image was sent.',
+    'درگاه در دسترس است؛ مدل بینایی فعال یا پیکربندی نشده است. تصویری ارسال نشد.');
+  }else if(typeof info.model==='string'&&info.model.trim()&&typeof info.provider_host==='string'&&info.provider_host.trim()){
+   msg('Gateway reports '+info.model+' at '+info.provider_host+' configured. No image was sent; real vision quality is not verified.',
+    'درگاه پیکربندی مدل '+info.model+' را گزارش می‌کند. تصویری ارسال نشد و کیفیت تحلیل هنوز تأیید نشده است.');
+  }else throw Error('invalid-status');
+ }catch{
+  if(current===epoch)msg('Cannot check the gateway. Review its URL, availability and permitted browser origin. No image was sent.',
+   'بررسی درگاه ممکن نیست. آدرس، دسترسی و مجوز اتصال مرورگر را بررسی کن. تصویری ارسال نشد.');
+ }finally{clearTimeout(timer);if(current===epoch){controller=null;refresh()}}
+});
 reviewButton.addEventListener('click',async () => {
  if(!image || reading || sending || !question.value.trim() || window.NexusStudioUI.uiStatus().busy)return;
  cancel();
