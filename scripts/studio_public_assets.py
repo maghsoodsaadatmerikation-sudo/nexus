@@ -3,8 +3,8 @@
 from pathlib import Path
 import stat
 
-# Bounded standalone HTML budget, including the reviewed chat capability directory.
-MAX_FILE = 505_000
+# Bounded standalone HTML budget, including the chat capability directory and voice controls.
+MAX_FILE = 515_000
 FILES = (
     "index.html",
     "service-worker.js",
