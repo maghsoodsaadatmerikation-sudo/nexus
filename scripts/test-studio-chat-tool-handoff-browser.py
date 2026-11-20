@@ -186,6 +186,19 @@ window.addEventListener('load',async()=>{
   // Explicit slash commands remain available in model mode.
   const chooser=$('studio-compose-mode');
   chooser.value='guide';chooser.dispatchEvent(new Event('change',{bubbles:true}));
+  for(const [request,query] of [
+   ['Search for Persian gardens, including water channels','Persian gardens, including water channels'],
+   ['جست‌وجو کن معماری باغ‌های ایرانی','معماری باغ‌های ایرانی'],
+   ['Search for Python package documentation','Python package documentation'],
+  ]){
+   fill('research-query','');
+   fill('message',request);chatSend.click();
+   assert($('nexus-zen-offer').textContent.includes('Open Research'),'explicit-search-in-chat-offers-research');
+   $('nexus-zen-offer').querySelector('button').click();
+   assert(NexusStudioFocus.active()==='research-card'&&$('research-query').value===query&&
+    !$('research-consent').checked&&searchCalls===1,'search-handoff-preserves-query-and-waits-for-consent');
+   NexusStudioFocus.openPanel('conversation-card');
+  }
   fill('message','بررسی وضعیت انتشار در رندر');
   assert(chatSend.textContent.includes('Render'),'persian-render-intent-discovered');
   chatSend.click();
@@ -326,7 +339,7 @@ window.addEventListener('load',async()=>{
   window.SpeechRecognition=class {
    start(){recognizer=this;starts++}
    stop(){this.onend()}
-   abort(){this.aborted=true}
+   abort(){this.abortCount=(this.abortCount||0)+1;this.aborted=true}
    emit(text){this.onresult({resultIndex:0,results:[Object.assign([{transcript:text}],{isFinal:true})]})}
   };
   const voice=$('studio-voice-toggle'),voiceStart=$('studio-voice-start'),voicePanel=$('studio-voice-panel');
@@ -353,6 +366,9 @@ window.addEventListener('load',async()=>{
   abandoned.emit('discarded words');abandoned.onend();
   assert(abandoned.aborted&&voicePanel.hidden&&!$('message').value.includes('discarded words'),
    'changing-chats-aborts-and-discards-late-speech');
+  const abortCount=abandoned.abortCount;
+  abandoned.onstart?.();
+  assert(abandoned.abortCount===abortCount+1,'late-microphone-start-after-chat-change-is-aborted');
 
   voice.click();voiceStart.click();
   const denied=recognizer;
@@ -364,6 +380,15 @@ window.addEventListener('load',async()=>{
   fill('message','manual edit');
   edited.emit('late text');edited.onend();
   assert(edited.aborted&&$('message').value==='manual edit','typing-cancels-the-active-recognizer');
+
+  const draft='a'.repeat($('message').maxLength-3);
+  fill('message',draft);voice.click();voiceStart.click();
+  recognizer.emit('😀more');$('studio-voice-stop').click();
+  assert($('message').value===draft+' 😀','dictation-reserves-separator-space-and-preserves-an-emoji');
+  const shortDraft=draft+'b';
+  fill('message',shortDraft);voice.click();voiceStart.click();
+  recognizer.emit('😀');$('studio-voice-stop').click();
+  assert($('message').value===shortDraft,'dictation-does-not-insert-a-partial-emoji');
 
   language.value='en';language.dispatchEvent(new Event('change',{bubbles:true}));
   const researchProvider=$('research-provider');

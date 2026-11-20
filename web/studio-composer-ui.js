@@ -116,6 +116,8 @@ function intent(value){
   const route=routes.find(x=>x[0]===command||(x[5]||'').split(' ').includes(command));
   return route?{route,query:message.slice(slash[0].length).trim()}:null;
  }
+ const search=/^(?:search\s+(?:the\s+web\s+)?for|جست[\s\u200c]*و[\s\u200c]*جو\s+کن)\s+(.+)$/is.exec(message);
+ if(search)return {route:routes.find(row=>row[0]==='research'),query:search[1]};
  const reminder=/^(?:remind me (?:to )?|set (?:a )?reminder(?: for)?\s+|یادآوری کن\s+)(.+)$/i.exec(message);
  if(reminder)return {route:routes.find(row=>row[0]==='remind'),query:reminder[1]};
  const s=message.slice(0,340).toLocaleLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ');
@@ -132,7 +134,7 @@ function intent(value){
   /(داستان|متن بنویس|essay|story|draft)/i.test(s)?'write':
   /(وظایف|task|workflow)/i.test(s)?'tasks':null;
  const route=routes.find(x=>x[0]===kind);
- const prefix=kind==='research'?/^(?:search for|find|جست\s*و\s*جو\s+کن)\s+/i.exec(s):null;
+ const prefix=kind==='research'?/^find\s+/i.exec(message):null;
  const query=kind==='research'||kind==='orchestra'?message.slice(prefix?.[0].length||0):'';
  return route?{route,query}:null;
 }
