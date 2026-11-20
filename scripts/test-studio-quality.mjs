@@ -18,7 +18,7 @@ project.sources=[{id:'dense',name:'dense.txt',text:'word\n'.repeat(13000)}];ok((
 
 const coverage=S.project('Across sources');
 coverage.sources=[
- {id:'long-first',name:'long.txt',text:'filler\\n'.repeat(13000)},
+ {id:'long-first',name:'long.txt',text:'filler\n'.repeat(13000)},
  {id:'late-source',name:'later.txt',text:'A unique needle appears here.'},
 ];
 const coverageHits=S.retrieve(coverage,'needle');
@@ -32,14 +32,14 @@ ok(()=>assert(partialContext.messages[0].content.includes('Search was partial:')
 ok(()=>assert.equal(partialContext.citations[0].source_id,'late-source'));
 const diverse=S.project('Diverse results');
 diverse.sources=[
- {id:'one',name:'one.txt',text:'ocean moon\\n'.repeat(100)},
- {id:'two',name:'two.txt',text:'ocean moon\\n'.repeat(10)},
+ {id:'one',name:'one.txt',text:'ocean moon\n'.repeat(100)},
+ {id:'two',name:'two.txt',text:'ocean moon\n'.repeat(10)},
 ];
 const diverseHits=S.retrieve(diverse,'ocean moon');
 ok(()=>assert.equal(diverseHits.length,5));
 ok(()=>assert.deepEqual(new Set(diverseHits.map(hit=>hit.source_id)),new Set(['one','two'])));
 const exactBudget=S.project('Exactly the budget');
-exactBudget.sources=[{id:'exact',name:'exact.txt',text:'word\\n'.repeat(11999)+'word'}];
+exactBudget.sources=[{id:'exact',name:'exact.txt',text:'word\n'.repeat(11999)+'word'}];
 ok(()=>assert.equal(S.retrieve(exactBudget,'word').truncated,false));
 
 const before={schema:S.SCHEMA,projects:[S.project('Keep')]},after=S.empty(),undo=new S.UndoSlot();undo.record(before,after,{projectId:before.projects[0].id});const recovered=undo.take(after);ok(()=>assert.deepEqual(recovered.data,before));ok(()=>assert.equal(undo.available,false));bad(()=>undo.take(after));undo.record(before,after,{});bad(()=>undo.take(before));ok(()=>assert.equal(undo.available,false));undo.record(before,after,{});undo.clear();ok(()=>assert(!undo.available));
