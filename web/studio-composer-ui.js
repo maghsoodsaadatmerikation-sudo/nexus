@@ -33,7 +33,7 @@ const suggestions=document.createElement('div');suggestions.id='nexus-zen-sugges
 box.prepend(suggestions);
 const offer=document.createElement('div');offer.id='nexus-zen-offer';offer.hidden=true;offer.setAttribute('role','status');box.after(offer);
 // One reviewed discovery catalog: command, UI destination, languages, prompt field, aliases.
- // Listing a capability never proves model or provider availability or grants execution.
+// Listing a capability never proves model or provider availability or grants execution.
 const routes=Object.freeze([
  ['orchestra','orchestra-card','Orchestra & vocal','ارکستر و آواز','orchestra-prompt','vocal'],
  ['music','music-card','Music Lab','موسیقی',null,'song'],
@@ -67,10 +67,26 @@ const directoryTitle=document.createElement('strong'),directoryNote=document.cre
  directoryItems=document.createElement('div'),directoryClose=document.createElement('button');
 directoryClose.type='button';directoryClose.className='secondary';
 directory.append(directoryTitle,directoryNote,directoryItems,directoryClose);offer.after(directory);
-function closeDirectory(){directory.hidden=true;directoryItems.replaceChildren()}
-directoryClose.onclick=closeDirectory;
+const directoryToggle=document.createElement('button');
+directoryToggle.id='studio-open-capability-directory';
+directoryToggle.type='button';directoryToggle.className='secondary';
+directoryToggle.dataset.en='All tools';directoryToggle.dataset.fa='همهٔ ابزارها';
+directoryToggle.setAttribute('aria-controls',directory.id);
+suggestions.append(directoryToggle);
+function closeDirectory(){
+ directory.hidden=true;directoryItems.replaceChildren();
+ directoryToggle.setAttribute('aria-expanded','false');
+}
+closeDirectory();
+directoryToggle.onclick=()=>{
+ if(directory.hidden){clearOffer();showDirectory()}
+ else closeDirectory();
+};
+directoryClose.onclick=()=>{closeDirectory();directoryToggle.focus()};
 function showDirectory(){
  closeDirectory();directory.hidden=false;
+ directoryToggle.setAttribute('aria-expanded','true');
+ directory.setAttribute('aria-label',words('Available capabilities','قابلیت‌های در دسترس'));
  directoryTitle.textContent=words('NEXUS capabilities','قابلیت‌های نکسوس');
  directoryNote.textContent=words('Choose a command to fill the chat. Nothing runs until you review and approve it.',
   'یک فرمان را برای درج در گفتگو انتخاب کن. تا بازبینی و تأیید، هیچ کاری اجرا نمی‌شود.');
@@ -80,13 +96,16 @@ function showDirectory(){
   b.textContent='/'+item.command+' · '+words(item.en,item.fa)+' · '+
    (item.kind==='connection-review'?words('Connection review','بازبینی اتصال'):words('Tool review','بازبینی ابزار'));
   b.onclick=()=>{
+   const draft=$('message').value.trim();
+   if(draft&&!/^\/(tools|help|capabilities)$/i.test(draft)&&
+      !confirm(words('Replace your unsent message with this command?','این فرمان جایگزین پیام ارسال‌نشده شود؟')))return;
    $('message').value='/'+item.command+' ';
    $('message').dispatchEvent(new Event('input',{bubbles:true}));
    closeDirectory();$('message').focus();
   };
   directoryItems.append(b);
  }
- directoryClose.focus();
+ directoryItems.firstElementChild.focus();
 }
 function intent(value){
  const message=value.trim();
@@ -277,7 +296,7 @@ $('message').addEventListener('keydown',event=>{
   run(); // In model mode only opens the consent review.
  }
 });
-$('language').addEventListener('change',()=>queueMicrotask(refresh));
+$('language').addEventListener('change',()=>queueMicrotask(()=>{if(!directory.hidden)showDirectory();refresh()}));
 document.addEventListener('nexus-studio-state',refresh);
 document.addEventListener('nexus-studio-chat-layout',refresh);
 document.addEventListener('nexus-studio-open-chat',()=>{
