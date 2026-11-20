@@ -240,7 +240,8 @@ html.studio-focus-mode{
 .studio-focus-mode input:not([type="checkbox"]):not([type="radio"]),
 .studio-focus-mode textarea,.studio-focus-mode select{background:#1b2029;color:#edf4f1;border-color:#404650}
 .studio-focus-mode #studio-compose{background:#1d1e29;border:1px solid #48405d;padding:13px;border-radius:18px}
-.studio-focus-mode #studio-compose-heading{font-size:.85rem;color:#c6baf1}
+#studio-compose details{margin-top:8px}
+#studio-compose #studio-compose-heading{display:list-item;font-size:.85rem;color:#c6baf1;cursor:pointer}
 .studio-focus-mode #studio-compose-send{background:#6555a4;color:#fff;border-color:#7464b4}
 .studio-focus-mode .studio-compose-row button.secondary,.studio-focus-mode button.secondary{background:#242a33;color:#e2ede6;border-color:#404955}
 .studio-focus-mode #studio-compose-privacy,.studio-focus-mode #studio-compose-storage{font-size:.76rem;line-height:1.45}

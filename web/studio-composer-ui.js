@@ -9,7 +9,7 @@ if(required.some(id=>!$(id))||!window.NexusStudioUI?.uiStatus)return;
 const words=(en,fa)=>document.documentElement.lang==='fa'?fa:en;
 const box=document.createElement('section');box.id='studio-compose';box.className='studio-compose';
 box.setAttribute('aria-label','Conversation actions');
-const heading=document.createElement('strong');heading.id='studio-compose-heading';
+const mode=document.createElement('details'),heading=document.createElement('summary');heading.id='studio-compose-heading';
 const row=document.createElement('div');row.className='studio-compose-row';
 const selectLabel=document.createElement('label');selectLabel.htmlFor='studio-compose-mode';
 const select=document.createElement('select');select.id='studio-compose-mode';
@@ -23,8 +23,9 @@ const config=document.createElement('button');config.type='button';config.id='st
 const privacy=document.createElement('p');privacy.id='studio-compose-privacy';privacy.className='help';
 privacy.setAttribute('role','note');
 const storage=document.createElement('p');storage.id='studio-compose-storage';storage.className='help';storage.setAttribute('role','status');storage.setAttribute('aria-live','polite');
-selectLabel.append(select);row.append(selectLabel,send,save,config);
-box.append(heading,row,privacy,storage);
+selectLabel.append(select);row.append(send,save);
+mode.append(heading,selectLabel,config,privacy);
+box.append(row,mode,storage);
 $('branch-notice').after(box);
 
 /* Discover capability from a typed request; proposal only, never execute. */
@@ -38,7 +39,7 @@ for(const [panel,en,fa] of [
  b.addEventListener('click',()=>window.NexusStudioFocus?.openPanel(panel));
  suggestions.append(b);
 }
-box.insertBefore(suggestions,privacy);
+box.prepend(suggestions);
 const offer=document.createElement('div');offer.id='nexus-zen-offer';offer.hidden=true;offer.setAttribute('role','status');box.after(offer);
 const routes=[
  ['orchestra','orchestra-card','Orchestra & vocal','ارکستر و آواز','orchestra-prompt'],
@@ -123,7 +124,7 @@ function refresh(){
  if(offeredDraft!==null&&($('message').value!==offeredDraft||state.archived))clearOffer();
  const model=select.value==='model',ready=!state.busy&&(!state.threadReady||!state.archived);
  $('message').placeholder=words('Ask NEXUS anything…','هرچه می‌خواهی از نکسوس بپرس…');
- heading.textContent=words('Reply using','پاسخ با');
+ heading.textContent=model?words('AI model options','گزینه‌های مدل هوش مصنوعی'):words('Local guide · change mode','راهنمای محلی · تغییر حالت');
  box.setAttribute('aria-label',words('Conversation actions','گزینه‌های گفتگو'));
  selectLabel.setAttribute('aria-label',words('Choose how to respond','روش پاسخ را انتخاب کن'));
  for(const b of suggestions.children)b.textContent=words(b.dataset.en,b.dataset.fa);
@@ -140,8 +141,8 @@ function refresh(){
  config.disabled=state.busy;
  config.textContent=words('Model settings','تنظیمات مدل');
  privacy.textContent=model?
-  words('No message is sent by this button. Review the exact context and separately approve it. A configured model is required.',
-        'این دکمه هیچ پیامی ارسال نمی‌کند؛ متن دقیق را بازبینی و جداگانه تأیید کن. اتصال مدل لازم است.'):
+  words('Choose a model, review the message and approve sending.',
+        'مدل را انتخاب کن، پیام را بازبینی کن و ارسال را تأیید کن.'):
   words('Local guide only — not generative AI. It cannot read attached files.',
         'فقط راهنمای محلی، نه هوش مصنوعی مولد؛ فایل‌های پیوست را نمی‌خواند.');
  storage.textContent=state.vaultUnlocked?
@@ -168,7 +169,7 @@ function run({routeTools=true}={}){
     const reviewHeading=$('request-review').querySelector('h3');
     if(reviewHeading){reviewHeading.tabIndex=-1;reviewHeading.focus({preventScroll:true})}
     $('request-review').scrollIntoView({block:'nearest'});
-   }
+   }else mode.open=true;
   }else{
    $('guide').click(); // Existing source/attachment validation; never a network call.
   }
