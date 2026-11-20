@@ -159,6 +159,17 @@ try{
    const install=document.getElementById('studio-install');
    const privacy=document.querySelector('a[href="#studio-privacy"]');
    if(!install||!privacy||!document.getElementById('studio-privacy'))return 'missing-controls';
+   const panel=document.getElementById('studio-install-card');
+   if(!panel||getComputedStyle(panel).display==='none'||panel.open)return 'install-panel-hidden-or-expanded';
+   panel.querySelector('summary').click();
+   if(!panel.open||getComputedStyle(document.getElementById('studio-offline')).display==='none')return 'offline-action-not-reachable';
+   panel.querySelector('summary').click();
+   const origin='https://nexus-studio-merikation.onrender.com/';
+   if(document.querySelector('link[rel="canonical"]')?.href!==origin||
+      document.querySelector('meta[property="og:url"]')?.content!==origin||
+      document.querySelector('meta[property="og:title"]')?.content!=='NEXUS Studio'||
+      !document.querySelector('meta[property="og:description"]')?.content||
+      document.querySelector('meta[property="og:image"]')?.content!==origin+'icons/nexus-512.png')return 'share-metadata-missing';
    let prompted=0;
    const event=new Event('beforeinstallprompt',{cancelable:true});
    event.prompt=async()=>{prompted++};
@@ -177,6 +188,7 @@ try{
  assert(await js("Boolean(window.NexusStudioCompose)&&NexusStudioCompose.mode()==='guide'&&document.getElementById('studio-compose-send').disabled&&document.getElementById('studio-compose-privacy').textContent.includes('not generative AI')&&document.getElementById('studio-compose-storage').textContent.includes('No encrypted archive')"),'initial-honest-composer');
  checks.push('composer-local-mode-honesty-before-project');
  assert(await js("typeof NexusStudioUI.startConversation==='function'&&NexusStudioUI.snapshot().projects.length===0"),'one-step-start-api-missing');
+ assert(await js("getComputedStyle(document.getElementById('messages')).display==='none'&&getComputedStyle(document.getElementById('branch')).display==='none'&&document.getElementById('studio-focus-onboarding').textContent.includes('No account needed')"),'first-visit-layout-not-compact');
  checks.push('one-step-onboarding-available-with-no-project');
  assert(await js("navigator.serviceWorker.getRegistration(location.href).then(r=>!r)"),'unapproved-worker');checks.push('no-automatic-worker');
  await poll(()=>retryJs('Boolean(window.NexusDevice)'),10000,'device-controls-not-ready');await js("document.getElementById('device-check').click();true");await poll(()=>retryJs("document.getElementById('device-readiness').textContent.includes('not been verified')"),10000,'readiness-not-rendered');assert(await js("NexusDevice.worker===null&&NexusDevice.report().generation_observed===false"),'readiness-started-model');checks.push('readiness-does-not-load-model-or-claim-execution');

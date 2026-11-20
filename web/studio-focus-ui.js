@@ -149,8 +149,8 @@ function refreshOnboarding(){
  if(!visible)return;
  const create=projects.length===0;
  hint.textContent=create
-  ?words('Write your first message. NEXUS will start a temporary local conversation. Save it explicitly to keep it.',
-         'اولین پیامت را بنویس. نکسوس یک گفتگوی موقت محلی آغاز می‌کند؛ برای نگهداری باید آن را صریحاً ذخیره کنی.')
+  ?words('Chat, research, analyze files or make music. No account needed.',
+         'گفتگو کن، پژوهش کن، فایل تحلیل کن یا موسیقی بساز. نیازی به حساب کاربری نیست.')
   :words('Write a message or start a conversation. The local guide is not a generative AI model.',
          'پیامت را بنویس یا گفتگو را آغاز کن. راهنمای محلی مدل هوش مصنوعی مولد نیست.');
  start.textContent=words('Start chatting','شروع گفتگو');
