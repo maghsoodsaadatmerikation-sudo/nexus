@@ -26,6 +26,7 @@ dialog.append(title,connect,settings,close,operations,topic,path,review,read,edi
 open.dataset.en='Connections';open.dataset.fa='اتصال‌ها';
 document.body.append(dialog);composer.append(open);
 let targets=[],origin='',controller=null,selectedResult=null,branchPlan=null,fileBase=null,filePlan=null,originalText='';
+let requestedProvider=null,requestedOperation=null;
 const branching=()=>operations.value==='github.branch',editing=()=>operations.value==='github.edit';
 const validSha=s=>/^[a-f0-9]{40}$/.test(s);
 const discardFile=()=>!fileBase||editor.value===originalText||confirm(words('Discard the unsaved file edit?','ویرایش ذخیره‌نشدهٔ فایل پاک شود؟'));
@@ -106,10 +107,24 @@ async function request(suffix,body,apply){
   if(controller===abort){controller=null;connect.disabled=create.disabled=preview.disabled=editor.readOnly=false;read.disabled=!path.hidden&&!path.value.trim()}
  }
 }
-open.onclick=()=>{reset();labels();dialog.showModal()};
+/* Provider and operation hints only choose the review surface. They never
+ * load credentials, call a provider, approve a read, or perform a write.
+ */
+function openFor({provider=null,operation=null}={}){
+ if(dialog.open||!([null,'github','render'].includes(provider))||
+   (operation!==null&&!choices.some(row=>row[0]===operation&&(!provider||row[1]===provider))))return false;
+ reset();requestedProvider=provider;requestedOperation=operation;labels();
+ if(provider){
+  const name=provider==='github'?'GitHub':'Render';
+  statusLine.textContent=words(name+' selected. Load connections to review available actions.',
+    name+' انتخاب شد. برای بازبینی عملیات موجود، اتصال‌ها را بارگیری کن.');
+ }
+ dialog.showModal();connect.focus();return true;
+}
+open.onclick=()=>openFor();
 close.onclick=()=>{if(discardFile())dialog.close()};
 dialog.addEventListener('cancel',event=>{if(!discardFile())event.preventDefault()});
-dialog.addEventListener('close',reset);
+dialog.addEventListener('close',()=>{requestedProvider=requestedOperation=null;reset()});
 settings.onclick=()=>{
  if(!discardFile())return;
  dialog.close();document.dispatchEvent(new Event('nexus-studio-show-chat-options'));
@@ -121,16 +136,32 @@ connect.onclick=()=>{
   if(!Array.isArray(output.connections))throw Error('catalog');
   targets=output.connections.filter(x=>typeof x.target==='string'&&/^[a-f0-9]{64}$/.test(x.configuration_id));
   origin=url;
-  for(const [id,provider,en,fa] of choices)if(targets.some(x=>x.provider===provider&&(id!=='github.branch'||x.branch_creation===true)&&(id!=='github.edit'||x.file_commit===true))){
-   operations.append(option(id,(provider==='github'?'GitHub':'Render')+' · '+words(en,fa)));
-  }
+  for(const [id,provider,en,fa] of choices)
+   if((!requestedProvider||provider===requestedProvider)&&
+      targets.some(x=>x.provider===provider&&(id!=='github.branch'||x.branch_creation===true)&&(id!=='github.edit'||x.file_commit===true))){
+    operations.append(option(id,(provider==='github'?'GitHub':'Render')+' · '+words(en,fa)));
+   }
   operations.hidden=!operations.options.length;
-  if(operations.hidden)statusLine.textContent=words('No connections configured on this gateway.','اتصالی روی این درگاه تنظیم نشده است.');
+  if(requestedOperation){
+   if([...operations.options].some(x=>x.value===requestedOperation))operations.value=requestedOperation;
+   else {
+    // A prohibited or unavailable operation must not silently fall back
+    // to another action or another provider.
+    operations.selectedIndex=-1;
+    statusLine.textContent=words('This requested action is unavailable. Choose a permitted action explicitly.',
+      'عملیات درخواستی در دسترس نیست. یک عملیات مجاز را صریحاً انتخاب کن.');
+   }
+  }
+  if(operations.hidden)statusLine.textContent=words(
+   'No configured connection for the requested provider on this gateway.',
+   'برای سرویس درخواستی اتصالی روی این درگاه پیکربندی نشده است.');
   updateReview();
  });
 };
 operations.onchange=topic.onchange=path.onchange=()=>{
  if(!discardFile()){operations.value='github.edit';topic.value=fileBase.slug;path.value=fileBase.path;preview.disabled=false;return}
+ // The user may replace a preselected proposal, never approve it implicitly.
+ if(document.activeElement===operations)requestedOperation=null;
  controller?.abort();controller=null;connect.disabled=editor.readOnly=false;updateReview();
 };
 topic.oninput=path.oninput=()=>{
@@ -229,5 +260,6 @@ window.addEventListener('beforeunload',event=>{
 document.addEventListener('nexus-studio-private-clear',()=>{if(dialog.open)dialog.close();reset()});
 for(const id of ['gateway','gateway-token'])$(id).addEventListener('input',reset);
 $('language').addEventListener('change',labels);
+window.NexusStudioConnections=Object.freeze({openFor});
 labels();
 })();
