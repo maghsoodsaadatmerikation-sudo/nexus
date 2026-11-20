@@ -2412,7 +2412,7 @@ const routes=Object.freeze([
  ['code','code-card','Code','کدنویسی',null,''],
  ['tasks','tasks-card','Tasks','وظایف',null,'task'],
  ['write','canvas-card','Writing','نوشتن',null,''],
- ['sources','sources-card','Sources','منابع',''],
+ ['sources','sources-card','Sources','منابع',null,''],
  ['astrology','astrology-card','Astrology','اخترشناسی',null,''],
  ['sky','sky-card','Sky','آسمان',null,''],
  ['memory','profile-card','Memory','حافظه',null,''],
@@ -2462,7 +2462,7 @@ function intent(value){
  const slash=/^\/([a-z-]+)(?:\s|$)/i.exec(message);
  if(slash){
   const command=slash[1].toLowerCase();
-  const route=routes.find(x=>x[0]===command||x[5].split(' ').includes(command));
+  const route=routes.find(x=>x[0]===command||(x[5]||'').split(' ').includes(command));
   return route?{route,query:message.slice(slash[0].length).trim()}:null;
  }
  const s=message.slice(0,340).toLocaleLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ');
