@@ -110,8 +110,14 @@ window.addEventListener('load',async()=>{
    'first-file-analysis-handoff-keeps-analysis-and-waits-for-approval');
   // The unified chat routes requests to reviewed connections, not directly to
   // provider APIs. No credentials or model execution are implied by a suggestion.
-  fill('message','/github list open pull requests');
   const chatSend=$('studio-compose-send');
+  const routeCatalog=NexusStudioCompose.catalog();
+  const allRoutable=routeCatalog.every(item=>{
+   fill('message','/'+item.command+' test');
+   return chatSend.textContent.includes(item.en);
+  });
+  assert(allRoutable,'every-catalog-command-routes-to-its-reviewed-tool');
+  fill('message','/github list open pull requests');
   assert(chatSend.textContent.includes('GitHub'),'github-slash-intent-discovered');
   chatSend.click();
   assert(!$('nexus-zen-offer').hidden,'github-discovery-requires-explicit-review');
