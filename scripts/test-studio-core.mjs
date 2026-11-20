@@ -13,6 +13,13 @@ ok(()=>assert(!JSON.stringify(S.context(p,candidate)).includes('PRIVATE-MEMORY')
 p.threads=[branch];v={schema:S.SCHEMA,projects:[p]};ok(()=>assert.equal(S.search(v,'original question').length,1));p.threads[0].archived=true;ok(()=>assert.equal(S.search(v,'original').length,0));ok(()=>assert.equal(S.search(v,'original',true).length,1));p.threads[0].archived=false;
 ok(()=>assert(S.guide('hello').includes('not a generative model')));ok(()=>assert(S.guide('سلام',true).includes('مدل مولد نیست')));
 ok(()=>assert.equal(S.context(p,candidate).study,false));
+ok(()=>assert.match(S.context(p,candidate).messages[0].content,/NEXUS response guidance/));
+ok(()=>assert.doesNotMatch(S.context(p,candidate,{onDevice:true}).messages[0].content,/NEXUS response guidance/));
+ok(()=>assert.match(S.guide('Should I launch today or wait?'),/reversible next step/));
+ok(()=>assert.match(S.guide('الان منتشر کنم یا منتظر بمانم؟',true),/قدم برگشت‌پذیر/));
+ok(()=>assert.doesNotMatch(S.guide('What does JSON or CSV mean?'),/reversible next step/));
+ok(()=>assert.doesNotMatch(S.guide('Translate this: choose between the red and blue doors.'),/reversible next step/));
+
 const study=S.context(p,candidate,{study:true});
 ok(()=>assert.equal(study.study,true));
 ok(()=>assert(study.messages[0].content.includes('User-selected Study mode')));
