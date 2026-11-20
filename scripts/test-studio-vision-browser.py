@@ -75,7 +75,29 @@ window.addEventListener('load',async()=>{
   fill('studio-vision-question','Changed question');
   assert($('studio-vision-review-box').hidden&&$('studio-vision-send').disabled,
    'editing-reviewed-question-revokes-consent');
+  const home=NexusStudioUI.selection();
+  window.confirm=()=>false;
+  $('new-thread').click();
+  assert(NexusStudioUI.selection().threadId===home.threadId&&NexusStudioVision.hasTransientWork(),
+   'declined-new-chat-does-not-discard-private-image');
   window.confirm=()=>true;
+  $('new-thread').click();
+  assert(NexusStudioUI.selection().threadId!==home.threadId&&
+   !NexusStudioVision.hasTransientWork()&&$('studio-vision-preview').hidden&&
+   !$('studio-vision-question').value,'new-chat-clears-private-image');
+  assert(NexusStudioUI.openConversation(home.projectId,home.threadId),'reopen-original-chat');
+  const oldHead=NexusStudioUI.snapshot().projects[0].threads[0].head;
+  $('messages').querySelector('article.message.user button').click();
+  $('guide').click();
+  assert($('branch').options.length===2,'original-and-new-branches-retained');
+  choose();await wait(()=>$('studio-vision-preview').hidden===false);
+  fill('studio-vision-question','Private branch image');
+  $('branch').value=oldHead;
+  $('branch').dispatchEvent(new Event('change'));
+  assert(!NexusStudioVision.hasTransientWork()&&$('studio-vision-preview').hidden,
+   'changing-chat-branch-clears-private-image');
+  choose();await wait(()=>$('studio-vision-preview').hidden===false);
+  fill('studio-vision-question','Private image before lock');
   $('lock').click();
   assert(!NexusStudioVision.hasTransientWork()&&$('studio-vision-question').value===''&&
     $('studio-vision-preview').hidden,'private-lock-clears-image-and-preview');
