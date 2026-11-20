@@ -11,6 +11,13 @@ p.memories=['PRIVATE-MEMORY'];p.instructions='concise';p.sources=[{id:S.uid(),na
 ok(()=>assert(!JSON.stringify(S.context(p,candidate)).includes('PRIVATE-MEMORY')));ok(()=>assert(JSON.stringify(S.context(p,candidate,{memory:true})).includes('PRIVATE-MEMORY')));ok(()=>assert.equal(S.context(p,candidate,{sources:true}).citations[0].line,1));ok(()=>assert.equal(S.retrieve(p,'unmatched').length,0));ok(()=>assert.equal(S.retrieve(S.project('other'),'orchard').length,0));
 p.threads=[branch];v={schema:S.SCHEMA,projects:[p]};ok(()=>assert.equal(S.search(v,'original question').length,1));p.threads[0].archived=true;ok(()=>assert.equal(S.search(v,'original').length,0));ok(()=>assert.equal(S.search(v,'original',true).length,1));p.threads[0].archived=false;
 ok(()=>assert(S.guide('hello').includes('not a generative model')));ok(()=>assert(S.guide('سلام',true).includes('مدل مولد نیست')));
+ok(()=>assert.equal(S.context(p,candidate).study,false));
+const study=S.context(p,candidate,{study:true});
+ok(()=>assert.equal(study.study,true));
+ok(()=>assert(study.messages[0].content.includes('User-selected Study mode')));
+ok(()=>assert.equal(study.messages.at(-1).content,S.context(p,candidate).messages.at(-1).content));
+ok(()=>assert(S.guide('Fractions',false,{study:true}).includes('Local study guide')));
+ok(()=>assert(S.guide('کسرها',true,{study:true}).includes('راهنمای مطالعهٔ محلی')));
 let long=S.thread('Long');for(let i=0;i<30;i++){long=S.append(long,'user','turn '+i,'human');long=S.append(long,'assistant','draft '+i,'model')}long=S.append(long,'user','final question','human');const bounded=S.context(S.project('Long project'),long);ok(()=>assert(bounded.messages.length<=42&&bounded.omitted_messages>0));ok(()=>assert.equal(bounded.messages.at(-1).content,'final question'));
 const pass='long private passphrase 123';
 class Store{raw=null;async read(){return this.raw}async commit(expected,raw,guard){if(!guard())throw Error('locked');if((this.raw?JSON.parse(this.raw).revision:null)!==expected)throw Error('conflict');this.raw=raw}}

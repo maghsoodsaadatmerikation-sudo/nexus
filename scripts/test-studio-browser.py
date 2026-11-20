@@ -22,7 +22,8 @@ window.addEventListener('load',async()=>{
  window.confirm=()=>true;window.prompt=()=> 'Renamed conversation';
  window.fetch=async(url,options={})=>{network++;if(String(url).endsWith('/status'))return new Response(JSON.stringify({configured:true,configuration_id:'a'.repeat(64),model:'synthetic-model',provider_host:'synthetic.invalid'}));posted=JSON.parse(options.body);const response=()=>new Response(JSON.stringify({text:'SYNTHETIC MODEL DRAFT',origin:'model',model:'synthetic-model',authority:'none'}));if(late)return new Promise(resolve=>delayResponse=()=>resolve(response()));return response()};
  try{
-  assert(document.documentElement.lang==='en','english-first');
+  assert(document.documentElement.lang==='en'&&document.documentElement.dir==='ltr'&&
+   $('language').value==='en'&&$('language').options[0].defaultSelected,'english-first');
   assert(!snapshot().projects.length&&!$('use-memory').checked,'empty-temporary-session-memory-off');
   const offer=$('nexus-zen-offer'),compose=$('studio-compose-send');
   $('nexus-zen-suggestions').querySelector('button').click();
@@ -110,7 +111,16 @@ window.addEventListener('load',async()=>{
   change('versions',current().documents[0].versions[0].id);assert($('version-diff').textContent.includes('version one')&&$('version-diff').textContent.includes('version two'),'version-diff');$('load-version').click();assert($('editor').value==='version one','load-old-version-into-draft');$('save-version').click();
   const injection='<img src=x onerror=alert(1)>';fill('message',injection);$('guide').click();assert($('messages').textContent.includes(injection)&&!$('messages').querySelector('img'),'untrusted-message-is-inert');
   fill('gateway','https://synthetic.invalid');fill('gateway-token','TRANSIENT ACCESS TOKEN');$('check-model').click();await wait(()=>$('model-status').textContent.includes('synthetic-model'));
-  fill('message','orchard trees');$('prepare').click();assert(!$('request-review').hidden&&!$('consent').checked,'review-required-before-send');assert(!$('request-context').textContent.includes('REVIEWED SECRET MEMORY'),'memory-not-sent-by-default');
+  const studyMode=$('study-mode');
+  studyMode.click();fill('message','Fractions');$('guide').click();
+  assert($('messages').textContent.includes('Local study guide')&&network===1,'study-guide-is-local');
+  fill('message','orchard trees');$('prepare').click();
+  const studyReview=JSON.parse($('request-context').textContent);
+  assert(studyReview.response_style==='study'&&studyReview.messages[0].content.includes('User-selected Study mode')&&
+   !$('consent').checked&&network===1,'study-uses-reviewed-model-context');
+  studyMode.click();
+  assert($('request-review').hidden&&!$('consent').checked,'changing-study-mode-revokes-review');
+  $('prepare').click();assert(!$('request-review').hidden&&!$('consent').checked,'review-required-before-send');assert(!$('request-context').textContent.includes('REVIEWED SECRET MEMORY'),'memory-not-sent-by-default');
   $('use-memory').checked=true;$('use-memory').dispatchEvent(new Event('input'));assert($('request-review').hidden,'context-change-invalidates-approval');$('use-sources').checked=true;$('prepare').click();assert($('request-context').textContent.includes('REVIEWED SECRET MEMORY')&&$('request-context').textContent.includes('notes.txt'),'exact-selected-context-visible');
   const count=network;$('send-model').click();assert(network===count,'unapproved-send-does-not-connect');$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));$('send-model').click();await wait(()=>current().threads[0].nodes.at(-1)?.origin==='model');assert(posted.consent===true&&posted.configuration_id==='a'.repeat(64),'approved-request-binds-configuration');assert(!JSON.stringify(posted).includes('TRANSIENT ACCESS TOKEN'),'gateway-token-excluded-from-context');
   $('regenerate').click();assert(!$('request-review').hidden,'regenerate-prepares-another-branch');$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));$('send-model').click();await wait(()=>$('request-review').hidden);assert($('branch').options.length>=3,'regenerate-keeps-original-answer');
