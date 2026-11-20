@@ -14,11 +14,20 @@ window.addEventListener('load',async()=>{
  const fill=(id,text)=>{$(id).value=text;$(id).dispatchEvent(new Event('input',{bubbles:true}))};
  const file=(id,name,text)=>{const dt=new DataTransfer();dt.items.add(new File([text],name));$(id).files=dt.files;$(id).dispatchEvent(new Event('change'))};
  const snapshot=()=>NexusStudioUI.snapshot(),project=()=>snapshot().projects.find(p=>p.id===$('projects').value);
- let providerCalls=0,searchCalls=0;
+ let providerCalls=0,searchCalls=0,catalogCalls=0,connectionActions=0;
+ const closeConnection=async()=>{const d=$('studio-connections');const closed=new Promise(r=>d.addEventListener('close',r,{once:true}));$('studio-connections-close').click();await closed};
  window.confirm=()=>true;
  window.fetch=async(url,options={})=>{
   if(String(url).endsWith('/studio-api/status'))return new Response(JSON.stringify({configured:true,model:'synthetic',provider_host:'synthetic.invalid',configuration_id:'a'.repeat(64)}));
   if(String(url).endsWith('/studio-api/respond')){providerCalls++;return new Response(JSON.stringify({text:'Fake response',model:'synthetic',origin:'model',authority:'none'}))}
+  if(String(url).endsWith('/studio-api/connections')){
+   catalogCalls++;
+   return new Response(JSON.stringify({connections:[
+    {provider:'github',target:'example/nexus',configuration_id:'a'.repeat(64)},
+    {provider:'render',target:'srv-test',configuration_id:'b'.repeat(64)}
+   ]}));
+  }
+  if(String(url).includes('/studio-api/connections/')){connectionActions++;throw Error('unreviewed-provider-call')}
   if(String(url).startsWith('https://en.wikipedia.org/')){searchCalls++;return new Response(JSON.stringify({query:{pages:{42:{pageid:42,title:'Source title',extract:'Unverified live source note from Wikipedia.'}}}}))}
   throw Error('unexpected-network');
  };
@@ -100,7 +109,16 @@ window.addEventListener('load',async()=>{
   $('nexus-zen-offer').querySelector('button').click();
   assert($('studio-connections').open,'github-proposal-opens-connection-review');
   assert($('message').value==='/github list open pull requests','github-draft-retained');
-  $('studio-connections-close').click();
+  assert($('studio-connections').textContent.includes('GitHub')&&catalogCalls===0,
+   'github-provider-selected-without-implicit-network');
+  fill('gateway-token','test-connector-access');
+  $('studio-connections-load').click();
+  await wait(()=>$('studio-connections').querySelector('select').options.length===2);
+  let operations=$('studio-connections').querySelector('select');
+  assert(operations.value==='github.pulls','github-appropriate-operation-selected');
+  assert([...operations.options].every(x=>x.value.startsWith('github.')),'github-target-isolation');
+  assert(catalogCalls===1&&connectionActions===0,'catalog-requires-approval-and-never-executes');
+  await closeConnection();
   // Natural-language discovery is opt-in through the local-guide composer.
   // Explicit slash commands remain available in model mode.
   const chooser=$('studio-compose-mode');
@@ -111,8 +129,23 @@ window.addEventListener('load',async()=>{
   assert(!$('nexus-zen-offer').hidden,'render-discovery-requires-review');
   $('nexus-zen-offer').querySelector('button').click();
   assert($('studio-connections').open,'render-proposal-opens-review-dialog');
-  assert(providerCalls===2&&searchCalls===1,'connection-routing-has-no-hidden-provider-side-effects');
-  $('studio-connections-close').click();
+  assert(catalogCalls===1,'render-preview-does-not-auto-load-catalog');
+  $('studio-connections-load').click();
+  await wait(()=>$('studio-connections').querySelector('select').options.length===1);
+  operations=$('studio-connections').querySelector('select');
+  assert(operations.value==='render.deploys'&&catalogCalls===2,'render-deployments-preselected');
+  assert(providerCalls===2&&searchCalls===1&&connectionActions===0,'connection-routing-has-no-hidden-provider-side-effects');
+  await closeConnection();
+  fill('message','/github create branch');
+  chatSend.click();$('nexus-zen-offer').querySelector('button').click();
+  assert(catalogCalls===2,'branch-intent-does-not-read-remotely');
+  $('studio-connections-load').click();
+  await wait(()=>$('studio-connections').querySelector('select').options.length===2);
+  operations=$('studio-connections').querySelector('select');
+  assert(operations.selectedIndex===-1&&!$('studio-connections-read').offsetParent,
+   'unavailable-write-action-never-silently-falls-back-to-read');
+  assert(connectionActions===0,'unavailable-branch-not-executed');
+  await closeConnection();
   fill('message','/unknown do something');
   assert(!chatSend.textContent.includes('Review Connections'),'unsupported-command-not-misrouted');
 
