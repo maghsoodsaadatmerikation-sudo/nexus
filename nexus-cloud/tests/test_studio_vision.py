@@ -78,6 +78,23 @@ def test_image_forwarded_once_with_policy_and_no_tool_authority(monkeypatch):
     assert len(seen) == 1
 
 
+
+def test_vision_status_is_honest_and_does_not_contact_provider(monkeypatch):
+    with configured(monkeypatch, lambda _: pytest.fail('status must not contact a model')) as c:
+        status = c.get('/studio-api/vision-status')
+        assert status.status_code == 200
+        body = status.json()
+        assert body['configured'] is True and body['model'] == 'vision-model'
+        assert body['provider_host'] == 'provider.example'
+        assert body['configuration_id'] == vision_body()['configuration_id']
+        assert body['authority'] == 'none' and status.headers['cache-control'] == 'no-store'
+        assert 'provider-secret' not in status.text and TOKEN not in status.text
+        monkeypatch.setenv('NEXUS_VISION_ENABLED', '0')
+        off = c.get('/studio-api/vision-status').json()
+        assert off['configured'] is False and off['model'] is None
+        assert off['configuration_id'] is None
+
+
 def test_vision_disabled_by_default_and_unsupported_adapter(monkeypatch):
     with configured(monkeypatch, lambda _: pytest.fail('disabled vision forwarded')) as c:
         monkeypatch.delenv('NEXUS_VISION_ENABLED')
