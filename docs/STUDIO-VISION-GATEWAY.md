@@ -1,0 +1,61 @@
+# NEXUS Studio — opt-in image understanding gateway (API stage)
+
+## What is implemented
+
+An authenticated endpoint, POST /studio-api/vision, accepts one reviewed question and
+one PNG or JPEG image for an operator-configured Chat Completions-compatible vision
+model. It returns a text draft. This is API infrastructure only: there is no
+Studio chat image picker, configured vision model, public rollout, or image-quality
+evaluation yet.
+
+The endpoint is disabled unless a valid NEXUS_MODEL_URL, NEXUS_MODEL_ID and
+NEXUS_STUDIO_TOKEN are configured, the operator sets NEXUS_VISION_ENABLED=1,
+and NEXUS_MODEL_ADAPTER=generic. A selected provider must separately support
+image input; setting the flag does not verify it. API keys remain server-side.
+
+## Exact request contract
+
+Send JSON with Authorization: Bearer <NEXUS_STUDIO_TOKEN>:
+
+    {
+      "consent": true,
+      "configuration_id": "<64 lowercase hex from GET /studio-api/status>",
+      "prompt": "Describe the objects shown.",
+      "mime_type": "image/png",
+      "image_base64": "<canonical base64 bytes>",
+      "max_output_tokens": 1024
+    }
+
+Consent must be JSON boolean true, not a truthy number/string. Reconfiguration
+invalidates the request fingerprint with HTTP 409. A future caller/UI must
+preview the specific image and question, reveal provider privacy implications,
+and obtain human consent. The API checks consent and authentication but cannot
+independently establish what the person actually previewed.
+
+## Bounds and limitations
+
+- Request JSON at most 2.1 MB; exactly one image up to 1.5 MB.
+- PNG/JPEG only, with matching magic and structural markers. PNG chunk CRC is
+  checked. Max 4,096 pixels each side and 8 million total pixels.
+- Noncanonical base64, unsupported types, external image URLs, oversized
+  images and dimensions are rejected.
+- Prompt up to 4,000 characters; output budget 1–4,096 tokens.
+- Shared four-request model concurrency, a 45-second deadline, bounded text
+  response, no redirects, no tool calls and Cache-Control: no-store.
+- The provider receives an embedded data URL, not an attacker-supplied URL.
+- No raw image is written to NEXUS's project archive by this endpoint.
+  The configured model provider DOES receive the image. Its own pricing,
+  retention and logs still apply, as do the host's infrastructure logs.
+- Image instructions are treated as untrusted model input; this is not
+  guaranteed defense against prompt injection or evidence of answer accuracy.
+- Format validation is not a complete image decoder or malware scanner.
+- This is not verified OCR, medical image interpretation, face recognition,
+  production readiness, or autonomous multimodal reasoning.
+
+## Verification and next stage
+
+Synthetic tests are in nexus-cloud/tests/test_studio_vision.py and cover the
+authorization, image bounds, request forwarding, provider response rejection,
+redirect refusal, and bounded recovery. The normal cloud-adapter CI must pass.
+Actual provider integration, browser file preview/consent flow, image lifetime
+management, costs, mobile QA, and public deployment remain separate work.
