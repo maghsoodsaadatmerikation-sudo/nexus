@@ -84,7 +84,8 @@ panel.addEventListener('keydown', event => {
 start.onclick = () => {
   const Engine = recognition();
   if (!Engine || current || !contextStillOpen()) return;
-  const room = message.maxLength - message.value.length;
+  const separator = /\S$/.test(message.value) ? ' ' : '';
+  const room = message.maxLength - message.value.length - separator.length;
   if (room <= 0) {
     status.textContent = words('The message is full.', 'کادر پیام پر است.');
     return;
@@ -106,6 +107,13 @@ start.onclick = () => {
   engine.lang = document.documentElement.lang === 'fa' ? 'fa-IR' : document.documentElement.lang;
   engine.continuous = true;
   engine.interimResults = false;
+  engine.onstart = () => {
+    if (current === session && contextStillOpen()) return;
+    if (current === session) hide();
+    else {
+      try { engine.abort(); } catch {}
+    }
+  };
   engine.onresult = ({resultIndex, results}) => {
     if (current !== session || !contextStillOpen()) return;
     for (let i = resultIndex; i < results.length && session.text.length < room; i += 1) {
@@ -118,8 +126,8 @@ start.onclick = () => {
     if (current !== session) return;
     if (!contextStillOpen()) { hide(); return; }
     finish();
-    const separator = /\S$/.test(message.value) ? ' ' : '';
-    const text = session.text.slice(0, Math.max(0, room - separator.length));
+    // The textarea limit counts UTF-16 code units. Drop a trailing half-surrogate.
+    const text = session.text.replace(/[\uD800-\uDBFF]$/, '');
     if (!text) {
       status.textContent = words('No speech was transcribed.', 'گفتاری به متن تبدیل نشد.');
       return;
