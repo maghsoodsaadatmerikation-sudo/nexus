@@ -86,6 +86,22 @@ function intent(value){
  const query=kind==='research'||kind==='orchestra'?message.slice(prefix?.[0].length||0):'';
  return route?{route,query}:null;
 }
+/* Advisory mapping only; no operation is executed from text classification.
+ * The connection dialog verifies actual provider permissions after a separate
+ * user-triggered catalog load and requires explicit review before each action.
+ */
+function connectionRequest(result,message){
+ const kind=result.route[0];
+ if(kind==='connections')return {};
+ if(kind==='render')return {provider:'render',operation:'render.deploys'};
+ if(kind!=='github')return null;
+ const text=message.replace(/^\/[a-z-]+\s*/i,'').slice(0,340).toLocaleLowerCase();
+ const operation=/(?:edit|commit|ویرایش|اصلاح\s+فایل|تغییر\s+فایل)/i.test(text)?'github.edit':
+  /(?:branch|شاخه)/i.test(text)?'github.branch':
+  /(?:file|readme|فایل)/i.test(text)?'github.file':
+  /(?:pull\s*requests?|\bpr\b|درخواست(?:‌|\s)*ادغام)/i.test(text)?'github.pulls':null;
+ return {provider:'github',operation};
+}
 let offeredDraft=null;
 function clearOffer(){
  offeredDraft=null;offer.hidden=true;offer.replaceChildren();
@@ -109,9 +125,12 @@ function offerTool(message,result){
    input.dispatchEvent(new Event('input',{bubbles:true}));
   }
   if(panel==='studio-connections'){
-   // Opening the review dialog never performs network requests or grants authority.
-   const entry=$('studio-connections-open');
-   if(entry&&!entry.disabled)entry.click();
+   // Opening a chosen review surface never fetches or grants permission.
+   const request=connectionRequest(result,message);
+   if(!window.NexusStudioConnections?.openFor?.(request)){
+    const entry=$('studio-connections-open');
+    if(entry&&!entry.disabled)entry.click();
+   }
   }else window.NexusStudioFocus?.openPanel(panel);
  });
  const dismiss=document.createElement('button');dismiss.type='button';dismiss.className='secondary';
