@@ -28,8 +28,8 @@ class Runner{
   let done=false,running=0,resolve,timer;const controls=new Map();const promise=new Promise(r=>resolve=r);
   const emit=()=>{try{onUpdate(snapshot())}catch{ /* observers cannot stall execution */ }};
   const finish=()=>{if(done)return;done=true;clearTimeout(timer);this.active=null;emit();resolve(snapshot())};
-  const cancel=()=>{if(done)return;for(const r of rows)if(['queued','running'].includes(r.status)){r.status='cancelled';r.error='cancelled'}for(const c of controls.values()){c.abort.abort();try{c.worker.cancel()}catch{}}controls.clear();finish()};
-  this.active={cancel};timer=setTimeout(cancel,60000);
+  const cancel=(reason='cancelled')=>{if(done)return;for(const r of rows)if(['queued','running'].includes(r.status)){r.status='cancelled';r.error=reason}for(const c of controls.values()){c.abort.abort();try{c.worker.cancel()}catch{}}controls.clear();finish()};
+  this.active={cancel};timer=setTimeout(()=>cancel('deadline-exceeded'),60000);
   const pump=()=>{
    if(done)return;
    for(const j of plan.jobs){const r=byId.get(j.id);if(r.status!=='queued')continue;

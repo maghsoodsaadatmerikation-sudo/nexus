@@ -47,11 +47,24 @@ window.addEventListener('load',async()=>{
   assert($('music-report').textContent.includes('Clipped PCM frames: 0'),'unclipped-wave-output');
   $('music-wav').click();
   assert(created.some(x=>x.type==='audio/wav'&&x.size>200000),'real-rendered-wave-download');
+  $('music-render').click();
+  assert(!$('music-report').textContent.includes('Measured WAV diagnostics')&&$('music-wav').disabled,
+   'starting-a-new-render-clears-previous-diagnostics-and-download');
+  $('music-cancel').click();
+  assert(NexusMusicUI.hasScore()&&!$('music-report').textContent.includes('Measured WAV diagnostics'),
+   'cancelled-render-displays-only-the-current-score');
+  $('music-render').click();await wait(()=>NexusMusicUI.hasWav(),900);
+  assert($('music-report').textContent.split('Measured WAV diagnostics').length===2,
+   'only-the-current-wav-has-diagnostics');
   $('music-sound').value='classic';$('music-sound').dispatchEvent(new Event('change',{bubbles:true}));
   assert(NexusMusicUI.hasScore()&&!NexusMusicUI.hasWav(),'timbre-ab-preserves-original-score-not-old-audio');
   assert(!$('music-render').disabled,'classic-synth-option-available');
   $('music-sound').value='expressive';$('music-sound').dispatchEvent(new Event('change',{bubbles:true}));
   assert(net===0,'no-suno-or-api-request');
+  $('music-render').click();
+  window.dispatchEvent(new Event('pagehide'));
+  assert(!$('music-render').disabled&&$('music-cancel').disabled&&NexusMusicUI.hasScore()&&!NexusMusicUI.hasWav(),
+   'pagehide-cancels-active-render-without-stranding-controls');
   // Repeat a setup change during the start of a new render: no stuck buttons.
   $('music-render').click();
   $('music-bpm').value='120';$('music-bpm').dispatchEvent(new Event('change',{bubbles:true}));
