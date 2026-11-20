@@ -85,18 +85,20 @@ function renderChatAttachments(){
 // v1 lifecycle contract: workspace tools are separate from private tab-only audio.
 const TOOL_LIFECYCLE=Object.freeze({
  version:'nexus.studio.tool-lifecycle.v1',
- cancel:Object.freeze([['NexusQualityUI','cancel'],['NexusAstrologyUI','cancel'],['NexusLabUI','cancel']]),
- project:Object.freeze([['NexusCalendar','clear'],['NexusTasksUI','clear'],['NexusQualityUI','clear'],['NexusAstrologyUI','clear'],['NexusLabUI','clear']]),
- private:Object.freeze([['NexusDevice','unload'],['NexusCalendar','clear'],['NexusTasksUI','clear'],['NexusQualityUI','clear'],
+ cancel:Object.freeze([['NexusStudioVision','cancel'],['NexusQualityUI','cancel'],['NexusAstrologyUI','cancel'],['NexusLabUI','cancel']]),
+ project:Object.freeze([['NexusStudioVision','clear'],['NexusCalendar','clear'],['NexusTasksUI','clear'],['NexusQualityUI','clear'],['NexusAstrologyUI','clear'],['NexusLabUI','clear']]),
+ private:Object.freeze([['NexusStudioVision','clear'],['NexusDevice','unload'],['NexusCalendar','clear'],['NexusTasksUI','clear'],['NexusQualityUI','clear'],
   ['NexusAstrologyUI','clear'],['NexusLabUI','clear'],['NexusMusicUI','clear'],['NexusOrchestraUI','clear']])
 });
 function unsavedLocalMedia(){
  // Preview buffers, unsaved scores and selected original vocals live outside the vault.
- return window.NexusMusicUI?.hasTransientWork?.()===true||
+ return window.NexusStudioVision?.hasTransientWork?.()===true||
+   window.NexusMusicUI?.hasTransientWork?.()===true||
   window.NexusOrchestraUI?.hasTransientWork?.()===true;
 }
 function hasToolWork(){
- return window.NexusCalendar?.hasTransientWork?.()===true||
+ return window.NexusStudioVision?.hasTransientWork?.()===true||
+   window.NexusCalendar?.hasTransientWork?.()===true||
   window.NexusLabUI?.hasTransientWork?.()===true||
   window.NexusTasksUI?.hasTransientWork?.()===true||
   window.NexusQualityUI?.hasTransientWork?.()===true;
@@ -198,7 +200,7 @@ function render(){
  $('source-list').replaceChildren();for(const s of p()?.sources||[]){const row=el('div',s.name+' · '+s.text.length);const b=el('button','×');b.disabled=busy;b.setAttribute('aria-label',language==='fa'?'حذف منبع':'Remove source');b.onclick=()=>mutate(v=>{const q=projectIn(v);q.sources=q.sources.filter(x=>x.id!==s.id)},{undoable:true});row.append(b);$('source-list').append(row)}
  $('documents').replaceChildren(...(p()?.documents||[]).map(d=>option(d.id,d.title)));$('documents').value=documentId||'';window.NexusLabUI?.render();window.NexusAstrologyUI?.render();window.NexusQualityUI?.render();renderChatAttachments();controls();
 }
-function hasChatDraft(){return Boolean($('message').value||chatAttachments.length||$('attach-document').checked)}
+function hasChatDraft(){return Boolean($('message').value||chatAttachments.length||$('attach-document').checked||window.NexusStudioVision?.hasTransientWork?.()===true)}
 function mayReplaceChat(){return !hasChatDraft()||confirm(t('discard'))}
 function mayReplace(){return (!forms()&&!hasChatDraft()&&!hasToolWork())||confirm(t('discard'))}
 function clearChatDraft(){
@@ -414,6 +416,20 @@ window.addEventListener('beforeunload',e=>{if(storageSnapshot().lossRisk){e.prev
 document.addEventListener('input',renderStorage);
 document.addEventListener('change',renderStorage);
 document.addEventListener('nexus-studio-media-state',renderStorage);
-window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,openConversation,selection:()=>({projectId,threadId}),lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
+function appendVisionResult({prompt,answer,selection}){
+  if(!selection||typeof prompt!=='string'||typeof answer!=='string'||
+     !prompt.trim()||prompt.length>4000||!answer.trim()||answer.length>24000||
+     busy||!chat()||chat().archived||branchBase!==selection.branchBase||
+     projectId!==selection.projectId||threadId!==selection.threadId||
+     revision!==selection.revision||chat().head!==selection.head||
+     $('message').value.trim()||chatAttachments.length||$('attach-document').checked)return false;
+  try{
+   const first=S.append(chat(),'user',prompt,'human',
+    branchBase===undefined?chat().head:branchBase,['Image supplied (binary not saved)']);
+   const completed=S.append(first,'assistant',answer,'model');
+   return installThread(completed);
+  }catch{return false}
+}
+window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,openConversation,selection:()=>({projectId,threadId,head:chat()?.head||null,revision,branchBase}),appendVisionResult,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
