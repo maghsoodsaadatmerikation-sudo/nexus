@@ -2583,7 +2583,13 @@ function offerTool(message,result){
   // suggestion slot that may have been invalidated by unrelated UI updates.
   const current=$('message').value===message;
   clearOffer();
-  if(current){refresh();run({routeTools:false})}
+  if(!current||window.NexusStudioUI.uiStatus().busy)return;
+  // The chosen continuation must explicitly establish a chat before the
+  // legacy local guide, which otherwise requires an existing conversation.
+  if(!window.NexusStudioUI.uiStatus().threadReady&&!window.NexusStudioUI.startConversation()){
+   refresh();return;
+  }
+  refresh();run({routeTools:false});
  });
  offer.append(p,open,proceed,dismiss);
 }
