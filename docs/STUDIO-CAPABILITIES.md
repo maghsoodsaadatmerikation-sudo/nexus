@@ -155,7 +155,7 @@ reference for the consumer-plan features below.
 | ChatGPT capability | NEXUS boundary after this change | Required next dependency |
 | --- | --- | --- |
 | Hosted frontier-model reasoning | No hosted model/key supplied | A funded/authorized provider or a separately hosted local model with sufficient compute |
-| Live web retrieval / deep research | Combined, consented Wikipedia/Crossref retrieval and a selected-source brief; autonomous multi-step research is pending | Broader search APIs, source verification, model/tool orchestration and source-quality evaluations |
+| Live web retrieval / deep research | Review and run up to four queries, one per line, against Wikipedia, Crossref or both. Duplicate results retain their matching queries, and selected sources can be exported or attached to the chat. | Broader search APIs, source verification, model/tool orchestration and source-quality evaluations |
 | Image understanding / OCR | The chat image picker and bounded PNG/JPEG vision route are implemented with separate consent and an operator-set request allowance | Compatible vision provider, deployment verification and quality tests, including OCR |
 | Image/video generation | Not implemented | A connected generation provider, usage authorization and media QA |
 | Real-time voice conversation | Opt-in microphone dictation and local read-aloud | A real-time audio provider, microphone permissions, interruption tests and device QA |

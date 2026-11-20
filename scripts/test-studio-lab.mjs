@@ -15,6 +15,32 @@ const partial=await L.researchBatch('both','solar fields','en',undefined,async(u
 ok(()=>assert.deepEqual(partial.failed,['crossref']));
 ok(()=>assert.equal(partial.cards.length,1));
 ok(()=>assert.deepEqual(batchUrls.map(url=>[url.hostname,url.searchParams.get('gsrsearch')||url.searchParams.get('query')]),[['en.wikipedia.org','solar fields'],['api.crossref.org','solar fields']]));
+const planRequests=[],progress=[];
+const plan=await L.researchPlan('both',' solar fields \r\n\n solar farms \n solar fields','en',undefined,
+ (...step)=>progress.push(step),async(url,options)=>{
+  const dest=new URL(url),query=dest.searchParams.get('gsrsearch')||dest.searchParams.get('query');
+  planRequests.push([dest.hostname,query]);assert.equal(options.credentials,'omit');
+  return dest.hostname==='en.wikipedia.org'?Response.json(wiki):new Response('',{status:503});
+ });
+ok(()=>assert.deepEqual(planRequests,[['en.wikipedia.org','solar fields'],['api.crossref.org','solar fields'],
+ ['en.wikipedia.org','solar farms'],['api.crossref.org','solar farms']]));
+ok(()=>assert.deepEqual(progress,[[1,2],[2,2]]));
+ok(()=>assert.equal(plan.cards.length,1));
+ok(()=>assert.deepEqual(plan.cards[0].queries,['solar fields','solar farms']));
+ok(()=>assert.equal(plan.successful,2));
+ok(()=>assert.deepEqual(plan.failed,['crossref']));
+ok(()=>assert(L.researchBrief(plan.cards).includes('Query: solar farms')));
+for(const invalid of ['', 'one\ntwo\nthree\nfour\nfive', 'x'.repeat(251)]){
+ await assert.rejects(()=>L.researchPlan('both',invalid,'en',undefined,undefined,()=>assert.fail('invalid plan fetched')));
+ checks++;
+}
+const abort=new AbortController();
+let calls=0;
+const stopped=await L.researchPlan('wikipedia','first\nsecond','en',abort.signal,()=>abort.abort(),
+ async()=>{calls++;return Response.json(wiki)});
+ok(()=>assert.equal(calls,1));
+ok(()=>assert.equal(stopped.timedOut,true));
+ok(()=>assert.deepEqual(stopped.cards[0].queries,['first']));
 const brief=L.researchBrief([...w,...c]);
 ok(()=>assert(brief.includes('[1] <img src=x>')&&brief.includes('https://doi.org/')&&brief.includes('bibliographic-metadata-only')));
 ok(()=>assert.throws(()=>L.researchBrief(Array(6).fill(w[0]))));
