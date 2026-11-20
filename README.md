@@ -1,10 +1,12 @@
 # NEXUS
 
-**Constitutional infrastructure for human judgment.**
+**An AI assistant built to support human judgment.**
 
 Created by **Maryam Najafi** · [maryamnajafi4991@gmail.com](mailto:maryamnajafi4991@gmail.com)
 
-NEXUS is a Rust-based constitutional core, epistemic workspace, authenticated HTTP gateway, browser client, and verification pipeline designed to help humans examine questions, evidence, alternatives, uncertainty, and consequences without transferring meaning, identity, or final decision authority to a machine.
+Use NEXUS to chat, write, research, analyze files, code, and make music. When a choice matters, turn on **Decision support** in Studio to compare options against your priorities, examine the evidence and consequences, and identify what would change the recommendation. You decide what to do with the result.
+
+Studio offers a local decision guide and model-assisted answers with a configured model. The Rust core records human judgment through a separate, explicit human action. [Current capabilities and availability](docs/STUDIO-CAPABILITIES.md).
 
 ## Core principle
 

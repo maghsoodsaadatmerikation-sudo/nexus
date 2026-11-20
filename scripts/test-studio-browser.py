@@ -130,6 +130,22 @@ window.addEventListener('load',async()=>{
    !$('consent').checked&&network===1,'study-uses-reviewed-model-context');
   studyMode.click();
   assert($('request-review').hidden&&!$('consent').checked,'changing-study-mode-revokes-review');
+  const decisionMode=$('decision-mode');
+  studyMode.click();decisionMode.click();
+  assert(!studyMode.checked&&!$('decision-mode-help').hidden,'decision-mode-and-study-are-exclusive');
+  fill('message','Launch today or wait for feedback?');$('guide').click();
+  assert($('messages').textContent.includes('Local decision guide')&&
+   $('messages').textContent.includes('smallest reversible next step')&&
+   current().threads[0].nodes.at(-1).origin==='guide'&&network===1,'decision-guide-is-local-and-advisory');
+  fill('message','orchard trees');$('prepare').click();
+  const decisionReview=JSON.parse($('request-context').textContent);
+  assert(decisionReview.response_style==='decision'&&
+   decisionReview.messages[0].content.includes('User-selected Decision support')&&
+   decisionReview.messages.at(-1).content==='orchard trees'&&
+   !$('consent').checked&&network===1,'decision-mode-discloses-exact-model-context');
+  decisionMode.click();
+  assert($('request-review').hidden&&!$('consent').checked&&$('decision-mode-help').hidden,
+   'changing-decision-mode-revokes-review');
   $('prepare').click();assert(!$('request-review').hidden&&!$('consent').checked,'review-required-before-send');assert(!$('request-context').textContent.includes('REVIEWED SECRET MEMORY'),'memory-not-sent-by-default');
   $('use-memory').checked=true;$('use-memory').dispatchEvent(new Event('input'));assert($('request-review').hidden,'context-change-invalidates-approval');$('use-sources').checked=true;$('prepare').click();assert($('request-context').textContent.includes('REVIEWED SECRET MEMORY')&&$('request-context').textContent.includes('notes.txt'),'exact-selected-context-visible');
   const count=network;$('send-model').click();assert(network===count,'unapproved-send-does-not-connect');$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));$('send-model').click();await wait(()=>current().threads[0].nodes.at(-1)?.origin==='model');assert(posted.consent===true&&posted.configuration_id==='a'.repeat(64),'approved-request-binds-configuration');assert(!JSON.stringify(posted).includes('TRANSIENT ACCESS TOKEN'),'gateway-token-excluded-from-context');

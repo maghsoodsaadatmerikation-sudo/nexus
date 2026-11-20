@@ -109,7 +109,7 @@ window.addEventListener('load',async()=>{
 """
 
 def main():
-    chrome=next((shutil.which(n) for n in ("chromium","google-chrome") if shutil.which(n)),None)
+    chrome=next((shutil.which(n) for n in ("google-chrome","chromium") if shutil.which(n)),None)
     if not chrome:
         raise RuntimeError("real Chromium required")
     html=(ROOT/"web/studio.html").read_text()
