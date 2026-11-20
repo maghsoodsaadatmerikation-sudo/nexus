@@ -27,6 +27,11 @@ A separate optional server-side model bridge requires a real configured
 provider; the local guide is labeled non-generative. No provider has been funded
 or provisioned by this implementation. [Features, comparison, setup and limits](docs/STUDIO-CAPABILITIES.md).
 
+An optional, operator-disabled-by-default [image understanding API](docs/STUDIO-VISION-GATEWAY.md)
+now accepts a reviewed single PNG/JPEG and prompt for a separately configured
+vision-capable model. It does **not** yet provide image upload in the Studio chat
+interface, verified OCR, real-provider acceptance or a deployed public feature.
+
 ## Open Studio on a phone
 
 The independent static Studio is at
