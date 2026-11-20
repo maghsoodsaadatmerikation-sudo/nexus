@@ -19,8 +19,18 @@ window.addEventListener('load',async()=>{
  const current=()=>snapshot().projects.find(p=>p.id===$('projects').value);
  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  let network=0,posted=null,delayResponse=null,late=false;
+ const formattedReply=[
+  '# Synthetic answer',
+  'Read **carefully** with `sample()` and *context*.',
+  '- First item','- Second item','3. Third step','4. Fourth step',
+  '> An attributed quote',
+  '```text','<div>literal code</div>','```',
+  '| Term | Meaning |','| --- | --- |','| مثال | Example |',
+  '[Source](https://example.org/reference) [Blocked](javascript:blocked) ![image](https://example.org/image.png)',
+  '<img src=x onerror="invalid()">'
+ ].join('\n');
  window.confirm=()=>true;window.prompt=()=> 'Renamed conversation';
- window.fetch=async(url,options={})=>{network++;if(String(url).endsWith('/status'))return new Response(JSON.stringify({configured:true,configuration_id:'a'.repeat(64),model:'synthetic-model',provider_host:'synthetic.invalid'}));posted=JSON.parse(options.body);const response=()=>new Response(JSON.stringify({text:'SYNTHETIC MODEL DRAFT',origin:'model',model:'synthetic-model',authority:'none'}));if(late)return new Promise(resolve=>delayResponse=()=>resolve(response()));return response()};
+ window.fetch=async(url,options={})=>{network++;if(String(url).endsWith('/status'))return new Response(JSON.stringify({configured:true,configuration_id:'a'.repeat(64),model:'synthetic-model',provider_host:'synthetic.invalid'}));posted=JSON.parse(options.body);const response=()=>new Response(JSON.stringify({text:formattedReply,origin:'model',model:'synthetic-model',authority:'none'}));if(late)return new Promise(resolve=>delayResponse=()=>resolve(response()));return response()};
  try{
   assert(document.documentElement.lang==='en'&&document.documentElement.dir==='ltr'&&
    $('language').value==='en'&&$('language').options[0].defaultSelected,'english-first');
@@ -123,6 +133,23 @@ window.addEventListener('load',async()=>{
   $('prepare').click();assert(!$('request-review').hidden&&!$('consent').checked,'review-required-before-send');assert(!$('request-context').textContent.includes('REVIEWED SECRET MEMORY'),'memory-not-sent-by-default');
   $('use-memory').checked=true;$('use-memory').dispatchEvent(new Event('input'));assert($('request-review').hidden,'context-change-invalidates-approval');$('use-sources').checked=true;$('prepare').click();assert($('request-context').textContent.includes('REVIEWED SECRET MEMORY')&&$('request-context').textContent.includes('notes.txt'),'exact-selected-context-visible');
   const count=network;$('send-model').click();assert(network===count,'unapproved-send-does-not-connect');$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));$('send-model').click();await wait(()=>current().threads[0].nodes.at(-1)?.origin==='model');assert(posted.consent===true&&posted.configuration_id==='a'.repeat(64),'approved-request-binds-configuration');assert(!JSON.stringify(posted).includes('TRANSIENT ACCESS TOKEN'),'gateway-token-excluded-from-context');
+  const formatted=$('messages').querySelector('.reply-format');
+  assert(formatted.querySelector('h3').textContent==='Synthetic answer'&&formatted.querySelector('p strong').textContent==='carefully'&&
+   formatted.querySelector('p code').textContent==='sample()'&&formatted.querySelector('p em').textContent==='context',
+   'finished-reply-displays-headings-and-inline-formatting');
+  assert(formatted.querySelectorAll('ul > li').length===2&&formatted.querySelector('ol').start===3&&
+   formatted.querySelector('blockquote').textContent==='An attributed quote','finished-reply-displays-lists-and-quotations');
+  assert(formatted.querySelector('pre code').textContent==='<div>literal code</div>'&&
+   formatted.querySelector('table tbody td').textContent==='مثال','code-and-table-render-as-structured-text');
+  const links=formatted.querySelectorAll('a');
+  assert(links.length===1&&links[0].href==='https://example.org/reference'&&links[0].rel.includes('noreferrer')&&
+   !formatted.querySelector('img')&&formatted.textContent.includes('[Blocked](javascript:blocked)'),
+   'plain-html-and-unsafe-links-cannot-become-interactive-elements');
+  let copiedReply;
+  Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{copiedReply=text}}});
+  formatted.parentElement.querySelector('[data-chat-copy]').click();
+  await wait(()=>copiedReply!==undefined);
+  assert(copiedReply===formattedReply&&current().threads[0].nodes.at(-1).text===formattedReply,'copy-and-history-keep-original-markdown');
   const regenerate=$('regenerate');
   assert(!regenerate.hidden&&!regenerate.disabled&&getComputedStyle(regenerate).display!=='none','retry-is-visible-in-chat');
   fill('message','Keep this unsent follow-up');

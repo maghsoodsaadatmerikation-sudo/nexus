@@ -204,8 +204,10 @@ function renderMessage(n){
  const item=el('article','');
  item.className='message '+n.role;
  item.append(el('strong',t(n.origin==='human'?'human':n.origin==='model'?'model':'local')));
- const body=el('div',n.text);
- body.className='body';body.dir='auto';item.append(body);
+ const body=el('div',n.origin==='model'?'':n.text);
+ body.className='body';body.dir='auto';
+ if(n.origin==='model')NexusReplyFormat.render(body,n.text);
+ item.append(body);
  if(n.role==='user'){
   if(n.attached_files?.length)item.append(el('small',t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' · '+t('chatFilesNotSaved')));
   const edit=el('button',t('edit'));
