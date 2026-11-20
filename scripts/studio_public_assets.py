@@ -3,9 +3,9 @@
 from pathlib import Path
 import stat
 
-# Bounded standalone HTML budget, including local Office text extraction.
+# Bounded standalone HTML budget, including the bilingual first-run experience and local Office text extraction.
 # User-selected images are never part of the bundle.
-MAX_FILE = 580_000
+MAX_FILE = 585_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000

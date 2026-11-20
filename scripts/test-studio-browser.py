@@ -35,6 +35,17 @@ window.addEventListener('load',async()=>{
   assert(document.documentElement.lang==='en'&&document.documentElement.dir==='ltr'&&
    $('language').value==='en'&&$('language').options[0].defaultSelected,'english-first');
   assert(!snapshot().projects.length&&!$('use-memory').checked,'empty-temporary-session-memory-off');
+  const example=$('studio-judgment-example');
+  assert(document.querySelector('[data-t="subtitle"]').textContent==='An AI assistant that supports your judgment.'&&
+   $('studio-focus-onboarding').textContent.includes('You make the final decision.'),'onboarding-explains-human-judgment');
+  fill('message','Keep the current draft');
+  example.click();
+  assert(example.disabled&&$('message').value==='Keep the current draft','decision-example-preserves-unsent-draft');
+  fill('message','');example.click();
+  assert($('message').value.includes('Separate the evidence from assumptions')&&
+   document.activeElement===$('message')&&snapshot().projects.length===0&&network===0,
+   'decision-example-is-editable-and-does-not-send-or-create-a-project');
+  fill('message','');
   const offer=$('nexus-zen-offer'),compose=$('studio-compose-send');
   $('nexus-zen-suggestions').querySelector('button').click();
   assert(NexusStudioFocus.active()==='music-card'&&!$('message').value&&snapshot().projects.length===0,
