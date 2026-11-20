@@ -130,7 +130,7 @@ reference for the consumer-plan features below.
 | --- | --- | --- |
 | Hosted frontier-model reasoning | No hosted model/key supplied | A funded/authorized provider or a separately hosted local model with sufficient compute |
 | Live web retrieval / deep research | Combined, consented Wikipedia/Crossref retrieval and a selected-source brief; autonomous multi-step research is pending | Broader search APIs, source verification, model/tool orchestration and source-quality evaluations |
-| Image understanding / OCR | Studio extracts selectable PDF text locally; image recognition and OCR are pending | A vision/OCR provider, image limits and actual image-quality tests |
+| Image understanding / OCR | An opt-in bounded PNG/JPEG vision **API** now exists; no chat image picker, provider provision, OCR validation or public rollout | Operator-configured compatible vision provider, reviewed Studio image UI and real image-quality/security tests |
 | Image/video generation | Not implemented | A connected generation provider, usage authorization and media QA |
 | Real-time voice conversation | Opt-in microphone dictation and local read-aloud | A real-time audio provider, microphone permissions, interruption tests and device QA |
 | Sandboxed Python/code execution | JavaScript Worker lab available; no Python or OS execution | An isolated Python/OS execution service with resource/network limits and reproducibility checks |
