@@ -3,7 +3,7 @@
 from pathlib import Path
 import stat
 
-MAX_FILE = 475_000
+MAX_FILE = 485_000
 FILES = (
     "index.html",
     "service-worker.js",

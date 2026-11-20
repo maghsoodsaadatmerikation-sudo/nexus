@@ -124,3 +124,38 @@ limit remains 1 MiB / 30 seconds; the Studio input limit remains 96,000 bytes /
 or consent review. See
 [`docs/CLOUD-TRANSPORT-ADMISSION-BOUNDARY-2026-11-17.md`](../docs/CLOUD-TRANSPORT-ADMISSION-BOUNDARY-2026-11-17.md)
 for invariants, tests, and the evidence boundary.
+
+
+## Studio connections
+
+Open **Connections** beside the chat tools. Set the Studio gateway URL and its
+operator access token, then load the configured connections. Pick a read action,
+review the displayed target, and approve the read. **Attach to next message**
+makes a separate temporary attachment. Sending the text to a configured model
+uses the normal Studio review and consent flow.
+
+Configure connections on an owner-only adapter. All settings below are optional
+except the Studio operator token when the API is used.
+
+| Setting | Purpose |
+| --- | --- |
+| `NEXUS_STUDIO_TOKEN` | Operator authentication (at least 32 characters). The local launcher creates its own token file. |
+| `NEXUS_CONNECTOR_GITHUB_REPO` | One repository, in `owner/repository` form. |
+| `NEXUS_CONNECTOR_GITHUB_TOKEN` | Optional fine-grained token for the selected repo. Use Contents read and Pull requests read permissions. Public repositories can be read without a provider token. |
+| `NEXUS_CONNECTOR_RENDER_SERVICE` | One Render service ID. |
+| `NEXUS_CONNECTOR_RENDER_TOKEN` | Server-side token with the narrowest available deployments read scope. |
+| `NEXUS_STUDIO_ORIGIN` | Exact public Studio origin when the UI and adapter run on different origins. |
+
+For local use, set the applicable connector environment variables before starting
+`uv run --project nexus-cloud --frozen python scripts/run-local-studio.py`.
+For remote use, put provider credentials in the owner's gateway secret settings.
+Only the Studio operator token goes into the Studio gateway field. Choose a
+gateway you control. Clear the provider token or target and restart the gateway
+to disable the private provider connection.
+
+The GitHub actions read open pull requests and UTF-8 files up to 24 KiB. The API
+also accepts an optional full Git commit SHA when reading a file. Render reads
+the latest eight deployments and returns only their identifiers, states, commit
+SHAs and creation times. Provider output is external context for review. This
+initial registry uses server-side credentials, and does not include an OAuth
+catalogue, code writes, pull-request creation or deployment triggers.

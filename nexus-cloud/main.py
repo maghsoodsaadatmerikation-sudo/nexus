@@ -12,6 +12,7 @@ import anyio
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+import studio_connections
 import studio_model
 from transport_bounds import read_bounded_body
 
@@ -62,6 +63,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         limits=httpx.Limits(max_connections=32, max_keepalive_connections=16),
     ) as client:
         app.state.client = client
+        app.state.connections_limiter = anyio.CapacityLimiter(4)
         app.state.model_limiter = anyio.CapacityLimiter(4)
         app.state.gateway_limiter = anyio.CapacityLimiter(MAX_DELEGATED_REQUESTS)
         yield
@@ -79,6 +81,7 @@ app = FastAPI(
 
 
 studio_model.register(app)
+studio_connections.register(app)
 if studio_origin := os.getenv("NEXUS_STUDIO_ORIGIN", "").strip():
     app.add_middleware(CORSMiddleware, allow_origins=[studio_origin],
                        allow_methods=["GET", "POST"],
