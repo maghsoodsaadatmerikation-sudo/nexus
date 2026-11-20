@@ -2850,7 +2850,9 @@ function openFor({provider=null,operation=null}={}){
 open.onclick=()=>openFor();
 close.onclick=()=>{if(discardFile())dialog.close()};
 dialog.addEventListener('cancel',event=>{if(!discardFile())event.preventDefault()});
-dialog.addEventListener('close',()=>{requestedProvider=requestedOperation=null;reset()});
+// A close event may be delivered after another review has already opened.
+// Never let the previous dialog lifecycle erase the newly opened operation.
+dialog.addEventListener('close',()=>{if(dialog.open)return;requestedProvider=requestedOperation=null;reset()});
 settings.onclick=()=>{
  if(!discardFile())return;
  dialog.close();document.dispatchEvent(new Event('nexus-studio-show-chat-options'));
