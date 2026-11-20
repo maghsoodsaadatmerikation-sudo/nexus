@@ -31,8 +31,10 @@ window.addEventListener('load',async()=>{
   $('nexus-zen-home').click();
   change('studio-compose-mode','model');fill('message','/research Explicit tool');
   assert(compose.textContent==='Review Research','explicit-tool-discoverable-in-model-mode');
-  compose.click();
+  $('message').focus();
+  $('message').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true}));
   assert(!offer.hidden&&$('request-review').hidden&&network===0,'explicit-tool-does-not-start-model-review');
+  assert(document.activeElement===offer.querySelector('button'),'tool-offer-focuses-review-action-from-keyboard');
   change('studio-compose-mode','guide');
   fill('message','تحليل فايل CSV');
   assert(compose.textContent==='Review Data analysis','persian-intent-shows-tool-before-submit');
@@ -55,6 +57,7 @@ window.addEventListener('load',async()=>{
   fill('message','/research Guide fallback');compose.click();offer.querySelectorAll('button')[1].click();
   assert(offer.hidden&&current().threads[0].nodes.length===2&&network===0,
    'declining-tool-can-continue-with-local-guide');
+  assert(document.activeElement===$('message'),'local-guide-fallback-restores-composer-focus');
   change('studio-compose-mode','model');$('studio-compose-config').click();
   assert($('nexus-zen-more').getAttribute('aria-expanded')==='true'&&$('studio-model-settings').open,
    'model-settings-shortcut-expands-chat-options');
