@@ -83,12 +83,25 @@ window.addEventListener('load',async()=>{
   assert(review.messages.length===1&&review.messages[0].text==='RECENT SAMPLE','training-review-works-with-history-off');
   $('training-opt-in').click();
   assert($('training-preview').hidden&&$('training-download').hidden&&!$('training-preview').textContent,'withdrawal-clears-training-review');
+  $('new-thread').click();
   fill('message','TEMPORARY MESSAGE');$('guide').click();
+  assert(!$('message').value&&NexusStudioUI.snapshot().projects[0].threads.at(-1).temporary===true,
+   'new-conversation-while-history-off-is-tab-only');
   $('history-days').value='';$('history-days').dispatchEvent(new Event('change',{bubbles:true}));
   $('save').click();await wait(()=>$('status').textContent.includes('encrypted data')&&!$('save').disabled);
   assert((await S.decrypt(await store.read(),pass)).data.projects[0].threads.length===0,'re-enabling-history-does-not-save-temporary-conversations');
   $('training-opt-in').click();$('training-review').click();
   assert(!$('training-preview').hidden&&$('training-preview').textContent.includes('TEMPORARY MESSAGE'),'review-binds-to-current-branch');
+  const createURL=URL.createObjectURL,clickAnchor=HTMLAnchorElement.prototype.click;
+  let downloaded;
+  try{
+   URL.createObjectURL=blob=>{downloaded=blob;return 'blob:synthetic-training-download'};
+   HTMLAnchorElement.prototype.click=()=>{};
+   window.confirm=()=>false;$('training-download').click();
+   assert(!downloaded,'declined-training-download-does-not-export');
+   window.confirm=()=>true;$('training-download').click();
+   assert(downloaded&&await downloaded.text()===$('training-preview').textContent,'training-download-matches-reviewed-text');
+  }finally{URL.createObjectURL=createURL;HTMLAnchorElement.prototype.click=clickAnchor;window.confirm=()=>true}
   $('lock').click();
   assert(!$('training-opt-in').checked&&$('training-preview').hidden&&!$('training-preview').textContent,'locking-revokes-training-opt-in');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,real_indexeddb_tested:true,network_requests:0,authority:'none'});
