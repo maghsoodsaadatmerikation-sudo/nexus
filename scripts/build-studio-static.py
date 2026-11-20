@@ -10,6 +10,18 @@ from studio_template_contract import replace_exact
 from studio_public_assets import check_public_tree
 
 ROOT = Path(__file__).resolve().parents[1]
+PUBLIC_ORIGIN = "https://nexus-studio-merikation.onrender.com"
+PUBLIC_DESCRIPTION = "Chat, research, analyze files and make music in a bilingual workspace. No NEXUS account required."
+PUBLIC_METADATA = (
+    f'<link rel="canonical" href="{PUBLIC_ORIGIN}/">'
+    f'<meta name="description" content="{PUBLIC_DESCRIPTION}">'
+    '<meta property="og:type" content="website">'
+    '<meta property="og:title" content="NEXUS Studio">'
+    f'<meta property="og:description" content="{PUBLIC_DESCRIPTION}">'
+    f'<meta property="og:url" content="{PUBLIC_ORIGIN}/">'
+    f'<meta property="og:image" content="{PUBLIC_ORIGIN}/icons/nexus-512.png">'
+    '<meta name="twitter:card" content="summary">'
+)
 PANEL = '''<details id="studio-install-card">
 <summary><span class="studio-en">Install or use offline</span><span class="studio-fa" lang="fa" dir="rtl">نصب یا استفادهٔ آفلاین</span></summary>
 <div class="studio-install-content">
@@ -117,7 +129,7 @@ def render_public_shell(source: str, device_panel: str) -> bytes:
     source=replace_exact(source, "frame-src 'self' blob:; worker-src blob:",
                          "frame-src 'self' blob:; worker-src 'self' blob:")
     source=replace_exact(source, "img-src data:", "img-src 'self' data:; manifest-src 'self'")
-    source=replace_exact(source, '<title>', '<link rel="manifest" href="./manifest.json"><link rel="icon" type="image/png" href="./icons/nexus-192.png"><link rel="apple-touch-icon" href="./icons/nexus-192.png"><meta property="og:image" content="https://nexus-studio-merikation.onrender.com/icons/nexus-512.png"><meta name="theme-color" content="#185e48"><title>')
+    source=replace_exact(source, '<title>', '<link rel="manifest" href="./manifest.json"><link rel="icon" type="image/png" href="./icons/nexus-192.png"><link rel="apple-touch-icon" href="./icons/nexus-192.png"><meta name="theme-color" content="#185e48">'+PUBLIC_METADATA+'<title>')
     source=replace_exact(source, '</style>', '.studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style>')
     source=replace_exact(source, '</header>', '</header>'+PANEL)
     source=replace_exact(source, '</main>', PRIVACY+'</main>')

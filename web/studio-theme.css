@@ -200,7 +200,7 @@ html.studio-focus-mode{
 .studio-focus-mode .studio-brand h1 span,.studio-focus-mode .studio-brand p{display:none}
 .studio-focus-mode .studio-mark{width:36px;height:36px;flex-basis:36px}
 .studio-focus-mode #language{background:#242832;color:#edf4f0;border-color:#414656}
-.studio-focus-mode main>details:not(#storage-center),.studio-focus-mode #storage-center,
+.studio-focus-mode main>details:not(#storage-center):not(#studio-install-card),.studio-focus-mode #storage-center,
 .studio-focus-mode #retention,.studio-focus-mode #undo-removal,
 .studio-focus-mode #nexus-creator,.studio-focus-mode main>.help:last-of-type{display:none}
 .studio-focus-mode #studio-focus-top{max-width:920px;margin:8px auto;display:block}
@@ -228,6 +228,11 @@ html.studio-focus-mode{
 .studio-focus-mode:not(.nexus-chat-options-open) #conversation-card label:has(#use-memory),
 .studio-focus-mode:not(.nexus-chat-options-open) #conversation-card label:has(#use-sources),
 .studio-focus-mode:not(.nexus-chat-options-open) #studio-model-settings{display:none}
+.studio-focus-mode #studio-install-card{max-width:920px;margin:8px auto}
+#studio-install-card>summary{padding:9px 0;cursor:pointer}
+.studio-focus-mode #conversation-card>[data-t="temporary"],
+.studio-focus-mode #branch:not(:has(option+option)),
+.studio-focus-mode #messages:not(:has(.message)){display:none}
 .studio-focus-mode #messages{min-height:min(38vh,330px);max-height:min(52vh,650px);overflow:auto;scrollbar-color:#4d5561 transparent}
 .studio-focus-mode .message{border:1px solid #333c49;background:#1b2029;color:#edf4f1;max-width:94%;border-radius:17px}
 .studio-focus-mode .message.assistant{background:#20302d;border-color:#35514a}
@@ -235,7 +240,8 @@ html.studio-focus-mode{
 .studio-focus-mode input:not([type="checkbox"]):not([type="radio"]),
 .studio-focus-mode textarea,.studio-focus-mode select{background:#1b2029;color:#edf4f1;border-color:#404650}
 .studio-focus-mode #studio-compose{background:#1d1e29;border:1px solid #48405d;padding:13px;border-radius:18px}
-.studio-focus-mode #studio-compose-heading{font-size:.85rem;color:#c6baf1}
+#studio-compose details{margin-top:8px}
+#studio-compose #studio-compose-heading{display:list-item;font-size:.85rem;color:#c6baf1;cursor:pointer}
 .studio-focus-mode #studio-compose-send{background:#6555a4;color:#fff;border-color:#7464b4}
 .studio-focus-mode .studio-compose-row button.secondary,.studio-focus-mode button.secondary{background:#242a33;color:#e2ede6;border-color:#404955}
 .studio-focus-mode #studio-compose-privacy,.studio-focus-mode #studio-compose-storage{font-size:.76rem;line-height:1.45}
