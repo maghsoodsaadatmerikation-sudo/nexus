@@ -2497,9 +2497,10 @@ function offerTool(message,result){
   words('Continue with local guide','ادامه با راهنمای محلی');
  proceed.addEventListener('click',()=>{
   const current=$('message').value===offeredDraft;clearOffer();
-  if(current)run({routeTools:false});
+  if(current){$('message').focus();run({routeTools:false})}
  });
  offer.append(p,open,proceed,dismiss);
+ open.focus();
 }
 
 let running=false,temporaryModel=false;
