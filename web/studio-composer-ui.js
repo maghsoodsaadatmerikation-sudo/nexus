@@ -80,24 +80,38 @@ function intent(value){
   /(چارت تولد|طالع|astrology|transit)/i.test(s)?'astrology':null;
  const route=routes.find(x=>x[0]===kind);return route?{route,query:''}:null;
 }
+let offeredDraft=null;
+function clearOffer(){
+ offeredDraft=null;offer.hidden=true;offer.replaceChildren();
+}
 function offerTool(message){
  const result=intent(message);
  if(!result||!window.NexusStudioFocus?.isFocused())return false;
- const [kind,panel,en,fa,field]=result.route;
- offer.replaceChildren();offer.hidden=false;
+ const [,panel,en,fa,field]=result.route;
+ clearOffer();offeredDraft=message;offer.hidden=false;
  const p=document.createElement('p');
  p.textContent=words('Suggested: '+en+'. No data was sent and no tool was run. Review inputs before execution.',
   'پیشنهاد: '+fa+'؛ هیچ اطلاعاتی ارسال و هیچ ابزاری اجرا نشده است. ورودی‌ها را پیش از اجرا بررسی کن.');
  const open=document.createElement('button');open.type='button';open.textContent=words('Open '+en,'بازکردن '+fa);
  open.addEventListener('click',()=>{
-  if(field&&result.query){
-   const input=$(field);if(input){input.value=result.query.slice(0,input.maxLength>0?input.maxLength:480);input.dispatchEvent(new Event('input',{bubbles:true}))}
+  if($('message').value!==offeredDraft||window.NexusStudioUI.uiStatus().busy){clearOffer();return}
+  clearOffer();
+  const input=field?$(field):null;
+  if(input&&!input.value&&result.query){
+   input.value=result.query.slice(0,input.maxLength>0?input.maxLength:480);
+   input.dispatchEvent(new Event('input',{bubbles:true}));
   }
-  offer.hidden=true;window.NexusStudioFocus.openPanel(panel);
+  window.NexusStudioFocus.openPanel(panel);
  });
  const dismiss=document.createElement('button');dismiss.type='button';dismiss.className='secondary';
- dismiss.textContent=words('Keep typing','ادامهٔ نوشتن');dismiss.addEventListener('click',()=>{offer.hidden=true;$('message').focus()});
- offer.append(p,open,dismiss);
+ dismiss.textContent=words('Keep typing','ادامهٔ نوشتن');dismiss.addEventListener('click',()=>{clearOffer();$('message').focus()});
+ const local=document.createElement('button');local.type='button';local.className='secondary';
+ local.textContent=words('Continue with local guide','ادامه با راهنمای محلی');
+ local.addEventListener('click',()=>{
+  const current=$('message').value===offeredDraft;clearOffer();
+  if(current)run({routeTools:false});
+ });
+ offer.append(p,open,local,dismiss);
  return true;
 }
 
@@ -105,6 +119,7 @@ let running=false;
 function refresh(){
  const state=window.NexusStudioUI.uiStatus();
  if(!state)return;
+ if(offeredDraft!==null&&($('message').value!==offeredDraft||state.archived))clearOffer();
  const model=select.value==='model',ready=!state.busy&&(!state.threadReady||!state.archived);
  $('message').placeholder=words('Ask NEXUS anything…','هرچه می‌خواهی از نکسوس بپرس…');
  heading.textContent=words('Reply using','پاسخ با');
@@ -136,9 +151,9 @@ function refresh(){
   words('No encrypted archive is unlocked. This work can be lost if the tab closes.',
         'آرشیو رمزگذاری‌شده‌ای باز نیست. با بسته‌شدن برگه ممکن است کار از بین برود.');
 }
-function run(){
+function run({routeTools=true}={}){
  if(running||send.disabled)return;
- if(select.value==='guide'&&offerTool($('message').value))return;
+ if(routeTools&&select.value==='guide'&&offerTool($('message').value))return;
  if(!window.NexusStudioUI.uiStatus().threadReady&&!window.NexusStudioUI.startConversation()){
   refresh();return;
  }
@@ -156,7 +171,7 @@ function run(){
   }
  }finally{running=false;refresh()}
 }
-send.addEventListener('click',run);
+send.addEventListener('click',()=>run());
 save.addEventListener('click',()=>{
  const state=window.NexusStudioUI.uiStatus();
  if(!state||state.busy||save.disabled)return;
@@ -165,13 +180,14 @@ save.addEventListener('click',()=>{
  refresh();
 });
 config.addEventListener('click',()=>{
- document.documentElement.classList.add('nexus-chat-options-open');
+ document.dispatchEvent(new Event('nexus-studio-show-chat-options'));
  const settings=$('studio-model-settings');if(!settings)return;
  settings.open=true;
  settings.scrollIntoView({block:'nearest'});
  settings.querySelector('summary')?.focus({preventScroll:true});
 });
-select.addEventListener('change',()=>{offer.hidden=true;refresh()});
+select.addEventListener('change',()=>{clearOffer();refresh()});
+document.addEventListener('nexus-studio-private-clear',clearOffer);
 $('message').addEventListener('input',refresh);
 $('message').addEventListener('keydown',event=>{
  if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&!event.isComposing&&

@@ -287,6 +287,9 @@ home.addEventListener('click',()=>go('conversation-card'));newChat.addEventListe
 all.addEventListener('click',()=>{dismiss();focus.openTools()});find.addEventListener('input',render);
 archiveToggle.addEventListener('change',render);
 document.addEventListener('nexus-studio-state',()=>{refreshSafety();if(!drawer.hidden)render()});
+document.addEventListener('nexus-studio-private-clear',()=>{
+ find.value='';archiveToggle.checked=false;history.replaceChildren();dismiss();
+});
 document.addEventListener('input',refreshSafety);
 document.addEventListener('change',refreshSafety);
 document.addEventListener('nexus-studio-media-state',refreshSafety);
@@ -300,9 +303,11 @@ document.addEventListener('keydown',event=>{
 });
 const more=make('nexus-zen-more','···');$('conversation-card').querySelector('.row').append(more);
 more.setAttribute('aria-expanded','false');
-more.addEventListener('click',()=>{
- const open=document.documentElement.classList.toggle('nexus-chat-options-open');
+function setChatOptions(open){
+ document.documentElement.classList.toggle('nexus-chat-options-open',open);
  more.setAttribute('aria-expanded',String(open));more.textContent=open?'×':'···';
-});
+}
+more.addEventListener('click',()=>setChatOptions(more.getAttribute('aria-expanded')!=='true'));
+document.addEventListener('nexus-studio-show-chat-options',()=>setChatOptions(true));
 labels();
 })();
