@@ -298,8 +298,8 @@ replace_exact(" await rpc('Page.enable');await rpc('Network.enable');",
     "best-effort-worker-target-observer")
 
 replace_exact(" await rm(profile,{recursive:true,force:true});",
-    " await proxy.close();\n await rm(profile,{recursive:true,force:true});",
-    "close-disposable-proxy")
+    " await proxy.close();\n await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:100});",
+    "close-disposable-proxy-and-retry-transient-profile-cleanup")
 
 path.write_text(text)
 print(json.dumps({'witness_source':'pinned-deployed-baseline',

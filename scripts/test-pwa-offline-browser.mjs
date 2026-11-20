@@ -239,5 +239,6 @@ try{
  }
  if(child.pid&&!exited){child.kill('SIGTERM');await delay(250)}
  if(child.pid&&!exited)child.kill('SIGKILL');
- await rm(profile,{recursive:true,force:true});
+ // Browser subprocesses can finish writing cache files after the main process exits.
+ await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:100});
 }
