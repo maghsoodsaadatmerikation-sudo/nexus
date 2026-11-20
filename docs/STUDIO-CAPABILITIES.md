@@ -152,7 +152,7 @@ Availability in ChatGPT varies by account, client and plan.
 | Workflow | NEXUS Studio implementation | Open work |
 | --- | --- | --- |
 | Compose and use answers | Copy an answer, prepare an alternate answer in the focused chat, and stage a paste that would overflow the draft as temporary reviewed text. The paste can be up to 128 KiB. Compatible gateways can show streamed answer text after request approval. Finished replies format Markdown headings, lists, quotes, tables, code and HTTPS links. | Rich-text paste and further formatting such as math. |
-| History, projects and sharing | Local search, branches, archives and transcript export. An individual answer can be downloaded as a readable HTML file. Project-level instructions and manually curated memory. | Share links, multi-user access, cross-device sync and opt-in retrieval across project chats. |
+| History, projects and sharing | Local search, branches, archives and transcript export. An individual answer can be downloaded as a readable HTML file. Project instructions, manually curated memory, reviewed excerpts from related chats, and a per-chat temporary mode. | Hosted share links, multi-user access and cross-device sync. |
 | Files, data and writing | One-turn excerpts from supported text files, Word body text, PowerPoint slide text and selectable PDFs, separate spreadsheet analysis and charts, and a versioned writing canvas. | Scanned PDF OCR, PowerPoint speaker notes and graphics, broader Office and audio ingestion, a reusable binary file library and model-assisted editing. |
 | Models and tools | Optional authenticated gateway with opt-in streaming, local reflection guide and optional limited device model. Tool recommendations require user review. | Hosted model provisioning and reliable model-driven use of approved tools. |
 
@@ -169,6 +169,27 @@ the preview and preserve the user draft.
 Use **Download answer** to save only the selected answer to an unencrypted HTML
 file. The file opens offline and keeps the answer's supported Markdown
 formatting. Conversation history and project context stay in Studio.
+
+## Project chat context and temporary chats
+
+In the chat options, select **Review related excerpts from other chats in this
+project** before preparing a model request. Studio ranks recent user-authored
+turns locally and offers at most three excerpts with chat titles and turn
+numbers in the exact request review. Other projects, archived or expired
+chats, alternate branches, temporary chats and model replies are excluded.
+Choosing excerpts does not send a request. The normal per-request approval
+still applies. ChatGPT's
+[project-only memory](https://help.openai.com/en/articles/8590148-memory-in-chatgpt)
+and [Claude Projects](https://support.claude.com/en/articles/9517075-what-are-projects)
+provide the comparative reference for keeping related work together.
+
+Type **/temporary** in the composer, or choose **Temporary chat** in chat
+options. This opens a thread without project personalization or other chat
+context. The thread stays in the tab and is excluded from history search,
+encrypted saves, backups and training-export review. You can still approve
+an online request or deliberately export a transcript. The
+[ChatGPT Temporary Chat FAQ](https://help.openai.com/en/articles/8914046-temporary-chat-in-chatgpt)
+describes its own service's separate privacy behavior.
 
 ## Remaining service prerequisites
 

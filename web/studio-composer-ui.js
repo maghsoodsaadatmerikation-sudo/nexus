@@ -223,8 +223,9 @@ function refresh(){
  selectLabel.setAttribute('aria-label',words('Choose how to respond','روش پاسخ را انتخاب کن'));
  for(const b of suggestions.children)b.textContent=words(b.dataset.en,b.dataset.fa);
  for(const opt of select.options)opt.textContent=words(opt.dataset.en,opt.dataset.fa);
+ const privateChat=/^\/temporary$/i.test($('message').value.trim());
  const tool=suggestion($('message').value);
- send.textContent=tool?words('Review '+tool.route[2],'بازبینی '+tool.route[3]):model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
+ send.textContent=privateChat?words('Start temporary chat','شروع گفتگوی موقت'):tool?words('Review '+tool.route[2],'بازبینی '+tool.route[3]):model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
  send.disabled=!ready||!$('message').value.trim();
  send.setAttribute('aria-label',send.textContent);
  save.textContent=state.vaultUnlocked?words('Save encrypted session','ذخیرهٔ رمزگذاری‌شدهٔ نشست'):words('Set up private archive','تنظیم آرشیو خصوصی');
@@ -254,7 +255,12 @@ function run({routeTools=true}={}){
  const state=window.NexusStudioUI.uiStatus();
  if(running||!state||state.busy||(state.threadReady&&state.archived)||
     !$('message').value.trim())return;
- const message=$('message').value,tool=routeTools&&suggestion(message);
+ const message=$('message').value;
+ if(/^\/temporary$/i.test(message.trim())){
+  if(window.NexusStudioUI.startConversation(true,{isolated:true}))$('message').focus();
+  return;
+ }
+ const tool=routeTools&&suggestion(message);
  if(tool?.route[0]==='tools'){clearOffer();showDirectory();return}
  if(tool){closeDirectory();offerTool(message,tool);return}
  if(!window.NexusStudioUI.uiStatus().threadReady&&!window.NexusStudioUI.startConversation()){

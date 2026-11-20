@@ -243,7 +243,7 @@ function render(){
  // so it must not be the source of truth for the chat drawer.
  for(const project of [...(state?.projects||[])].reverse()){
   for(const thread of [...(project.threads||[])].reverse()){
-   if(thread.archived&&!archiveToggle.checked)continue;
+   if(thread.isolated||(thread.archived&&!archiveToggle.checked))continue;
    const texts=thread.nodes||[];
    const preview=(texts.find(x=>x.role==='user')?.text||'').replace(/\s+/g,' ').trim().slice(0,72);
    if(q&&![project.title,thread.title].some(x=>x.toLocaleLowerCase().includes(q))&&

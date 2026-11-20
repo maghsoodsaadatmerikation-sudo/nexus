@@ -88,8 +88,19 @@ Object.assign(FA,{
  trainingHelp:'پیش‌فرض خاموش است و هنگام قفل‌کردن دوباره خاموش می‌شود. سامانهٔ آموزش نکسوس متصل نیست. می‌توانی یک شاخه از گفتگو را بازبینی کنی و نسخهٔ محلی آن را دانلود کنی. فایل و صدا در خروجی نیستند. ارائه‌دهندگان آنلاین سیاست خودشان را دارند.',
  trainingReview:'بازبینی گفتگو برای آموزش',trainingDownload:'دانلود متن بازبینی‌شده',trainingConfirm:'متن بازبینی‌شده برای آموزش به‌صورت فایل بدون رمزگذاری دانلود شود؟'
 });
+const CHAT_CONTEXT_EN={
+ temporaryAttachments:'Remove staged attachments before starting a temporary chat.',
+ useRelatedChats:'Review related excerpts from other chats in this project',
+ isolatedChat:'Temporary chat',isolatedChatNote:'This chat stays in this tab. Project context is off. Online model requests still require approval.'
+};
+Object.assign(EN,CHAT_CONTEXT_EN);
+Object.assign(FA,{
+ temporaryAttachments:'برای شروع گفتگوی موقت، پیوست‌های آماده‌شده را بردار.',
+ useRelatedChats:'بازبینی بخش‌های مرتبط از گفتگوهای دیگر همین پروژه',
+ isolatedChat:'گفتگوی موقت',isolatedChatNote:'این گفتگو فقط در همین برگه می‌ماند. زمینهٔ پروژه خاموش است. ارسال به مدل آنلاین همچنان به تأیید تو نیاز دارد.'
+});
 function selectedAttachments(){
- const saved=$('attach-document').checked&&doc()?.versions.at(-1)?.text?.trim();
+ const saved=!chat()?.isolated&&$('attach-document').checked&&doc()?.versions.at(-1)?.text?.trim();
  const version=saved?doc().versions.at(-1):null;
  return [...chatAttachments,...(version?[{id:doc().id,name:'Document: '+doc().title+' ('+version.id.slice(0,8)+')',text:version.text}]:[])];
 }
@@ -117,7 +128,7 @@ function renderChatAttachments(){
   item.append(remove);tray.append(item);
  }
  const latest=doc()?.versions.at(-1);
- $('attach-document').disabled=busy||!latest?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;
+ $('attach-document').disabled=busy||Boolean(chat()?.isolated)||!latest?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;
  if(!latest?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS)$('attach-document').checked=false;
  $('clear-chat-files').disabled=busy||(!chatAttachments.length&&!$('attach-document').checked);
 }
@@ -206,7 +217,7 @@ function controls(){
  $('history-days').value=String(data.history_days??'');
  $('history-days').disabled=busy;
  $('training-opt-in').disabled=busy;
- $('training-review').disabled=busy||!$('training-opt-in').checked||!chat()?.head;
+ $('training-review').disabled=busy||!$('training-opt-in').checked||!chat()?.head||chat()?.isolated;
  if(trainingReview&&(trainingReview.thread!==threadId||trainingReview.head!==chat()?.head||!$('training-opt-in').checked))clearTrainingReview();
  $('training-download').disabled=busy;
 
@@ -215,10 +226,14 @@ function controls(){
  $('chat-file').disabled=busy||!chat()||chat().archived;
  $('clear-chat-files').disabled=busy||(!chatAttachments.length&&!$('attach-document').checked);
  const thread=chat();
+ $('isolated-chat-note').hidden=!thread?.isolated;
+ $('new-temporary-chat').disabled=busy;
+ for(const id of ['use-memory','use-sources','use-astrology','astro-historical'])$(id).disabled=busy||Boolean(thread?.isolated);
+ $('use-related-chats').disabled=busy||!thread||thread.temporary||thread.isolated;
  const regenerate=$('regenerate');
  regenerate.hidden=thread?.nodes.find(node=>node.id===thread.head)?.role!=='assistant';
  regenerate.disabled=regenerate.hidden||busy||thread.archived||branchBase!==undefined||hasChatDraft();
- $('attach-document').disabled=busy||!chat()||chat().archived||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(storageSnapshot().lossRisk?'unsaved':(vault.unlocked?'saved':'temporary'));renderStorage();window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
+ $('attach-document').disabled=busy||!chat()||chat().archived||chat().isolated||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(storageSnapshot().lossRisk?'unsaved':(vault.unlocked?'saved':'temporary'));renderStorage();window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
 function mutate(fn,{undoable=false,afterCommit}={}){
  if(busy)return false;
  const before=data,next=S.copy(data),selection={projectId,threadId,documentId};
@@ -313,12 +328,12 @@ function resetConversation(id){
  // Only first-chat setup may preserve a selected image when there is no prior thread.
  if(threadId!==null&&threadId!==id)window.NexusStudioVision?.clear?.();
  threadId=id;clearChatDraft();
- for(const key of ['use-memory','use-sources','use-astrology','astro-historical','study-mode'])$(key).checked=false;
+ for(const key of ['use-memory','use-sources','use-related-chats','use-astrology','astro-historical','study-mode'])$(key).checked=false;
 }
 function resetProject(id){
  toolLifecycle('project');
  projectId=id;selectDocument(p()?.documents[0]?.id||null);
- resetConversation(p()?.threads.find(x=>!x.archived)?.id||null);
+ resetConversation(p()?.threads.find(x=>!x.archived&&!x.isolated)?.id||null);
  profileDirty=false;$('source-results').textContent='';fillProfile();
 }
 function selectProject(id){resetProject(id);stop({refresh:false})}
@@ -352,22 +367,24 @@ async function operation(fn,success='apply'){
 }
 // Create a local first conversation on the user's explicit action, retaining the typed draft.
 // No model request, archive write, or network activity happens here.
-function newThread(){
- const thread=S.thread(t('newChat'));
- if(data.history_days===0)thread.temporary=true;
+function newThread(isolated=false){
+ const thread=S.thread(t(isolated?'isolatedChat':'newChat'));
+ if(data.history_days===0||isolated)thread.temporary=true;
+ if(isolated)thread.isolated=true;
  return thread;
 }
-function startConversation(fresh=false){
+function startConversation(fresh=false,{isolated=false}={}){
  if(busy)return false;
+ if(isolated&&(chatAttachments.length||$('attach-document').checked||window.NexusStudioVision?.hasTransientWork?.()===true)){status('temporaryAttachments');return false;}
  const current=chat();
- if(current&&!current.archived){
+ if(current&&!current.archived&&!isolated){
   if(!fresh)return true;
   const before=threadId;
   $('new-thread').click(); // Existing draft-discard confirmation remains authoritative.
   return Boolean(chat()&&threadId!==before);
  }
- const draft=$('message').value;
- const study=$('study-mode').checked;
+ const draft=isolated?'':$('message').value;
+ const study=!isolated&&$('study-mode').checked;
  const openWithDraft=id=>{
   resetConversation(id);
   $('message').value=draft;
@@ -379,12 +396,12 @@ function startConversation(fresh=false){
   let ok=false;
   if(!p()){
    const project=S.project(language==='fa'?'گفتگوهای من':'My conversations');
-   const thread=newThread();
+   const thread=newThread(isolated);
    ok=mutate(v=>{project.threads.push(thread);v.projects.push(project)},{
     afterCommit:()=>{projectId=project.id;openWithDraft(thread.id)}
    });
   }else{
-   const thread=newThread();
+   const thread=newThread(isolated);
    ok=mutate(v=>projectIn(v).threads.push(thread),{
     afterCommit:()=>openWithDraft(thread.id)
    });
@@ -399,8 +416,8 @@ function installThread(next){
  return mutate(v=>{const q=projectIn(v);q.threads[q.threads.findIndex(x=>x.id===next.id)]=next},{afterCommit:clearChatDraft});
 }
 function selectedModelEngine(){return document.getElementById('model-engine')?.value==='device'?'device':'gateway'}
-function prepare(regenerate=false){if(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft()))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked,onDevice:destination==='device'});if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');const stream=destination==='gateway'&&modelInfo.streaming===true;
- pending={destination,stream,thread:c,body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);$('request-review').hidden=false;controls()}catch(error){status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
+function prepare(regenerate=false){if(!chat()?.isolated&&(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,relatedChats:$('use-related-chats').checked,historyDays:data.history_days,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked,onDevice:destination==='device'});if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');const stream=destination==='gateway'&&modelInfo.streaming===true;
+ pending={destination,stream,thread:c,body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);$('request-review').hidden=false;controls()}catch(error){status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
 function gateway(){const value=$('gateway').value.trim();const u=new URL(value||location.origin);if((u.protocol!=='https:'&&!(u.protocol==='http:'&&['127.0.0.1','[::1]'].includes(u.hostname)))||u.username||u.password||u.search||u.hash||!['','/'].includes(u.pathname))throw Error('gateway-url');return u.origin}
 async function boundedJson(response,max=128000){if(!response.ok)throw Error('gateway-status-'+response.status);if(!response.body)throw Error('empty-response');const reader=response.body.getReader(),chunks=[];let size=0;try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>max)throw Error('response-capacity');chunks.push(value)}const bytes=new Uint8Array(size);let offset=0;for(const c of chunks){bytes.set(c,offset);offset+=c.length}return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes))}finally{await reader.cancel().catch(()=>{})}}
 async function streamedAnswer(response,onDelta){
@@ -451,6 +468,9 @@ $('delete-project').onclick=()=>{
  mutate(v=>v.projects=v.projects.filter(x=>x.id!==projectId),
   {undoable:true,afterCommit:()=>resetProject(data.projects[0]?.id||null)});
 };
+$('new-temporary-chat').onclick=()=>{
+ if(mayReplaceChat()&&startConversation(true,{isolated:true}))$('message').focus();
+};
 $('new-thread').onclick=()=>{
  if(!p()||!mayReplaceChat())return;
  const c=newThread();
@@ -472,7 +492,7 @@ $('branch').onchange=()=>{
  if(!mayReplaceChat()){$('branch').value=current.head||'';return}
  if(!mutate(v=>projectIn(v).threads.find(x=>x.id===threadId).head=head,{afterCommit:()=>{window.NexusStudioVision?.clear?.();clearChatDraft()}}))render();
 };
-$('guide').onclick=()=>{if(chatAttachments.length||$('attach-document').checked)return status('chatAttachmentRequiresModel');if($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())return status('needApply');try{const c=candidate();installThread(S.append(c,'assistant',S.guide(S.path(c).at(-1).text,language==='fa',{skyTone:$('sky-tone').checked,study:$('study-mode').checked})+($('use-astrology').checked?'\n\n'+NexusAstrology.reflection(p().astrology,language==='fa',{historical:$('astro-historical').checked}):''),'guide'))}catch{status('failed')}};
+$('guide').onclick=()=>{if(chatAttachments.length||$('attach-document').checked)return status('chatAttachmentRequiresModel');if($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())return status('needApply');try{const c=candidate();installThread(S.append(c,'assistant',S.guide(S.path(c).at(-1).text,language==='fa',{skyTone:!c.isolated&&$('sky-tone').checked,study:$('study-mode').checked})+(!c.isolated&&$('use-astrology').checked?'\n\n'+NexusAstrology.reflection(p().astrology,language==='fa',{historical:$('astro-historical').checked}):''),'guide'))}catch{status('failed')}};
 $('prepare').onclick=()=>prepare();$('regenerate').onclick=()=>{if(!$('regenerate').disabled)prepare(true)};$('consent').onchange=controls;$('stop').onclick=()=>{stop({refresh:false});render()};
 const officeReader=file=>/\.docx$/i.test(file.name)?NexusOfficeZip.readDocx:
  /\.pptx$/i.test(file.name)?NexusOfficeZip.readPptx:null;
@@ -508,7 +528,7 @@ $('message').addEventListener('paste',event=>{
 });
 $('attach-document').onchange=()=>{stop();renderChatAttachments()};
 $('clear-chat-files').onclick=()=>{if(busy)return;clearChatAttachments();stop()};
-for(const id of ['message','gateway','gateway-token','use-memory','use-sources','use-astrology','astro-historical','sky-tone','study-mode'])$(id).addEventListener('input',stop);
+for(const id of ['message','gateway','gateway-token','use-memory','use-sources','use-related-chats','use-astrology','astro-historical','sky-tone','study-mode'])$(id).addEventListener('input',stop);
 $('send-model').onclick=async()=>{
  if(!pending||!$('consent').checked||busy)return;
  languageImport++;
@@ -594,7 +614,7 @@ $('history-days').onchange=()=>{
 $('training-opt-in').onchange=()=>{clearTrainingReview();controls()};
 $('training-review').onclick=()=>{
  const thread=chat();
- if(busy||!$('training-opt-in').checked||!thread?.head)return;
+ if(busy||!$('training-opt-in').checked||!thread?.head||thread.isolated)return;
  const messages=S.path(thread).map(({role,text})=>({role,text}));
  const payload=JSON.stringify({schema:'nexus.studio.training-export.v1',messages},null,2);
  trainingReview={thread:thread.id,head:thread.head,payload};
@@ -612,7 +632,7 @@ $('save').onclick=()=>{
   await vault.save(snapshot,{signal:abort.signal,now});if(rev!==revision)return;
   if(JSON.stringify(data)!==JSON.stringify(snapshot)){
    data=snapshot;undoSlot.clear();
-   if(!chat())resetConversation(p()?.threads.find(c=>!c.archived)?.id||null);
+   if(!chat())resetConversation(p()?.threads.find(c=>!c.archived&&!c.isolated)?.id||null);
    render();
   }
   dirty=false;
@@ -635,7 +655,7 @@ $('language-file').onchange=async event=>{
  if(!f||busy)return;if(f.size>NexusLocales.MAX_BYTES)return status('failed');
  const current=()=>task===languageImport&&rev===revision&&!busy;
  try{
-  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:[...Object.keys(PRIVACY_EN),'storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
+  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:[...Object.keys(PRIVACY_EN),...Object.keys(CHAT_CONTEXT_EN),'storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
   if(!$('language').querySelector('option[value="'+pack.code+'"]'))$('language').append(option(pack.code,pack.code));
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}

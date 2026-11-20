@@ -22,6 +22,30 @@ ok(()=>assert.match(S.guide('الان منتشر کنم یا منتظر بمان
 ok(()=>assert.doesNotMatch(S.guide('What does JSON or CSV mean?'),/reversible next step/));
 ok(()=>assert.doesNotMatch(S.guide('Translate this: choose between the red and blue doors.'),/reversible next step/));
 
+const related=S.project('Research project');
+related.instructions='PRIVATE PROFILE';
+related.memories=['PRIVATE MEMORY'];
+related.sources=[{id:S.uid(),name:'project notes',text:'orchard PRIVATE SOURCE'}];
+const prior=S.append(S.thread('Earlier plan'),'user','orchard PREFERRED VARIETY','human');
+const activeBranch=S.append(prior,'assistant','orchard UNTRUSTED MODEL CLAIM','model');
+const hiddenBranch=S.append(activeBranch,'user','orchard OTHER BRANCH','human',null);
+activeBranch.nodes=hiddenBranch.nodes;
+const recent=S.append(S.thread('Current plan'),'user','Which orchard variety did we prefer?','human');
+const privateThread={...S.append(S.thread('Tab only'),'user','orchard PRIVATE THREAD','human'),temporary:true,isolated:true};
+const archived={...S.append(S.thread('Archived'),'user','orchard ARCHIVED THREAD','human'),archived:true};
+const expired={...S.append(S.thread('Expired'),'user','orchard EXPIRED THREAD','human'),last_activity:1};
+related.threads=[activeBranch,recent,privateThread,archived,expired];
+const recalled=S.context(related,recent,{relatedChats:true,historyDays:30});
+ok(()=>assert.deepEqual(recalled.recalled_chats,[{title:'Earlier plan',thread:activeBranch.id,turn:1}]));
+ok(()=>assert.match(recalled.messages[0].content,/PREFERRED VARIETY/));
+ok(()=>assert.doesNotMatch(JSON.stringify(recalled),/PRIVATE THREAD|ARCHIVED THREAD|EXPIRED THREAD|OTHER BRANCH|UNTRUSTED MODEL CLAIM/));
+ok(()=>assert.equal(S.context(related,recent).recalled_chats.length,0));
+const isolated=S.context(related,privateThread,{relatedChats:true,memory:true,sources:true,astrology:true});
+ok(()=>assert.doesNotMatch(JSON.stringify(isolated),/PRIVATE PROFILE|PRIVATE MEMORY|PRIVATE SOURCE|PREFERRED VARIETY/));
+const projectSession={schema:S.SCHEMA,projects:[related]};
+ok(()=>assert.equal(S.search(projectSession,'PRIVATE THREAD',true).length,0));
+ok(()=>assert(!S.retainHistory(projectSession).projects[0].threads.some(c=>c.id===privateThread.id)));
+
 const study=S.context(p,candidate,{study:true});
 ok(()=>assert.equal(study.study,true));
 ok(()=>assert(study.messages[0].content.includes('User-selected Study mode')));
