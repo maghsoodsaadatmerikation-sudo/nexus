@@ -175,6 +175,46 @@ window.addEventListener('load',async()=>{
   assert(!exportedHtml.includes('orchard trees')&&!exportedHtml.includes('REVIEWED SECRET MEMORY')&&
    !exportedHtml.includes('TRANSIENT ACCESS TOKEN')&&JSON.stringify(snapshot())===beforeExport&&network===beforeExportCalls,
    'answer-export-excludes-conversation-context-and-stays-local');
+  const spoken=[];
+  let pauses=0,resumes=0,cancellations=0,paused=false;
+  const localEnglish={name:'Local English',lang:'en-US',localService:true};
+  const localPersian={name:'Local Persian',lang:'fa-IR',localService:true};
+  const remoteVoice={name:'Cloud voice',lang:'en-GB',localService:false};
+  let voices=[remoteVoice,localPersian,localEnglish];
+  Object.defineProperty(window,'speechSynthesis',{configurable:true,value:{
+   getVoices:()=>voices, speak:utterance=>spoken.push(utterance),
+   pause(){paused=true;pauses++},resume(){paused=false;resumes++},
+   cancel(){cancellations++},get paused(){return paused}
+  }});
+  Object.defineProperty(window,'SpeechSynthesisUtterance',{configurable:true,value:class{constructor(text){this.text=text}}});
+  const speak=formatted.parentElement.querySelector('[data-chat-speak]');
+  const playback=$('studio-playback'),playPause=$('studio-playback-pause'),voiceChoice=$('studio-playback-voice');
+  speak.click();
+  assert(!playback.hidden&&spoken[0].voice===localEnglish&&voiceChoice.options.length===2&&
+   spoken[0].text.includes('Synthetic answer')&&!spoken[0].text.includes('**carefully**'),'playback-uses-local-voice-and-readable-answer-text');
+  playPause.click();assert(pauses===1&&playPause.textContent==='Resume','pause-keeps-playback-controls');
+  playPause.click();assert(resumes===1&&playPause.textContent==='Pause','resume-continues-the-current-answer');
+  const oldVoice=spoken[0];
+  change('studio-playback-voice','0');
+  assert(spoken.at(-1).voice===localPersian&&spoken.at(-1).text===oldVoice.text,'changing-local-voice-restarts-answer');
+  const beforeLateVoice=spoken.length;oldVoice.onend();
+  assert(spoken.length===beforeLateVoice,'abandoned-utterance-does-not-queue-more-audio');
+  $('studio-playback-stop').click();
+  assert(playback.hidden&&document.activeElement===speak,'stop-restores-focus-to-the-answer');
+  voices=[remoteVoice];speak.click();
+  assert(!playback.hidden&&spoken.length===beforeLateVoice&&$('studio-playback-status').textContent.includes('No local'),
+   'remote-only-browser-shows-unavailable-without-starting-audio');
+  $('studio-playback-stop').click();voices=[remoteVoice,localPersian,localEnglish];
+  const longSpeech='الف'+'🌙'.repeat(3500);
+  const chunkStart=spoken.length;
+  NexusSpeechPlayback.start(longSpeech);
+  for(let i=0;i<100&&!playPause.disabled;i++)spoken.at(-1).onend();
+  const chunks=spoken.slice(chunkStart);
+  assert(playPause.disabled&&chunks.map(chunk=>chunk.text).join('')===longSpeech&&
+   chunks.every(chunk=>chunk.text.length<=240&&!/[\uD800-\uDBFF]$/.test(chunk.text)),
+   'chunked-playback-reads-beyond-old-limit-without-splitting-surrogates');
+  $('studio-playback-stop').click();
+  assert(JSON.stringify(snapshot())===beforeExport&&network===beforeExportCalls,'playback-leaves-archive-and-network-untouched');
   const regenerate=$('regenerate');
   assert(!regenerate.hidden&&!regenerate.disabled&&getComputedStyle(regenerate).display!=='none','retry-is-visible-in-chat');
   fill('message','Keep this unsent follow-up');
@@ -378,6 +418,19 @@ window.addEventListener('load',async()=>{
   frame({type:'delta',text:'Late content'});frame(complete);stream.close();await sleep(40);
   assert(streamSignal.aborted&&$('model-stream-preview').hidden&&$('message').value==='Retryable draft'&&
    JSON.stringify(snapshot())===committedStream,'stop-aborts-preview-without-saving-late-content');
+
+  fill('message','');
+  const playbackOrigin=NexusStudioUI.selection();
+  $('new-thread').click();
+  const playbackDestination=NexusStudioUI.selection();
+  assert(playbackDestination.threadId!==playbackOrigin.threadId&&
+   NexusStudioUI.openConversation(playbackOrigin.projectId,playbackOrigin.threadId),'setup-playback-navigation');
+  $('messages').querySelector('[data-chat-speak]').click();
+  assert(!playback.hidden,'playback-starts-in-prior-chat');
+  const beforeSwitch=cancellations,abandonedSpeech=spoken.at(-1),beforeSwitchCount=spoken.length;
+  assert(NexusStudioUI.openConversation(playbackDestination.projectId,playbackDestination.threadId),'switch-chat-during-playback');
+  abandonedSpeech.onend();
+  assert(playback.hidden&&cancellations===beforeSwitch+1&&spoken.length===beforeSwitchCount,'chat-switch-stops-playback-and-ignores-late-events');
 
   assert(document.documentElement.scrollWidth<=innerWidth+2,'no-horizontal-overflow');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});

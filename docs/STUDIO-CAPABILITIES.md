@@ -32,7 +32,7 @@ judgment workspace or migrate the separate Android prototype's local archives.
 | Generative text model | Deterministic guide, no model | Optional authenticated server bridge; requires an operator-configured real provider |
 | Stop and late-response isolation | No model transport | Abort waiting and reject stale responses after edits, project changes or lock |
 | English/Persian accessibility | Existing bilingual offline tools | English-first Studio, Persian/RTL and a complete local interface language-pack importer/template; inert text rendering |
-| Read aloud | Existing browser adapters | Explicit read-aloud using an available local device voice only |
+| Read aloud | Existing browser adapters | Local voice selection, pause, resume, stop and chunked reading of long answers |
 | Live source retrieval | Provider search destinations only | Explicit direct Wikipedia excerpts and Crossref metadata, with source/provenance cards |
 | Local code execution | Inert text only | Explicit JavaScript execution in an opaque-origin Worker, with network/storage isolation, timeout and output bounds |
 | Data charts | Separate local analysis tools | Validated bar/line JSON to local Canvas and explicit PNG export |
@@ -119,7 +119,10 @@ Finish dictation to append recognized text to the existing draft. The transcript
 stays in the composer for editing and follows the existing send and save controls.
 Editing the draft, switching conversations, hiding the tab, or clearing private
 state cancels an active recording and discards its pending text. Studio's existing
-read-aloud action uses device voices. See [browser speech recognition support](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition).
+**Read aloud** action uses device voices and offers Pause, Resume and Stop.
+Changing the selected voice starts that answer again from the beginning. Switching
+conversations or hiding the tab stops playback. Voice availability depends on
+the device and browser. See [browser speech recognition support](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition).
 
 ## Core feature comparison, 20 November 2026
 
