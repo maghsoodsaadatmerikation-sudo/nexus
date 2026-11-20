@@ -42,14 +42,28 @@ window.addEventListener('load',async()=>{
   assert(NexusStudioVision.hasTransientWork()===false,'no-hidden-image-state');
   $('studio-vision-open').click();
   fill('gateway','https://provider.example');fill('gateway-token','local-test-token');
+  assert($('studio-vision-preview').hidden && getComputedStyle($('studio-vision-preview')).display==='none',
+   'hidden-preview-is-visually-hidden');
+  $('studio-vision-settings').click();
+  assert($('studio-model-settings').open&&document.activeElement===$('gateway'),
+   'model-settings-open-directly-from-image-panel');
+  $('studio-vision-check').click();
+  await wait(()=>statusCalls===1&&$('studio-vision-status').textContent.includes('configured'));
+  assert(uploads===0 && $('studio-vision-status').textContent.includes('No image was sent'),
+   'preflight-connectivity-sends-no-image');
   choose();await wait(()=>$('studio-vision-preview').hidden===false);
-  assert(statusCalls===0&&uploads===0,'selection-makes-no-provider-call');
+  assert(statusCalls===1&&uploads===0,'selection-makes-no-provider-call');
+  $('studio-vision-clear').click();
+  assert(!NexusStudioVision.hasTransientWork()&&$('studio-vision-file').value===''&&
+   $('studio-vision-preview').hidden&&getComputedStyle($('studio-vision-preview')).display==='none',
+   'remove-image-button-clears-bytes-and-visual-preview');
+  choose();await wait(()=>$('studio-vision-preview').hidden===false);
   assert(NexusStudioVision.hasTransientWork()&&NexusStudioUI.storageStatus().lossRisk,
    'temporary-vision-image-is-protected-against-loss');
   fill('studio-vision-question','What can you see?');
   $('studio-vision-review').click();
   await wait(()=>$('studio-vision-review-box').hidden===false);
-  assert(statusCalls===1&&uploads===0&&$('studio-vision-send').disabled,
+  assert(statusCalls===2&&uploads===0&&$('studio-vision-send').disabled,
    'preview-and-status-are-not-consent');
   assert($('studio-vision-request-detail').textContent.includes('provider.example')&&
    $('studio-vision-request-detail').textContent.includes('SHA-256')&&
@@ -66,7 +80,11 @@ window.addEventListener('load',async()=>{
     str.includes('A single square'),'model-reply-stored-but-image-binary-is-not');
   assert(!NexusStudioVision.hasTransientWork()&&!$('studio-vision-preview').getAttribute('src'),
    'image-bytes-cleared-after-success');
-  disabled=true;choose();await wait(()=>$('studio-vision-preview').hidden===false);
+  disabled=true;
+  $('studio-vision-check').click();
+  await wait(()=>statusCalls===3&&$('studio-vision-status').textContent.includes('not enabled'));
+  assert(uploads===1,'disabled-gateway-preflight-is-read-only');
+  choose();await wait(()=>$('studio-vision-preview').hidden===false);
   fill('studio-vision-question','Read the text');
   $('studio-vision-review').click();await wait(()=>$('studio-vision-status').textContent.includes('unavailable'));
   assert(uploads===1&&$('studio-vision-review-box').hidden,'disabled-provider-prevents-image-upload');
