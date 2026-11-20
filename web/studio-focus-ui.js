@@ -39,8 +39,9 @@ toolsTray.append(toolHeading,search,toolsGrid,noTools);
 const onboarding=document.createElement('div');onboarding.id='studio-focus-onboarding';onboarding.className='studio-focus-onboarding';
 onboarding.setAttribute('role','group');onboarding.setAttribute('aria-label','Getting started');
 const hint=document.createElement('p'),start=document.createElement('button');start.type='button';
+const example=document.createElement('button');example.id='studio-judgment-example';example.type='button';example.className='secondary';
 const tryTools=document.createElement('button');tryTools.type='button';tryTools.className='secondary';
-onboarding.append(hint,start,tryTools);
+onboarding.append(hint,start,example,tryTools);
 $('conversation-card').insertBefore(onboarding,$('conversation-card').children[1]||null);
 const existingNav=document.querySelector('nav.tool-nav');existingNav.before(top,toolsTray);main.append(nav);
 document.documentElement.classList.add('studio-enhanced');
@@ -150,16 +151,28 @@ function refreshOnboarding(){
  if(!visible)return;
  const create=projects.length===0;
  hint.textContent=create
-  ?words('Chat, research, analyze files or make music. No account needed.',
-         'گفتگو کن، پژوهش کن، فایل تحلیل کن یا موسیقی بساز. نیازی به حساب کاربری نیست.')
+  ?words('Write, research, analyze files or create. NEXUS helps you weigh evidence and options. You make the final decision. No account needed.',
+         'بنویس، پژوهش کن، فایل‌ها را تحلیل کن یا چیزی بساز. نکسوس کمک می‌کند شواهد و گزینه‌ها را بسنجی. تصمیم نهایی با توست. حساب کاربری لازم نیست.')
   :words('Write a message or start a conversation. The local guide is not a generative AI model.',
          'پیامت را بنویس یا گفتگو را آغاز کن. راهنمای محلی مدل هوش مصنوعی مولد نیست.');
  start.textContent=words('Start chatting','شروع گفتگو');
+ example.textContent=words('Try a decision question','یک سؤال تصمیم‌گیری را امتحان کن');
+ example.disabled=Boolean($('message').value);
  start.onclick=()=>{
   if(!window.NexusStudioUI?.startConversation())return;
   openPanel('conversation-card');$('message').focus({preventScroll:true});
  };
 }
+example.onclick=()=>{
+ const message=$('message');
+ if(message.value||window.NexusStudioUI.uiStatus().busy)return;
+ message.value=words(
+  'Help me decide whether to publish my draft now or revise it first. Separate the evidence from assumptions, compare the trade-offs, and tell me what would change the assessment.',
+  'کمکم کن تصمیم بگیرم پیش‌نویسم را حالا منتشر کنم یا ابتدا بازبینی‌اش کنم. شواهد را از فرض‌ها جدا کن، مزایا و هزینه‌های هر گزینه را مقایسه کن و بگو چه چیزی می‌تواند ارزیابی را تغییر دهد.');
+ message.dispatchEvent(new Event('input',{bubbles:true}));
+ message.focus({preventScroll:true});
+};
+$('message').addEventListener('input',()=>{example.disabled=Boolean($('message').value)});
 toggle.addEventListener('click',()=>setFocus(!focused,true));
 catalog.addEventListener('click',()=>toolsOpen?openPanel(selected):openTools());
 tryTools.addEventListener('click',openTools);

@@ -1,10 +1,12 @@
 # NEXUS
 
-**Constitutional infrastructure for human judgment.**
+**An AI assistant that supports your judgment.**
 
 Created by **Maryam Najafi** · [maryamnajafi4991@gmail.com](mailto:maryamnajafi4991@gmail.com)
 
-NEXUS is a Rust-based constitutional core, epistemic workspace, authenticated HTTP gateway, browser client, and verification pipeline designed to help humans examine questions, evidence, alternatives, uncertainty, and consequences without transferring meaning, identity, or final decision authority to a machine.
+Use NEXUS Studio to write, research, work with files and data, code, and make music. When a task involves a decision, NEXUS helps you distinguish evidence from assumptions, compare options and understand what could change the assessment. The final choice stays with you.
+
+Studio brings these tools into one conversation. A configured model can assist with drafting and analysis. Review the context before a model request and the inputs before running a tool. The local reflection guide is available without a model connection.
 
 ## Core principle
 
@@ -27,10 +29,10 @@ A separate optional server-side model bridge requires a real configured
 provider; the local guide is labeled non-generative. No provider has been funded
 or provisioned by this implementation. [Features, comparison, setup and limits](docs/STUDIO-CAPABILITIES.md).
 
-An optional, operator-disabled-by-default [image understanding API](docs/STUDIO-VISION-GATEWAY.md)
-now accepts a reviewed single PNG/JPEG and prompt for a separately configured
-vision-capable model. It does **not** yet provide image upload in the Studio chat
-interface, verified OCR, real-provider acceptance or a deployed public feature.
+The optional [image tool](docs/STUDIO-VISION-GATEWAY.md) lets you review one
+PNG or JPEG and a prompt in Studio before sending them to a separately
+configured vision-capable model. Public availability depends on the gateway
+configuration and deployment.
 
 ## Open Studio on a phone
 

@@ -116,6 +116,18 @@ def test_changed_provider_requires_new_review(monkeypatch):
         assert c.post('/studio-api/respond',json=BODY,headers=AUTH).status_code==409
 
 
+def test_gateway_policy_guides_human_decisions_and_changes_review_id(monkeypatch):
+    with configured(monkeypatch,lambda _:pytest.fail('stale policy review forwarded')) as client:
+        old_id=client.get('/studio-api/status').json()['configuration_id']
+        assert 'Help directly with ordinary work' in model.POLICY
+        assert 'separate evidence from assumptions' in model.POLICY
+        assert 'compare viable options and trade-offs' in model.POLICY
+        assert 'Final judgment stays with the human' in model.POLICY
+        monkeypatch.setattr(model,'POLICY',model.POLICY+' Revised guidance.')
+        assert client.get('/studio-api/status').json()['configuration_id']!=old_id
+        assert client.post('/studio-api/respond',json={**BODY,'configuration_id':old_id},headers=AUTH).status_code==409
+
+
 def test_real_loopback_http_provider_transport(monkeypatch):
     import json
     import threading
