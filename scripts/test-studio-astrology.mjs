@@ -37,7 +37,7 @@ const project=S.project('Synthetic project');project.astrology=v;let thread=S.ap
 ok(()=>assert.deepEqual(S.state(state).projects[0].astrology,A.profile(v)));
 ok(()=>assert(!JSON.stringify(S.context(project,thread)).includes('optional-symbolic-astrology')));
 ok(()=>assert(JSON.stringify(S.context(project,thread,{astrology:true,astroHistorical:true})).includes('optional-symbolic-astrology')));
-const long=structuredClone(project);long.instructions='x'.repeat(2000);long.memories=Array(30).fill('m'.repeat(500));long.sources=[{id:S.uid(),name:'source',text:Array(8).fill('reflect '+'q'.repeat(1990)).join('\n')}];bad(()=>S.context(long,thread,{memory:true,sources:true,astrology:true,astroHistorical:true}));
+const long=structuredClone(project);long.instructions='x'.repeat(2000);long.memories=Array(30).fill('m'.repeat(500));long.sources=[{id:S.uid(),name:'source',text:Array(8).fill('reflect '+'q'.repeat(1990)).join('\n')}];const crowded=S.context(long,thread,{memory:true,sources:true,astrology:true,astroHistorical:true});ok(()=>assert(crowded.optional_context_truncated===true));ok(()=>assert(crowded.messages[0].content.length<=24000));ok(()=>assert(crowded.messages.at(-1).content==='Help me reflect'));
 const vault=new S.Vault({});const encrypted=await vault.export(state,'synthetic private password 123');ok(()=>assert(!encrypted.includes(birth)));const restored=await S.decrypt(encrypted,'synthetic private password 123');ok(()=>assert.deepEqual(restored.data.projects[0].astrology,A.profile(v)));
 delete project.astrology;ok(()=>assert(!('astrology' in S.state(state).projects[0])));
 console.log(JSON.stringify({status:'PASS',checks,scope:'astro-contract-and-personalization',live_network:false}));
