@@ -30,42 +30,89 @@ $('branch-notice').after(box);
 
 /* Discover capability from a typed request; proposal only, never execute. */
 const suggestions=document.createElement('div');suggestions.id='nexus-zen-suggestions';
-for(const [panel,en,fa] of [
- ['music-card','Music','موسیقی'],
- ['research-card','Research','پژوهش'],
- ['data-card','Analyze files','تحلیل فایل']
-]){
+box.prepend(suggestions);
+const offer=document.createElement('div');offer.id='nexus-zen-offer';offer.hidden=true;offer.setAttribute('role','status');box.after(offer);
+// One reviewed discovery catalog: command, UI destination, languages, prompt field, aliases.
+// Listing a capability never proves model or provider availability or grants execution.
+const routes=Object.freeze([
+ ['orchestra','orchestra-card','Orchestra & vocal','ارکستر و آواز','orchestra-prompt','vocal'],
+ ['music','music-card','Music Lab','موسیقی',null,'song'],
+ ['research','research-card','Research','پژوهش','research-query','search'],
+ ['data','data-card','Data analysis','تحلیل داده',null,'analyze'],
+ ['chart','chart-card','Charts','نمودارها',null,''],
+ ['code','code-card','Code','کدنویسی',null,''],
+ ['tasks','tasks-card','Tasks','وظایف',null,'task'],
+ ['write','canvas-card','Writing','نوشتن',null,''],
+ ['sources','sources-card','Sources','منابع',null,''],
+ ['astrology','astrology-card','Astrology','اخترشناسی',null,''],
+ ['sky','sky-card','Sky','آسمان',null,''],
+ ['memory','profile-card','Memory','حافظه',null,''],
+ ['github','studio-connections','GitHub','گیت‌هاب',null,'repo'],
+ ['render','studio-connections','Render','رندر',null,'deploy'],
+ ['connections','studio-connections','Connections','اتصال‌ها',null,'connect'],
+ ['tools','studio-tool-directory','Capabilities','قابلیت‌ها',null,'help capabilities']
+].map(row=>Object.freeze(row)));
+for(const id of ['music','research','data']){
+ const [,panel,en,fa]=routes.find(row=>row[0]===id);
  const b=document.createElement('button');b.type='button';b.className='secondary';b.dataset.en=en;b.dataset.fa=fa;
  b.addEventListener('click',()=>window.NexusStudioFocus?.openPanel(panel));
  suggestions.append(b);
 }
-box.prepend(suggestions);
-const offer=document.createElement('div');offer.id='nexus-zen-offer';offer.hidden=true;offer.setAttribute('role','status');box.after(offer);
-const routes=[
- ['orchestra','orchestra-card','Orchestra & vocal','ارکستر و آواز','orchestra-prompt'],
- ['music','music-card','Music Lab','موسیقی',null],
- ['research','research-card','Research','پژوهش','research-query'],
- ['data','data-card','Data analysis','تحلیل داده',null],
- ['chart','chart-card','Charts','نمودارها',null],
- ['code','code-card','Code','کدنویسی',null],
- ['tasks','tasks-card','Tasks','وظایف',null],
- ['write','canvas-card','Writing','نوشتن',null],
- ['sources','sources-card','Sources','منابع','source-query'],
- ['astrology','astrology-card','Astrology','اخترشناسی',null],
- ['sky','sky-card','Sky','آسمان',null],
- ['memory','profile-card','Memory','حافظه',null],
- // Connections remain review-only. No GitHub or Render action runs from chat.
- ['github','studio-connections','GitHub','گیت‌هاب',null],
- ['render','studio-connections','Render','رندر',null],
- ['connections','studio-connections','Connections','اتصال‌ها',null]
-];
+const catalog=Object.freeze(routes.filter(row=>row[0]!=='tools').map(
+ row=>Object.freeze({command:row[0],en:row[2],fa:row[3],
+  kind:row[1]==='studio-connections'?'connection-review':'local-review'})));
+const directory=document.createElement('section');directory.id='studio-capability-directory';
+directory.hidden=true;directory.setAttribute('aria-label','Available capabilities');
+const directoryTitle=document.createElement('strong'),directoryNote=document.createElement('p'),
+ directoryItems=document.createElement('div'),directoryClose=document.createElement('button');
+directoryClose.type='button';directoryClose.className='secondary';
+directory.append(directoryTitle,directoryNote,directoryItems,directoryClose);offer.after(directory);
+const directoryToggle=document.createElement('button');
+directoryToggle.id='studio-open-capability-directory';
+directoryToggle.type='button';directoryToggle.className='secondary';
+directoryToggle.dataset.en='All tools';directoryToggle.dataset.fa='همهٔ ابزارها';
+directoryToggle.setAttribute('aria-controls',directory.id);
+suggestions.append(directoryToggle);
+function closeDirectory(){
+ directory.hidden=true;directoryItems.replaceChildren();
+ directoryToggle.setAttribute('aria-expanded','false');
+}
+closeDirectory();
+directoryToggle.onclick=()=>{
+ if(directory.hidden){clearOffer();showDirectory()}
+ else closeDirectory();
+};
+directoryClose.onclick=()=>{closeDirectory();directoryToggle.focus()};
+function showDirectory(){
+ closeDirectory();directory.hidden=false;
+ directoryToggle.setAttribute('aria-expanded','true');
+ directory.setAttribute('aria-label',words('Available capabilities','قابلیت‌های در دسترس'));
+ directoryTitle.textContent=words('NEXUS capabilities','قابلیت‌های نکسوس');
+ directoryNote.textContent=words('Choose a command to fill the chat. Nothing runs until you review and approve it.',
+  'یک فرمان را برای درج در گفتگو انتخاب کن. تا بازبینی و تأیید، هیچ کاری اجرا نمی‌شود.');
+ directoryClose.textContent=words('Close','بستن');
+ for(const item of catalog){
+  const b=document.createElement('button');b.type='button';b.className='secondary';
+  b.textContent='/'+item.command+' · '+words(item.en,item.fa)+' · '+
+   (item.kind==='connection-review'?words('Connection review','بازبینی اتصال'):words('Tool review','بازبینی ابزار'));
+  b.onclick=()=>{
+   const draft=$('message').value.trim();
+   if(draft&&!/^\/(tools|help|capabilities)$/i.test(draft)&&
+      !confirm(words('Replace your unsent message with this command?','این فرمان جایگزین پیام ارسال‌نشده شود؟')))return;
+   $('message').value='/'+item.command+' ';
+   $('message').dispatchEvent(new Event('input',{bubbles:true}));
+   closeDirectory();$('message').focus();
+  };
+  directoryItems.append(b);
+ }
+ directoryItems.firstElementChild.focus();
+}
 function intent(value){
  const message=value.trim();
  const slash=/^\/([a-z-]+)(?:\s|$)/i.exec(message);
  if(slash){
-  const aliases={song:'music',vocal:'orchestra',analyze:'data',search:'research',task:'tasks',repo:'github',deploy:'render',connect:'connections'};
-  const kind=aliases[slash[1].toLowerCase()]||slash[1].toLowerCase();
-  const route=routes.find(x=>x[0]===kind);
+  const command=slash[1].toLowerCase();
+  const route=routes.find(x=>x[0]===command||(x[5]||'').split(' ').includes(command));
   return route?{route,query:message.slice(slash[0].length).trim()}:null;
  }
  const s=message.slice(0,340).toLocaleLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ');
@@ -139,8 +186,19 @@ function offerTool(message,result){
  proceed.textContent=select.value==='model'?words('Review as model message','بازبینی برای ارسال به مدل'):
   words('Continue with local guide','ادامه با راهنمای محلی');
  proceed.addEventListener('click',()=>{
-  const current=$('message').value===offeredDraft;clearOffer();
-  if(current)run({routeTools:false});
+  // Bind continuation to this exact reviewed proposal, not a mutable
+  // suggestion slot that may have been invalidated by unrelated UI updates.
+  const current=$('message').value===message;
+  clearOffer();
+  const state=window.NexusStudioUI.uiStatus();
+  if(!current||state.busy||state.archived)return;
+  // The local guide is an existing consent-checked action and requires
+  // a thread. Start it explicitly; never infer permission for a model.
+  if(!state.threadReady&&!window.NexusStudioUI.startConversation()){
+   refresh();return;
+  }
+  if(select.value==='guide'){$('guide').click();refresh();return}
+  refresh();run({routeTools:false});
  });
  offer.append(p,open,proceed,dismiss);
 }
@@ -184,9 +242,14 @@ function refresh(){
         'آرشیو رمزگذاری‌شده‌ای باز نیست. با بسته‌شدن برگه ممکن است کار از بین برود.');
 }
 function run({routeTools=true}={}){
- if(running||send.disabled)return;
+ // The send button can briefly lag a newly created first conversation.
+ // Authoritative UI state and the draft, not a stale disabled flag, gate work.
+ const state=window.NexusStudioUI.uiStatus();
+ if(running||!state||state.busy||(state.threadReady&&state.archived)||
+    !$('message').value.trim())return;
  const message=$('message').value,tool=routeTools&&suggestion(message);
- if(tool){offerTool(message,tool);return}
+ if(tool?.route[0]==='tools'){clearOffer();showDirectory();return}
+ if(tool){closeDirectory();offerTool(message,tool);return}
  if(!window.NexusStudioUI.uiStatus().threadReady&&!window.NexusStudioUI.startConversation()){
   refresh();return;
  }
@@ -219,8 +282,8 @@ config.addEventListener('click',()=>{
  settings.scrollIntoView({block:'nearest'});
  settings.querySelector('summary')?.focus({preventScroll:true});
 });
-select.addEventListener('change',()=>{temporaryModel=false;clearOffer();refresh()});
-document.addEventListener('nexus-studio-private-clear',clearOffer);
+select.addEventListener('change',()=>{temporaryModel=false;clearOffer();closeDirectory();refresh()});
+document.addEventListener('nexus-studio-private-clear',()=>{clearOffer();closeDirectory()});
 $('message').addEventListener('input',refresh);
 $('message').addEventListener('keydown',event=>{
  if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&!event.isComposing&&
@@ -233,15 +296,15 @@ $('message').addEventListener('keydown',event=>{
   run(); // In model mode only opens the consent review.
  }
 });
-$('language').addEventListener('change',()=>queueMicrotask(refresh));
+$('language').addEventListener('change',()=>queueMicrotask(()=>{if(!directory.hidden)showDirectory();refresh()}));
 document.addEventListener('nexus-studio-state',refresh);
 document.addEventListener('nexus-studio-chat-layout',refresh);
 document.addEventListener('nexus-studio-open-chat',()=>{
- clearOffer();
+ clearOffer();closeDirectory();
  if(select.value==='guide'){temporaryModel=true;select.value='model'}
  $('chat-file-panel').open=true;refresh();
  $('message').focus({preventScroll:true});
 });
-window.NexusStudioCompose={refresh,mode:()=>select.value};
+window.NexusStudioCompose={refresh,mode:()=>select.value,catalog:()=>catalog};
 refresh();
 })();

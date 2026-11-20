@@ -131,8 +131,14 @@ window.addEventListener('load',async()=>{
    'first-file-analysis-handoff-keeps-analysis-and-waits-for-approval');
   // The unified chat routes requests to reviewed connections, not directly to
   // provider APIs. No credentials or model execution are implied by a suggestion.
-  fill('message','/github list open pull requests');
   const chatSend=$('studio-compose-send');
+  const routeCatalog=NexusStudioCompose.catalog();
+  const allRoutable=routeCatalog.every(item=>{
+   fill('message','/'+item.command+' test');
+   return chatSend.textContent.includes(item.en);
+  });
+  assert(allRoutable,'every-catalog-command-routes-to-its-reviewed-tool');
+  fill('message','/github list open pull requests');
   assert(chatSend.textContent.includes('GitHub'),'github-slash-intent-discovered');
   chatSend.click();
   assert(!$('nexus-zen-offer').hidden,'github-discovery-requires-explicit-review');
@@ -211,8 +217,52 @@ window.addEventListener('load',async()=>{
    'unavailable-write-action-never-silently-falls-back-to-read');
   assert(connectionActions===2,'unavailable-branch-not-executed');
   await closeConnection();
+  // A single frozen catalog drives quick buttons, slash routing and the
+  // opt-in palette. Browsing a tool never requests credentials or executes it.
+  const catalog=NexusStudioCompose.catalog();
+  assert(Object.isFrozen(catalog)&&catalog.length===15&&catalog.every(Object.isFrozen),
+   'capability-catalog-is-read-only-and-complete');
+  assert(new Set(catalog.map(x=>x.command)).size===catalog.length,
+   'capability-commands-unique');
+  assert(catalog.filter(x=>x.kind==='connection-review').map(x=>x.command).join(',')===
+   'github,render,connections','connector-routes-identified-without-claiming-authority');
+  const networkBefore={catalogCalls,connectionActions,providerCalls,searchCalls};
+  fill('message','Keep this unsent draft');
+  const toolButton=$('studio-open-capability-directory');
+  toolButton.click();
+  const palette=$('studio-capability-directory');
+  assert(!palette.hidden&&toolButton.getAttribute('aria-expanded')==='true'&&
+   $('message').value==='Keep this unsent draft','tools-visible-without-a-slash-command');
+  window.confirm=()=>false;
+  palette.querySelector('div button').click();
+  assert($('message').value==='Keep this unsent draft'&&!palette.hidden,'decline-keeps-existing-draft');
+  window.confirm=()=>true;
+  palette.querySelector(':scope > button').click();
+  assert(palette.hidden&&toolButton.getAttribute('aria-expanded')==='false','closing-tools-updates-trigger');
+  fill('message','/tools');
+  assert(chatSend.textContent.includes('Capabilities'),'tools-command-discovered');
+  chatSend.click();
+  assert(!palette.hidden&&palette.querySelector('div').children.length===15,
+   'capability-palette-shows-all-reviewable-tools');
+  assert(JSON.stringify({catalogCalls,connectionActions,providerCalls,searchCalls})===
+   JSON.stringify(networkBefore),'capability-browser-has-no-network-effects');
+  const pick=[...palette.querySelectorAll('button')].find(x=>x.textContent.startsWith('/github ·'));
+  assert(Boolean(pick),'github-option-shown-with-provider-review');
+  pick.click();
+  assert(palette.hidden&&$('message').value==='/github ',
+   'capability-selection-only-fills-draft');
+  assert(catalogCalls===networkBefore.catalogCalls&&connectionActions===networkBefore.connectionActions,
+   'capability-selection-never-performs-provider-operation');
+  fill('message','/repo list open pull requests');
+  assert(chatSend.textContent.includes('GitHub'),'alias-resolved-from-single-catalog');
+  fill('message','/help');
+  chatSend.click();
+  assert(!palette.hidden,'help-alias-opens-capability-directory');
+  document.dispatchEvent(new Event('nexus-studio-private-clear'));
+  assert(palette.hidden,'private-clear-revokes-capability-directory');
   fill('message','/unknown do something');
   assert(!chatSend.textContent.includes('Review Connections'),'unsupported-command-not-misrouted');
+  assert($('studio-connection-receipt').hidden,'private-clear-revokes-provider-receipt');
   branchEnabled=true;
   assert(NexusStudioConnections.openFor({provider:'github',operation:'github.branch'}),'open-branch-review');
   $('studio-connections-load').click();

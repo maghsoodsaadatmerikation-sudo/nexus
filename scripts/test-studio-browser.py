@@ -52,7 +52,20 @@ window.addEventListener('load',async()=>{
   fill('message','/research Exact query');compose.click();offer.querySelector('button').click();
   assert($('research-query').value==='Exact query','empty-tool-field-receives-reviewed-query');
   fill('research-query','');$('nexus-zen-home').click();
-  fill('message','/research Guide fallback');compose.click();offer.querySelectorAll('button')[1].click();
+  fill('message','/research Guide fallback');compose.click();
+  assert(offer.querySelectorAll('button').length===3&&
+   offer.querySelectorAll('button')[1].textContent.includes('Continue with local guide'),
+   'tool-fallback-continues-with-local-guide-action');
+  offer.querySelectorAll('button')[1].click();
+  if(!current()?.threads?.[0]?.nodes?.length)
+   throw Error('guide-fallback-state:'+JSON.stringify({
+    status:$('status').textContent,sendDisabled:compose.disabled,
+    draftPresent:Boolean($('message').value),draftMatchesExpected:$('message').value==='/research Guide fallback',
+    mode:$('studio-compose-mode').value,
+    guideDisabled:$('guide').disabled,offerHidden:offer.hidden,
+    projectCount:snapshot().projects.length,ui:NexusStudioUI.uiStatus(),
+    activePanel:NexusStudioFocus.active()
+   }));
   assert(offer.hidden&&current().threads[0].nodes.length===2&&network===0,
    'declining-tool-can-continue-with-local-guide');
   change('studio-compose-mode','model');$('studio-compose-config').click();
