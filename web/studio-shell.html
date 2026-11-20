@@ -38,6 +38,9 @@ html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focu
 .studio-compose-row select{display:block;width:100%;min-height:48px}
 .studio-compose-row button{flex:1 1 125px;min-height:48px;margin:0}
 #studio-compose-privacy,#studio-compose-storage{margin:7px 0 0}
+#studio-capability-directory:not([hidden]){margin:10px 0;padding:12px;border:1px solid #c9dbcf;border-radius:12px;background:#f6faf7}
+#studio-capability-directory>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px;max-height:320px;overflow:auto}
+#studio-capability-directory>div button{margin:0;text-align:start;white-space:normal}
 .studio-focus-mode #guide,.studio-focus-mode #prepare,.studio-focus-mode #regenerate{display:none}
 @media(max-width:480px){.studio-compose-row label{flex:1 1 100%}.studio-compose-row button{flex:1 1 125px}}
 .music-fa{display:none}html[lang="fa"] .music-en{display:none}html[lang="fa"] .music-fa{display:initial}#music-card progress{accent-color:#185e48}#music-card pre{max-height:360px}
