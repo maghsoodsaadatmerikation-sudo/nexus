@@ -8,9 +8,10 @@ model. It returns a text draft. This is API infrastructure only: there is no
 Studio chat image picker, configured vision model, public rollout, or image-quality
 evaluation yet.
 
-The endpoint is disabled unless a valid NEXUS_MODEL_URL, NEXUS_MODEL_ID and
+The endpoint is disabled unless valid NEXUS_MODEL_URL, NEXUS_MODEL_ID and
 NEXUS_STUDIO_TOKEN are configured, the operator sets NEXUS_VISION_ENABLED=1,
-and NEXUS_MODEL_ADAPTER=generic. A selected provider must separately support
+NEXUS_MODEL_ADAPTER=generic, and an explicit
+NEXUS_VISION_MAX_REQUESTS_PER_PROCESS between 1 and 1000. A selected provider must separately support
 image input; setting the flag does not verify it. API keys remain server-side.
 
 ## Exact request contract
@@ -111,3 +112,33 @@ revokes any prior approval, and removes the preview from the page. Browser
 regressions cover hidden preview rendering, no-upload status checks and local
 removal. These tests are synthetic and cannot establish production-provider
 readiness or permission to send private images.
+
+## Provider-attempt guard (operator safety gate)
+
+An operator **must** set `NEXUS_VISION_MAX_REQUESTS_PER_PROCESS=10` (example;
+valid range 1–1000) in addition to the existing vision and model configuration
+before enabling image forwarding. Missing, empty, invalid, zero or excessive
+values fail closed with HTTP 503, even if the vision flag is enabled.
+
+Every authenticated, successfully parsed, valid single-image request reserves
+one quota unit **before calling the provider**. Provider errors, timeouts and
+disconnects do not refund it, because a provider may still have charged.
+Invalid JSON, wrong auth, stale configuration and invalid image data are rejected
+*before* reservation. An exhausted quota rejects further attempts with HTTP 429,
+and `GET /studio-api/vision-status` reports `configured=false` and
+`reason=limit-reached`. When the cap is absent or invalid it reports
+`reason=limit-unconfigured`. The status call itself never spends quota,
+uploads an image or checks a paid model, and returns no access tokens.
+
+**Important limitation:** this is an atomic, memory-only, per-Python-process
+attempt limit, **not** a durable dollar-cost budget or a user-by-user rate limit.
+Restarts reset it, and multiple processes or replicas each receive their own
+allowance. Reconfiguring the cap may make additional requests possible.
+For real paid public access, require a provider-side spending limit, durable
+shared usage metering, authenticated individual users, abuse/rate controls and
+an explicit operational budget. Do not interpret `configured=true` as
+proof that the upstream model actually supports images or provides safe output.
+
+Synthetic tests verify exact reservation count, invalid configuration,
+unauthenticated/malformed rejection, exhausted behavior, concurrency safety,
+and the deliberate lack of durability across process lifespans.
