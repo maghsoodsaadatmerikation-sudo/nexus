@@ -36,7 +36,7 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertEqual(self.manifest_file.read_bytes(), second_manifest.read_bytes())
         self.assertEqual(manifest["schema"], gate.SCHEMA)
         self.assertEqual(manifest["source_commit"], COMMIT)
-        self.assertEqual(manifest["content_count"], 13)
+        self.assertEqual(manifest["content_count"], 17)
         self.assertEqual(manifest["readiness"], "REVIEW_CANDIDATE_ONLY")
         for name in ("contains_private_data", "contains_provider_secrets",
                      "production_promotion_authorized", "render_deploy_performed",
@@ -45,7 +45,7 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertEqual(manifest["authority"], "none")
         with zipfile.ZipFile(self.archive) as zipped:
             members = zipped.namelist()
-            self.assertEqual(len(members), 13)
+            self.assertEqual(len(members), 17)
             self.assertEqual(
                 set(members), {gate.BUNDLE + "/" + name for name in gate.FILES})
             self.assertNotIn(gate.BUNDLE + "/device-check.html", members)

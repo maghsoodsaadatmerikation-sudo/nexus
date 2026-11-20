@@ -17,11 +17,28 @@ if(!browser||typeof WebSocket==='undefined')throw Error('real-chromium-and-node-
 const sha=buf=>createHash('sha256').update(buf).digest('hex');
 const sourceHtml=await readFile(new URL('index.html',root)),sourceDigest=sha(sourceHtml);
 const assert=(v,label)=>{if(!v)throw Error(label)};
-const allowed={'/':'index.html','/index.html':'index.html','/service-worker.js':'service-worker.js','/manifest.json':'manifest.json','/icons/nexus-192.png':'icons/nexus-192.png','/icons/nexus-512.png':'icons/nexus-512.png',...(packageRoot?{'/device-check.html':'device-check.html'}:{})};
+const pdfModules=['pdf/studio-pdf.mjs','pdf/pdf.min.mjs','pdf/pdf.worker.min.mjs'];
+const allowed={...Object.fromEntries(pdfModules.map(name=>['/'+name,name])),'/':'index.html','/index.html':'index.html','/service-worker.js':'service-worker.js','/manifest.json':'manifest.json','/icons/nexus-192.png':'icons/nexus-192.png','/icons/nexus-512.png':'icons/nexus-512.png',...(packageRoot?{'/device-check.html':'device-check.html'}:{})};
 let server;
-if(!PUBLIC_MODE){server=createServer(async(req,res)=>{const file=allowed[req.url]||(['device-engine.js','device-worker.js','device-ui.js','model-manifest.json'].some(n=>req.url==='/device/'+n)?req.url.slice(1):null);if(req.method!=='GET'||!file){res.writeHead(404);res.end();return}res.setHeader('content-type',file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.js')?'text/javascript':file.endsWith('.json')?'application/manifest+json':'image/png');res.end(await readFile(new URL(file,root)))});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))}
+if(!PUBLIC_MODE){server=createServer(async(req,res)=>{const file=allowed[req.url]||(['device-engine.js','device-worker.js','device-ui.js','model-manifest.json'].some(n=>req.url==='/device/'+n)?req.url.slice(1):null);if(req.method!=='GET'||!file){res.writeHead(404);res.end();return}res.setHeader('content-type',file.endsWith('.html')?'text/html; charset=utf-8':/\.m?js$/.test(file)?'text/javascript':file.endsWith('.json')?'application/manifest+json':'image/png');res.end(await readFile(new URL(file,root)))});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))}
+// Small ASCII fixture with exact xref offsets and one selectable text line.
+function samplePdf(){
+ const stream='BT /F1 12 Tf 20 720 Td (NEXUS SYNTHETIC PDF TEST) Tj ET';
+ const objects=[
+  '<< /Type /Catalog /Pages 2 0 R >>',
+  '<< /Type /Pages /Count 1 /Kids [3 0 R] >>',
+  '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+  '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  '<< /Length '+stream.length+' >>\nstream\n'+stream+'\nendstream'
+ ];
+ let pdf='%PDF-1.4\n';
+ const positions=objects.map((object,i)=>{const offset=pdf.length;pdf+=(i+1)+' 0 obj\n'+object+'\nendobj\n';return offset});
+ const xref=pdf.length;
+ const rows=positions.map(offset=>String(offset).padStart(10,'0')+' 00000 n \n').join('');
+ return pdf+'xref\n0 6\n0000000000 65535 f \n'+rows+'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n';
+}
 const ORIGIN=PUBLIC_MODE?'https://nexus-studio-merikation.onrender.com/':`http://127.0.0.1:${server.address().port}/`;
-for(const name of ['index.html','service-worker.js','manifest.json']){const response=await fetch(ORIGIN+(name==='index.html'?'':name),{redirect:'error',signal:AbortSignal.timeout(15000)});assert(response.status===200&&sha(Buffer.from(await response.arrayBuffer()))===sha(await readFile(new URL(name,root))),'public-source-identity-'+name)}
+for(const name of ['index.html','service-worker.js','manifest.json',...pdfModules]){const response=await fetch(ORIGIN+(name==='index.html'?'':name),{redirect:'error',signal:AbortSignal.timeout(15000)});assert(response.status===200&&sha(Buffer.from(await response.arrayBuffer()))===sha(await readFile(new URL(name,root))),'public-source-identity-'+name)}
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const profile=await mkdtemp(path.join(tmpdir(),'nexus-pwa-private-'));
 const child=spawn(browser,[
@@ -288,7 +305,7 @@ try{
  stage='opt-in-offline';await js("document.getElementById('studio-offline').click();true");
  await poll(()=>retryJs("document.getElementById('studio-offline-state').textContent.includes('code is ready')"),25000,'offline-prepare');
  const cached=await js("(async()=>{const names=await caches.keys(),cache=await caches.open(names[0]),keys=await cache.keys();const response=await cache.match(location.origin+'/');const bytes=await response.arrayBuffer();return {names,entries:keys.map(k=>k.url),sha:Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join(''),private:new TextDecoder().decode(bytes).includes('SYNTHETIC PRIVATE QUESTION')}})()");
- assert(cached.names.length===1&&cached.names[0].startsWith('nexus-studio-shell-v1-')&&cached.entries.length===5&&cached.entries.includes(ORIGIN)&&cached.sha===sourceDigest&&!cached.private,'cache-not-public-code-only');checks.push('opt-in-cache-exact-public-code-only');
+ assert(cached.names.length===1&&cached.names[0].startsWith('nexus-studio-shell-v1-')&&cached.entries.length===5+pdfModules.length&&pdfModules.every(name=>cached.entries.includes(ORIGIN+name))&&cached.entries.includes(ORIGIN)&&cached.sha===sourceDigest&&!cached.private,'cache-not-public-code-only');checks.push('opt-in-cache-exact-public-code-only');
  await poll(()=>retryJs("Boolean(navigator.serviceWorker.controller)"),10000,'worker-control');
  await js("window.__beforeOfflineReload=true;true");
  stage='true-offline';await setOffline(true);await rpc('Page.reload',{ignoreCache:true});
@@ -296,6 +313,15 @@ try{
  assert(await js("NexusStudioUI.snapshot().projects.length===0"),'automatic-private-reopen');checks.push('true-offline-reload-still-locked');
  await js("document.getElementById('passphrase').value='synthetic secret phrase 123';document.getElementById('unlock').click();true");
  await poll(()=>retryJs("NexusStudioUI.snapshot().projects[0]?.title==='My conversations'"),12000,'offline-unlock');checks.push('offline-encrypted-reopen');
+ stage='offline-pdf';
+ await js(`(()=>{const file=document.getElementById('studio-pdf-file'),transfer=new DataTransfer();
+  transfer.items.add(new File([${JSON.stringify(samplePdf())}],'fixture.pdf',{type:'application/pdf'}));
+  file.files=transfer.files;file.dispatchEvent(new Event('change'));return true})()`);
+ await poll(()=>retryJs("document.getElementById('studio-pdf-status').textContent.includes('ready for review')"),20000,'offline-pdf-extract');
+ assert(await js("document.getElementById('chat-attachment-tray').textContent.includes('fixture.pdf')&&!JSON.stringify(NexusStudioUI.snapshot()).includes('NEXUS SYNTHETIC PDF TEST')"),'pdf-attaches-temporarily');
+ checks.push('pdf-text-extracted-in-offline-worker');
+ await js("document.getElementById('clear-chat-files').click();true");
+
  await js("document.getElementById('language').value='fa';document.getElementById('language').dispatchEvent(new Event('change'));true");
  assert(await js("document.documentElement.dir==='rtl'&&getComputedStyle(document.querySelector('.studio-en')).display==='none'&&document.querySelector('#studio-focus-nav button[data-panel=conversation-card] .studio-control-label').textContent==='گفتگو'&&document.getElementById('studio-compose-send').textContent==='استفاده از راهنمای محلی'"),'persian-static-panel');checks.push('persian-rtl-navigation-and-installation-panel');
  stage='remove';await setOffline(false);

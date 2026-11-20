@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 from studio_template_contract import replace_exact
-from studio_public_assets import check_public_tree
+from studio_public_assets import PDF_MODULES, check_public_tree
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_ORIGIN = "https://nexus-studio-merikation.onrender.com"
@@ -135,7 +135,8 @@ def render_public_shell(source: str, device_panel: str) -> bytes:
     source=replace_exact(source, '</main>', PRIVACY+'</main>')
     source=replace_exact(source, 'value="2048"></details>', 'value="2048">'+device_panel+'</details>')
     source=replace_exact(source, '<label for="gateway"', '<label for="model-engine"><span class="studio-en">Model engine</span><span class="studio-fa">موتور مدل</span></label><select id="model-engine"><option value="gateway">Remote gateway / درگاه سرور</option><option value="device">On-device small model / مدل کوچک روی دستگاه</option></select><label for="gateway"')
-    source=replace_exact(source, '</body>', '<script>'+BOOTSTRAP+'</script><script type="module" src="./device/device-ui.js"></script></body>')
+    source=replace_exact(source, '<div id="chat-attachment-tray"', '<label id="studio-pdf-label" for="studio-pdf-file">Attach a PDF</label><input id="studio-pdf-file" type="file" accept=".pdf,application/pdf" disabled><p id="studio-pdf-help" class="help"></p><p id="studio-pdf-status" role="status"></p><div id="chat-attachment-tray"')
+    source=replace_exact(source, '</body>', '<script>'+BOOTSTRAP+'</script><script type="module" src="./device/device-ui.js"></script><script type="module" src="./pdf/studio-pdf.mjs"></script></body>')
     return source.encode()
 
 
@@ -150,6 +151,9 @@ def artifacts():
     code=[]
     for name in ['device-engine.js','device-worker.js','device-ui.js','model-manifest.json']:
         content=(ROOT/'public/studio/device'/name).read_bytes();code.append({'path':'device/'+name,'bytes':len(content),'sha256':hashlib.sha256(content).hexdigest(),'kind':'json' if name.endswith('.json') else 'javascript'})
+    for name in PDF_MODULES:
+        content=(ROOT/'public/studio'/name).read_bytes()
+        code.append({'path':name,'bytes':len(content),'sha256':hashlib.sha256(content).hexdigest(),'kind':'javascript'})
     worker=replace_exact(WORKER, '__DIGEST__', hashlib.sha256(html).hexdigest())
     worker=replace_exact(worker, '__INDEX_BYTES__', str(len(html)))
     worker=replace_exact(worker, '__CODE_ASSETS__', json.dumps(code,separators=(',',':')))

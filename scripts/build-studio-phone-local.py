@@ -16,27 +16,13 @@ import subprocess
 import sys
 import zipfile
 
-from studio_public_assets import MAX_FILE
+from studio_public_assets import FILES, MAX_FILE, WORKER_LIMIT, asset_limit
 
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC = ROOT / "public/studio"
 BUNDLE = "nexus-studio-phone-local"
 STAMP = (2020, 1, 1, 0, 0, 0)
-SOURCE_NAMES = (
-    "index.html",
-    "service-worker.js",
-    "manifest.json",
-    "icons/nexus-192.png",
-    "icons/nexus-512.png",
-    "device/device-engine.js",
-    "device/device-ui.js",
-    "device/device-worker.js",
-    "device/model-manifest.json",
-    "device/vendor/LICENSE-jinja.txt",
-    "device/vendor/LICENSE-onnxruntime.txt",
-    "device/vendor/LICENSE-transformers.txt",
-    "device/vendor/ort-wasm-simd-threaded.asyncify.mjs",
-)
+SOURCE_NAMES = FILES
 SCHEMA = "nexus.studio-phone-local-kit.v1"
 CHECK_NAME = "device-check.html"
 CHECK_SOURCE = ROOT / "scripts/studio-phone-fieldcheck.html"
@@ -126,6 +112,8 @@ from urllib.parse import urlsplit
 
 BASE = Path(__file__).resolve().parent
 LIMIT = __STUDIO_MAX_FILE__
+PDF_WORKER_LIMIT = __STUDIO_WORKER_LIMIT__
+ASSET_COUNT = __STUDIO_ASSET_COUNT__
 MIME = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -143,7 +131,7 @@ def load_public():
        manifest.get("private_user_data_included") is not False:
         raise ValueError("untrusted package manifest")
     items = manifest.get("assets")
-    if not isinstance(items, dict) or len(items) != 14:
+    if not isinstance(items, dict) or len(items) != ASSET_COUNT:
         raise ValueError("unexpected public asset contract")
     assets = {}
     for name, expected in items.items():
@@ -153,7 +141,7 @@ def load_public():
             raise ValueError("unsafe public asset name")
         st = path.lstat()
         if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or path.is_symlink() or \
-           not (0 < st.st_size <= LIMIT):
+           not (0 < st.st_size <= (PDF_WORKER_LIMIT if name == "pdf/pdf.worker.min.mjs" else LIMIT)):
             raise ValueError("unsafe public asset type or length")
         payload = path.read_bytes()
         if len(payload) != expected["bytes"] or \
@@ -244,7 +232,7 @@ def public_assets():
         source = PUBLIC / name
         st = source.lstat()
         if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or source.is_symlink() or \
-           not (0 < st.st_size <= MAX_FILE):
+           not (0 < st.st_size <= asset_limit(name)):
             raise ValueError("public Studio asset is missing, linked or oversized")
         items[name] = source.read_bytes()
     html = items["index.html"]
@@ -295,14 +283,14 @@ def contents(commit):
     }
     return {
         **assets,
-        "run-local.py": LAUNCHER.replace("__STUDIO_MAX_FILE__", str(MAX_FILE)).encode(),
+        "run-local.py": LAUNCHER.replace("__STUDIO_MAX_FILE__", str(MAX_FILE)).replace("__STUDIO_WORKER_LIMIT__", str(WORKER_LIMIT)).replace("__STUDIO_ASSET_COUNT__", str(len(SOURCE_NAMES) + 1)).encode(),
         "README.txt": README.encode(),
         "source-manifest.json": (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(),
     }
 
 
 def verify(zip_file, exact_commit=None):
-    if not zip_file.is_file() or zip_file.is_symlink() or zip_file.stat().st_size > 900000:
+    if not zip_file.is_file() or zip_file.is_symlink() or zip_file.stat().st_size > 2_800_000:
         raise ValueError("ZIP missing or too large")
     with zipfile.ZipFile(zip_file, "r", allowZip64=False) as archive:
         infos = archive.infolist()
@@ -311,14 +299,14 @@ def verify(zip_file, exact_commit=None):
         payloads = {}
         for info in infos:
             if info.flag_bits & 1 or info.is_dir() or \
-               info.file_size > MAX_FILE or info.compress_type != zipfile.ZIP_STORED:
+               info.compress_type != zipfile.ZIP_STORED:
                 raise ValueError("unsupported ZIP entry")
             prefix = BUNDLE + "/"
             if not info.filename.startswith(prefix):
                 raise ValueError("unexpected ZIP entry root")
             name = info.filename[len(prefix):]
             if name not in SOURCE_NAMES + (CHECK_NAME, "README.txt", "run-local.py", "source-manifest.json") or \
-               name in payloads or ".." in PurePosixPath(name).parts or \
+               name in payloads or info.file_size > asset_limit(name) or ".." in PurePosixPath(name).parts or \
                not stat.S_ISREG(info.external_attr >> 16):
                 raise ValueError("unsafe ZIP entry")
             payloads[name] = archive.read(info)

@@ -18,7 +18,7 @@ import urllib.error
 import urllib.request
 import zipfile
 
-from studio_public_assets import FILES, MAX_FILE, check_public_tree
+from studio_public_assets import FILES, MAX_FILE, asset_limit, check_public_tree
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "public/studio"
@@ -30,7 +30,7 @@ STAMP = (2020, 1, 1, 0, 0, 0)
 # A returned MATCH on nine reviewed public assets is not a substitute for
 # production owner-authorized release, nor the real public-origin browser tests.
 OBSERVE = FILES[:9]
-MAX_ZIP = 900_000
+MAX_ZIP = 2_800_000
 
 
 def sha(data):
@@ -153,7 +153,7 @@ def verify(archive, manifest_path, expected_commit=None):
             relative = info.filename[len(prefix):]
             if relative not in FILES or relative in found or \
                     ".." in PurePosixPath(relative).parts or \
-                    info.file_size > MAX_FILE or info.is_dir() or \
+                    info.file_size > asset_limit(relative) or info.is_dir() or \
                     info.flag_bits & 1 or info.compress_type != zipfile.ZIP_STORED or \
                     not stat.S_ISREG(info.external_attr >> 16):
                 raise ValueError("unreviewed ZIP member")
