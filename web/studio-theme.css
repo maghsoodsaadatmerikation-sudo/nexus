@@ -54,6 +54,16 @@ summary {cursor: pointer; padding: 7px 0; font-weight: 600;}
 .grid > * {min-width: 0;}
 .message {border-color: var(--studio-line); border-radius: 13px;}
 .message.assistant {background: #f1f7f3;}
+.reply-format > :first-child {margin-block-start: .35rem;}
+.reply-format > :last-child {margin-block-end: .35rem;}
+.reply-format :is(ul,ol) {padding-inline-start: 1.5rem;}
+.reply-format blockquote {margin-inline: 0; padding-inline-start: .75rem; border-inline-start: 3px solid currentColor;}
+.reply-format pre {direction: ltr; text-align: left; white-space: pre; overflow: auto; padding: .65rem; border: 1px solid currentColor; border-radius: 8px;}
+.reply-format pre:focus-visible, .reply-table:focus-visible {outline: 2px solid currentColor; outline-offset: 2px;}
+.reply-format a {color: inherit; text-decoration: underline;}
+.reply-table {overflow: auto;}
+.reply-table table {border-collapse: collapse; width: 100%;}
+.reply-table :is(th,td) {border: 1px solid currentColor; padding: .25rem .5rem; text-align: start;}
 #message {min-height: 108px;}
 #status:empty, #studio-offline-state:empty, #studio-install-state:empty {display: none;}
 #status:not(:empty) {background: var(--studio-soft); border-radius: 10px; padding: 8px 12px;}
