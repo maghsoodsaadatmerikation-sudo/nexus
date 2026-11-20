@@ -7,7 +7,7 @@ They do not establish ChatGPT model/reasoning parity.
 ## Public source retrieval
 
 The research desk makes a direct, explicit, unauthenticated CORS GET request to
-one of two fixed API providers:
+one or both of two fixed API providers:
 
 - Wikipedia Action API: an introduction excerpt, title, page identity and link.
   The interface supports English, Persian, Spanish, French, German and Arabic.
@@ -18,7 +18,7 @@ The exact standalone query is at most 250 characters. No conversation, project
 memory, file, API token or document is added to it automatically. Changing the
 query/provider/language revokes approval. Requests omit credentials and referrers,
 reject redirects, have a 20-second waiting deadline and stop after 160,000 bytes.
-At most five source cards are displayed. Unavailable providers/CORS/network
+At most five cards per provider are displayed. In combined mode, successful results remain available when the other provider fails. Unavailable providers/CORS/network
 failures are reported; no results or AI answer are fabricated as a fallback.
 There is no promise that every provider works in every country/network/browser.
 
@@ -30,6 +30,14 @@ saved. These records are source leads, not independent verification, immutable
 web snapshots, clinical evidence appraisal or automated research conclusions.
 Wikipedia attribution terms remain applicable; a DOI does not grant access to
 copyrighted article text.
+
+## Research brief
+
+Select up to five result cards to assemble a local research brief with source
+links, attribution, retrieval dates and excerpts or bibliographic metadata.
+Download it as plain text or attach it to the next chat message. The model
+review shows the bounded excerpts available for that request before sending.
+Selecting cards, drafting a brief and downloading it make no provider requests.
 
 ## Local JavaScript execution
 

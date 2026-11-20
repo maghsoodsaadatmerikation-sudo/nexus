@@ -15,6 +15,7 @@ window.addEventListener('load',async()=>{
  const file=(id,name,text)=>{const dt=new DataTransfer();dt.items.add(new File([text],name));$(id).files=dt.files;$(id).dispatchEvent(new Event('change'))};
  const snapshot=()=>NexusStudioUI.snapshot(),project=()=>snapshot().projects.find(p=>p.id===$('projects').value);
  let providerCalls=0,searchCalls=0,catalogCalls=0,connectionActions=0;
+ let crossrefCalls=0,rejectCrossref=false;
  let branchEnabled=false,delayRead=false,releaseRead,readSignal;
  let branchPreviews=0,branchWrites=0;
  const branchBase='d'.repeat(40);
@@ -60,6 +61,11 @@ window.addEventListener('load',async()=>{
   }
   if(String(url).includes('/studio-api/connections/')){connectionActions++;throw Error('unreviewed-provider-call')}
   if(String(url).startsWith('https://en.wikipedia.org/')){searchCalls++;return new Response(JSON.stringify({query:{pages:{42:{pageid:42,title:'Source title',extract:'Unverified live source note from Wikipedia.'}}}}))}
+  if(String(url).startsWith('https://api.crossref.org/')){
+   crossrefCalls++;
+   if(rejectCrossref)return new Response('',{status:503});
+   return Response.json({message:{items:[{DOI:'10.1234/source',title:['Bibliographic source'],type:'journal-article'}]}});
+  }
   throw Error('unexpected-network');
  };
  try{
@@ -358,6 +364,32 @@ window.addEventListener('load',async()=>{
   fill('message','manual edit');
   edited.emit('late text');edited.onend();
   assert(edited.aborted&&$('message').value==='manual edit','typing-cancels-the-active-recognizer');
+
+  language.value='en';language.dispatchEvent(new Event('change',{bubbles:true}));
+  const researchProvider=$('research-provider');
+  researchProvider.value='both';researchProvider.dispatchEvent(new Event('change',{bubbles:true}));
+  fill('research-query','combined source query');
+  const wikiBefore=searchCalls;
+  $('research-run').click();
+  assert(searchCalls===wikiBefore&&crossrefCalls===0,'combined-search-requires-explicit-query-consent');
+  $('research-consent').click();$('research-run').click();
+  await wait(()=>$('research-cards').children.length===2);
+  assert(searchCalls===wikiBefore+1&&crossrefCalls===1,'combined-search-calls-each-reviewed-provider-once');
+  const picks=$('research-cards').querySelectorAll('input[type="checkbox"]');
+  picks[0].click();picks[1].click();
+  const briefText=$('research-brief-text').textContent;
+  assert(!$('research-brief').hidden&&briefText.includes('wikipedia.org')&&briefText.includes('https://doi.org/10.1234/source')&&
+   briefText.includes('bibliographic-metadata-only'),'research-brief-retains-links-and-evidence-types');
+  $('research-brief-chat').click();
+  assert($('chat-attachment-tray').textContent.includes('Research brief')&&providerCalls===beforeVoiceNetwork&&
+   !JSON.stringify(snapshot()).includes('Bibliographic source'),'brief-staged-for-review-without-model-send-or-archive');
+  fill('research-query','revised combined source query');
+  assert($('research-brief').hidden&&$('research-cards').children.length===0,'query-change-clears-old-brief');
+  rejectCrossref=true;$('research-consent').click();$('research-run').click();
+  await wait(()=>$('research-status').textContent.includes('Some providers failed'));
+  assert($('research-cards').children.length===1&&$('research-status').textContent.includes('crossref'),
+   'provider-failure-preserves-other-provider-results');
+
 
 
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,real_model_tested:false});
