@@ -134,7 +134,7 @@ def text_value(value, limit=240):
 
 def git_blob_sha(content: bytes) -> str:
     """Compute Git's SHA-1 blob object ID (identity check, not a trust signature)."""
-    return hashlib.sha1(b"blob " + str(len(content)).encode("ascii") + b"\\0" + content).hexdigest()
+    return hashlib.sha1(b"blob " + str(len(content)).encode("ascii") + bytes([0]) + content).hexdigest()
 
 
 def project_result(operation, raw, path):
