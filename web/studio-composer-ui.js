@@ -115,10 +115,11 @@ function offerTool(message,result){
  offer.append(p,open,proceed,dismiss);
 }
 
-let running=false;
+let running=false,temporaryModel=false;
 function refresh(){
  const state=window.NexusStudioUI.uiStatus();
  if(!state)return;
+ if(temporaryModel&&!state.hasChatAttachments){select.value='guide';temporaryModel=false}
  if(offeredDraft!==null&&($('message').value!==offeredDraft||state.archived))clearOffer();
  const model=select.value==='model',ready=!state.busy&&(!state.threadReady||!state.archived);
  $('message').placeholder=words('Ask NEXUS anything…','هرچه می‌خواهی از نکسوس بپرس…');
@@ -188,7 +189,7 @@ config.addEventListener('click',()=>{
  settings.scrollIntoView({block:'nearest'});
  settings.querySelector('summary')?.focus({preventScroll:true});
 });
-select.addEventListener('change',()=>{clearOffer();refresh()});
+select.addEventListener('change',()=>{temporaryModel=false;clearOffer();refresh()});
 document.addEventListener('nexus-studio-private-clear',clearOffer);
 $('message').addEventListener('input',refresh);
 $('message').addEventListener('keydown',event=>{
@@ -206,7 +207,8 @@ $('language').addEventListener('change',()=>queueMicrotask(refresh));
 document.addEventListener('nexus-studio-state',refresh);
 document.addEventListener('nexus-studio-chat-layout',refresh);
 document.addEventListener('nexus-studio-open-chat',()=>{
- clearOffer();select.value='model';
+ clearOffer();
+ if(select.value==='guide'){temporaryModel=true;select.value='model'}
  $('chat-file-panel').open=true;refresh();
  $('message').focus({preventScroll:true});
 });

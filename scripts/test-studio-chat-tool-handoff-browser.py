@@ -75,6 +75,7 @@ window.addEventListener('load',async()=>{
   $('clear-chat-files').click();
   assert($('chat-attachment-tray').textContent.includes(EN.chatNoFiles),'explicit-clear-from-chat');
   assert($('request-review').hidden,'clear-revokes-previous-model-review');
+  assert(NexusStudioCompose.mode()==='guide','clearing-handoff-restores-local-guide');
   const size=project().threads[0].nodes.length;
   fill('message','Different question');
   const rejected=NexusStudioUI.stageChatContext('Oversized','x'.repeat(131073));
