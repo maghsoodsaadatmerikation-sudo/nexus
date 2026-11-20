@@ -52,6 +52,7 @@ jobs:
           node --check web/table-core.js
           node --check web/studio-quality-ui.js
           node scripts/test-studio-quality.mjs
+          node scripts/test-studio-retrieval-quality.mjs
           node scripts/test-analysis-group-completeness.mjs
           node scripts/test-analysis-numeric-boundaries.mjs
           node scripts/test-analysis-empty-records.mjs
