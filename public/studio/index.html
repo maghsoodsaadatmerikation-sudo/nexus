@@ -436,7 +436,7 @@ html.studio-focus-mode{
 <label for="reminder-advance" data-t="reminderAlert">Alert</label><select id="reminder-advance"><option value="0" data-t="reminderAtStart">At the event time</option><option value="5" data-t="reminderFive">5 minutes before</option><option value="15" data-t="reminderFifteen">15 minutes before</option><option value="60" data-t="reminderHour">1 hour before</option></select>
 <button id="reminder-download" type="submit" data-t="reminderExport">Download calendar file</button>
 </form><p id="reminder-status" role="status"></p></section>
-<section class="card" id="tasks-card"><h2 data-t="tasks"></h2><p class="help" data-t="tasksHelp"></p><button id="task-sample" class="secondary" data-t="tasksSample"></button><label for="task-plan" data-t="tasksPlan"></label><textarea id="task-plan" maxlength="524288" spellcheck="false" dir="ltr"></textarea><label class="inline"><input id="task-consent" type="checkbox"><span data-t="tasksConsent"></span></label><button id="task-run" data-t="tasksRun"></button><button id="task-stop" data-t="tasksStop" disabled></button><p id="task-status" role="status"></p><pre id="task-report" role="log" aria-live="polite"></pre><button id="task-export" data-t="tasksExport" disabled></button></section>
+<section class="card" id="tasks-card"><h2 data-t="tasks"></h2><p class="help" data-t="tasksHelp"></p><button id="task-sample" class="secondary" data-t="tasksSample"></button><label for="task-plan" data-t="tasksPlan"></label><textarea id="task-plan" maxlength="524288" spellcheck="false" dir="ltr"></textarea><label class="inline"><input id="task-consent" type="checkbox"><span data-t="tasksConsent"></span></label><button id="task-run" data-t="tasksRun"></button><button id="task-stop" data-t="tasksStop" disabled></button><p id="task-status" role="status"></p><pre id="task-report"></pre><button id="task-export" data-t="tasksExport" disabled></button></section>
 <section class="card" id="code-card"><h2 data-t="codeLab"></h2><p class="help" data-t="codeHelp"></p><button id="code-sample" class="secondary" data-t="codeSample"></button><label for="code" data-t="codeSource"></label><textarea id="code" maxlength="100000" spellcheck="false" dir="ltr"></textarea><label for="code-input" data-t="codeInput"></label><textarea id="code-input" maxlength="262144" dir="auto"></textarea><label class="inline"><input id="code-consent" type="checkbox"><span data-t="codeConsent"></span></label><button id="code-run" data-t="codeRun"></button><button id="code-stop" data-t="codeStop" disabled></button><p id="code-status" role="status"></p><h3 data-t="codeOutput"></h3><pre id="code-console"></pre><pre id="code-result"></pre><button id="code-copy" class="secondary" data-t="codeCopy"></button><button id="code-chat" class="secondary" data-t="codeChat">Use code result in next chat</button></section>
 <section class="card" id="data-card"><h2 data-t="dataTitle"></h2><p class="help" data-t="dataHelp"></p><label for="data-file" data-t="dataFile"></label><input id="data-file" type="file" accept=".csv,.tsv,.json"><label for="data-source" data-t="dataSource"></label><select id="data-source"></select><button id="data-run" data-t="dataRun"></button><p id="data-status" role="status"></p><div class="row"><div><label for="data-group" data-t="dataGroup"></label><select id="data-group"></select></div><div><label for="data-metric" data-t="dataMetric"></label><select id="data-metric"></select></div></div><pre id="data-summary"></pre><button id="data-chart" data-t="dataChart" disabled></button><button id="data-copy" data-t="dataCopy" disabled></button><button id="data-chat" class="secondary" data-t="dataChat" disabled>Use analysis summary in next chat</button><button id="data-export" data-t="dataExport" disabled></button></section>
 <section class="card" id="chart-card"><h2 data-t="chartLab"></h2><p class="help" data-t="chartHelp"></p><label for="chart-json" data-t="chartJson"></label><textarea id="chart-json" maxlength="64000" dir="ltr"></textarea><button id="chart-use" class="secondary" data-t="chartUse"></button><button id="chart-draw" data-t="chartDraw"></button><button id="chart-export" data-t="chartExport"></button><p id="chart-status" role="status"></p><canvas id="chart" hidden aria-label="Local data chart" style="width:100%;height:auto;border:1px solid #cddcd5"></canvas></section>
@@ -1487,8 +1487,8 @@ class Runner{
   let done=false,running=0,resolve,timer;const controls=new Map();const promise=new Promise(r=>resolve=r);
   const emit=()=>{try{onUpdate(snapshot())}catch{ /* observers cannot stall execution */ }};
   const finish=()=>{if(done)return;done=true;clearTimeout(timer);this.active=null;emit();resolve(snapshot())};
-  const cancel=()=>{if(done)return;for(const r of rows)if(['queued','running'].includes(r.status)){r.status='cancelled';r.error='cancelled'}for(const c of controls.values()){c.abort.abort();try{c.worker.cancel()}catch{}}controls.clear();finish()};
-  this.active={cancel};timer=setTimeout(cancel,60000);
+  const cancel=(reason='cancelled')=>{if(done)return;for(const r of rows)if(['queued','running'].includes(r.status)){r.status='cancelled';r.error=reason}for(const c of controls.values()){c.abort.abort();try{c.worker.cancel()}catch{}}controls.clear();finish()};
+  this.active={cancel};timer=setTimeout(()=>cancel('deadline-exceeded'),60000);
   const pump=()=>{
    if(done)return;
    for(const j of plan.jobs){const r=byId.get(j.id);if(r.status!=='queued')continue;
@@ -2043,12 +2043,30 @@ window.NexusLabUI=Object.freeze({cancel,clear,hasTransientWork,render:renderCard
 const runner=new NexusTasks.Runner();let epoch=0,report=null,working=false;
 Object.assign(EN,{tasks:'Parallel local tasks',tasksHelp:'Review a JSON plan of up to 12 JavaScript jobs. At most two isolated workers run at once; dependencies run after success. Each worker has a 3-second execution watchdog and no network or archive access. No hard memory quota. The whole plan stops after 60 seconds. Chat remains available while jobs run. Plans and reports are temporary and cleared on project changes or lock. This executes reviewed code, not autonomous model planning or a server background service.',tasksPlan:'Exact plan — version: 1; jobs: id, code, input, needs; concurrency: 1 or 2. Worker input is JSON containing input (string) and dependencies (map of result strings).',tasksConsent:'Execute this exact plan locally once.',tasksSample:'Load dependency example',tasksRun:'Run plan',tasksStop:'Cancel plan',tasksExport:'Export report',tasksFailed:'Invalid plan or execution unavailable.'});
 Object.assign(FA,{tasks:'کارهای محلی هم‌زمان',tasksHelp:'طرح JSON با حداکثر ۱۲ کار JavaScript را بازبینی کن. حداکثر دو Worker ایزوله هم‌زمان اجرا می‌شوند؛ کار وابسته پس از موفقیت پیش‌نیاز اجرا می‌شود. هر Worker مهلت اجرای ۳ ثانیه‌ای دارد و به شبکه یا آرشیو دسترسی ندارد. سقف سخت حافظه وجود ندارد. کل طرح پس از ۶۰ ثانیه متوقف می‌شود. گفتگو حین اجرا در دسترس است. طرح و گزارش موقت‌اند و با تغییر پروژه یا قفل پاک می‌شوند. این اجرای کد بازبینی‌شده است؛ برنامه‌ریزی خودکار مدل یا سرویس پس‌زمینهٔ سرور نیست.',tasksPlan:'طرح دقیق — version: 1؛ jobs: id, code, input, needs؛ concurrency: 1 یا 2. ورودی Worker یک JSON شامل input به‌صورت رشته و dependencies به‌صورت نگاشت خروجی‌های رشته‌ای است.',tasksConsent:'همین طرح دقیق را یک بار محلی اجرا کن.',tasksSample:'بارگذاری نمونهٔ کارهای وابسته',tasksRun:'اجرای طرح',tasksStop:'لغو طرح',tasksExport:'خروجی گزارش',tasksFailed:'طرح نامعتبر است یا اجرا در دسترس نیست.'});
-function show(){ $('task-report').textContent=report?JSON.stringify(report,null,2):'';$('task-run').disabled=working;$('task-stop').disabled=!working;$('task-export').disabled=!report||working }
+const progressLabels={
+ en:{queued:'queued',running:'running',succeeded:'succeeded',failed:'failed',blocked:'blocked by dependencies',cancelled:'cancelled',deadline:'Plan time limit reached.'},
+ fa:{queued:'در صف',running:'در حال اجرا',succeeded:'موفق',failed:'ناموفق',blocked:'متوقف به‌دلیل پیش‌نیاز',cancelled:'لغوشده',deadline:'مهلت اجرای طرح تمام شد.'}
+};
+function show(){
+ $('task-report').textContent=report?JSON.stringify(report,null,2):'';
+ $('task-run').disabled=working;
+ $('task-stop').disabled=!working;
+ $('task-export').disabled=!report||working;
+ if(!report)return;
+ const labels=progressLabels[document.documentElement.lang==='fa'?'fa':'en'];
+ const counts={};
+ for(const job of report.jobs)counts[job.status]=(counts[job.status]??0)+1;
+ const summary=Object.keys(labels).filter(key=>counts[key]).map(key=>counts[key]+' '+labels[key]).join(' · ');
+ const deadline=report.jobs.some(job=>job.error==='deadline-exceeded');
+ const status=deadline?labels.deadline+' '+summary:summary;
+ if($('task-status').textContent!==status)$('task-status').textContent=status;
+}
 function cancel(){epoch++;runner.cancel();working=false;$('task-consent').checked=false;show()}
 function clear(){cancel();report=null;$('task-plan').value='';$('task-status').textContent='';show()}
 $('task-plan').addEventListener('input',()=>{cancel();report=null;$('task-status').textContent='';show()});
 $('task-sample').onclick=()=>{if($('task-plan').value&&!confirm(t('discard')))return;clear();$('task-plan').value=JSON.stringify({version:1,concurrency:2,jobs:[{id:'sum',input:'[2,3,5]',code:'const data=JSON.parse(input); return JSON.parse(data.input).reduce((a,b)=>a+b,0);'},{id:'count',input:'[2,3,5]',code:'return JSON.parse(JSON.parse(input).input).length;'},{id:'mean',needs:['sum','count'],code:'const d=JSON.parse(input).dependencies; return JSON.parse(d.sum)/JSON.parse(d.count);'}]},null,2);renderStorage()};
-$('task-run').onclick=async()=>{if(working||!$('task-consent').checked)return;const scope=++epoch;$('task-consent').checked=false;$('task-status').textContent='';try{const plan=NexusTasks.validate(JSON.parse($('task-plan').value));working=true;await runner.run(plan,{onUpdate:value=>{if(scope===epoch){report=value;show()}}})}catch{if(scope===epoch)$('task-status').textContent=t('tasksFailed')}finally{if(scope===epoch){working=false;show()}}};
+$('task-run').onclick=async()=>{if(working||!$('task-consent').checked)return;const scope=++epoch;$('task-consent').checked=false;$('task-status').textContent='';report=null;try{const plan=NexusTasks.validate(JSON.parse($('task-plan').value));working=true;await runner.run(plan,{onUpdate:value=>{if(scope===epoch){report=value;show()}}})}catch{if(scope===epoch)$('task-status').textContent=t('tasksFailed')}finally{if(scope===epoch){working=false;show()}}};
+$('language').addEventListener('change',()=>queueMicrotask(show));
 $('task-stop').onclick=()=>{runner.cancel();working=false;$('task-consent').checked=false;show()};
 $('task-export').onclick=()=>{if(report&&!working&&confirm(t('plain')))download(JSON.stringify(report,null,2),'nexus-task-report.json','application/json')};
 window.NexusTasksUI=Object.freeze({clear,cancel,render:show,hasTransientWork:()=>Boolean($('task-plan').value||report)});show();applyLanguage();
@@ -4246,17 +4264,17 @@ function buttons(){
 function resetAudio(){
  if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=null;
  const audio=$('music-preview');audio.pause();audio.removeAttribute('src');audio.load();
- wav=null;$('music-progress').value=0;buttons()
+ wav=null;$('music-progress').value=0;summary();buttons()
 }
 function invalidate(){
- revision++;working=false;score=null;resetAudio();$('music-report').textContent='';out(txt('ready'));
+ revision++;working=false;score=null;resetAudio();out(txt('ready'));
 }
 for(const node of $('music-card').querySelectorAll('select,input')){
  if(['music-quality','music-sound','music-problem','music-lock-motif'].includes(node.id))continue;
  node.addEventListener('change',invalidate);
 }
 function outputSettingsChanged(){
- revision++;working=false;resetAudio();summary();out(txt('ready'));
+ revision++;working=false;resetAudio();out(txt(score?'built':'ready'));
 }
 $('music-quality').addEventListener('change',outputSettingsChanged);
 $('music-sound').addEventListener('change',outputSettingsChanged);
@@ -4269,7 +4287,7 @@ function download(data,name,type){
  out(txt('exported'));
 }
 function summary(){
- if(!score)return;
+ if(!score){$('music-report').textContent='';return}
  const energy=score.sections.map(s=>(s.name+': '+s.energy.toFixed(2)+' · '+s.bars+' bars')).join('\n');
  const r=score.review,inst=Object.entries(r.instruments).filter(([,count])=>count).map(([key,count])=>key+': '+count).join(' | ');
  const text=[
@@ -4289,7 +4307,7 @@ function summary(){
 $('music-build').addEventListener('click',()=>{
  if(working)return;
  try{
-  score=Music.compose(inputs());resetAudio();summary();
+  score=Music.compose(inputs());resetAudio();
   $('music-progress').value=0;out(txt('built'));buttons();
  }catch{score=null;resetAudio();out(txt('error'))}
 });
@@ -4332,7 +4350,6 @@ $('music-render').addEventListener('click',async()=>{
    onProgress:p=>{if(start===revision){$('music-progress').value=Math.round(p*100);out(txt('rendering')+': '+Math.round(100*p)+'%')}}
   });
   if(start!==revision)return;
-  wav=data;
   const audio=Music.analyzeWav(data,active);
   const a=[
     fa()?'--- تحلیل واقعی سیگنال WAV ---':'--- Measured WAV diagnostics ---',
@@ -4347,9 +4364,10 @@ $('music-render').addEventListener('click',async()=>{
     'WAV warnings: '+(audio.warnings.join(', ')||'none'),
     'No listening evaluation, acoustic fidelity, or mastering certification.'
   ];
-  $('music-report').textContent+='\n'+a.join('\n');
-  objectUrl=URL.createObjectURL(new Blob([wav],{type:'audio/wav'}));
+  objectUrl=URL.createObjectURL(new Blob([data],{type:'audio/wav'}));
   $('music-preview').src=objectUrl;
+  wav=data;
+  $('music-report').textContent+='\n'+a.join('\n');
   out((fa()?'WAV استریو آماده شد.':'Stereo WAV ready.')+' '+txt('browser'));
  }catch(e){if(start===revision)out(e?.message==='render-cancelled'?txt('cancelled'):
     e?.message==='mobile-render-memory-budget'?txt('resource'):txt('error'))}
@@ -4381,7 +4399,11 @@ function resetPrivateDraft(){
  invalidate();
 }
 document.addEventListener('nexus-music-clear',()=>{invalidate();$('music-title').value='Untitled journey'});
-window.addEventListener('pagehide',()=>{revision++;resetAudio()});
+window.addEventListener('pagehide',()=>{
+ const wasRendering=working;
+ revision++;working=false;resetAudio();
+ out(txt(wasRendering?'cancelled':score?'built':'ready'));
+});
 out(txt('ready'));buttons();
 window.NexusMusicUI=Object.freeze({clear:resetPrivateDraft,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
  hasTransientWork:()=>Boolean(score||wav||working||isFormChanged())});
@@ -5258,7 +5280,13 @@ function resetPrivateDraft(){
   'دستور موسیقی را بنویس و طرح شناسایی‌شده را بازبینی کن.');
  buttons();
 }
-window.addEventListener('pagehide',()=>{ticket++;clearWav();clearDry()});
+window.addEventListener('pagehide',()=>{
+ const hadRender=rendering||wav;
+ ticket++;rendering=false;mixing=false;
+ clearWav();clearDry();
+ if(hadRender&&score)status('Score ready. Render again to preview audio.',
+  'پارتیتور آماده است. برای پیش‌شنیدن دوباره صدا بساز.');
+});
 window.NexusOrchestraUI=Object.freeze({
  hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
  hasOriginalVocal:()=>Boolean(dryBytes),hasMixedWav:()=>Boolean(mixWav),

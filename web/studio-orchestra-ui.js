@@ -275,7 +275,13 @@ function resetPrivateDraft(){
   'دستور موسیقی را بنویس و طرح شناسایی‌شده را بازبینی کن.');
  buttons();
 }
-window.addEventListener('pagehide',()=>{ticket++;clearWav();clearDry()});
+window.addEventListener('pagehide',()=>{
+ const hadRender=rendering||wav;
+ ticket++;rendering=false;mixing=false;
+ clearWav();clearDry();
+ if(hadRender&&score)status('Score ready. Render again to preview audio.',
+  'پارتیتور آماده است. برای پیش‌شنیدن دوباره صدا بساز.');
+});
 window.NexusOrchestraUI=Object.freeze({
  hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
  hasOriginalVocal:()=>Boolean(dryBytes),hasMixedWav:()=>Boolean(mixWav),

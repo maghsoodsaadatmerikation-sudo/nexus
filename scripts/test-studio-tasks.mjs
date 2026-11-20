@@ -13,9 +13,24 @@ pending.get('left').resolve('2');await tick();assert.deepEqual(started,['left','
 pending.get('right').resolve('3');await tick();assert(started.includes('final'));assert.deepEqual(JSON.parse(pending.get('final').input).dependencies,{left:'2',right:'3'});checks+=2;
 pending.get('final').resolve('5');pending.get('other').resolve('7');const result=await done;assert(result.jobs.every(j=>j.status==='succeeded'));assert.equal(peak,2);checks+=2;
 started=[];pending=new Map();const failed=runner.run(plan([{id:'child',code:'child',needs:['bad']},{id:'grandchild',code:'grandchild',needs:['child']},{id:'bad',code:'bad'},{id:'ok',code:'ok'}]));await tick();pending.get('bad').reject();pending.get('ok').resolve('1');const failure=await failed;assert.deepEqual(failure.jobs.map(j=>j.status),['blocked','blocked','failed','succeeded']);checks++;
-const cancelled=runner.run(plan([{id:'a',code:'a'},{id:'b',code:'b'},{id:'c',code:'c'}]));await tick();runner.cancel();assert((await cancelled).jobs.every(j=>j.status==='cancelled'));checks++;
+const cancelled=runner.run(plan([{id:'a',code:'a'},{id:'b',code:'b'},{id:'c',code:'c'}]));await tick();runner.cancel();assert((await cancelled).jobs.every(j=>j.status==='cancelled'&&j.error==='cancelled'));checks++;
 const throwing=new Runner(()=>{throw Error('factory failure')});const tr=await throwing.run(plan([{id:'a',code:'a'}]),{onUpdate(){throw Error('observer')}});assert.equal(tr.jobs[0].status,'failed');checks++;
 const huge=new Runner(()=>({run:async()=> 'x'.repeat(64001)}));assert.equal((await huge.run(plan([{id:'a',code:'a'}]))).jobs[0].status,'failed');checks++;
 const cancelledImmediately=runner.run(plan([{id:'fresh',code:'fresh'}]));runner.cancel();assert.equal((await cancelledImmediately).jobs[0].status,'cancelled');checks++;
 await tick();assert.equal(runner.active,null);checks++;
+const nativeSetTimeout=globalThis.setTimeout;
+let deadline;
+globalThis.setTimeout=(callback,delay,...args)=>{
+ if(delay!==60000)return nativeSetTimeout(callback,delay,...args);
+ deadline=callback;return null;
+};
+try{
+ const timed=runner.run({...plan([{id:'good',code:'good'},{id:'slow',code:'slow'},{id:'queued',code:'queued'}]),concurrency:1});
+ await tick();pending.get('good').resolve('2');await tick();
+ deadline();
+ const {jobs}=await timed;
+ assert.equal(jobs[0].status,'succeeded');
+ assert(jobs.slice(1).every(job=>job.status==='cancelled'&&job.error==='deadline-exceeded'));
+ checks+=2;
+}finally{globalThis.setTimeout=nativeSetTimeout}
 console.log(JSON.stringify({status:'PASS',checks,real_browser_worker_tested:false}));

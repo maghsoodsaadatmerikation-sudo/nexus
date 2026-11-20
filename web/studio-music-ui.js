@@ -41,17 +41,17 @@ function buttons(){
 function resetAudio(){
  if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=null;
  const audio=$('music-preview');audio.pause();audio.removeAttribute('src');audio.load();
- wav=null;$('music-progress').value=0;buttons()
+ wav=null;$('music-progress').value=0;summary();buttons()
 }
 function invalidate(){
- revision++;working=false;score=null;resetAudio();$('music-report').textContent='';out(txt('ready'));
+ revision++;working=false;score=null;resetAudio();out(txt('ready'));
 }
 for(const node of $('music-card').querySelectorAll('select,input')){
  if(['music-quality','music-sound','music-problem','music-lock-motif'].includes(node.id))continue;
  node.addEventListener('change',invalidate);
 }
 function outputSettingsChanged(){
- revision++;working=false;resetAudio();summary();out(txt('ready'));
+ revision++;working=false;resetAudio();out(txt(score?'built':'ready'));
 }
 $('music-quality').addEventListener('change',outputSettingsChanged);
 $('music-sound').addEventListener('change',outputSettingsChanged);
@@ -64,7 +64,7 @@ function download(data,name,type){
  out(txt('exported'));
 }
 function summary(){
- if(!score)return;
+ if(!score){$('music-report').textContent='';return}
  const energy=score.sections.map(s=>(s.name+': '+s.energy.toFixed(2)+' · '+s.bars+' bars')).join('\n');
  const r=score.review,inst=Object.entries(r.instruments).filter(([,count])=>count).map(([key,count])=>key+': '+count).join(' | ');
  const text=[
@@ -84,7 +84,7 @@ function summary(){
 $('music-build').addEventListener('click',()=>{
  if(working)return;
  try{
-  score=Music.compose(inputs());resetAudio();summary();
+  score=Music.compose(inputs());resetAudio();
   $('music-progress').value=0;out(txt('built'));buttons();
  }catch{score=null;resetAudio();out(txt('error'))}
 });
@@ -127,7 +127,6 @@ $('music-render').addEventListener('click',async()=>{
    onProgress:p=>{if(start===revision){$('music-progress').value=Math.round(p*100);out(txt('rendering')+': '+Math.round(100*p)+'%')}}
   });
   if(start!==revision)return;
-  wav=data;
   const audio=Music.analyzeWav(data,active);
   const a=[
     fa()?'--- تحلیل واقعی سیگنال WAV ---':'--- Measured WAV diagnostics ---',
@@ -142,9 +141,10 @@ $('music-render').addEventListener('click',async()=>{
     'WAV warnings: '+(audio.warnings.join(', ')||'none'),
     'No listening evaluation, acoustic fidelity, or mastering certification.'
   ];
-  $('music-report').textContent+='\n'+a.join('\n');
-  objectUrl=URL.createObjectURL(new Blob([wav],{type:'audio/wav'}));
+  objectUrl=URL.createObjectURL(new Blob([data],{type:'audio/wav'}));
   $('music-preview').src=objectUrl;
+  wav=data;
+  $('music-report').textContent+='\n'+a.join('\n');
   out((fa()?'WAV استریو آماده شد.':'Stereo WAV ready.')+' '+txt('browser'));
  }catch(e){if(start===revision)out(e?.message==='render-cancelled'?txt('cancelled'):
     e?.message==='mobile-render-memory-budget'?txt('resource'):txt('error'))}
@@ -176,7 +176,11 @@ function resetPrivateDraft(){
  invalidate();
 }
 document.addEventListener('nexus-music-clear',()=>{invalidate();$('music-title').value='Untitled journey'});
-window.addEventListener('pagehide',()=>{revision++;resetAudio()});
+window.addEventListener('pagehide',()=>{
+ const wasRendering=working;
+ revision++;working=false;resetAudio();
+ out(txt(wasRendering?'cancelled':score?'built':'ready'));
+});
 out(txt('ready'));buttons();
 window.NexusMusicUI=Object.freeze({clear:resetPrivateDraft,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
  hasTransientWork:()=>Boolean(score||wav||working||isFormChanged())});
