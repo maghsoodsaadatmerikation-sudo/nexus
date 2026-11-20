@@ -21,7 +21,8 @@ class SourceFallbackTests(unittest.TestCase):
         self.root = Path(temp.name)
         self.zip_path = self.root / "old-live-source.zip"
         self.report_path = self.root / "old-live-public-witness.json"
-        self.assets = fallback.gate.source_assets()
+        assets = fallback.gate.source_assets()
+        self.assets = {name: assets[name] for name in fallback.LEGACY_FILES}
         self.fetch = lambda name: self.assets[name]
 
     def build(self, fetch=None):
@@ -47,7 +48,7 @@ class SourceFallbackTests(unittest.TestCase):
         self.assertEqual(report["data_included"], "public_static_source_only")
         with zipfile.ZipFile(self.zip_path) as zipped:
             self.assertEqual(zipped.namelist(), sorted(
-                fallback.BUNDLE+"/"+name for name in fallback.gate.FILES))
+                fallback.BUNDLE+"/"+name for name in fallback.LEGACY_FILES))
         one = self.zip_path.read_bytes()
         self.zip_path.unlink()
         self.report_path.unlink()
@@ -143,11 +144,11 @@ class SourceFallbackTests(unittest.TestCase):
             fallback.make_report(self.assets, good, "UNPINNED")
 
     def test_public_only_allowlist(self):
-        self.assertEqual(len(fallback.gate.FILES), 13)
+        self.assertEqual(len(fallback.LEGACY_FILES), 13)
         self.assertEqual(len(fallback.gate.OBSERVE), 9)
         self.assertEqual(fallback.SERVICE, "srv-dbrjurc9v7es73cqe0v0")
-        self.assertEqual(fallback.LIVE_COMMIT, "9e05b840fc2d36d7bc268aede2693ab4d6fb08e3")
-        self.assertEqual(fallback.LIVE_DEPLOY, "dep-dbvkuonf3r2c73cj3930")
+        self.assertEqual(fallback.LIVE_COMMIT, "8b5da6a192e6be68283282afcb2ac9b5d0fdcd91")
+        self.assertEqual(fallback.LIVE_DEPLOY, "dep-dbvvvil9fdbs73c6qb80")
 
 
 if __name__ == "__main__":

@@ -47,14 +47,14 @@ class StudioLocalTests(unittest.TestCase):
         self.assertTrue(kit.verify(self.zip, exact_commit=COMMIT))
         with zipfile.ZipFile(self.zip) as archive:
             names = archive.namelist()
-            self.assertEqual(len(names), 17)
+            self.assertEqual(len(names), 21)
             self.assertEqual(
                 set(names),
                 {kit.BUNDLE + "/" + n for n in kit.SOURCE_NAMES + (kit.CHECK_NAME,
                     "run-local.py", "README.txt", "source-manifest.json")})
             receipt = json.loads(archive.read(kit.BUNDLE + "/source-manifest.json"))
             self.assertEqual(receipt["source_commit"], COMMIT)
-            self.assertEqual(len(receipt["assets"]), 14)
+            self.assertEqual(len(receipt["assets"]), 18)
             check = archive.read(kit.BUNDLE + "/" + kit.CHECK_NAME)
             self.assertIn(receipt["assets"]["index.html"]["sha256"].encode(), check)
             self.assertIn(receipt["assets"]["service-worker.js"]["sha256"].encode(), check)

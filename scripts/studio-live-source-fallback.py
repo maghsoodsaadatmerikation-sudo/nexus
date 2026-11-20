@@ -18,6 +18,7 @@ import sys
 import tempfile
 import zipfile
 from png_pixels import pixel_digest
+from studio_public_assets import LEGACY_FILES
 
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "studio-static-release-gate.py"
@@ -25,8 +26,8 @@ _spec = importlib.util.spec_from_file_location("nexus_static_release_gate", SCRI
 gate = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(gate)
 
-LIVE_COMMIT = "9e05b840fc2d36d7bc268aede2693ab4d6fb08e3"
-LIVE_DEPLOY = "dep-dbvkuonf3r2c73cj3930"
+LIVE_COMMIT = "8b5da6a192e6be68283282afcb2ac9b5d0fdcd91"
+LIVE_DEPLOY = "dep-dbvvvil9fdbs73c6qb80"
 SERVICE = "srv-dbrjurc9v7es73cqe0v0"
 WORKSPACE = "tea-dabhioe10ojc73acbs8g"
 SCHEMA = "nexus.studio.live-source-fallback.v1"
@@ -46,10 +47,10 @@ def check_old_root(root):
         raise ValueError("BLOCKED: old checkout does not match known live Git SHA")
     source = root / "public/studio"
     found = sorted(str(p.relative_to(source)) for p in source.rglob("*") if p.is_file())
-    if found != sorted(gate.FILES):
+    if found != sorted(LEGACY_FILES):
         raise ValueError("BLOCKED: historical source asset list differs")
     assets = {}
-    for name in gate.FILES:
+    for name in LEGACY_FILES:
         target = source / name
         st = target.lstat()
         if target.is_symlink() or not stat.S_ISREG(st.st_mode) or \
@@ -104,7 +105,7 @@ def archive(assets, target):
 def make_report(assets, statuses, zip_sha):
     if set(statuses) != set(gate.OBSERVE):
         raise ValueError("BLOCKED: incomplete public observation")
-    if set(assets) != set(gate.FILES):
+    if set(assets) != set(LEGACY_FILES):
         raise ValueError("BLOCKED: unexpected fallback asset set")
     if not re.fullmatch(r"[0-9a-f]{64}", zip_sha):
         raise ValueError("BLOCKED: invalid package digest")
@@ -124,7 +125,7 @@ def make_report(assets, statuses, zip_sha):
         "png_icons_compared_by_rgba_pixels": True,
         "observed_paths": [{"path": name, "status": statuses[name]}
                            for name in gate.OBSERVE],
-        "reviewed_file_count": len(gate.FILES),
+        "reviewed_file_count": len(LEGACY_FILES),
         "source_assets": {name: {"bytes": len(assets[name]), "sha256": sha(assets[name])}
                           for name in sorted(assets)},
         "archive_sha256": zip_sha,
@@ -192,16 +193,16 @@ def verify(zip_path, manifest_path):
             manifest.get("production_deploy_executed") is not False or \
             manifest.get("rollback_render_build_artifact_confirmed") is not False or \
             manifest.get("archive_sha256") != sha(zip_path.read_bytes()) or \
-            manifest.get("reviewed_file_count") != len(gate.FILES):
+            manifest.get("reviewed_file_count") != len(LEGACY_FILES):
         raise ValueError("BLOCKED: fallback evidence/authority invalid")
     with zipfile.ZipFile(zip_path) as zipped:
         infos = zipped.infolist()
-        if len(infos) != len(gate.FILES):
+        if len(infos) != len(LEGACY_FILES):
             raise ValueError("BLOCKED: unexpected fallback member count")
         assets = {}
         for member in infos:
             if not member.filename.startswith(BUNDLE + "/") or \
-                    member.filename[len(BUNDLE)+1:] not in gate.FILES or \
+                    member.filename[len(BUNDLE)+1:] not in LEGACY_FILES or \
                     member.filename in assets or \
                     member.is_dir() or member.compress_type != zipfile.ZIP_STORED or \
                     not stat.S_ISREG(member.external_attr >> 16) or \

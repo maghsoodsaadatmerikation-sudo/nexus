@@ -58,6 +58,20 @@ See [the operational and security contract](STUDIO-CHAT-ATTACHMENTS.md).
 This is *not* multimodal model vision, PDF/OCR parsing, unrestricted file
 uploads, source verification or a substitute for real ChatGPT model quality.
 
+## PDF text attachments
+
+In the public or phone-local Studio, open **Attach text files to this message**
+and choose **Attach a PDF**. The browser extracts selectable text with its
+packaged PDF.js 6.5.438 worker. It reads up to the first 20 pages of a file up
+to 2 MiB and labels passages with page numbers. Studio attaches temporary text
+rather than storing the PDF. When using a model, the existing request preview
+shows the excerpts before sending.
+
+Image-only scans require OCR before import. Password-protected PDFs and complex
+reading order are not supported reliably. Offline extraction is available after
+**Prepare offline use** caches the parser and worker. The original PDF is
+never sent to a server by this import. See [PDF.js](https://mozilla.github.io/pdf.js/).
+
 ## Direct chat handoff from the existing local tools
 
 Studio now exposes **Use in next chat** actions on explicitly fetched public
@@ -106,7 +120,7 @@ reference for the consumer-plan features below.
 | --- | --- | --- |
 | Hosted frontier-model reasoning | No hosted model/key supplied | A funded/authorized provider or a separately hosted local model with sufficient compute |
 | Live web retrieval / deep research | Combined, consented Wikipedia/Crossref retrieval and a selected-source brief; autonomous multi-step research is pending | Broader search APIs, source verification, model/tool orchestration and source-quality evaluations |
-| Image understanding / OCR | Studio imports text, not images/PDF OCR | A vision/OCR provider, image limits and actual image-quality tests |
+| Image understanding / OCR | Studio extracts selectable PDF text locally; image recognition and OCR are pending | A vision/OCR provider, image limits and actual image-quality tests |
 | Image/video generation | Not implemented | A connected generation provider, usage authorization and media QA |
 | Real-time voice conversation | Opt-in microphone dictation and local read-aloud | A real-time audio provider, microphone permissions, interruption tests and device QA |
 | Sandboxed Python/code execution | JavaScript Worker lab available; no Python or OS execution | An isolated Python/OS execution service with resource/network limits and reproducibility checks |
@@ -135,8 +149,7 @@ automatically inserted into a prompt. Global local-history search is a separate,
 explicit user action. The UI rejects unsaved profile/canvas drafts before archive
 save, so applied and unapplied work are not silently conflated.
 
-Archives contain project source text, not the original file binaries. There is no
-PDF, Office layout parsing, semantic embedding search or OCR in Studio. Existing
+Archives contain project source text, not the original file binaries. PDF attachments are temporary text extracts. Office layout parsing, semantic embedding search and OCR are outside this implementation. Existing
 file-desk and analysis tools are separate. Retrieval is lexical, case-insensitive,
 Unicode-aware search over bounded source passages. A name/line label identifies
 supplied text; it does not independently verify that text or validate a model's

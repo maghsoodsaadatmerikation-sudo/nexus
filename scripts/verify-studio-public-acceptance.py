@@ -22,6 +22,7 @@ REQUIRED_CHECKS = frozenset({
     "encrypted-browser-save",
     "true-offline-reload-still-locked",
     "offline-encrypted-reopen",
+    "pdf-text-extracted-in-offline-worker",
     "corrupted-offline-shell-rejected",
     "remove-code-retains-open-and-encrypted-work",
 })

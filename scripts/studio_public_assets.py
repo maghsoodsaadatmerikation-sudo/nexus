@@ -5,7 +5,10 @@ import stat
 
 # Bounded standalone HTML budget, including the combined research brief.
 MAX_FILE = 520_000
-FILES = (
+PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
+PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
+WORKER_LIMIT = 1_300_000
+LEGACY_FILES = (
     "index.html",
     "service-worker.js",
     "manifest.json",
@@ -20,6 +23,10 @@ FILES = (
     "device/vendor/LICENSE-transformers.txt",
     "device/vendor/ort-wasm-simd-threaded.asyncify.mjs",
 )
+FILES = LEGACY_FILES + PDF_FILES
+
+def asset_limit(name):
+    return WORKER_LIMIT if name == 'pdf/pdf.worker.min.mjs' else MAX_FILE
 
 
 def check_public_tree(root):
@@ -33,7 +40,7 @@ def check_public_tree(root):
             continue
         relative = path.relative_to(root).as_posix()
         if (relative not in FILES or not stat.S_ISREG(info.st_mode) or
-                info.st_nlink != 1 or not 0 < info.st_size <= MAX_FILE):
+                info.st_nlink != 1 or not 0 < info.st_size <= asset_limit(relative)):
             raise ValueError("public Studio contains an unreviewed or unsupported asset")
         paths[relative] = path
     if paths.keys() != set(FILES):
