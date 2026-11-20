@@ -2691,7 +2691,11 @@ $('messages').after(receipt);
 open.dataset.en='Connections';open.dataset.fa='اتصال‌ها';
 document.body.append(dialog);composer.append(open);
 let targets=[],origin='',controller=null,selectedResult=null,branchPlan=null,fileBase=null,filePlan=null,originalText='';
-let requestedProvider=null,requestedOperation=null,receiptCopy=null,receiptSelection=null;
+let requestedProvider=null,requestedOperation=null,dialogSelection=null,receiptCopy=null,receiptSelection=null;
+function matchesSelection(selection){
+ const current=window.NexusStudioUI.selection();
+ return current.projectId===selection?.projectId&&current.threadId===selection?.threadId;
+}
 function clearReceipt(){
  receipt.hidden=view.hidden=true;receiptCopy=receiptSelection=null;
  receiptTitle.textContent=receiptStatus.textContent=receiptPreview.textContent='';
@@ -2699,8 +2703,7 @@ function clearReceipt(){
 }
 function showReceipt({kind,operation='',target='',message='',body='',copy=null}){
  clearReceipt();
- const current=window.NexusStudioUI?.selection?.();
- receiptSelection={projectId:current?.projectId||null,threadId:current?.threadId||null};
+ receiptSelection=dialogSelection;
  receiptTitle.textContent=([operation||'Connections',target].filter(Boolean).join(' · ')).slice(0,240);
  const success=kind==='read'||kind==='write';
  receiptStatus.textContent=message||(
@@ -2726,9 +2729,7 @@ function showReceipt({kind,operation='',target='',message='',body='',copy=null})
 receiptDismiss.onclick=clearReceipt;
 receiptAttach.onclick=()=>{
  if(!receiptCopy)return;
- const current=window.NexusStudioUI?.selection?.();
- if(current?.projectId!==receiptSelection?.projectId||
-    current?.threadId!==receiptSelection?.threadId){clearReceipt();return}
+ if(!matchesSelection(receiptSelection)){clearReceipt();return}
  const {label,text}=receiptCopy;
  if(window.NexusStudioUI.stageChatContext(label,text)){
   receiptCopy=null;receiptAttach.hidden=true;
@@ -2744,10 +2745,11 @@ view.onclick=()=>{
  receipt.tabIndex=-1;receipt.focus({preventScroll:true});
 };
 document.addEventListener('nexus-studio-state',()=>{
- if(receipt.hidden)return;
- const current=window.NexusStudioUI?.selection?.();
- if(current?.projectId!==receiptSelection?.projectId||
-    current?.threadId!==receiptSelection?.threadId)clearReceipt();
+ if(!receipt.hidden&&!matchesSelection(receiptSelection))clearReceipt();
+ if(dialog.open&&!matchesSelection(dialogSelection)){
+  dialog.close();
+  reset();
+ }
 });
 const branching=()=>operations.value==='github.branch',editing=()=>operations.value==='github.edit';
 const validSha=s=>/^[a-f0-9]{40}$/.test(s);
@@ -2781,18 +2783,23 @@ function updateReview(){
  review.textContent=entry?operations.selectedOptions[0].textContent+'\n'+entry.target+
   (path.hidden?'':' / '+(branch?'nexus/studio-':'')+path.value.trim()):'';
 }
+function setRequestControls(active){
+ connect.disabled=create.disabled=preview.disabled=operations.disabled=topic.disabled=path.disabled=editor.readOnly=active;
+ read.disabled=active||(!path.hidden&&!path.value.trim());
+}
 function reset(){
  controller?.abort();controller=null;targets=[];origin='';
  operations.replaceChildren();operations.hidden=true;
- statusLine.textContent='';topic.value='';updateReview();
- connect.disabled=false;editor.readOnly=false;
+ statusLine.textContent='';topic.value=path.value='';updateReview();
+ setRequestControls(false);
 }
 async function request(suffix,body,apply){
- if(controller)return;
+ if(controller||!dialog.open)return;
+ clearReceipt();
  const abort=new AbortController();controller=abort;
  const branchWrite=suffix==='/github/branch',fileWrite=suffix==='/github/file-commit';
  const timer=setTimeout(()=>abort.abort(),suffix.includes('/file-')?55000:branchWrite?43000:15000);
- connect.disabled=read.disabled=create.disabled=preview.disabled=editor.readOnly=true;
+ setRequestControls(true);
  statusLine.textContent=words('Loading…','در حال بارگیری…');
  try{
   const url=gateway(),token=$('gateway-token').value.trim();
@@ -2805,11 +2812,13 @@ async function request(suffix,body,apply){
   });
   if(controller!==abort||!dialog.open)return;
   if(suffix.includes('/file-')&&response.status===409){
+   clearResult();
    statusLine.textContent=words('Review again. Reload the file if the branch changed.','دوباره بازبینی کن. اگر شاخه تغییر کرده، فایل را دوباره باز کن.');
    showReceipt({kind:'error',operation:operations.value,message:statusLine.textContent});
    return;
   }
   if(branchWrite&&response.status===409){
+   clearResult();
    statusLine.textContent=words('Review again or choose a new name. The branch was not confirmed.',
     'دوباره بازبینی کن یا نام دیگری انتخاب کن. ایجاد شاخه تأیید نشد.');
    showReceipt({kind:'error',operation:operations.value,message:statusLine.textContent});
@@ -2820,7 +2829,7 @@ async function request(suffix,body,apply){
   if(url!==gateway()||token!==$('gateway-token').value.trim())throw Error('changed');
   statusLine.textContent='';apply(output,url);
  }catch{
-  if(controller===abort){
+  if(controller===abort&&dialog.open){
    statusLine.textContent=words('Connection unavailable. Check the gateway, access token and provider permissions.',
     'اتصال برقرار نشد. درگاه، توکن دسترسی و مجوز سرویس را بررسی کن.');
    if(branchWrite)statusLine.textContent=words('Branch result unknown. Retry with the same name.',
@@ -2830,7 +2839,7 @@ async function request(suffix,body,apply){
   }
  }finally{
   clearTimeout(timer);
-  if(controller===abort){controller=null;connect.disabled=create.disabled=preview.disabled=editor.readOnly=false;read.disabled=!path.hidden&&!path.value.trim()}
+  if(controller===abort){controller=null;setRequestControls(false)}
  }
 }
 /* Provider and operation hints only choose the review surface. They never
@@ -2845,6 +2854,7 @@ function openFor({provider=null,operation=null}={}){
   statusLine.textContent=words(name+' selected. Load connections to review available actions.',
     name+' انتخاب شد. برای بازبینی عملیات موجود، اتصال‌ها را بارگیری کن.');
  }
+ dialogSelection=window.NexusStudioUI.selection();
  dialog.showModal();connect.focus();return true;
 }
 open.onclick=()=>openFor();
@@ -2852,7 +2862,7 @@ close.onclick=()=>{if(discardFile())dialog.close()};
 dialog.addEventListener('cancel',event=>{if(!discardFile())event.preventDefault()});
 // A close event may be delivered after another review has already opened.
 // Never let the previous dialog lifecycle erase the newly opened operation.
-dialog.addEventListener('close',()=>{if(dialog.open)return;requestedProvider=requestedOperation=null;reset()});
+dialog.addEventListener('close',()=>{if(dialog.open)return;requestedProvider=requestedOperation=dialogSelection=null;reset()});
 settings.onclick=()=>{
  if(!discardFile())return;
  dialog.close();document.dispatchEvent(new Event('nexus-studio-show-chat-options'));
@@ -2887,13 +2897,15 @@ connect.onclick=()=>{
  });
 };
 operations.onchange=topic.onchange=path.onchange=()=>{
+ if(controller)return;
  if(!discardFile()){operations.value='github.edit';topic.value=fileBase.slug;path.value=fileBase.path;preview.disabled=false;return}
  // The user may replace a preselected proposal, never approve it implicitly.
  if(document.activeElement===operations)requestedOperation=null;
- controller?.abort();controller=null;connect.disabled=editor.readOnly=false;updateReview();
+ clearReceipt();updateReview();
 };
 topic.oninput=path.oninput=()=>{
- controller?.abort();controller=null;connect.disabled=editor.readOnly=false;
+ if(controller)return;
+ clearReceipt();
  if(fileBase){clearResult();preview.disabled=topic.value.trim()!==fileBase.slug||path.value.trim()!==fileBase.path;return}
  updateReview();
 };
@@ -2947,7 +2959,7 @@ read.onclick=()=>{
 function sameFile(data,entry,p){
  return p.target===entry.target&&p.branch==='nexus/studio-'+data.slug&&p.path===data.path;
 }
-editor.oninput=()=>{controller?.abort();controller=null;connect.disabled=preview.disabled=read.disabled=false;clearResult()};
+editor.oninput=()=>{if(!controller)clearResult()};
 preview.onclick=()=>{
  if(!fileBase||topic.value.trim()!==fileBase.slug||path.value.trim()!==fileBase.path)return;
  const entry=choice(),data={...fileBase,text:editor.value};
@@ -3001,7 +3013,7 @@ window.addEventListener('beforeunload',event=>{
  if(fileBase&&editor.value!==originalText){event.preventDefault();event.returnValue=''}
 });
 document.addEventListener('nexus-studio-private-clear',()=>{clearReceipt();if(dialog.open)dialog.close();reset()});
-for(const id of ['gateway','gateway-token'])$(id).addEventListener('input',reset);
+for(const id of ['gateway','gateway-token'])$(id).addEventListener('input',()=>{clearReceipt();reset()});
 $('language').addEventListener('change',labels);
 window.NexusStudioConnections=Object.freeze({openFor});
 labels();

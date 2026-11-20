@@ -15,6 +15,9 @@ window.addEventListener('load',async()=>{
  const file=(id,name,text)=>{const dt=new DataTransfer();dt.items.add(new File([text],name));$(id).files=dt.files;$(id).dispatchEvent(new Event('change'))};
  const snapshot=()=>NexusStudioUI.snapshot(),project=()=>snapshot().projects.find(p=>p.id===$('projects').value);
  let providerCalls=0,searchCalls=0,catalogCalls=0,connectionActions=0;
+ let branchEnabled=false,delayRead=false,releaseRead,readSignal;
+ let branchPreviews=0,branchWrites=0;
+ const branchBase='d'.repeat(40);
  const closeConnection=async()=>{const d=$('studio-connections');const closed=new Promise(r=>d.addEventListener('close',r,{once:true}));$('studio-connections-close').click();await closed};
  window.confirm=()=>true;
  window.fetch=async(url,options={})=>{
@@ -23,7 +26,7 @@ window.addEventListener('load',async()=>{
   if(String(url).endsWith('/studio-api/connections')){
    catalogCalls++;
    return new Response(JSON.stringify({connections:[
-    {provider:'github',target:'example/nexus',configuration_id:'a'.repeat(64)},
+    {provider:'github',target:'example/nexus',configuration_id:'a'.repeat(64),branch_creation:branchEnabled},
     {provider:'render',target:'srv-test',configuration_id:'b'.repeat(64)}
    ]}));
   }
@@ -31,11 +34,29 @@ window.addEventListener('load',async()=>{
    connectionActions++;
    const requested=JSON.parse(options.body||'{}');
    if(!requested.consent)throw Error('missing-explicit-consent');
+   if(delayRead){
+    readSignal=options.signal;
+    await new Promise(resolve=>{releaseRead=resolve});
+    if(requested.path)return Response.json({
+     provenance:'external-untrusted',operation:'github.file',provider:'github',
+     target:'example/nexus',result:{text:'Delayed private read',blob_sha:'c'.repeat(40)}
+    });
+   }
    if(requested.operation==='github.pulls')return new Response(JSON.stringify({
     provenance:'external-untrusted',operation:'github.pulls',provider:'github',
     target:'example/nexus',result:[{number:7,title:'UNTRUSTED synthetic pull request',head:'review'}]
    }),{headers:{'content-type':'application/json'}});
    throw Error('simulated-provider-unavailable');
+  }
+  if(String(url).endsWith('/studio-api/connections/github/branch-preview')){
+   branchPreviews++;
+   const {slug}=JSON.parse(options.body);
+   return Response.json({target:'example/nexus',branch:'nexus/studio-'+slug,
+    base_sha:branchBase,review_id:String(branchPreviews).repeat(64),expires_at:1900000000});
+  }
+  if(String(url).endsWith('/studio-api/connections/github/branch')){
+   branchWrites++;
+   return new Response(null,{status:409});
   }
   if(String(url).includes('/studio-api/connections/')){connectionActions++;throw Error('unreviewed-provider-call')}
   if(String(url).startsWith('https://en.wikipedia.org/')){searchCalls++;return new Response(JSON.stringify({query:{pages:{42:{pageid:42,title:'Source title',extract:'Unverified live source note from Wikipedia.'}}}}))}
@@ -192,8 +213,57 @@ window.addEventListener('load',async()=>{
   await closeConnection();
   fill('message','/unknown do something');
   assert(!chatSend.textContent.includes('Review Connections'),'unsupported-command-not-misrouted');
+  branchEnabled=true;
+  assert(NexusStudioConnections.openFor({provider:'github',operation:'github.branch'}),'open-branch-review');
+  $('studio-connections-load').click();
+  await wait(()=>$('studio-connections').querySelector('select').value==='github.branch');
+  fill('studio-connection-path','branch-review');
+  $('studio-connections-read').click();
+  const confirmBranch=$('studio-connections-create');
+  await wait(()=>!confirmBranch.hidden&&!confirmBranch.disabled);
+  confirmBranch.click();
+  await wait(()=>!receipt.hidden);
+  assert(branchWrites===1&&confirmBranch.hidden,'branch-conflict-revokes-confirmation');
+  confirmBranch.click();
+  assert(branchWrites===1,'expired-approval-cannot-be-replayed');
+  $('studio-connections-read').click();
+  assert(receipt.hidden,'new-review-replaces-previous-receipt');
+  await wait(()=>!confirmBranch.hidden&&!confirmBranch.disabled);
+  assert(branchPreviews===2,'fresh-branch-review-restores-confirmation');
+  await closeConnection();
+
+  const prior=NexusStudioUI.selection();
+  fill('message','');
+  $('new-thread').click();
+  const next=NexusStudioUI.selection();
+  assert(prior.projectId===next.projectId&&prior.threadId!==next.threadId,'two-chats-share-a-project');
+  assert(NexusStudioUI.openConversation(prior.projectId,prior.threadId),'select-origin-chat');
+  assert(NexusStudioConnections.openFor({provider:'github',operation:'github.file'}),'open-file-review');
+  $('studio-connections-load').click();
+  await wait(()=>$('studio-connections').querySelector('select').value==='github.file');
+  fill('studio-connection-path','private-notes.md');
+  delayRead=true;
+  $('studio-connections-read').click();
+  await wait(()=>Boolean(releaseRead));
+  const dialog=$('studio-connections');
+  assert($('studio-connection-path').disabled&&dialog.querySelector('select').disabled,
+   'pending-request-locks-reviewed-operation-and-path');
+  assert(NexusStudioUI.openConversation(next.projectId,next.threadId),'change-chat-during-read');
+  assert(!dialog.open&&readSignal.aborted,'chat-change-closes-dialog-and-aborts-read');
+  releaseRead();
+  await new Promise(resolve=>setTimeout(resolve,50));
+  assert(receipt.hidden&&!receipt.textContent.includes('Delayed private read')&&
+   !dialog.textContent.includes('Delayed private read')&&$('studio-connection-path').value==='',
+   'late-connector-response-and-path-stay-out-of-new-chat');
+
+  delayRead=false;
+  assert(NexusStudioConnections.openFor({provider:'github',operation:'github.pulls'}),'open-fresh-review');
+  $('studio-connections-load').click();
+  await wait(()=>dialog.querySelector('select').value==='github.pulls');
+  $('studio-connections-read').click();
+  await wait(()=>!receipt.hidden);
   document.dispatchEvent(new Event('nexus-studio-private-clear'));
-  assert($('studio-connection-receipt').hidden,'private-clear-revokes-provider-receipt');
+  assert(receipt.hidden&&!dialog.open,'private-clear-revokes-visible-provider-result');
 
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,real_model_tested:false});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
