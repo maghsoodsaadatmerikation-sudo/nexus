@@ -145,5 +145,53 @@ function render(container, text) {
  }
 }
 
-globalThis.NexusReplyFormat = Object.freeze({render});
+const exportStyle = `
+ :root {color-scheme: light dark; font: 17px/1.6 system-ui, sans-serif;}
+ body {margin: 0; padding: clamp(1rem, 4vw, 3rem);}
+ main {max-width: 74ch; margin: auto; overflow-wrap: anywhere; white-space: pre-wrap;}
+ .reply-format {white-space: normal;}
+ .reply-format :is(p,blockquote) {white-space: pre-wrap;}
+ h1 {font-size: 1.5rem;}
+ ul, ol {padding-inline-start: 1.5rem;}
+ blockquote {margin-inline: 0; padding-inline-start: .75rem; border-inline-start: 3px solid;}
+ pre, .reply-table {overflow: auto;}
+ pre {direction: ltr; text-align: left; white-space: pre; border: 1px solid; border-radius: .5rem; padding: .75rem;}
+ pre:focus-visible, .reply-table:focus-visible {outline: 2px solid; outline-offset: 2px;}
+ table {width: 100%; border-collapse: collapse;}
+ th, td {border: 1px solid; text-align: start; padding: .35rem .6rem;}
+ @media print {body {padding: 0;} pre {white-space: pre-wrap;}}
+`;
+
+function exportHtml(sourceDocument, text, {title, format}) {
+ const doc = sourceDocument.implementation.createHTMLDocument(title);
+ doc.documentElement.lang = sourceDocument.documentElement.lang || 'en';
+ doc.documentElement.dir = sourceDocument.documentElement.dir === 'rtl' ? 'rtl' : 'ltr';
+ const charset = doc.createElement('meta');
+ charset.setAttribute('charset', 'utf-8');
+ const policy = doc.createElement('meta');
+ policy.httpEquiv = 'Content-Security-Policy';
+ policy.content = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
+ doc.head.prepend(charset, policy);
+ const viewport = doc.createElement('meta');
+ viewport.name = 'viewport';
+ viewport.content = 'width=device-width, initial-scale=1';
+ const referrer = doc.createElement('meta');
+ referrer.name = 'referrer';
+ referrer.content = 'no-referrer';
+ const style = doc.createElement('style');
+ style.textContent = exportStyle;
+ doc.head.append(viewport, referrer, style);
+ const article = doc.createElement('main');
+ article.dir = 'auto';
+ const heading = doc.createElement('h1');
+ heading.textContent = title;
+ const content = doc.createElement('div');
+ if (format) render(content, text);
+ else content.textContent = text;
+ article.append(heading, content);
+ doc.body.append(article);
+ return '<!doctype html>\n' + doc.documentElement.outerHTML;
+}
+
+globalThis.NexusReplyFormat = Object.freeze({render, exportHtml});
 })();
