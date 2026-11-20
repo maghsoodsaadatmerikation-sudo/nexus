@@ -253,8 +253,9 @@ try{
    const query=text=>{search.value=text;search.dispatchEvent(new Event('input'))};
    query('CSV');if(choices().join()!=='data-card')return false;
    query('ميكس');if(choices().join()!=='orchestra-card')return false;
+   query('Reminders');if(choices().join()!=='reminders-card')return false;
    query('xyz-no-such-tool');if(choices().length||tray.querySelector('[role=status]').hidden)return false;
-   query('');return choices().length===12&&tray.querySelector('[role=status]').hidden;
+   query('');return choices().length===13&&tray.querySelector('[role=status]').hidden;
  })()`),'tool-catalog-search-and-empty-state');
  await js("document.querySelector('#studio-focus-tools button[data-panel=data-card]').click();true");
  assert(await js("NexusStudioFocus.active()==='data-card'&&!document.getElementById('data-card').hidden&&document.getElementById('conversation-card').hidden"),'data-panel-route');
