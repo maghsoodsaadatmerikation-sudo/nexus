@@ -1,4 +1,7 @@
 from contextlib import contextmanager
+import json
+
+import anyio
 import httpx
 import pytest
 from fastapi.testclient import TestClient
@@ -185,3 +188,116 @@ def test_malformed_provider_output_is_contained_and_capacity_recovers(monkeypatc
         assert r.status_code==502
         assert r.json()['detail']=='Invalid text-only model response'
         assert c.post('/studio-api/respond',json=BODY,headers=AUTH).json()['text']=='Recovered draft'
+
+
+def sse(delta, finish=None):
+    return ("data: " + json.dumps({
+        "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+    }, ensure_ascii=False) + "\r\n\r\n").encode()
+
+
+DONE = b"data: [DONE]\r\n\r\n"
+
+
+@pytest.mark.parametrize("finish", ["stop", "length"])
+def test_streamed_transport_binds_review_and_only_emits_answer_text(monkeypatch, finish):
+    monkeypatch.setenv("NEXUS_MODEL_STREAMING", "1")
+    visible = "برای 🌙"
+    wire = (b": keepalive\r\n\r\n" + sse({"role": "assistant", "reasoning_content": "private"})
+            + sse({"content": visible}) + sse({}, finish) + DONE)
+
+    class Bytes(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            for offset in range(0, len(wire), 3):
+                yield wire[offset:offset + 3]
+
+    def handler(request):
+        payload = json.loads(request.content)
+        assert payload["stream"] is True and payload["store"] is False
+        assert payload["messages"][0]["content"] == model.POLICY
+        assert payload["messages"][1:] == BODY["messages"]
+        assert request.headers["accept"] == "text/event-stream"
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, stream=Bytes())
+
+    with configured(monkeypatch, handler) as client:
+        status = client.get("/studio-api/status").json()
+        assert status["streaming"] is True
+        route = "/studio-api/respond-stream"
+        assert client.post(route, json=BODY, headers=AUTH).status_code == 409
+        body = {**BODY, "configuration_id": status["configuration_id"]}
+        assert client.post(route, json=body).status_code == 401
+        assert client.post(route, json={**body, "consent": False}, headers=AUTH).status_code == 422
+        response = client.post(route, json=body, headers=AUTH)
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/x-ndjson"
+        assert response.headers["cache-control"] == "no-store"
+        assert list(map(json.loads, response.text.splitlines())) == [
+            {"type": "delta", "text": visible},
+            {"type": "done", "origin": "model", "model": "configured-test-model",
+             "truncated": finish == "length", "authority": "none"},
+        ]
+
+
+def test_stream_is_opt_in_and_preserves_buffered_requests(monkeypatch):
+    monkeypatch.delenv("NEXUS_MODEL_STREAMING", raising=False)
+    with configured(monkeypatch) as client:
+        assert "streaming" not in client.get("/studio-api/status").json()
+        assert client.post("/studio-api/respond-stream", json=BODY, headers=AUTH).status_code == 503
+        assert client.post("/studio-api/respond", json=BODY, headers=AUTH).json()["text"] == "Model draft"
+
+
+@pytest.mark.parametrize("tail", [
+    b"", DONE, sse({}, "stop"), sse({"tool_calls": [{}]}) + DONE,
+    sse({"content": "🌙" * 12000}) + DONE, sse({"content": "x" * 128001}) + DONE,
+])
+def test_stream_without_valid_bounded_completion_has_no_done_frame(monkeypatch, tail):
+    monkeypatch.setenv("NEXUS_MODEL_STREAMING", "1")
+    with configured(monkeypatch, lambda _: httpx.Response(
+        200, headers={"content-type": "text/event-stream"}, content=sse({"content": "Draft"}) + tail,
+    )) as client:
+        body = {**BODY, "configuration_id": model.configuration_id(model.config())}
+        for _ in range(5):
+            response = client.post("/studio-api/respond-stream", json=body, headers=AUTH)
+            frames = list(map(json.loads, response.text.splitlines()))
+            assert frames[-1] == {"type": "error", "reason": "incomplete"}
+            assert not any(frame["type"] == "done" for frame in frames)
+
+
+def test_stream_disconnect_closes_silent_upstream_and_releases_capacity(monkeypatch):
+    from types import SimpleNamespace
+
+    async def exercise():
+        first_delta = anyio.Event()
+        upstream_closed = anyio.Event()
+        limiter = anyio.CapacityLimiter(1)
+
+        class Paused(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield sse({"content": "Before disconnect"})
+                await anyio.sleep_forever()
+
+            async def aclose(self):
+                upstream_closed.set()
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, stream=Paused(),
+        ))) as client:
+            request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(client=client, model_limiter=limiter)))
+            response = model.CompletionStream(model.response_frames(
+                request, "https://provider.example", {}, {"model": "test", "stream": True},
+            ))
+
+            async def receive():
+                await first_delta.wait()
+                return {"type": "http.disconnect"}
+
+            async def send(message):
+                if b"Before disconnect" in message.get("body", b""):
+                    assert limiter.borrowed_tokens == 1
+                    first_delta.set()
+
+            with anyio.fail_after(2):
+                await response({"type": "http", "asgi": {"spec_version": "2.4"}}, receive, send)
+            assert upstream_closed.is_set() and limiter.borrowed_tokens == 0
+
+    anyio.run(exercise)

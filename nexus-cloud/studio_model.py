@@ -1,5 +1,6 @@
 """Opt-in, non-authoritative model bridge. Provider keys never reach the browser."""
 from __future__ import annotations
+from contextlib import AsyncExitStack, aclosing
 import hmac
 import hashlib
 import json
@@ -9,7 +10,7 @@ from pathlib import Path
 
 import anyio
 from fastapi import HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from typing import Literal
 import httpx
@@ -17,6 +18,7 @@ from transport_bounds import read_bounded_body
 
 MAX_INPUT = 96000
 MAX_OUTPUT = 128000
+MODEL_TIMEOUT = 45
 POLICY = (
     "You are a non-authoritative NEXUS assistant. Distinguish observation, fact, "
     "interpretation, probability, hypothesis and values. Acknowledge uncertainty. "
@@ -72,7 +74,128 @@ def adapter():
 
 def configuration_id(c):
     suffix = "" if adapter() == "generic" else "\nadapter:" + adapter()
+    if streaming_enabled():
+        suffix += "\nstreaming:v1"
     return hashlib.sha256((c[0]+"\n"+c[1]+suffix).encode()).hexdigest()
+
+
+def streaming_enabled():
+    return os.getenv("NEXUS_MODEL_STREAMING", "") == "1"
+
+
+class CompletionStream(StreamingResponse):
+    async def __call__(self, scope, receive, send):
+        # Listen even while the provider is silent. Some ASGI servers signal
+        # disconnect on receive before the next attempted send.
+        async with anyio.create_task_group() as tasks:
+            async def deliver():
+                try:
+                    async with aclosing(self.body_iterator):
+                        await self.stream_response(send)
+                except OSError:
+                    pass  # The HTTP client disconnected during a send.
+                finally:
+                    tasks.cancel_scope.cancel()
+
+            tasks.start_soon(deliver)
+            await self.listen_for_disconnect(receive)
+            tasks.cancel_scope.cancel()
+
+
+def stream_frame(kind, **payload):
+    return (json.dumps({"type": kind, **payload}, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+async def sse_data(chunks, deadline):
+    size = 0
+    buffer = bytearray()
+    event = []
+    while True:
+        try:
+            with anyio.fail_after(max(0, deadline - anyio.current_time())):
+                chunk = await anext(chunks)
+        except StopAsyncIteration:
+            return
+        size += len(chunk)
+        if size > MAX_OUTPUT:
+            raise ValueError("stream budget exceeded")
+        # Split only on LF. CRLF and fragmented UTF-8 are supported.
+        lines = chunk.split(b"\n")
+        tail = lines.pop()
+        for segment in lines:
+            buffer.extend(segment)
+            line = buffer.removesuffix(b"\r")
+            buffer.clear()
+            if not line:
+                if event:
+                    yield b"\n".join(event)
+                    event.clear()
+            elif line == b"data":
+                event.append(b"")
+            elif line.startswith(b"data:"):
+                event.append(line[5:].removeprefix(b" "))
+        buffer.extend(tail)
+
+
+async def response_frames(request, endpoint, headers, payload):
+    limiter = request.app.state.model_limiter
+    try:
+        limiter.acquire_nowait()
+    except anyio.WouldBlock:
+        yield stream_frame("error", reason="busy")
+        return
+    stack = AsyncExitStack()
+    try:
+        deadline = anyio.current_time() + MODEL_TIMEOUT
+        with anyio.fail_after(MODEL_TIMEOUT):
+            upstream = await stack.enter_async_context(request.app.state.client.stream(
+                "POST", endpoint, headers={**headers, "accept": "text/event-stream"},
+                follow_redirects=False, json=payload,
+            ))
+        if (upstream.status_code != 200
+            or upstream.headers.get("content-encoding", "identity").lower() != "identity"
+            or upstream.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "text/event-stream"):
+            raise ValueError("invalid upstream stream")
+        units = 0
+        visible_text = False
+        finish = None
+        async for raw in sse_data(upstream.aiter_bytes(), deadline):
+            if raw == b"[DONE]":
+                if not visible_text or finish is None:
+                    break
+                yield stream_frame("done", origin="model", model=payload["model"],
+                                   truncated=finish == "length", authority="none")
+                return
+            choices = json.loads(raw.decode("utf-8"))["choices"]
+            if choices == []:
+                continue
+            if not isinstance(choices, list) or len(choices) != 1 or finish is not None:
+                raise ValueError("invalid stream choice")
+            choice = choices[0]
+            delta = choice["delta"]
+            if (choice.get("index") != 0 or not isinstance(delta, dict)
+                or delta.get("tool_calls") or delta.get("function_call")
+                or delta.get("role") not in {None, "assistant"}):
+                raise ValueError("non-text stream delta")
+            finish = choice.get("finish_reason")
+            content = delta.get("content")
+            if finish not in {None, "stop", "length"} or (content is not None and not isinstance(content, str)):
+                raise ValueError("invalid stream content")
+            if content:
+                units += len(content.encode("utf-16-le")) // 2
+                if units > 24000:
+                    raise ValueError("answer exceeded limit")
+                visible_text |= bool(content.strip())
+                yield stream_frame("delta", text=content)
+        raise ValueError("incomplete stream")
+    except (TimeoutError, httpx.RequestError, KeyError, TypeError, ValueError, RecursionError):
+        yield stream_frame("error", reason="incomplete")
+    finally:
+        try:
+            with anyio.move_on_after(2, shield=True):
+                await stack.aclose()
+        finally:
+            limiter.release()
 
 
 def register(app):
@@ -88,11 +211,11 @@ def register(app):
         c = config()
         return JSONResponse({"configured": c is not None, "configuration_id": configuration_id(c) if c else None, "model": c[1] if c else None,
                              "provider_host": c[3] if c else None, "authority": "none",
+                             **({"streaming": True} if c and streaming_enabled() else {}),
                              **({"modes": ["standard", "thinking", "non-thinking"], "max_output_tokens": 8192} if c and adapter() == "deepseek" else {})},
                             headers={"Cache-Control": "no-store"})
 
-    @app.post("/studio-api/respond")
-    async def respond(request: Request):
+    async def handle_response(request: Request, stream: bool):
         c = config()
         if c is None:
             raise HTTPException(503, "No model provider is configured")
@@ -100,6 +223,8 @@ def register(app):
         authorization = authorization_values[0] if len(authorization_values) == 1 else ""
         if not hmac.compare_digest(authorization.encode(), ("Bearer " + c[2]).encode()):
             raise HTTPException(401, "Studio authentication required", headers={"WWW-Authenticate": "Bearer"})
+        if stream and not streaming_enabled():
+            raise HTTPException(503, "Model streaming is disabled")
         media_values = request.headers.getlist("content-type")
         if len(media_values) != 1 or media_values[0].split(";", 1)[0].strip().lower() != "application/json":
             raise HTTPException(415, "JSON required")
@@ -132,13 +257,17 @@ def register(app):
             key = os.getenv("NEXUS_MODEL_API_KEY", "").strip()
             if key:
                 headers["authorization"] = "Bearer " + key
-            payload = {"model": c[1], "messages": messages, "stream": False, "store": False}
+            payload = {"model": c[1], "messages": messages, "stream": stream, "store": False}
             payload["max_tokens" if adapter() == "deepseek" else "max_completion_tokens"] = data.max_output_tokens
             if data.mode != "standard":
                 payload["thinking"] = {"type": "enabled" if data.mode == "thinking" else "disabled"}
+            if stream:
+                return CompletionStream(response_frames(request, c[0], headers, payload),
+                                        media_type="application/x-ndjson",
+                                        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
             raw = bytearray()
             # Both first-byte and total-response deadlines apply; no redirects.
-            with anyio.fail_after(45):
+            with anyio.fail_after(MODEL_TIMEOUT):
                 async with request.app.state.client.stream(
                     "POST", c[0], headers=headers, follow_redirects=False,
                     json=payload,
@@ -173,3 +302,11 @@ def register(app):
             raise HTTPException(503, "Model provider unavailable") from None
         finally:
             request.app.state.model_limiter.release()
+
+    @app.post("/studio-api/respond")
+    async def respond(request: Request):
+        return await handle_response(request, stream=False)
+
+    @app.post("/studio-api/respond-stream")
+    async def respond_stream(request: Request):
+        return await handle_response(request, stream=True)
