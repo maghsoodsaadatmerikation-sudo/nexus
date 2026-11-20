@@ -136,6 +136,7 @@ function setFocus(on,explicit=false){
  if(explicit)manual=true;
  focused=Boolean(on);if(!focused)toolsOpen=false;
  layout();
+ document.dispatchEvent(new Event('nexus-studio-chat-layout'));
  if(focused)moveTo(toolsOpen?toolsTray:$(selected));
 }
 function refreshOnboarding(){

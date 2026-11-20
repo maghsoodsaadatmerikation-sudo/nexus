@@ -23,13 +23,19 @@ window.addEventListener('load',async()=>{
   throw Error('unexpected-network');
  };
  try{
-  fill('project-title','TOOL CHAT INTEGRATION');$('new-project').click();$('new-thread').click();
   fill('gateway','https://fake-gateway.example');$('check-model').click();await wait(()=>$('model-status').textContent.includes('synthetic'));
   fill('message','Explain the source with citations');
   fill('research-query','independent external source');
   $('research-consent').checked=true;$('research-run').click();await wait(()=>$('research-cards').children.length===1);
   const actions=$('research-cards').querySelectorAll('button');assert(actions.length===2,'research-card-two-separate-destinations');
+  assert(snapshot().projects.length===0&&actions[0].disabled&&!actions[1].disabled,'first-run-research-can-go-to-chat');
   actions[1].click();
+  assert(project().threads.length===1&&NexusStudioFocus.active()==='conversation-card'&&
+   $('message').value==='Explain the source with citations'&&document.activeElement===$('message'),
+   'first-handoff-creates-a-chat-and-retains-text');
+  assert($('chat-file-panel').open&&NexusStudioCompose.mode()==='model'&&$('request-review').hidden&&
+   $('research-query').value==='independent external source'&&$('research-cards').children.length===1,
+   'handoff-shows-attachment-without-running-or-clearing-research');
   assert($('chat-attachment-tray').textContent.includes('Source title'),'research-excerpt-staged-in-chat');
   assert(project().sources.length===0,'research-handoff-not-permanent-source-enrollment');
   assert(providerCalls===0,'no-auto-model-send-for-research');
@@ -75,6 +81,13 @@ window.addEventListener('load',async()=>{
   assert(rejected===false,'tool-output-size-cap');
   assert(project().threads[0].nodes.length===size,'invalid-tool-output-cannot-create-message');
   assert(searchCalls===1,'research-no-hidden-refetch');
+  $('lock').click();
+  file('data-file','fresh.csv','Name,Count\nA,2\nB,4\n');$('data-run').click();
+  await wait(()=>$('data-status').textContent.includes('Analysis ready'));
+  $('data-chat').click();
+  assert(project()?.threads.length===1&&$('chat-attachment-tray').textContent.includes('fresh.csv')&&
+   $('data-summary').textContent.includes('fresh.csv')&&providerCalls===2,
+   'first-file-analysis-handoff-keeps-analysis-and-waits-for-approval');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,real_model_tested:false});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
 });

@@ -1514,11 +1514,12 @@ function selectedAttachments(){
  return [...chatAttachments,...(version?[{id:doc().id,name:'Document: '+doc().title+' ('+version.id.slice(0,8)+')',text:version.text}]:[])];
 }
 function stageChatContext(label,material){
- if(busy||!p()||!chat()||chat().archived||typeof label!=='string'||!label.trim()||
+ if(busy||chat()?.archived||typeof label!=='string'||!label.trim()||
     label.length>160||typeof material!=='string'||!material.trim()||material.length>131072||
     chatAttachments.length>=4||chatAttachments.length+1+($('attach-document').checked?1:0)>S.MAX_CHAT_ATTACHMENTS){
   status('chatAttachmentInvalid');return false;
  }
+ if(!chat()&&!startConversation())return false;
  chatAttachments.push({id:S.uid(),name:label,text:material});
  stop();renderChatAttachments();status('chatAttachmentAdded');
  document.dispatchEvent(new CustomEvent('nexus-studio-open-chat'));
@@ -1630,6 +1631,7 @@ function option(value,label){const o=el('option',label);o.value=value;return o}
 function fillProfile(){$('instructions').value=p()?.instructions||'';$('memories').value=p()?.memories.join('\n')||''}
 function fillDoc(){$('editor').value=doc()?.versions.at(-1)?.text||'';renderVersions()}
 function renderVersions(){const d=doc();$('versions').replaceChildren(...(d?.versions||[]).map((v,i)=>option(v.id,(i+1)+' · '+v.at)));$('versions').value=d?.versions.at(-1)?.id||'';$('version-diff').textContent=''}
+let lastChatView;
 function render(){
  $('projects').replaceChildren(...data.projects.map(x=>option(x.id,x.title)));$('projects').value=projectId||'';
  $('history').replaceChildren();
@@ -1640,6 +1642,11 @@ function render(){
  }
  const stamp=projectId+':'+(p()?.sources||[]).map(s=>s.id).join(',');if(stamp!==sourceViewStamp){$('source-results').textContent='';sourceViewStamp=stamp}
  const c=chat();$('messages').replaceChildren();if(c){for(const n of S.path(c)){const item=el('article','');item.className='message '+n.role;item.append(el('strong',t(n.origin==='human'?'human':n.origin==='model'?'model':'local')));const body=el('div',n.text);body.className='body';body.dir='auto';item.append(body);if(n.role==='user'){if(n.attached_files?.length){const info=el('small',t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' · '+t('chatFilesNotSaved'));item.append(info)}const edit=el('button',t('edit'));edit.disabled=busy;edit.onclick=()=>{if(!mayReplaceChat())return;clearChatDraft();branchBase=n.parent;$('message').value=n.text;$('branch-notice').textContent=t('branching');stop()};item.append(edit)}else{const canvas=el('button',t('toCanvas'));canvas.disabled=busy;canvas.onclick=()=>{if($('editor').value&&!confirm(t('discard')))return;$('editor').value=n.text;editorDirty=true;stop()};const speak=el('button',t('speak'));speak.onclick=()=>readAloud(n.text);item.append(canvas,speak)}$('messages').append(item)}}else $('messages').append(el('p',t('empty')));
+ const chatView=[projectId,threadId,c?.head].join(':');
+ if(chatView!==lastChatView){
+  lastChatView=chatView;
+  requestAnimationFrame(()=>{const messages=$('messages');messages.scrollTop=messages.scrollHeight});
+ }
  const parents=new Set(c?.nodes.map(n=>n.parent));const leaves=c?.nodes.filter(n=>!parents.has(n.id))||[];$('branch').replaceChildren(...leaves.map((n,i)=>option(n.id,(i+1)+' · '+n.text.slice(0,60))));$('branch').value=c?.head||'';
  $('source-list').replaceChildren();for(const s of p()?.sources||[]){const row=el('div',s.name+' · '+s.text.length);const b=el('button','×');b.disabled=busy;b.setAttribute('aria-label',language==='fa'?'حذف منبع':'Remove source');b.onclick=()=>mutate(v=>{const q=projectIn(v);q.sources=q.sources.filter(x=>x.id!==s.id)},{undoable:true});row.append(b);$('source-list').append(row)}
  $('documents').replaceChildren(...(p()?.documents||[]).map(d=>option(d.id,d.title)));$('documents').value=documentId||'';window.NexusLabUI?.render();window.NexusAstrologyUI?.render();window.NexusQualityUI?.render();renderChatAttachments();controls();
@@ -1704,15 +1711,15 @@ function startConversation(fresh=false){
   return Boolean(chat()&&threadId!==before);
  }
  const draft=$('message').value;
- // A new project changes tool context. Never silently throw away unapplied work.
- if(!p()&&(forms()||hasToolWork())){status('needApply');return false}
+ // First-chat setup keeps workspace tools already used in this tab.
+ if(!p()&&forms()){status('needApply');return false}
  try{
   let ok=false;
   if(!p()){
    const project=S.project(language==='fa'?'گفتگوهای من':'My conversations');
    const thread=S.thread(t('newChat'));
    ok=mutate(v=>{project.threads.push(thread);v.projects.push(project)},{
-    afterCommit:()=>{resetProject(project.id);resetConversation(thread.id);$('message').value=draft}
+    afterCommit:()=>{projectId=project.id;resetConversation(thread.id);$('message').value=draft}
    });
   }else{
    const thread=S.thread(t('newChat'));
@@ -1874,7 +1881,7 @@ const workFields=['research-query','code','code-input','chart-json'];
 function hasTransientWork(){return workFields.some(id=>$(id).value.length>0)}
 function clear(){cancel();cards=[];result=chartData=null;for(const id of workFields)$(id).value='';for(const id of ['research-cards','research-status','code-result','code-console','code-status'])$(id).replaceChildren();$('chart').hidden=true;$('chart').width=1;$('chart').height=1}
 function renderCards(){
- $('research-cards').replaceChildren();for(const card of cards){const box=el('article','');box.className='message';const link=el('a',card.title);link.href=card.url;link.target='_blank';link.rel='noopener noreferrer';box.append(link,el('p',card.kind+' · '+card.at),el('p',card.excerpt),el('p',card.license));const add=el('button',t('researchAdd'));add.disabled=!p();add.onclick=()=>{if(!p())return;const source={id:S.uid(),name:(card.engine+' · '+card.title).slice(0,160),text:L.sourceText(card)};mutate(v=>projectIn(v).sources.push(source))};const use=el('button',t('researchChat'));use.className='secondary';use.disabled=!p();use.onclick=()=>{if(p())window.NexusStudioUI?.stageChatContext((card.engine+' · '+card.title).slice(0,160),L.sourceText(card))};box.append(add,use);$('research-cards').append(box)}
+ $('research-cards').replaceChildren();for(const card of cards){const box=el('article','');box.className='message';const link=el('a',card.title);link.href=card.url;link.target='_blank';link.rel='noopener noreferrer';box.append(link,el('p',card.kind+' · '+card.at),el('p',card.excerpt),el('p',card.license));const add=el('button',t('researchAdd'));add.disabled=!p();add.onclick=()=>{if(!p())return;const source={id:S.uid(),name:(card.engine+' · '+card.title).slice(0,160),text:L.sourceText(card)};mutate(v=>projectIn(v).sources.push(source))};const use=el('button',t('researchChat'));use.className='secondary';use.onclick=()=>{window.NexusStudioUI?.stageChatContext((card.engine+' · '+card.title).slice(0,160),L.sourceText(card))};box.append(add,use);$('research-cards').append(box)}
 }
 for(const id of ['research-query','research-provider','research-language'])for(const event of ['input','change'])$(id).addEventListener(event,()=>{cancel();cards=[];renderCards();$('research-status').textContent=''});
 $('research-run').onclick=async()=>{
@@ -2011,6 +2018,7 @@ function resetResult(){analysis=sourceStamp=null;summary='';$('data-summary').te
 function clear(){cancel();file=null;$('data-file').value='';$('data-source').value='';resetResult();$('data-status').textContent=''}
 function render(){
  const selected=$('data-source').value,source=p()?.sources.find(s=>s.id===sourceStamp?.id);
+ if(sourceStamp?.project===null&&!sourceStamp.id)sourceStamp.project=projectId;
  if(sourceStamp&&(sourceStamp.project!==projectId||(sourceStamp.id&&(!source||source.text!==sourceStamp.text))))resetResult();
  $('data-source').replaceChildren(option('',t('dataFileOption')),...(p()?.sources||[]).filter(s=>/\.(csv|tsv|json)$/i.test(s.name)).map(s=>option(s.id,s.name)));
  if([...$('data-source').options].some(o=>o.value===selected))$('data-source').value=selected;
@@ -2194,6 +2202,7 @@ function setFocus(on,explicit=false){
  if(explicit)manual=true;
  focused=Boolean(on);if(!focused)toolsOpen=false;
  layout();
+ document.dispatchEvent(new Event('nexus-studio-chat-layout'));
  if(focused)moveTo(toolsOpen?toolsTray:$(selected));
 }
 function refreshOnboarding(){
@@ -2400,17 +2409,13 @@ $('branch-notice').after(box);
 
 /* Discover capability from a typed request; proposal only, never execute. */
 const suggestions=document.createElement('div');suggestions.id='nexus-zen-suggestions';
-for(const [cmd,en,fa] of [['/music','Music','موسیقی'],['/research','Research','پژوهش'],['/data','Files','فایل‌ها']]){
+for(const [panel,en,fa] of [
+ ['music-card','Music','موسیقی'],
+ ['research-card','Research','پژوهش'],
+ ['data-card','Analyze files','تحلیل فایل']
+]){
  const b=document.createElement('button');b.type='button';b.className='secondary';b.dataset.en=en;b.dataset.fa=fa;
- b.addEventListener('click',()=>{
-  const message=$('message');
-  if(message.value.trim()){
-   // A quick action must not overwrite an unsent private draft.
-   const target=cmd==='/music'?'music-card':cmd==='/research'?'research-card':'data-card';
-   window.NexusStudioFocus?.openPanel(target);return;
-  }
-  message.value=cmd+' ';message.dispatchEvent(new Event('input',{bubbles:true}));message.focus();
- });
+ b.addEventListener('click',()=>window.NexusStudioFocus?.openPanel(panel));
  suggestions.append(b);
 }
 box.insertBefore(suggestions,privacy);
@@ -2438,31 +2443,35 @@ function intent(value){
   const route=routes.find(x=>x[0]===kind);
   return route?{route,query:message.slice(slash[0].length).trim()}:null;
  }
- const s=message.slice(0,340).toLocaleLowerCase();
- if(!/(بساز|ساخت|تولید|طراحی|بنویس|تنظیم|compose|create|make|generate|write|analy[sz]e|search|find|draw|run|اجرا|بررسی|جستجو|جست‌وجو)/i.test(s))return null;
+ const s=message.slice(0,340).toLocaleLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ');
+ if(!/(بساز|ساخت|تولید|طراحی|بنویس|تنظیم|compose|create|make|generate|write|analy[sz]e|search|find|draw|run|اجرا|بررسی|تحلیل|جست\s*و\s*جو)/i.test(s))return null;
  const kind=/(ارکستر|گروه کر|وکال|orchestra|choir|vocal)/i.test(s)?'orchestra':
   /(آهنگ|اهنگ|موسیقی|ملودی|music|song|melody)/i.test(s)?'music':
+  /(چارت تولد|طالع|astrology|transit)/i.test(s)?'astrology':
   /(نمودار|chart|graph)/i.test(s)?'chart':
-  /(کدنویسی|برنامه‌نویسی|code|javascript|python)/i.test(s)?'code':
+  /(کدنویسی|برنامه نویسی|code|javascript|python)/i.test(s)?'code':
   /(csv|json|داده|فایل|dataset|spreadsheet)/i.test(s)?'data':
   /(پژوهش|منبع علمی|research|wikipedia|crossref)/i.test(s)?'research':
   /(داستان|متن بنویس|essay|story|draft)/i.test(s)?'write':
-  /(وظایف|task|workflow)/i.test(s)?'tasks':
-  /(چارت تولد|طالع|astrology|transit)/i.test(s)?'astrology':null;
- const route=routes.find(x=>x[0]===kind);return route?{route,query:''}:null;
+  /(وظایف|task|workflow)/i.test(s)?'tasks':null;
+ const route=routes.find(x=>x[0]===kind);
+ const prefix=kind==='research'?/^(?:search for|find|جست\s*و\s*جو\s+کن)\s+/i.exec(s):null;
+ const query=kind==='research'||kind==='orchestra'?message.slice(prefix?.[0].length||0):'';
+ return route?{route,query}:null;
 }
 let offeredDraft=null;
 function clearOffer(){
  offeredDraft=null;offer.hidden=true;offer.replaceChildren();
 }
-function offerTool(message){
- const result=intent(message);
- if(!result||!window.NexusStudioFocus?.isFocused())return false;
+function suggestion(message){
+ if(!window.NexusStudioFocus?.isFocused()||(select.value==='model'&&!message.trimStart().startsWith('/')))return null;
+ return intent(message);
+}
+function offerTool(message,result){
  const [,panel,en,fa,field]=result.route;
  clearOffer();offeredDraft=message;offer.hidden=false;
  const p=document.createElement('p');
- p.textContent=words('Suggested: '+en+'. No data was sent and no tool was run. Review inputs before execution.',
-  'پیشنهاد: '+fa+'؛ هیچ اطلاعاتی ارسال و هیچ ابزاری اجرا نشده است. ورودی‌ها را پیش از اجرا بررسی کن.');
+ p.textContent=words('Open '+en+' to review its inputs.','برای بازبینی ورودی‌ها، '+fa+' را باز کن.');
  const open=document.createElement('button');open.type='button';open.textContent=words('Open '+en,'بازکردن '+fa);
  open.addEventListener('click',()=>{
   if($('message').value!==offeredDraft||window.NexusStudioUI.uiStatus().busy){clearOffer();return}
@@ -2476,14 +2485,14 @@ function offerTool(message){
  });
  const dismiss=document.createElement('button');dismiss.type='button';dismiss.className='secondary';
  dismiss.textContent=words('Keep typing','ادامهٔ نوشتن');dismiss.addEventListener('click',()=>{clearOffer();$('message').focus()});
- const local=document.createElement('button');local.type='button';local.className='secondary';
- local.textContent=words('Continue with local guide','ادامه با راهنمای محلی');
- local.addEventListener('click',()=>{
+ const proceed=document.createElement('button');proceed.type='button';proceed.className='secondary';
+ proceed.textContent=select.value==='model'?words('Review as model message','بازبینی برای ارسال به مدل'):
+  words('Continue with local guide','ادامه با راهنمای محلی');
+ proceed.addEventListener('click',()=>{
   const current=$('message').value===offeredDraft;clearOffer();
   if(current)run({routeTools:false});
  });
- offer.append(p,open,local,dismiss);
- return true;
+ offer.append(p,open,proceed,dismiss);
 }
 
 let running=false;
@@ -2498,7 +2507,8 @@ function refresh(){
  selectLabel.setAttribute('aria-label',words('Choose how to respond','روش پاسخ را انتخاب کن'));
  for(const b of suggestions.children)b.textContent=words(b.dataset.en,b.dataset.fa);
  for(const opt of select.options)opt.textContent=words(opt.dataset.en,opt.dataset.fa);
- send.textContent=model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
+ const tool=suggestion($('message').value);
+ send.textContent=tool?words('Review '+tool.route[2],'بازبینی '+tool.route[3]):model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
  send.disabled=!ready||!$('message').value.trim();
  send.setAttribute('aria-label',send.textContent);
  save.textContent=state.vaultUnlocked?words('Save encrypted session','ذخیرهٔ رمزگذاری‌شدهٔ نشست'):words('Set up private archive','تنظیم آرشیو خصوصی');
@@ -2524,7 +2534,8 @@ function refresh(){
 }
 function run({routeTools=true}={}){
  if(running||send.disabled)return;
- if(routeTools&&select.value==='guide'&&offerTool($('message').value))return;
+ const message=$('message').value,tool=routeTools&&suggestion(message);
+ if(tool){offerTool(message,tool);return}
  if(!window.NexusStudioUI.uiStatus().threadReady&&!window.NexusStudioUI.startConversation()){
   refresh();return;
  }
@@ -2573,6 +2584,12 @@ $('message').addEventListener('keydown',event=>{
 });
 $('language').addEventListener('change',()=>queueMicrotask(refresh));
 document.addEventListener('nexus-studio-state',refresh);
+document.addEventListener('nexus-studio-chat-layout',refresh);
+document.addEventListener('nexus-studio-open-chat',()=>{
+ clearOffer();select.value='model';
+ $('chat-file-panel').open=true;refresh();
+ $('message').focus({preventScroll:true});
+});
 window.NexusStudioCompose={refresh,mode:()=>select.value};
 refresh();
 })();
