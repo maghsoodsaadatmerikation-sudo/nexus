@@ -98,7 +98,7 @@ reference for the consumer-plan features below.
 | Image/video generation | Not implemented | A connected generation provider, usage authorization and media QA |
 | Real-time voice conversation | Opt-in microphone dictation and local read-aloud | A real-time audio provider, microphone permissions, interruption tests and device QA |
 | Sandboxed Python/code execution | JavaScript Worker lab available; no Python or OS execution | An isolated Python/OS execution service with resource/network limits and reproducibility checks |
-| Scheduled unattended work and push notifications | Local task tracking with due dates. Background execution and push delivery are pending | A durable job runner, delivery channel and user-specific authorization |
+| Scheduled unattended work and push notifications | Reviewed one-off local job plans. Background scheduling and push delivery are pending | A durable job runner, delivery channel and user-specific authorization |
 | Third-party app actions/MCP | Configured gateways can expose reviewed GitHub and Render operations. A general-purpose app catalog is pending | Per-service OAuth, scoped tokens, concrete tools, revocation and action review |
 | Shared projects and live collaboration | Single browser owner only | User accounts, tenancy, encrypted sync, access control and conflict resolution |
 | Cross-device automatic history sync | Portable encrypted file only | An authenticated sync service and account recovery design |
