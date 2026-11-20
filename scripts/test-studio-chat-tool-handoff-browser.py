@@ -89,6 +89,33 @@ window.addEventListener('load',async()=>{
   assert(project()?.threads.length===1&&$('chat-attachment-tray').textContent.includes('fresh.csv')&&
    $('data-summary').textContent.includes('fresh.csv')&&providerCalls===2,
    'first-file-analysis-handoff-keeps-analysis-and-waits-for-approval');
+  // The unified chat routes requests to reviewed connections, not directly to
+  // provider APIs. No credentials or model execution are implied by a suggestion.
+  fill('message','/github list open pull requests');
+  const chatSend=$('studio-compose-send');
+  assert(chatSend.textContent.includes('GitHub'),'github-slash-intent-discovered');
+  chatSend.click();
+  assert(!$('nexus-zen-offer').hidden,'github-discovery-requires-explicit-review');
+  assert(providerCalls===2,'no-model-call-from-github-intent');
+  $('nexus-zen-offer').querySelector('button').click();
+  assert($('studio-connections').open,'github-proposal-opens-connection-review');
+  assert($('message').value==='/github list open pull requests','github-draft-retained');
+  $('studio-connections-close').click();
+  // Natural-language discovery is opt-in through the local-guide composer.
+  // Explicit slash commands remain available in model mode.
+  const chooser=$('studio-compose-mode');
+  chooser.value='guide';chooser.dispatchEvent(new Event('change',{bubbles:true}));
+  fill('message','بررسی وضعیت انتشار در رندر');
+  assert(chatSend.textContent.includes('Render'),'persian-render-intent-discovered');
+  chatSend.click();
+  assert(!$('nexus-zen-offer').hidden,'render-discovery-requires-review');
+  $('nexus-zen-offer').querySelector('button').click();
+  assert($('studio-connections').open,'render-proposal-opens-review-dialog');
+  assert(providerCalls===2&&searchCalls===1,'connection-routing-has-no-hidden-provider-side-effects');
+  $('studio-connections-close').click();
+  fill('message','/unknown do something');
+  assert(!chatSend.textContent.includes('Review Connections'),'unsupported-command-not-misrouted');
+
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,real_model_tested:false});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
 });

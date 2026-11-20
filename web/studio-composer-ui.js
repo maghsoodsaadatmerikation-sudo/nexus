@@ -53,20 +53,26 @@ const routes=[
  ['sources','sources-card','Sources','منابع','source-query'],
  ['astrology','astrology-card','Astrology','اخترشناسی',null],
  ['sky','sky-card','Sky','آسمان',null],
- ['memory','profile-card','Memory','حافظه',null]
+ ['memory','profile-card','Memory','حافظه',null],
+ // Connections remain review-only. No GitHub or Render action runs from chat.
+ ['github','studio-connections','GitHub','گیت‌هاب',null],
+ ['render','studio-connections','Render','رندر',null],
+ ['connections','studio-connections','Connections','اتصال‌ها',null]
 ];
 function intent(value){
  const message=value.trim();
  const slash=/^\/([a-z-]+)(?:\s|$)/i.exec(message);
  if(slash){
-  const aliases={song:'music',vocal:'orchestra',analyze:'data',search:'research',task:'tasks'};
+  const aliases={song:'music',vocal:'orchestra',analyze:'data',search:'research',task:'tasks',repo:'github',deploy:'render',connect:'connections'};
   const kind=aliases[slash[1].toLowerCase()]||slash[1].toLowerCase();
   const route=routes.find(x=>x[0]===kind);
   return route?{route,query:message.slice(slash[0].length).trim()}:null;
  }
  const s=message.slice(0,340).toLocaleLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ');
- if(!/(بساز|ساخت|تولید|طراحی|بنویس|تنظیم|compose|create|make|generate|write|analy[sz]e|search|find|draw|run|اجرا|بررسی|تحلیل|جست\s*و\s*جو)/i.test(s))return null;
- const kind=/(ارکستر|گروه کر|وکال|orchestra|choir|vocal)/i.test(s)?'orchestra':
+ if(!/(بساز|ساخت|تولید|طراحی|بنویس|تنظیم|compose|create|make|generate|write|analy[sz]e|search|find|draw|run|open|list|show|check|اجرا|بررسی|تحلیل|نمایش|نشان\s*بده|وضعیت|جست\s*و\s*جو)/i.test(s))return null;
+ const kind=/(github|گیت\s*هاب|گیتهاب|pull requests?|درخواست(?:‌|\s)*ادغام)/i.test(s)?'github':
+  /(render|رندر|deployment|deploy)/i.test(s)?'render':
+  /(ارکستر|گروه کر|وکال|orchestra|choir|vocal)/i.test(s)?'orchestra':
   /(آهنگ|اهنگ|موسیقی|ملودی|music|song|melody)/i.test(s)?'music':
   /(چارت تولد|طالع|astrology|transit)/i.test(s)?'astrology':
   /(نمودار|chart|graph)/i.test(s)?'chart':
@@ -102,7 +108,11 @@ function offerTool(message,result){
    input.value=result.query.slice(0,input.maxLength>0?input.maxLength:480);
    input.dispatchEvent(new Event('input',{bubbles:true}));
   }
-  window.NexusStudioFocus.openPanel(panel);
+  if(panel==='studio-connections'){
+   // Opening the review dialog never performs network requests or grants authority.
+   const entry=$('studio-connections-open');
+   if(entry&&!entry.disabled)entry.click();
+  }else window.NexusStudioFocus?.openPanel(panel);
  });
  const dismiss=document.createElement('button');dismiss.type='button';dismiss.className='secondary';
  dismiss.textContent=words('Keep typing','ادامهٔ نوشتن');dismiss.addEventListener('click',()=>{clearOffer();$('message').focus()});
