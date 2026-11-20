@@ -103,6 +103,7 @@ start.onclick = () => {
     return;
   }
   const session = {engine, text:'', timer:null};
+  window.NexusSpeechPlayback?.stop();
   current = session;
   engine.lang = document.documentElement.lang === 'fa' ? 'fa-IR' : document.documentElement.lang;
   engine.continuous = true;
@@ -151,7 +152,7 @@ stop.onclick = () => {
   session.timer = setTimeout(hide, 3000);
   try { session.engine.stop(); } catch { hide(); }
 };
-for (const event of ['nexus-studio-private-clear', 'nexus-studio-chat-layout', 'nexus-studio-open-chat']) {
+for (const event of ['nexus-studio-private-clear', 'nexus-studio-chat-layout', 'nexus-studio-open-chat', 'nexus-studio-playback-start']) {
   document.addEventListener(event, hide);
 }
 const cancelStale = () => { if (!panel.hidden && !contextStillOpen()) hide(); };

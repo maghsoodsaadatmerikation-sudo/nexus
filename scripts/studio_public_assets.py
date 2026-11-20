@@ -3,9 +3,9 @@
 from pathlib import Path
 import stat
 
-# Bounded standalone HTML budget, including the static answer exporter.
+# Bounded standalone HTML budget, including on-device answer playback.
 # User-selected images are never part of the bundle.
-MAX_FILE = 565_000
+MAX_FILE = 575_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000

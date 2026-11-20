@@ -173,7 +173,7 @@ function clearModelReview(){
 }
 function stop({refresh=true}={}){
  languageImport++;toolLifecycle('cancel');revision++;controller?.abort();controller=null;busy=false;
- clearModelReview();try{speechSynthesis.cancel()}catch{}if(refresh)controls();
+ clearModelReview();window.NexusSpeechPlayback?.stop();if(refresh)controls();
 }
 function controls(){
  $('study-mode').disabled=busy||Boolean(chat()?.archived);
@@ -238,7 +238,8 @@ function renderMessage(n){
   canvas.disabled=busy;
   canvas.onclick=()=>{if($('editor').value&&!confirm(t('discard')))return;$('editor').value=n.text;editorDirty=true;stop()};
   const speak=el('button',t('speak'));
-  speak.onclick=()=>readAloud(n.text);
+  speak.type='button';speak.dataset.chatSpeak='';
+  speak.onclick=()=>window.NexusSpeechPlayback?.start(body.innerText||n.text,speak);
   item.append(copy,exportAnswer,canvas,speak);
  }
  return item;
@@ -272,6 +273,7 @@ function selectDocument(id){
  documentId=id;editorDirty=false;$('attach-document').checked=false;fillDoc();
 }
 function resetConversation(id){
+ window.NexusSpeechPlayback?.stop();
  // Private image input belongs to the thread where it was selected.
  // Only first-chat setup may preserve a selected image when there is no prior thread.
  if(threadId!==null&&threadId!==id)window.NexusStudioVision?.clear?.();
@@ -536,7 +538,6 @@ $('erase').onclick=()=>{if(confirm(t('discard')))operation(async(rev,abort)=>{
   if(rev!==revision){if(!vault.unlocked&&data.projects.length)dirty=true;return}
   const clean=toolLifecycle('private');undoSlot.clear();modelInfo=null;for(const id of ['gateway-token','source-query','search','project-title','document-title'])$(id).value='';data=S.empty();selectProject(null);dirty=false;render();if(!clean)location.reload();
 })};
-function readAloud(text){try{speechSynthesis.cancel();const voices=speechSynthesis.getVoices().filter(v=>v.localService&&v.lang.startsWith(language));if(!voices.length)return status('failed');const u=new SpeechSynthesisUtterance(text.slice(0,6000));u.voice=voices[0];speechSynthesis.speak(u)}catch{status('failed')}}
 $('language-template').onclick=()=>download(JSON.stringify({schema:'nexus.studio.locale.v1',code:'en',dir:'ltr',messages:EN},null,2),'nexus-studio-english-labels.json','application/json');
 $('language-file').onchange=async event=>{
  const f=event.target.files[0],task=++languageImport,rev=revision;event.target.value='';
