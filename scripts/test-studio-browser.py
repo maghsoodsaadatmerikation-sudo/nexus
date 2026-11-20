@@ -60,7 +60,8 @@ window.addEventListener('load',async()=>{
   if(!current()?.threads?.[0]?.nodes?.length)
    throw Error('guide-fallback-state:'+JSON.stringify({
     status:$('status').textContent,sendDisabled:compose.disabled,
-    message:$('message').value,mode:$('studio-compose-mode').value,
+    draftPresent:Boolean($('message').value),draftMatchesExpected:$('message').value==='/research Guide fallback',
+    mode:$('studio-compose-mode').value,
     guideDisabled:$('guide').disabled,offerHidden:offer.hidden,
     projectCount:snapshot().projects.length,ui:NexusStudioUI.uiStatus(),
     activePanel:NexusStudioFocus.active()
