@@ -50,7 +50,7 @@ MODULES = (
     Module("/*STUDIO_COMPOSER_UI*/", "studio-composer-ui.js", "NexusStudioCompose",
            ("NexusStudioUI", "NexusStudioFocus"), ("NexusStudioConnections",)),
     Module("/*STUDIO_CONNECTIONS_UI*/", "studio-connections-ui.js",
-           "NexusStudioConnections", ("NexusStudioUI",)),
+           "NexusStudioConnections", ("NexusStudioUI", "NexusStudioFocus")),
     Module("/*STUDIO_MUSIC_AUDIO*/", "studio-music-audio.js", "NexusMusicAudio"),
     Module("/*STUDIO_MUSIC*/", "studio-music.js", "NexusMusic", ("NexusMusicAudio",)),
     Module("/*STUDIO_MUSIC_UI*/", "studio-music-ui.js", "NexusMusicUI", ("NexusMusic",)),

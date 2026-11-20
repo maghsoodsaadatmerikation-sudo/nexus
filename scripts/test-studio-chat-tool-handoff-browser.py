@@ -27,6 +27,16 @@ window.addEventListener('load',async()=>{
     {provider:'render',target:'srv-test',configuration_id:'b'.repeat(64)}
    ]}));
   }
+  if(String(url).endsWith('/studio-api/connections/read')){
+   connectionActions++;
+   const requested=JSON.parse(options.body||'{}');
+   if(!requested.consent)throw Error('missing-explicit-consent');
+   if(requested.operation==='github.pulls')return new Response(JSON.stringify({
+    provenance:'external-untrusted',operation:'github.pulls',provider:'github',
+    target:'example/nexus',result:[{number:7,title:'UNTRUSTED synthetic pull request',head:'review'}]
+   }),{headers:{'content-type':'application/json'}});
+   throw Error('simulated-provider-unavailable');
+  }
   if(String(url).includes('/studio-api/connections/')){connectionActions++;throw Error('unreviewed-provider-call')}
   if(String(url).startsWith('https://en.wikipedia.org/')){searchCalls++;return new Response(JSON.stringify({query:{pages:{42:{pageid:42,title:'Source title',extract:'Unverified live source note from Wikipedia.'}}}}))}
   throw Error('unexpected-network');
@@ -118,7 +128,27 @@ window.addEventListener('load',async()=>{
   assert(operations.value==='github.pulls','github-appropriate-operation-selected');
   assert([...operations.options].every(x=>x.value.startsWith('github.')),'github-target-isolation');
   assert(catalogCalls===1&&connectionActions===0,'catalog-requires-approval-and-never-executes');
-  await closeConnection();
+  assert($('studio-connection-receipt').hidden,'catalog-is-not-provider-read');
+  $('studio-connections-read').click();
+  await wait(()=>!$('studio-connection-receipt').hidden);
+  const receipt=$('studio-connection-receipt');
+  assert(connectionActions===1&&receipt.textContent.includes('UNTRUSTED synthetic pull request'),
+   'approved-github-read-shows-untrusted-data-inline');
+  assert($('studio-connections-view-chat').hidden===false,'explicit-view-in-chat-is-available');
+  assert(!JSON.stringify(snapshot()).includes('UNTRUSTED synthetic pull request'),
+   'provider-data-not-persisted-in-project-state');
+  $('studio-connections-view-chat').click();
+  await wait(()=>!$('studio-connections').open);
+  assert(NexusStudioFocus.active()==='conversation-card'&&!receipt.hidden,
+   'result-visible-after-dialog-closes');
+  assert($('message').value==='/github list open pull requests','result-does-not-overwrite-chat-draft');
+  $('studio-connection-attach').click();
+  assert($('chat-attachment-tray').textContent.includes('github.pulls'),
+   'reviewed-provider-result-explicitly-staged');
+  assert(providerCalls===2,'staging-read-does-not-send-to-model');
+  $('clear-chat-files').click();
+  assert(!JSON.stringify(snapshot()).includes('UNTRUSTED synthetic pull request'),
+   'cleared-connector-result-not-retained');
   // Natural-language discovery is opt-in through the local-guide composer.
   // Explicit slash commands remain available in model mode.
   const chooser=$('studio-compose-mode');
@@ -131,10 +161,24 @@ window.addEventListener('load',async()=>{
   assert($('studio-connections').open,'render-proposal-opens-review-dialog');
   assert(catalogCalls===1,'render-preview-does-not-auto-load-catalog');
   $('studio-connections-load').click();
-  await wait(()=>$('studio-connections').querySelector('select').options.length===1);
+  await wait(()=>$('studio-connections').querySelector('select').options.length===1)
+   .catch(()=>{throw Error('render-catalog-state:'+JSON.stringify({
+    options:[...$('studio-connections').querySelector('select').options].map(x=>x.value),
+    catalogCalls,connectionActions,dialogOpen:$('studio-connections').open,
+    loadDisabled:$('studio-connections-load').disabled,
+    hasToken:Boolean($('gateway-token').value),
+    status:$('studio-connections').querySelector('[role="status"]')?.textContent
+   }))});
   operations=$('studio-connections').querySelector('select');
   assert(operations.value==='render.deploys'&&catalogCalls===2,'render-deployments-preselected');
-  assert(providerCalls===2&&searchCalls===1&&connectionActions===0,'connection-routing-has-no-hidden-provider-side-effects');
+  assert(providerCalls===2&&searchCalls===1&&connectionActions===1,'connection-routing-has-no-hidden-provider-side-effects');
+  $('studio-connections-read').click();
+  await wait(()=>$('studio-connection-receipt').textContent.includes('Connection unavailable'));
+  assert($('studio-connection-receipt').textContent.includes('Request')===false||
+    !$('studio-connection-receipt').textContent.includes('simulated-provider-unavailable'),
+   'provider-errors-do-not-expose-raw-exceptions');
+  assert($('studio-connection-attach').hidden,'failed-read-not-attachable');
+  assert(connectionActions===2,'failure-happens-only-after-explicit-approved-read');
   await closeConnection();
   fill('message','/github create branch');
   chatSend.click();$('nexus-zen-offer').querySelector('button').click();
@@ -144,10 +188,12 @@ window.addEventListener('load',async()=>{
   operations=$('studio-connections').querySelector('select');
   assert(operations.selectedIndex===-1&&!$('studio-connections-read').offsetParent,
    'unavailable-write-action-never-silently-falls-back-to-read');
-  assert(connectionActions===0,'unavailable-branch-not-executed');
+  assert(connectionActions===2,'unavailable-branch-not-executed');
   await closeConnection();
   fill('message','/unknown do something');
   assert(!chatSend.textContent.includes('Review Connections'),'unsupported-command-not-misrouted');
+  document.dispatchEvent(new Event('nexus-studio-private-clear'));
+  assert($('studio-connection-receipt').hidden,'private-clear-revokes-provider-receipt');
 
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,real_model_tested:false});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
