@@ -123,7 +123,13 @@ window.addEventListener('load',async()=>{
   $('prepare').click();assert(!$('request-review').hidden&&!$('consent').checked,'review-required-before-send');assert(!$('request-context').textContent.includes('REVIEWED SECRET MEMORY'),'memory-not-sent-by-default');
   $('use-memory').checked=true;$('use-memory').dispatchEvent(new Event('input'));assert($('request-review').hidden,'context-change-invalidates-approval');$('use-sources').checked=true;$('prepare').click();assert($('request-context').textContent.includes('REVIEWED SECRET MEMORY')&&$('request-context').textContent.includes('notes.txt'),'exact-selected-context-visible');
   const count=network;$('send-model').click();assert(network===count,'unapproved-send-does-not-connect');$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));$('send-model').click();await wait(()=>current().threads[0].nodes.at(-1)?.origin==='model');assert(posted.consent===true&&posted.configuration_id==='a'.repeat(64),'approved-request-binds-configuration');assert(!JSON.stringify(posted).includes('TRANSIENT ACCESS TOKEN'),'gateway-token-excluded-from-context');
-  $('regenerate').click();assert(!$('request-review').hidden,'regenerate-prepares-another-branch');$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));$('send-model').click();await wait(()=>$('request-review').hidden);assert($('branch').options.length>=3,'regenerate-keeps-original-answer');
+  const regenerate=$('regenerate');
+  assert(!regenerate.hidden&&!regenerate.disabled&&getComputedStyle(regenerate).display!=='none','retry-is-visible-in-chat');
+  fill('message','Keep this unsent follow-up');
+  regenerate.click();
+  assert(regenerate.disabled&&$('request-review').hidden&&$('message').value==='Keep this unsent follow-up','retry-protects-unsent-draft');
+  fill('message','');
+  regenerate.click();assert(!$('request-review').hidden,'regenerate-prepares-another-branch');$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));$('send-model').click();await wait(()=>$('request-review').hidden);assert($('branch').options.length>=3,'regenerate-keeps-original-answer');
   late=true;fill('message','STALE REQUEST');$('prepare').click();$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));const before=current().threads[0].nodes.length;$('send-model').click();await wait(()=>delayResponse!==null);$('stop').click();delayResponse();await sleep(50);assert(current().threads[0].nodes.length===before,'stop-discards-late-model-answer');fill('message','');late=false;
   const historyButton=title=>[...$('history').children].find(b=>b.textContent.endsWith(' · '+title));
   const canvasId=$('documents').value;

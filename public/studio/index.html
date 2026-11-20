@@ -41,7 +41,7 @@ html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focu
 #studio-capability-directory:not([hidden]){margin:10px 0;padding:12px;border:1px solid #c9dbcf;border-radius:12px;background:#f6faf7}
 #studio-capability-directory>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px;max-height:320px;overflow:auto}
 #studio-capability-directory>div button{margin:0;text-align:start;white-space:normal}
-.studio-focus-mode #guide,.studio-focus-mode #prepare,.studio-focus-mode #regenerate{display:none}
+.studio-focus-mode #guide,.studio-focus-mode #prepare{display:none}
 @media(max-width:480px){.studio-compose-row label{flex:1 1 100%}.studio-compose-row button{flex:1 1 125px}}
 .music-fa{display:none}html[lang="fa"] .music-en{display:none}html[lang="fa"] .music-fa{display:initial}#music-card progress{accent-color:#185e48}#music-card pre{max-height:360px}
 :root {
@@ -1585,6 +1585,18 @@ Object.assign(FA,{
  reminderExport:'دریافت فایل تقویم',reminderDownloaded:'فایل آماده است. آن را در تقویمت وارد و اعلان را بررسی کن.',reminderInvalid:'عنوان یادآور و تاریخ و ساعت معتبر وارد کن.'
 });
 function status(k){$('status').textContent=t(k)}
+Object.assign(EN,{
+ chatCopy:'Copy answer',chatCopyDone:'Answer copied to the clipboard.',
+ chatCopyFailed:'Clipboard access is unavailable. Select the answer text to copy it.',
+ chatPasteName:'Pasted text',chatPasteAdded:'Long paste attached locally. Add a question and review the excerpts before sending.',
+ chatPasteLimit:'The draft was kept. Paste less text or remove an attachment to make room.'
+});
+Object.assign(FA,{
+ chatCopy:'کپی پاسخ',chatCopyDone:'پاسخ در کلیپ‌بورد کپی شد.',
+ chatCopyFailed:'دسترسی به کلیپ‌بورد ممکن نیست. متن پاسخ را انتخاب و کپی کن.',
+ chatPasteName:'متن چسبانده‌شده',chatPasteAdded:'متن بلند به‌صورت محلی پیوست شد. پرسشت را بنویس و گزیده‌ها را پیش از ارسال بازبینی کن.',
+ chatPasteLimit:'پیش‌نویس حفظ شد. متن کوتاه‌تری بچسبان یا یکی از پیوست‌ها را بردار.'
+});
 function selectedAttachments(){
  const saved=$('attach-document').checked&&doc()?.versions.at(-1)?.text?.trim();
  const version=saved?doc().versions.at(-1):null;
@@ -1694,10 +1706,14 @@ function stop({refresh=true}={}){
 }
 function controls(){
  $('study-mode').disabled=busy||Boolean(chat()?.archived);
- for(const id of ['new-project','delete-project','new-thread','rename-thread','archive-thread','delete-thread','guide','prepare','regenerate','apply-profile','new-document','save-version','delete-document','projects','branch','documents','create-vault','unlock','save','backup','restore','erase','language-file'])$(id).disabled=busy;
+ for(const id of ['new-project','delete-project','new-thread','rename-thread','archive-thread','delete-thread','guide','prepare','apply-profile','new-document','save-version','delete-document','projects','branch','documents','create-vault','unlock','save','backup','restore','erase','language-file'])$(id).disabled=busy;
  $('chat-file').disabled=busy||!chat()||chat().archived;
  $('clear-chat-files').disabled=busy||(!chatAttachments.length&&!$('attach-document').checked);
- $('attach-document').disabled=busy||!chat()||chat().archived||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare','regenerate'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(storageSnapshot().lossRisk?'unsaved':(vault.unlocked?'saved':'temporary'));renderStorage();window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
+ const thread=chat();
+ const regenerate=$('regenerate');
+ regenerate.hidden=thread?.nodes.find(node=>node.id===thread.head)?.role!=='assistant';
+ regenerate.disabled=regenerate.hidden||busy||thread.archived||branchBase!==undefined||hasChatDraft();
+ $('attach-document').disabled=busy||!chat()||chat().archived||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(storageSnapshot().lossRisk?'unsaved':(vault.unlocked?'saved':'temporary'));renderStorage();window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
 function mutate(fn,{undoable=false,afterCommit}={}){
  if(busy)return false;
  const before=data,next=S.copy(data),selection={projectId,threadId,documentId};
@@ -1717,6 +1733,35 @@ function fillProfile(){$('instructions').value=p()?.instructions||'';$('memories
 function fillDoc(){$('editor').value=doc()?.versions.at(-1)?.text||'';renderVersions()}
 function renderVersions(){const d=doc();$('versions').replaceChildren(...(d?.versions||[]).map((v,i)=>option(v.id,(i+1)+' · '+v.at)));$('versions').value=d?.versions.at(-1)?.id||'';$('version-diff').textContent=''}
 let lastChatView;
+function renderMessage(n){
+ const item=el('article','');
+ item.className='message '+n.role;
+ item.append(el('strong',t(n.origin==='human'?'human':n.origin==='model'?'model':'local')));
+ const body=el('div',n.text);
+ body.className='body';body.dir='auto';item.append(body);
+ if(n.role==='user'){
+  if(n.attached_files?.length)item.append(el('small',t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' · '+t('chatFilesNotSaved')));
+  const edit=el('button',t('edit'));
+  edit.disabled=busy;
+  edit.onclick=()=>{if(!mayReplaceChat())return;clearChatDraft();branchBase=n.parent;$('message').value=n.text;$('branch-notice').textContent=t('branching');stop()};
+  item.append(edit);
+ }else{
+  const copy=el('button',t('chatCopy'));
+  copy.type='button';copy.className='secondary';copy.dataset.chatCopy='';
+  copy.onclick=async()=>{
+   let result='chatCopyDone';
+   try{await navigator.clipboard.writeText(n.text)}catch{result='chatCopyFailed'}
+   if(copy.isConnected)status(result);
+  };
+  const canvas=el('button',t('toCanvas'));
+  canvas.disabled=busy;
+  canvas.onclick=()=>{if($('editor').value&&!confirm(t('discard')))return;$('editor').value=n.text;editorDirty=true;stop()};
+  const speak=el('button',t('speak'));
+  speak.onclick=()=>readAloud(n.text);
+  item.append(copy,canvas,speak);
+ }
+ return item;
+}
 function render(){
  $('projects').replaceChildren(...data.projects.map(x=>option(x.id,x.title)));$('projects').value=projectId||'';
  $('history').replaceChildren();
@@ -1726,7 +1771,7 @@ function render(){
   b.disabled=busy;b.onclick=()=>openHistoryThread(h);$('history').append(b);
  }
  const stamp=projectId+':'+(p()?.sources||[]).map(s=>s.id).join(',');if(stamp!==sourceViewStamp){$('source-results').textContent='';sourceViewStamp=stamp}
- const c=chat();$('messages').replaceChildren();if(c){for(const n of S.path(c)){const item=el('article','');item.className='message '+n.role;item.append(el('strong',t(n.origin==='human'?'human':n.origin==='model'?'model':'local')));const body=el('div',n.text);body.className='body';body.dir='auto';item.append(body);if(n.role==='user'){if(n.attached_files?.length){const info=el('small',t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' · '+t('chatFilesNotSaved'));item.append(info)}const edit=el('button',t('edit'));edit.disabled=busy;edit.onclick=()=>{if(!mayReplaceChat())return;clearChatDraft();branchBase=n.parent;$('message').value=n.text;$('branch-notice').textContent=t('branching');stop()};item.append(edit)}else{const canvas=el('button',t('toCanvas'));canvas.disabled=busy;canvas.onclick=()=>{if($('editor').value&&!confirm(t('discard')))return;$('editor').value=n.text;editorDirty=true;stop()};const speak=el('button',t('speak'));speak.onclick=()=>readAloud(n.text);item.append(canvas,speak)}$('messages').append(item)}}else $('messages').append(el('p',t('empty')));
+ const c=chat();$('messages').replaceChildren(...(c?S.path(c).map(renderMessage):[el('p',t('empty'))]));
  const chatView=[projectId,threadId,c?.head].join(':');
  if(chatView!==lastChatView){
   lastChatView=chatView;
@@ -1870,7 +1915,7 @@ $('branch').onchange=()=>{
  if(!mutate(v=>projectIn(v).threads.find(x=>x.id===threadId).head=head,{afterCommit:()=>{window.NexusStudioVision?.clear?.();clearChatDraft()}}))render();
 };
 $('guide').onclick=()=>{if(chatAttachments.length||$('attach-document').checked)return status('chatAttachmentRequiresModel');if($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())return status('needApply');try{const c=candidate();installThread(S.append(c,'assistant',S.guide(S.path(c).at(-1).text,language==='fa',{skyTone:$('sky-tone').checked,study:$('study-mode').checked})+($('use-astrology').checked?'\n\n'+NexusAstrology.reflection(p().astrology,language==='fa',{historical:$('astro-historical').checked}):''),'guide'))}catch{status('failed')}};
-$('prepare').onclick=()=>prepare();$('regenerate').onclick=()=>prepare(true);$('consent').onchange=controls;$('stop').onclick=()=>{stop({refresh:false});render()};
+$('prepare').onclick=()=>prepare();$('regenerate').onclick=()=>{if(!$('regenerate').disabled)prepare(true)};$('consent').onchange=controls;$('stop').onclick=()=>{stop({refresh:false});render()};
 $('chat-file').onchange=async event=>{
  const files=Array.from(event.target.files);event.target.value='';
  if(!files.length||busy||!p()||!chat())return;
@@ -1880,9 +1925,21 @@ $('chat-file').onchange=async event=>{
  try{
   const incoming=await S.readSources(files);
   if(epoch!==attachmentEpoch||pid!==projectId||tid!==threadId||busy)return;
+  if(chatAttachments.length+incoming.length+Number($('attach-document').checked)>S.MAX_CHAT_ATTACHMENTS){status('chatAttachmentInvalid');return}
   chatAttachments.push(...incoming);stop();renderChatAttachments();status('chatAttachmentAdded');
  }catch{if(epoch===attachmentEpoch)status('chatAttachmentInvalid')}
 };
+$('message').addEventListener('paste',event=>{
+ if(event.defaultPrevented||busy||chat()?.archived)return;
+ const text=event.clipboardData?.getData('text/plain')?.replace(/\r\n?/g,'\n');
+ const field=event.currentTarget;
+ const available=field.maxLength-field.value.length+field.selectionEnd-field.selectionStart;
+ if(!text?.trim()||text.length<=available)return;
+ event.preventDefault();
+ if(text.length<=131072&&new TextEncoder().encode(text).length<=131072&&stageChatContext(t('chatPasteName'),text)){
+  status('chatPasteAdded');
+ }else status('chatPasteLimit');
+});
 $('attach-document').onchange=()=>{stop();renderChatAttachments()};
 $('clear-chat-files').onclick=()=>{if(busy)return;clearChatAttachments();stop()};
 for(const id of ['message','gateway','gateway-token','use-memory','use-sources','use-astrology','astro-historical','sky-tone','study-mode'])$(id).addEventListener('input',stop);
@@ -1944,7 +2001,7 @@ $('language-file').onchange=async event=>{
  if(!f||busy)return;if(f.size>NexusLocales.MAX_BYTES)return status('failed');
  const current=()=>task===languageImport&&rev===revision&&!busy;
  try{
-  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{optionalKeys:['storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport',...Object.keys(EN).filter(key=>key.startsWith('reminder'))]});
+  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{optionalKeys:['storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatPaste'))]});
   if(!$('language').querySelector('option[value="'+pack.code+'"]'))$('language').append(option(pack.code,pack.code));
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}
