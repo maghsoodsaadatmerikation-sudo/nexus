@@ -94,12 +94,25 @@ function previewClear(){
  if(videoURL)URL.revokeObjectURL(videoURL);
  videoURL=format=null;download.disabled=true;
 }
-function drawBitmap(ctx,bitmap,opacity){
+/* Camera transforms are strictly contained inside the output canvas.
+ * Frame factor never exceeds 1: no content is cropped or invented.
+ */
+function drawBitmap(ctx,bitmap,opacity,progress=0,motion='still'){
  if(!bitmap||opacity<=0)return;
+ const p=Math.max(0,Math.min(1,progress));
+ const smooth=p*p*(3-2*p);
  const scale=Math.min(canvas.width/bitmap.width,canvas.height/bitmap.height);
- const w=bitmap.width*scale,h=bitmap.height*scale;
+ const factor=motion==='push'?0.90+0.10*smooth:
+  motion==='pull'?1-0.10*smooth:
+  motion==='left'||motion==='right'?0.94:1;
+ const w=bitmap.width*scale*factor,h=bitmap.height*scale*factor;
+ const freeX=(canvas.width-w)/2,freeY=(canvas.height-h)/2;
+ const travel=(motion==='left'||motion==='right')?
+  Math.min(20,Math.max(0,freeX)):0;
+ const dx=motion==='left'?travel*(1-2*smooth):
+  motion==='right'?travel*(2*smooth-1):0;
  ctx.globalAlpha=opacity;
- ctx.drawImage(bitmap,(canvas.width-w)/2,(canvas.height-h)/2,w,h);
+ ctx.drawImage(bitmap,freeX+dx,freeY,w,h);
  ctx.globalAlpha=1;
 }
 function timeline(override){
@@ -138,8 +151,10 @@ function draw(t=0,seconds){
    local>sceneSeconds-transition)?
   Math.max(0,Math.min(1,(local-(sceneSeconds-transition))/transition)):0;
  const outer=fade.checked?Math.max(0,Math.min(1,elapsed/0.4,(plan.total-elapsed)/0.4)):1;
- drawBitmap(ctx,scenes[idx].bitmap,outer*(1-blend));
- if(blend>0)drawBitmap(ctx,scenes[idx+1].bitmap,outer*blend);
+ drawBitmap(ctx,scenes[idx].bitmap,outer*(1-blend),
+   sceneSeconds?local/sceneSeconds:0,scenes[idx].motion);
+ if(blend>0)drawBitmap(ctx,scenes[idx+1].bitmap,outer*blend,
+   0,scenes[idx+1].motion);
 }
 function freeScenes(){
  for(const scene of scenes)scene.bitmap.close?.();
@@ -167,6 +182,23 @@ function listScenes(){
    previewClear();layout();refresh();
   });
   row.append(sceneTiming);
+  const motionChoice=node('select');motionChoice.dataset.sceneMotion=String(index);
+  motionChoice.setAttribute('aria-label',words('Scene motion','حرکت تصویر صحنه')+' '+(index+1));
+  for(const [mode,en,fa] of [
+    ['still','Still','ثابت'],['push','Gentle push','نزدیک‌شدن ملایم'],
+    ['pull','Gentle pullback','دورشدن ملایم'],
+    ['left','Drift left','حرکت آرام به چپ'],
+    ['right','Drift right','حرکت آرام به راست']]){
+   const o=node('option');o.value=mode;o.textContent=words(en,fa);motionChoice.append(o)
+  }
+  motionChoice.value=scene.motion||'still';
+  motionChoice.disabled=Boolean(recording||preparing||loading);
+  motionChoice.addEventListener('change',()=>{
+   if(recording||preparing||loading)return;
+   scene.motion=motionChoice.value;
+   previewClear();layout();refresh();
+  });
+  row.append(motionChoice);
   for(const [action,textEN,textFA] of [
    ['preview','Preview','پیش‌نمایش'],['up','Move up','انتقال به بالا'],
    ['down','Move down','انتقال به پایین'],['remove','Remove','حذف']]){
@@ -241,7 +273,10 @@ function refresh(){
  timingInfo.textContent=plan?
   words('Total clip duration: ','مدت کل کلیپ: ')+plan.total.toFixed(2)+' s':
   scenes.length?words('Duration exceeds 24 seconds; shorten individual scenes.','مدت بیش از ۲۴ ثانیه است؛ زمان صحنه‌ها را کم کن.'):'';
- for(const field of sceneList.querySelectorAll('select'))field.disabled=blocked||!individual.checked;
+ for(const field of sceneList.querySelectorAll('[data-scene-seconds]'))
+  field.disabled=blocked||!individual.checked;
+ for(const field of sceneList.querySelectorAll('[data-scene-motion]'))
+  field.disabled=blocked;
  for(const button of sceneList.querySelectorAll('button'))button.disabled=blocked||
   (button.dataset.sceneAction==='up'&&button.closest('[role=listitem]')===sceneList.firstChild)||
   (button.dataset.sceneAction==='down'&&button.closest('[role=listitem]')===sceneList.lastChild);
@@ -276,7 +311,7 @@ async function acceptImages(files){
    }
    pixels+=bitmap.width*bitmap.height;
    if(pixels>MAX_TOTAL_PIXELS){bitmap.close?.();throw Error('total-pixels')}
-   decoded.push({bitmap,label:f.name.slice(0,100),seconds:3});
+   decoded.push({bitmap,label:f.name.slice(0,100),seconds:3,motion:'still'});
   }
   if(ticket!==epoch)throw Error('stale');
   scenes=decoded;image=scenes[0].bitmap;photo.value='';layout();listScenes();
@@ -305,7 +340,7 @@ generated.addEventListener('click',async()=>{
   if(ticket!==epoch){candidate?.close?.();return}
   if(!candidate.width||!candidate.height||candidate.width>4096||candidate.height>4096||
      candidate.width*candidate.height>MAX_PIXELS)throw Error('dimensions');
-  scenes=[{bitmap:candidate,label:words('Generated image','تصویر ساخته‌شده'),seconds:3}];image=candidate;
+  scenes=[{bitmap:candidate,label:words('Generated image','تصویر ساخته‌شده'),seconds:3,motion:'still'}];image=candidate;
   photo.value='';layout();listScenes();
   message('Generated preview copied locally; no new provider call.',
           'پیش‌نمایش ساخته‌شده روی دستگاه کپی شد؛ درخواست جدیدی ارسال نشد.');
@@ -449,8 +484,8 @@ shortcut.addEventListener('click',()=>{box.open=true;photo.focus({preventScroll:
 function labels(){
  heading.textContent=words('Create a video locally (free)','ساخت ویدیوی محلی (رایگان)');
  help.textContent=words(
-  'Arrange 1–4 uncropped scenes. Use a total preset (3–12 s) or set each scene (maximum 24 s combined), choose transition length and audio volume/fades. Preview before recording. Browser-only, no generative AI.',
-  '۱ تا ۴ تصویر بدون برش مرتب کن. از زمان آماده (۳ تا ۱۲ ثانیه) یا مدت مستقل هر صحنه (مجموعاً تا ۲۴ ثانیه) استفاده کن؛ طول گذار و شدت و محوشدن صوت را تنظیم و پیش‌نمایش کن. ابزار محلی است.');
+  'Arrange 1–4 scenes with optional contained camera drift, push or pull (no crop). Set clip duration, crossfades, audio volume and fades; preview before recording. Browser-only, no generative AI.',
+  '۱ تا ۴ صحنه با حرکت دوربین محدود، نزدیک‌شدن یا دورشدن بدون برش تنظیم کن. زمان، گذار نرم و شدت صدا را انتخاب و پیش‌نمایش کن. ابزار محلی و غیرمولد است.');
  const labelText=(parent,child,en,fa)=>{
   if(parent.firstChild?.nodeType===3)parent.firstChild.remove();
   parent.insertBefore(document.createTextNode(words(en,fa)),child)

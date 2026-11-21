@@ -23,10 +23,16 @@ only if the browser supports the selected encoding. It never contacts a
 video provider or requires a model API key. Users can preview, stop and
 discard, clear or explicitly download the completed clip.
 
-Each source photo is fitted within the frame; neutral letterbox
+Each source photo is fitted within the frame. A per-scene **virtual camera**
+selector can leave the scene still, gently move toward/away from it, or drift
+left/right. The effect operates only inside available margins: scale never
+exceeds the original full-frame fit, and horizontal motion is bounded by unused
+canvas space. This does not crop the photo or edit its pixels. Neutral letterbox
 space is used rather than cropping. **No zoom, face/body edits, generative
-animation, camera motion, subtitles, automatic sharing or YouTube publishing**
-is performed. Motion is limited to optional fade-in/out and transitions
+animation, camera tracking based on image understanding, subtitles, automatic
+sharing or YouTube publishing**
+is performed. Motion is limited to contained manual camera movement,
+optional fade-in/out and transitions
 between still images. The default preset divides total duration equally;
 independent scene timings change the total duration when enabled.
 
@@ -57,7 +63,8 @@ independent scene timings change the total duration when enabled.
 
 The real Chromium static acceptance test exercises a synthetic local photo,
 portrait layout, a two-image synthetic color preview with reorder,
-per-scene durations, timeline scrubbing, variable crossfade pixels and
+per-scene durations, timeline scrubbing, contained virtual-camera push/pan
+pixel tests, variable crossfade pixels and
 volume/fade control state, plus an actual MediaRecorder clip when supported, resulting
 file header and size, exclusion from project storage, and clear. Unsupported
 MediaRecorder configurations fail closed. This does not prove real Android
