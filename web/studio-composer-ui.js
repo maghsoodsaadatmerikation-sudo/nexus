@@ -15,17 +15,21 @@ const selectLabel=document.createElement('label');selectLabel.htmlFor='studio-co
 const select=document.createElement('select');select.id='studio-compose-mode';
 for(const [value,en,fa] of [
  ['guide','Local reflection guide','راهنمای تأمل محلی'],
- ['model','Review AI model request','بازبینی درخواست مدل هوش مصنوعی']
+ ['model','Connected AI model (requires approval)','مدل متصل (نیازمند تأیید)']
 ]){const o=document.createElement('option');o.value=value;o.dataset.en=en;o.dataset.fa=fa;select.append(o)}
 const send=document.createElement('button');send.type='button';send.id='studio-compose-send';
 const save=document.createElement('button');save.type='button';save.id='studio-compose-save';save.className='secondary';
 const config=document.createElement('button');config.type='button';config.id='studio-compose-config';config.className='secondary';
+const modelStrip=document.createElement('div');modelStrip.id='studio-compose-model-info';modelStrip.className='studio-compose-model-info';modelStrip.hidden=true;
+const modelState=document.createElement('p');modelState.id='studio-compose-model-state';modelState.className='help';modelState.setAttribute('role','status');modelState.setAttribute('aria-live','polite');
+const modelCheck=document.createElement('button');modelCheck.id='studio-compose-model-check';modelCheck.type='button';modelCheck.className='secondary';
+modelStrip.append(modelState,modelCheck);
 const privacy=document.createElement('p');privacy.id='studio-compose-privacy';privacy.className='help';
 privacy.setAttribute('role','note');
 const storage=document.createElement('p');storage.id='studio-compose-storage';storage.className='help';storage.setAttribute('role','status');storage.setAttribute('aria-live','polite');
 selectLabel.append(select);row.append(send,save);
 mode.append(heading,selectLabel,config,privacy);
-box.append(row,mode,storage);
+box.append(row,modelStrip,mode,storage);
 $('branch-notice').after(box);
 
 /* Discover capability from a typed request; proposal only, never execute. */
@@ -365,6 +369,24 @@ function refresh(){
  send.textContent=planning?words('Review workflow','بازبینی گردش‌کار'):privateChat?words('Start temporary chat','شروع گفتگوی موقت'):tool?words('Review '+tool.route[2],'بازبینی '+tool.route[3]):model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
  send.disabled=!ready||!$('message').value.trim();
  send.setAttribute('aria-label',send.textContent);
+ select.disabled=state.busy;
+ const availability=window.NexusStudioUI.modelAvailability?.()||{kind:'gateway',checked:false,configured:false};
+ modelStrip.hidden=!model;
+ modelCheck.disabled=state.busy||state.attachmentLoading;
+ modelCheck.textContent=availability.kind==='device'?
+  words('Check local model','بررسی مدل روی دستگاه'):
+  words('Check gateway settings','بررسی تنظیمات درگاه');
+ modelState.textContent=!model?'':availability.kind==='device'?
+  (availability.configured?words('On-device · '+availability.model+' · small model, limited accuracy; no provider request yet.',
+   'روی دستگاه · '+availability.model+' · مدل کوچک با دقت محدود؛ هنوز درخواستی به ارائه‌دهنده ارسال نشده است.'):
+   words('On-device model not ready; load it separately before reviewing a request.',
+    'مدل روی دستگاه آماده نیست؛ پیش از بازبینی درخواست، آن را جداگانه بارگذاری کن.')):
+  !availability.checked?words('Gateway model not checked. Check settings before requesting an AI reply.',
+    'مدل درگاه هنوز بررسی نشده است. پیش از درخواست پاسخ، تنظیمات را بررسی کن.'):
+  !availability.configured?words('No model configured at this gateway. Local guide is still available.',
+    'در این درگاه مدلی پیکربندی نشده است؛ راهنمای محلی همچنان در دسترس است.'):
+  words(availability.model+' · '+availability.providerHost+' · configured only; real access and quality are not verified.',
+    availability.model+' · '+availability.providerHost+' · فقط پیکربندی تأیید شده؛ دسترسی و کیفیت واقعی هنوز بررسی نشده‌اند.');
  save.textContent=state.vaultUnlocked?words('Save encrypted session','ذخیرهٔ رمزگذاری‌شدهٔ نشست'):words('Set up private archive','تنظیم آرشیو خصوصی');
  // Never bypass the existing noForms() gate, including unread chat drafts.
  const pendingDraft=Boolean($('message').value.trim());
@@ -373,10 +395,10 @@ function refresh(){
  config.disabled=state.busy;
  config.textContent=words('Model settings','تنظیمات مدل');
  privacy.textContent=model?
-  words('Choose a model, review the message and approve sending.',
-        'مدل را انتخاب کن، پیام را بازبینی کن و ارسال را تأیید کن.'):
-  words('Local guide only — not generative AI. It cannot read attached files.',
-        'فقط راهنمای محلی، نه هوش مصنوعی مولد؛ فایل‌های پیوست را نمی‌خواند.');
+  words('One server model is configured at a time. Review exact context and approve each send; provider charges may apply.',
+        'در هر لحظه یک مدل سروری تنظیم می‌شود. متن دقیق را بازبینی و هر ارسال را تأیید کن؛ ممکن است هزینه داشته باشد.'):
+  words('Local guide only — not generative AI. It cannot read attached files or contact a provider.',
+        'فقط راهنمای محلی است، نه هوش مصنوعی مولد؛ فایل پیوست نمی‌خواند یا با ارائه‌دهنده تماس نمی‌گیرد.');
  storage.textContent=state.vaultUnlocked?
   state.dirty||state.unsavedForms||pendingDraft?
    words('Work is not fully saved. Finish or clear draft fields, then save explicitly.',
@@ -433,7 +455,12 @@ config.addEventListener('click',()=>{
  settings.scrollIntoView({block:'nearest'});
  settings.querySelector('summary')?.focus({preventScroll:true});
 });
-select.addEventListener('change',()=>{temporaryModel=false;clearOffer();closeDirectory();refresh()});
+modelCheck.addEventListener('click',()=>{if(!modelCheck.disabled)$('check-model').click()});
+select.addEventListener('change',()=>{
+ temporaryModel=false;clearOffer();closeDirectory();
+ window.NexusStudioUI.revokeModelReview?.();
+ refresh();
+});
 document.addEventListener('nexus-studio-private-clear',()=>{clearOffer();closeDirectory();clearWorkflow()});
 $('message').addEventListener('input',refresh);
 $('message').addEventListener('keydown',event=>{
