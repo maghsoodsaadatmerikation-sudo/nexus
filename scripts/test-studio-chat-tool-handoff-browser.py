@@ -419,7 +419,7 @@ window.addEventListener('load',async()=>{
   // A single frozen catalog drives quick buttons, slash routing and the
   // opt-in palette. Browsing a tool never requests credentials or executes it.
   const catalog=NexusStudioCompose.catalog();
-  assert(Object.isFrozen(catalog)&&catalog.length===16&&catalog.every(Object.isFrozen),
+  assert(Object.isFrozen(catalog)&&catalog.length===17&&catalog.every(Object.isFrozen),
    'capability-catalog-is-read-only-and-complete');
   assert(new Set(catalog.map(x=>x.command)).size===catalog.length,
    'capability-commands-unique');
@@ -441,7 +441,7 @@ window.addEventListener('load',async()=>{
   fill('message','/tools');
   assert(chatSend.textContent.includes('Capabilities'),'tools-command-discovered');
   chatSend.click();
-  assert(!palette.hidden&&palette.querySelector('div').children.length===16,
+  assert(!palette.hidden&&palette.querySelector('div').children.length===17,
    'capability-palette-shows-all-reviewable-tools');
   assert(JSON.stringify({catalogCalls,connectionActions,providerCalls,searchCalls})===
    JSON.stringify(networkBefore),'capability-browser-has-no-network-effects');
@@ -758,6 +758,101 @@ window.addEventListener('load',async()=>{
    'previous-session-writing-receipt-is-not-replayable-in-new-workflow');
   fill('message','Changed writing task invalidates its old observation');
   assert(writing.hidden,'changed-writing-goal-revokes-unconfirmed-version');
+  // Document export is only a user-triggered browser request. Never report
+  // arrival on the user's disk. No prior document state or unrelated download
+  // may unlock the newly reviewed /export step.
+  const exportPlan='/plan\n/export\n/write';
+  fill('message',exportPlan);$('studio-compose-send').click();
+  const exporting=$('studio-chat-workflow');
+  assert(exporting.querySelectorAll('li').length===2&&
+   exporting.querySelector('li button:nth-of-type(2)').disabled,
+   'document-export-plan-does-not-trigger-a-download');
+  exporting.querySelector('li button').click();
+  assert(NexusStudioFocus.active()==='canvas-card'&&
+   exporting.querySelector('li button:nth-of-type(2)').disabled,
+   'opening-export-tool-does-not-prove-delivery');
+  const exportCalls={providerCalls,searchCalls,catalogCalls,connectionActions};
+  const previousConfirm=window.confirm;
+  window.confirm=()=>false;
+  $('export-document').click();
+  window.confirm=previousConfirm;
+  assert(exporting.querySelector('li button:nth-of-type(2)').disabled,
+   'declined-plaintext-export-leaves-reviewed-step-incomplete');
+  fill('editor',' ');
+  $('export-document-word').click();
+  assert(exporting.querySelector('li button:nth-of-type(2)').disabled,
+   'empty-word-export-cannot-create-a-receipt');
+  fill('editor','Updated manuscript after review and deliberate correction.');
+  $('language-template').click();
+  assert(exporting.querySelector('li button:nth-of-type(2)').disabled,
+   'unrelated-template-download-does-not-complete-document-export');
+  $('export-document').click();
+  assert(!exporting.querySelector('li button:nth-of-type(2)').disabled&&
+   exporting.textContent.includes('Browser download requested')&&
+   exporting.textContent.includes('saved_version'),
+   'explicit-markdown-download-request-emits-only-scoped-receipt');
+  const savedVersionCount=NexusStudioUI.snapshot().projects
+   .find(p=>p.id===NexusStudioUI.selection().projectId).documents
+   .find(d=>d.id===$('documents').value).versions.length;
+  exporting.querySelector('li button').click();
+  assert(exporting.querySelector('li button:nth-of-type(2)').disabled,
+   'reopen-review-revokes-previous-file-request-receipt');
+  $('export-document-word').click();
+  assert(!exporting.querySelector('li button:nth-of-type(2)').disabled&&
+   exporting.textContent.includes('docx')&&
+   exporting.textContent.includes('Browser download requested')&&
+   JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions})===
+    JSON.stringify(exportCalls),
+   'explicit-docx-request-has-no-implicit-provider-or-research-execution');
+  exporting.querySelector('li button:nth-of-type(2)').click();
+  assert(exporting.querySelector('li').textContent.includes('delivery unverified'),
+   'document-export-checklist-does-not-claim-file-on-disk');
+  exporting.querySelector('li:nth-child(2) button:last-of-type').click();
+  assert(exporting.textContent.includes('download requests (unverified): 1')&&
+   exporting.textContent.includes('skipped: 1'),
+   'file-download-request-distinguished-from-version-and-skip');
+  assert(NexusStudioUI.snapshot().projects
+   .find(p=>p.id===NexusStudioUI.selection().projectId).documents
+   .find(d=>d.id===$('documents').value).versions.length===savedVersionCount,
+   'exporting-never-mutates-applied-document-versions');
+  // Print is a separate browser dialog: PDF is only available if the user
+  // chooses Save as PDF and verifies the resulting file. The print-only sheet
+  // must never contain Studio chat/history/credentials or executable HTML.
+  fill('message',exportPlan);$('studio-compose-send').click();
+  exporting.querySelector('li button').click();
+  assert(exporting.querySelector('li button:nth-of-type(2)').disabled,
+   'old-docx-request-cannot-complete-new-print-workflow');
+  const originalPrint=window.print;
+  window.print=()=>{throw Error('simulated-print-unavailable')};
+  $('export-document-pdf').click();
+  assert(exporting.querySelector('li button:nth-of-type(2)').disabled&&
+   !$('nexus-print-sheet'),
+   'failed-print-call-has-no-receipt-and-removes-private-sheet');
+  let printSnapshot=null;
+  window.print=()=>{
+   const sheet=$('nexus-print-sheet');
+   printSnapshot={body:sheet?.querySelector('pre')?.textContent,
+    title:sheet?.querySelector('h1')?.textContent,
+    style:document.querySelector('style')?.textContent||''};
+  };
+  $('export-document-pdf').click();
+  window.print=originalPrint;
+  assert(printSnapshot?.body===$('editor').value&&
+   printSnapshot?.title&&printSnapshot.style.includes('body>:not(#nexus-print-sheet){display:none!important}')&&
+   !printSnapshot.body.includes('Fake response'),
+   'print-dialog-has-a-document-only-private-safe-plain-text-sheet');
+  assert(!exporting.querySelector('li button:nth-of-type(2)').disabled&&
+   exporting.textContent.includes('Browser print dialog requested'),
+   'print-receipt-claims-dialog-only-not-saved-pdf');
+  window.dispatchEvent(new Event('afterprint'));
+  assert(!$('nexus-print-sheet'),'print-private-sheet-cleared-after-dialog');
+  exporting.querySelector('li button:nth-of-type(2)').click();
+  exporting.querySelector('li:nth-child(2) button:last-of-type').click();
+  assert(exporting.textContent.includes('print dialogs (unverified): 1')&&
+   exporting.textContent.includes('download requests (unverified): 0'),
+   'pdf-print-dialog-not-mislabeled-as-completed-download');
+  fill('message',exportPlan+' modified');
+  assert(exporting.hidden,'editing-draft-revokes-file-export-workflow');
   $('lock').click();
   assert(!$('reminder-title').value&&!$('reminder-start').value,'lock-clears-reminder-form');
 

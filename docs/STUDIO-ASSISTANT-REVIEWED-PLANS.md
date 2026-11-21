@@ -245,3 +245,50 @@ successful new changed-version application, safe explicit retry with proof
 revocation, and non-replay of an earlier session's writing receipt. All
 UI and PWA shells are rebuilt with deterministic module order and re-pinned
 hashes; the hard public size cap remains enabled at 635,000 bytes.
+
+## Reviewed document exports: Markdown, DOCX and Print/Save as PDF (stacked candidate)
+
+The temporary chat-first workflow now includes explicit `/export` as a local
+review action. It opens the existing writing canvas without exporting anything.
+A separate action on that canvas is required:
+
+- **Markdown:** the user explicitly approves plain-text output and clicks
+  **Export Markdown**. The browser is given a Blob URL and an explicit
+  `download` click. The output can come from an unsaved editor draft or a
+  saved version; the UI records which one was requested.
+- **Word:** the user explicitly approves unencrypted output and clicks
+  **Download Word**. A valid, nonempty document is serialized through the
+  existing local DOCX generator before its Blob URL is clicked. Rejection,
+  invalid content or generation failure cannot create a completion receipt.
+- **PDF:** the user clicks **Print / Save as PDF**, reviews the plain-text-only
+  document print surface and uses their browser's print dialog to choose
+  **Save as PDF**. NEXUS does not itself create, download, or certify a PDF.
+  Print CSS hides all other Studio body children; the ephemeral print surface
+  contains only the document title and text using `textContent`. It is
+  removed on `afterprint`, error, private clear or a bounded fallback.
+
+Only the **browser request** is observed. A receipt contains a typed
+`download_requested` (Markdown/DOCX) or `print_requested` (browser print)
+status, the output type, a bounded size for generated downloads (0 for print),
+and whether the editor content matched its latest saved version. It carries
+**no document text, filenames, access tokens, content excerpts or source
+data**. The user must independently check that the file was saved, opens,
+and faithfully represents the intended document. Neither a download click
+nor a print dialog proves delivery to disk.
+
+A new workflow, opening the review tool again, explicit skip, goal edit,
+project/thread change or private clear invalidates the previous one-shot
+receipt. Other downloads (language packs, chat responses, backups) do not
+count toward a document export step. No tool runs automatically, no model
+or external provider receives the document, and the workflow does not
+silently save to the encrypted archive.
+
+Real browser regression checks rejected plaintext export, empty Word output,
+unrelated downloads, Markdown and DOCX request receipts, explicit retry and
+non-replay, a failed browser print, an isolated document-only print sheet,
+print cleanup, no unauthorized provider calls and separate counts for
+download versus print requests.
+
+The reviewed source and standalone/PWA shells remain within a strict
+645,000-byte HTML limit, with SHA-256 and service-worker cache re-pinning.
+This is a **draft development candidate**, not a live production release.
