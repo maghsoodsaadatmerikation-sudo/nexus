@@ -90,3 +90,44 @@ execution boundary.
 Bundled Studio pages and the integrity-pinned static PWA worker must be rebuilt
 from the exact source before release. CI and real-browser tests for the PR head
 must pass; no live publication is asserted.
+
+## Scoped, read-only execution receipts (stacked candidate)
+
+An assistant plan can now distinguish three outcomes:
+- **Gateway read returned (source content untrusted):** an explicitly approved
+  GitHub open-PR or Render deployment-status read returned through the existing
+  Studio connector, passed the connector's response validation and matched the
+  exact current workflow step. The user then separately confirms the step.
+- **Confirmed by user:** the user opens another tool and manually reports
+  completion; NEXUS has no independent tool result for that step.
+- **Skipped by user:** the step was bypassed and must never count as done.
+
+The read receipt is held only in the current browser tab's checklist. It is
+not saved to a chat, memory, archive, API, telemetry or external account. It
+does not carry provider payloads or secrets and is NOT cryptographic
+attestation of factual accuracy, timing, completeness or provider identity.
+
+A connector opens with a one-shot, scoped callback only for the reviewed
+read-only operations `github.pulls` and `render.deploys`. The callback
+fires only after the separate human-approved read has received a validated
+connector response; opening a dialog, loading an account catalog, changing
+an operation or receiving an error is NOT sufficient. A callback cannot
+authorize a second read or perform a write.
+
+Editing the exact draft, switching project/conversation, clearing the
+private session or reopening the workflow invalidates the old checklist.
+Late callbacks cannot advance newer steps. The existing connector also
+discards stale results on navigation, changed token or closed dialog.
+Read-operation mismatch and explicit operator selection changes revoke the
+pending receipt listener.
+
+This is an incremental **human-in-the-loop workflow progress engine**, not
+autonomous tool chaining, scheduled execution or durable execution evidence.
+Read-only connector data is still untrusted, and all access permissions remain
+on the gateway/connector. External tool success cannot establish a human
+judgment under the NEXUS constitutional core.
+
+The browser regression verifies that dialog opening and catalog browsing
+are not receipts, an approved provider read enables an exact-matching step,
+the user must confirm that step, and skipping/cancellation are reported
+honestly. Review the exact PR head's CI before merging or publishing.
