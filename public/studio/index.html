@@ -529,7 +529,7 @@ html.studio-focus-mode{
 <p class="help music-en">This version creates synthetic vowel phrases only; it does not pronounce text or imitate anyone's voice. Piano, strings, brass, woodwinds and animal-inspired effects are electronic approximations. You decide what to publish; no external service is called.</p>
 <p class="help music-fa" lang="fa" dir="rtl">در این نسخه آواز مصنوعی با واکه‌های ساده تولید می‌شود و متن را نمی‌خواند یا صدای کسی را تقلید نمی‌کند. سازهای غربی و افکت‌های حیوانات الکترونیکی و تقریبی‌اند؛ هیچ انتشار یا اتصال خودکاری وجود ندارد.</p>
 </section>
-<section class="card" id="canvas-card"><h2 data-t="canvas">Versioned writing canvas</h2><select id="documents" aria-label="Document"></select><input id="document-title" maxlength="120" data-placeholder="documentTitle" aria-label="Document title"><button id="new-document" data-t="newDocument">New document</button><textarea id="editor" maxlength="100000" dir="auto"></textarea><div class="row"><button id="save-version" data-t="saveVersion">Save new version</button><button id="export-document" data-t="exportDocument">Export Markdown</button><button id="delete-document" data-t="deleteDocument">Delete document</button></div><select id="versions" aria-label="Saved document version"></select><button id="load-version" class="secondary" data-t="loadVersion">Load version into editor</button><pre id="version-diff"></pre><p class="help" data-t="canvasHelp">Every saved version remains available, up to 30 per document. Text and code are edited as inert text and never executed.</p></section>
+<section class="card" id="canvas-card"><h2 data-t="canvas">Versioned writing canvas</h2><select id="documents" aria-label="Document"></select><input id="document-title" maxlength="120" data-placeholder="documentTitle" aria-label="Document title"><button id="new-document" data-t="newDocument">New document</button><textarea id="editor" maxlength="100000" dir="auto"></textarea><div class="row"><button id="save-version" data-t="saveVersion">Save new version</button><button id="export-document" data-t="exportDocument">Export Markdown</button><button id="export-document-word" type="button" data-t="chatExportWord"></button><button id="delete-document" data-t="deleteDocument">Delete document</button></div><select id="versions" aria-label="Saved document version"></select><button id="load-version" class="secondary" data-t="loadVersion">Load version into editor</button><pre id="version-diff"></pre><p class="help" data-t="canvasHelp">Every saved version remains available, up to 30 per document. Text and code are edited as inert text and never executed.</p></section>
 </div></div><p class="help" data-t="boundary">NEXUS assists judgment. It cannot make a human decision or take external actions from a conversation.</p>
 <footer class="help" id="nexus-creator" dir="auto">Created by <a href="mailto:maryamnajafi4991@gmail.com">Maryam Najafi · maryamnajafi4991@gmail.com</a></footer>
 <section class="card" id="studio-privacy">
@@ -1926,9 +1926,11 @@ globalThis.NexusReplyFormat = Object.freeze({
  exportConversation:(doc,sections,title)=>exportHtml(doc,sections,{title})
 });
 })();
-</script><script>/* Bounded ZIP and XML readers reused by Studio and the offline file desk. */
+</script><script>/* Bounded ZIP and XML helpers for Studio Office documents. */
 (function(root){'use strict';
 const PREVIEW_LIMIT=512*1024;
+// Studio exports a single document without tray attachments.
+const TRAY_LIMIT=0;
 function decodeFileText(bytes){
   if(bytes[0]===0xff&&bytes[1]===0xfe)return new TextDecoder('utf-16le',{fatal:true}).decode(bytes.subarray(2));
   if(bytes[0]===0xfe&&bytes[1]===0xff)return new TextDecoder('utf-16be',{fatal:true}).decode(bytes.subarray(2));
@@ -1976,6 +1978,26 @@ function zipReader(bytes){
     }
     if(data.length!==entry.raw||crc32(data)!==entry.crc)throw Error('zip-integrity');return data;
   }};
+}
+function makeZip(entries){
+  if(entries.length>200)throw Error('zip-count');
+  const parts=[],central=[],seen=new Set();let offset=0,centralSize=0;
+  for(const entry of entries){
+    const name=String(entry.name);if(!name||name.startsWith('/')||name.includes('\\')||name.split('/').includes('..')||seen.has(name))throw Error('zip-output-path');seen.add(name);
+    const n=new TextEncoder().encode(name),data=entry.data instanceof Uint8Array?entry.data:new TextEncoder().encode(String(entry.data));
+    if(n.length>1000||data.length>TRAY_LIMIT+2*1024*1024)throw Error('zip-output-size');
+    const crc=crc32(data),local=new Uint8Array(30),l=new DataView(local.buffer);
+    l.setUint32(0,0x04034b50,true);l.setUint16(4,20,true);l.setUint16(6,0x0800,true);l.setUint16(12,33,true);l.setUint32(14,crc,true);l.setUint32(18,data.length,true);l.setUint32(22,data.length,true);l.setUint16(26,n.length,true);
+    const record=new Uint8Array(46),c=new DataView(record.buffer);
+    c.setUint32(0,0x02014b50,true);c.setUint16(4,20,true);c.setUint16(6,20,true);c.setUint16(8,0x0800,true);c.setUint16(14,33,true);c.setUint32(16,crc,true);c.setUint32(20,data.length,true);c.setUint32(24,data.length,true);c.setUint16(28,n.length,true);c.setUint32(42,offset,true);
+    parts.push(local,n,data);central.push(record,n);offset+=local.length+n.length+data.length;centralSize+=record.length+n.length;
+  }
+  const end=new Uint8Array(22),e=new DataView(end.buffer);e.setUint32(0,0x06054b50,true);e.setUint16(8,entries.length,true);e.setUint16(10,entries.length,true);e.setUint32(12,centralSize,true);e.setUint32(16,offset,true);
+  return new Blob([...parts,...central,end],{type:'application/zip'});
+}
+function xmlEscape(value){
+  const text=Array.from(String(value)).map(c=>{const n=c.codePointAt(0);return (n<32&&![9,10,13].includes(n))||(n>=0xd800&&n<=0xdfff)||n===0xfffe||n===0xffff?'\\u'+n.toString(16).padStart(4,'0'):c;}).join('');
+  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
 }
 const OFFICE_MAX_BYTES=2*1024*1024;
 const WORD_NAMESPACES=[
@@ -2074,7 +2096,27 @@ async function readPptx(file){
  return boundedText(lines.join('\n'));
 }
 
-root.NexusOfficeZip=Object.freeze({readDocx,readPptx,OFFICE_MAX_BYTES});
+const DOCX_TYPE='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+function writeDocx(title,body){
+ if(typeof title!=='string'||title.length>120||typeof body!=='string'||!body.trim()||body.length>100000)throw Error('word-export-size');
+ const paragraph=(text,heading=false)=>{
+  if(!text)return '<w:p/>';
+  const rtl=/^[^\p{L}]*\p{Script=Arabic}/u.test(text);
+  const runs=text.split('\t').map(part=>part?'<w:t xml:space="preserve">'+xmlEscape(part)+'</w:t>':'').join('<w:tab/>');
+  return '<w:p>'+(rtl?'<w:pPr><w:bidi/></w:pPr>':'')+'<w:r>'+
+   (heading?'<w:rPr><w:b/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr>':'')+
+   runs+'</w:r></w:p>';
+ };
+ const documentXml='<?xml version="1.0" encoding="UTF-8"?>'+
+  '<w:document xmlns:w="'+WORD_NAMESPACES[0]+'"><w:body>'+paragraph(title,true)+
+  body.split(/\r\n?|\n/).map(line=>paragraph(line)).join('')+'<w:sectPr/></w:body></w:document>';
+ return new Blob([makeZip([
+  {name:'[Content_Types].xml',data:'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/word/document.xml" ContentType="'+DOCX_TYPE+'.main+xml"/></Types>'},
+  {name:'_rels/.rels',data:'<Relationships xmlns="'+PACKAGE_REL+'"><Relationship Id="rId1" Type="'+PRESENTATION_NAMESPACES[0][2]+'/officeDocument" Target="word/document.xml"/></Relationships>'},
+  {name:'word/document.xml',data:documentXml}
+ ])],{type:DOCX_TYPE});
+}
+root.NexusOfficeZip=Object.freeze({readDocx,readPptx,writeDocx,OFFICE_MAX_BYTES});
 })(globalThis);
 </script><script>'use strict';
 const S=NexusStudio,$=id=>document.getElementById(id),vault=new S.Vault(),undoSlot=new S.UndoSlot(),localePacks=new NexusLocales.Registry();
@@ -2133,6 +2175,7 @@ Object.assign(EN,{
  chatCopy:'Copy answer',chatCopyDone:'Answer copied to the clipboard.',
  chatCopyFailed:'Clipboard access is unavailable. Select the answer text to copy it.',
  chatExportThread:'Download active branch as HTML',chatExport:'Download answer',chatExportTitle:'NEXUS answer',
+ chatExportWord:'Download Word (.docx)',chatExportWordDone:'Word download requested.',chatExportWordFailed:'Word export needs text within the supported size.',
  chatExportConfirm:'Download this answer as an unencrypted HTML file?',chatExportDone:'HTML download requested.',
  chatPasteName:'Pasted text',chatPasteAdded:'Long paste attached locally. Add a question and review the excerpts before sending.',
  chatPasteLimit:'The draft was kept. Paste less text or remove an attachment to make room.'
@@ -2141,6 +2184,7 @@ Object.assign(FA,{
  chatCopy:'کپی پاسخ',chatCopyDone:'پاسخ در کلیپ‌بورد کپی شد.',
  chatCopyFailed:'دسترسی به کلیپ‌بورد ممکن نیست. متن پاسخ را انتخاب و کپی کن.',
  chatExportThread:'دریافت شاخهٔ فعال به‌صورت HTML',chatExport:'دریافت فایل پاسخ',chatExportTitle:'پاسخ نکسوس',
+ chatExportWord:'دریافت Word (.docx)',chatExportWordDone:'درخواست دانلود Word ثبت شد.',chatExportWordFailed:'برای دریافت Word، متن باید در محدودهٔ حجم مجاز باشد.',
  chatExportConfirm:'همین پاسخ را به‌صورت فایل HTML بدون رمزگذاری دانلود می‌کنی؟',chatExportDone:'درخواست دانلود HTML ثبت شد.',
  chatPasteName:'متن چسبانده‌شده',chatPasteAdded:'متن بلند به‌صورت محلی پیوست شد. پرسشت را بنویس و گزیده‌ها را پیش از ارسال بازبینی کن.',
  chatPasteLimit:'پیش‌نویس حفظ شد. متن کوتاه‌تری بچسبان یا یکی از پیوست‌ها را بردار.'
@@ -2315,7 +2359,7 @@ function controls(){
  const regenerate=$('regenerate');
  regenerate.hidden=thread?.nodes.find(node=>node.id===thread.head)?.role!=='assistant';
  regenerate.disabled=regenerate.hidden||busy||thread.archived||branchBase!==undefined||hasChatDraft();
- $('attach-document').disabled=busy||!chat()||chat().archived||chat().isolated||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(storageSnapshot().lossRisk?'unsaved':(vault.unlocked?'saved':'temporary'));renderStorage();window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
+ $('attach-document').disabled=busy||!chat()||chat().archived||chat().isolated||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','export-document-word','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(storageSnapshot().lossRisk?'unsaved':(vault.unlocked?'saved':'temporary'));renderStorage();window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
 function mutate(fn,{undoable=false,afterCommit}={}){
  if(busy)return false;
  const before=data,next=S.copy(data),selection={projectId,threadId,documentId};
@@ -2365,13 +2409,16 @@ function renderMessage(n){
    download(html,'nexus-answer.html','text/html;charset=utf-8');
    status('chatExportDone');
   };
+  const exportWord=el('button',t('chatExportWord'));
+  exportWord.type='button';exportWord.className='secondary';exportWord.dataset.chatWord='';
+  exportWord.onclick=()=>downloadWord(t('chatExportTitle'),n.text,'nexus-answer.docx');
   const canvas=el('button',t('toCanvas'));
   canvas.disabled=busy;
   canvas.onclick=()=>{if($('editor').value&&!confirm(t('discard')))return;$('editor').value=n.text;editorDirty=true;stop()};
   const speak=el('button',t('speak'));
   speak.type='button';speak.dataset.chatSpeak='';
   speak.onclick=()=>window.NexusSpeechPlayback?.start(body.innerText||n.text,speak);
-  item.append(copy,exportAnswer,canvas,speak);
+  item.append(copy,exportAnswer,exportWord,canvas,speak);
  }
  return item;
 }
@@ -2441,7 +2488,16 @@ function openConversation(project,thread){
  return projectId===project&&threadId===thread;
 }
 function applyLanguage(){document.documentElement.lang=language;document.documentElement.dir=localePacks.get(language)?.dir||(language==='fa'?'rtl':'ltr');document.querySelectorAll('[data-t]').forEach(n=>n.textContent=t(n.dataset.t));document.querySelectorAll('[data-placeholder]').forEach(n=>n.placeholder=t(n.dataset.placeholder));render();if(branchBase!==undefined)$('branch-notice').textContent=t('branching')}
-function download(text,name,type='text/plain'){const u=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
+function download(text,name,type='text/plain'){const u=URL.createObjectURL(text instanceof Blob?text:new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
+function downloadWord(title,text,filename){
+ if(!text.trim())return status('chatExportWordFailed');
+ if(!confirm(t('plain')))return;
+ try{
+  download(NexusOfficeZip.writeDocx(title,text),filename);
+  status('chatExportWordDone');
+ }catch{status('chatExportWordFailed')}
+}
+
 async function operation(fn,success='apply'){
  if(busy)return;languageImport++;const rev=revision,abort=new AbortController();controller=abort;busy=true;controls();
  try{await fn(rev,abort);if(rev===revision)status(success)}catch(error){if(rev===revision)status(error?.message==='archive-damaged'?'archiveDamaged':'failed')}
@@ -2689,6 +2745,9 @@ $('delete-document').onclick=()=>{
 $('versions').onchange=()=>{const a=doc()?.versions.find(x=>x.id===$('versions').value)?.text||'',b=doc()?.versions.at(-1)?.text||'';const left=a.split('\n'),right=b.split('\n');$('version-diff').textContent=Array.from({length:Math.max(left.length,right.length)},(_,i)=>left[i]===right[i]?null:(i+1)+':\n− '+(left[i]??'')+'\n+ '+(right[i]??'')).filter(Boolean).slice(0,200).join('\n')};
 $('load-version').onclick=()=>{if(forms()&&!confirm(t('discard')))return;const v=doc()?.versions.find(x=>x.id===$('versions').value);if(v){$('editor').value=v.text;editorDirty=true;stop()}};
 $('export-document').onclick=()=>{if(doc()&&confirm(t('plain')))download($('editor').value,'nexus-document.md','text/markdown')};
+$('export-document-word').onclick=()=>{
+ if(doc()&&!busy)downloadWord(doc().title,$('editor').value,'nexus-document.docx');
+};
 $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+chat().title+'\n\n'+S.path(chat()).map(n=>'## '+t(n.origin==='human'?'human':n.origin==='model'?'model':'local')+'\n\n'+n.text+(n.attached_files?.length?'\n\n'+t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' — '+t('chatFilesNotSaved'):'')).join('\n\n'),'nexus-conversation.md','text/markdown')};
 $('export-thread-html').onclick=()=>{
  const thread=chat();

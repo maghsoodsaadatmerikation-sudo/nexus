@@ -1,7 +1,9 @@
-/* Bounded ZIP and XML readers reused by Studio and the offline file desk. */
+/* Bounded ZIP and XML helpers for Studio Office documents. */
 (function(root){'use strict';
 const PREVIEW_LIMIT=512*1024;
-/* OFFICE_ZIP_READER */
+// Studio exports a single document without tray attachments.
+const TRAY_LIMIT=0;
+/* OFFICE_ZIP_HELPERS */
 const OFFICE_MAX_BYTES=2*1024*1024;
 const WORD_NAMESPACES=[
  'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
@@ -99,5 +101,25 @@ async function readPptx(file){
  return boundedText(lines.join('\n'));
 }
 
-root.NexusOfficeZip=Object.freeze({readDocx,readPptx,OFFICE_MAX_BYTES});
+const DOCX_TYPE='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+function writeDocx(title,body){
+ if(typeof title!=='string'||title.length>120||typeof body!=='string'||!body.trim()||body.length>100000)throw Error('word-export-size');
+ const paragraph=(text,heading=false)=>{
+  if(!text)return '<w:p/>';
+  const rtl=/^[^\p{L}]*\p{Script=Arabic}/u.test(text);
+  const runs=text.split('\t').map(part=>part?'<w:t xml:space="preserve">'+xmlEscape(part)+'</w:t>':'').join('<w:tab/>');
+  return '<w:p>'+(rtl?'<w:pPr><w:bidi/></w:pPr>':'')+'<w:r>'+
+   (heading?'<w:rPr><w:b/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr>':'')+
+   runs+'</w:r></w:p>';
+ };
+ const documentXml='<?xml version="1.0" encoding="UTF-8"?>'+
+  '<w:document xmlns:w="'+WORD_NAMESPACES[0]+'"><w:body>'+paragraph(title,true)+
+  body.split(/\r\n?|\n/).map(line=>paragraph(line)).join('')+'<w:sectPr/></w:body></w:document>';
+ return new Blob([makeZip([
+  {name:'[Content_Types].xml',data:'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/word/document.xml" ContentType="'+DOCX_TYPE+'.main+xml"/></Types>'},
+  {name:'_rels/.rels',data:'<Relationships xmlns="'+PACKAGE_REL+'"><Relationship Id="rId1" Type="'+PRESENTATION_NAMESPACES[0][2]+'/officeDocument" Target="word/document.xml"/></Relationships>'},
+  {name:'word/document.xml',data:documentXml}
+ ])],{type:DOCX_TYPE});
+}
+root.NexusOfficeZip=Object.freeze({readDocx,readPptx,writeDocx,OFFICE_MAX_BYTES});
 })(globalThis);

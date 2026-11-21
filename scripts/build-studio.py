@@ -23,7 +23,7 @@ for item in modules:
     marker, filename = item.marker, item.filename
     code = (root/'web'/filename).read_text()
     if filename == 'studio-office-zip.js':
-        # Reuse the static offline file desk reader. The public pilot keeps its
+        # Reuse the static offline file desk ZIP and XML helpers. The pilot keeps its
         # reviewed bytes while Studio supplies its own smaller expansion limit.
         pilot = (root/'web/offline-pilot.html').read_text()
         start = pilot.index('  function decodeFileText(bytes){')
@@ -31,7 +31,10 @@ for item in modules:
         crc = pilot.index('  const ZIP_CRC_TABLE=', helpers)
         end = pilot.index('  async function officeText(', crc)
         reader = dedent(pilot[start:helpers]) + dedent(pilot[crc:end])
-        code = replace_exact(code, '/* OFFICE_ZIP_READER */', reader.rstrip())
+        writer_start = pilot.index('  function makeZip(entries){')
+        writer_end = pilot.index('  function reportRows(raw){', writer_start)
+        writer = dedent(pilot[writer_start:writer_end])
+        code = replace_exact(code, '/* OFFICE_ZIP_HELPERS */', (reader + writer).rstrip())
     if '</script' in code.lower():
         raise ValueError('script closing sequence is not permitted in bundled sources')
     shell = replace_exact(shell, marker, code)
