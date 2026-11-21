@@ -26,6 +26,36 @@ Chromium acceptance covers English/Persian explicit requests, draft
 preservation, the model-mode generic-question boundary, and absence of network
 calls from suggestions alone.
 
+## Explicit multi-step chat workflows (review-only)
+
+Type **/plan** on its own line, followed by **2–6 distinct or repeated supported
+tool slash commands**, one command per line. For example:
+
+    /plan
+    /research published evidence about a question
+    /data
+    /write
+
+NEXUS displays a temporary, ordered checklist alongside the chat. The user can
+open the current tool for separate review, then manually acknowledge that the
+step was completed before the next step becomes active. The original unsent
+chat draft is preserved. Opening a step **does not** execute code, send a prompt,
+query a provider, upload a document, or perform a GitHub/Render operation. Every
+tool retains its existing explicit permission and consent checks.
+
+Unknown, empty, overly long, nested, and malformed steps fail closed. The
+workflow is local to the current tab, conversation and exact draft. Editing
+the draft, changing chat/project, archiving, or clearing private state discards
+the checklist without sending any network request. Busy tools do not
+prematurely discard the plan; they cannot be opened or marked done while the
+underlying Studio UI reports them busy. Marking a step done is a **human
+acknowledgment**, not evidence that an external operation succeeded.
+
+This is not LLM-generated planning or autonomous orchestration: there is no
+unattended queue, background task, model tool call, implicit account permission,
+durable execution log or automatic retry. Real multi-step agents require
+independent per-step authorization, execution receipts and error handling.
+
 NEXUS Studio now provides an explicit **Use in next chat** action at the
 output location for three existing tools:
 

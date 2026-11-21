@@ -5,7 +5,9 @@ import stat
 
 # Bounded Studio asset budget, including local Office text extraction and
 # bilingual decision support in the standalone HTML.
-MAX_FILE = 610_000
+# The reviewed chat workflow checklist adds ~5.8 KiB to the bundled
+# self-contained shell. Keep a hard asset ceiling and fail closed above it.
+MAX_FILE = 615_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000

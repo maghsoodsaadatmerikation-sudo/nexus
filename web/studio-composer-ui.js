@@ -161,6 +161,134 @@ function connectionRequest(result,message){
   /(?:pull\s*requests?|\bpr\b|درخواست(?:‌|\s)*ادغام)/i.test(text)?'github.pulls':null;
  return {provider:'github',operation};
 }
+
+/* Review-only multi-step chat checklist. This is not autonomous planning:
+ * each step is a reviewed slash command supplied by the human. No work runs
+ * from parsing, opening, or marking a step; tools enforce their own consent.
+ */
+const workflow=document.createElement('section');
+workflow.id='studio-chat-workflow';workflow.className='studio-compose';
+workflow.hidden=true;workflow.setAttribute('aria-label','Reviewed workflow');
+directory.after(workflow);
+let workflowState=null;
+function workflowScope(){
+ const selection=window.NexusStudioUI.selection?.()||{};
+ return JSON.stringify([selection.projectId||null,selection.threadId||null]);
+}
+function isWorkflowRequest(message){return /^\/plan(?:\s|$)/i.test(message.trimStart())}
+function parseWorkflow(message){
+ const lines=message.replace(/\r\n?/g,'\n').split('\n');
+ if(lines[0].trim().toLowerCase()!=='/plan'||lines.length<3||lines.length>7||
+    message.length>1900)return {error:'Use /plan on its own line, then 2–6 tool commands on separate lines.'};
+ const steps=[];
+ for(const raw of lines.slice(1)){
+  const line=raw.trim();
+  if(!line||line.length>260||/[\x00-\x1f\x7f]/.test(line)||
+     !/^\/[a-z-]+(?:[ \t]+\S.*)?$/i.test(line))
+   return {error:'Every step must be a short /tool command; empty or unrecognized steps are rejected.'};
+  const result=intent(line);
+  if(!result||result.route[0]==='tools')
+   return {error:'Unknown workflow tool. Use All tools to choose a supported /command.'};
+  steps.push({line,result});
+ }
+ return {steps};
+}
+function clearWorkflow(){
+ workflowState=null;workflow.hidden=true;workflow.replaceChildren();
+}
+function retainedWorkflow(){
+ const state=window.NexusStudioUI.uiStatus();
+ return Boolean(workflowState&&state&&!state.archived&&
+  $('message').value===workflowState.draft&&workflowScope()===workflowState.scope);
+}
+function validWorkflow(){
+ const state=window.NexusStudioUI.uiStatus();
+ return Boolean(retainedWorkflow()&&state&&!state.busy&&!state.attachmentLoading);
+}
+function workflowError(reason){
+ clearWorkflow();workflow.hidden=false;
+ const p=document.createElement('p');p.textContent=words(reason,reason);
+ const close=document.createElement('button');close.type='button';close.className='secondary';
+ close.textContent=words('Close','بستن');close.onclick=()=>{clearWorkflow();$('message').focus()};
+ workflow.append(p,close);
+}
+function openReviewedSurface(result,message){
+ const state=window.NexusStudioUI.uiStatus();
+ if(!state||state.busy||state.attachmentLoading||state.archived)return false;
+ const [,panel,,,field]=result.route;
+ const input=field?$(field):null;
+ if(input&&!input.value&&result.query){
+  const limit=field==='research-query'?250:input.maxLength;
+  input.value=result.query.slice(0,limit>0?limit:480);
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+ }
+ if(panel==='studio-connections'){
+  const request=connectionRequest(result,message);
+  if(!window.NexusStudioConnections?.openFor?.(request)){
+   const entry=$('studio-connections-open');
+   if(entry&&!entry.disabled)entry.click();
+  }
+ }else window.NexusStudioFocus?.openPanel(panel);
+ return true;
+}
+function showWorkflow(){
+ if(!workflowState)return;
+ workflow.hidden=false;workflow.replaceChildren();
+ const title=document.createElement('strong');
+ title.textContent=words('Your reviewed workflow','گردش‌کار قابل بازبینی');
+ const info=document.createElement('p');info.className='help';
+ info.textContent=words(
+  'Temporary checklist only. Opening a step does not run it. Mark each step done yourself after completing it in the separate tool.',
+  'فهرست موقت است. بازکردن هر گام آن را اجرا نمی‌کند. پس از انجام کار در ابزار مربوطه، گام را خودت تکمیل‌شده علامت بزن.');
+ const list=document.createElement('ol');
+ workflowState.steps.forEach((step,i)=>{
+  const item=document.createElement('li'),span=document.createElement('span');
+  span.textContent=step.line+' · '+(i<workflowState.index?
+   words('confirmed by you','به تأیید شما'):
+   i===workflowState.index?words('current','گام فعلی'):words('not started','شروع‌نشده'));
+  item.append(span);
+  if(i===workflowState.index){
+   const open=document.createElement('button');open.type='button';open.className='secondary';
+   open.textContent=words('Open tool for review','بازکردن ابزار برای بازبینی');
+   open.onclick=()=>{
+    if(!retainedWorkflow()){clearWorkflow();return}
+    if(!validWorkflow())return;
+    if(openReviewedSurface(step.result,step.line)){
+     workflowState.opened=true;showWorkflow();
+    }
+   };
+   const done=document.createElement('button');done.type='button';done.className='secondary';
+   done.textContent=words('I completed this step','این گام را انجام دادم');
+   done.disabled=!workflowState.opened;
+   done.onclick=()=>{
+    if(!retainedWorkflow()){clearWorkflow();return}
+    if(!validWorkflow()||!workflowState.opened)return;
+    workflowState.index++;workflowState.opened=false;showWorkflow();
+   };
+   item.append(open,done);
+  }
+  list.append(item);
+ });
+ const cancel=document.createElement('button');cancel.type='button';cancel.className='secondary';
+ cancel.textContent=words('Discard workflow','حذف گردش‌کار');
+ cancel.onclick=()=>{clearWorkflow();$('message').focus()};
+ workflow.append(title,info,list);
+ if(workflowState.index===workflowState.steps.length){
+  const note=document.createElement('p');note.setAttribute('role','status');
+  note.textContent=words('All steps marked done by you; NEXUS has not verified external results.',
+   'همهٔ گام‌ها به تأیید شما رسیدند؛ نکسوس نتیجهٔ خارجی را راستی‌آزمایی نکرده است.');
+  workflow.append(note);
+ }
+ workflow.append(cancel);
+}
+function reviewWorkflow(message){
+ closeDirectory();clearOffer();
+ const parsed=parseWorkflow(message);
+ if(parsed.error){workflowError(parsed.error);return}
+ workflowState={draft:message,scope:workflowScope(),steps:parsed.steps,index:0,opened:false};
+ showWorkflow();
+}
+
 let offeredDraft=null;
 function clearOffer(){
  offeredDraft=null;offer.hidden=true;offer.replaceChildren();
@@ -192,20 +320,7 @@ function offerTool(message,result){
  open.addEventListener('click',()=>{
   if($('message').value!==offeredDraft||window.NexusStudioUI.uiStatus().busy){clearOffer();return}
   clearOffer();
-  const input=field?$(field):null;
-  if(input&&!input.value&&result.query){
-   const limit=field==='research-query'?250:input.maxLength;
-   input.value=result.query.slice(0,limit>0?limit:480);
-   input.dispatchEvent(new Event('input',{bubbles:true}));
-  }
-  if(panel==='studio-connections'){
-   // Opening a chosen review surface never fetches or grants permission.
-   const request=connectionRequest(result,message);
-   if(!window.NexusStudioConnections?.openFor?.(request)){
-    const entry=$('studio-connections-open');
-    if(entry&&!entry.disabled)entry.click();
-   }
-  }else window.NexusStudioFocus?.openPanel(panel);
+  openReviewedSurface(result,message);
  });
  const dismiss=document.createElement('button');dismiss.type='button';dismiss.className='secondary';
  dismiss.textContent=words('Keep typing','ادامهٔ نوشتن');dismiss.addEventListener('click',()=>{clearOffer();$('message').focus()});
@@ -236,6 +351,7 @@ function refresh(){
  if(!state)return;
  if(temporaryModel&&!state.hasChatAttachments){select.value='guide';temporaryModel=false}
  if(offeredDraft!==null&&($('message').value!==offeredDraft||state.archived))clearOffer();
+ if(workflowState&&!retainedWorkflow())clearWorkflow();
  const model=select.value==='model',ready=!state.busy&&!state.attachmentLoading&&(!state.threadReady||!state.archived);
  $('message').placeholder=words('Ask NEXUS anything…','هرچه می‌خواهی از نکسوس بپرس…');
  heading.textContent=model?words('AI model options','گزینه‌های مدل هوش مصنوعی'):words('Local guide · change mode','راهنمای محلی · تغییر حالت');
@@ -245,7 +361,8 @@ function refresh(){
  for(const opt of select.options)opt.textContent=words(opt.dataset.en,opt.dataset.fa);
  const privateChat=/^\/temporary$/i.test($('message').value.trim());
  const tool=suggestion($('message').value);
- send.textContent=privateChat?words('Start temporary chat','شروع گفتگوی موقت'):tool?words('Review '+tool.route[2],'بازبینی '+tool.route[3]):model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
+ const planning=isWorkflowRequest($('message').value);
+ send.textContent=planning?words('Review workflow','بازبینی گردش‌کار'):privateChat?words('Start temporary chat','شروع گفتگوی موقت'):tool?words('Review '+tool.route[2],'بازبینی '+tool.route[3]):model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
  send.disabled=!ready||!$('message').value.trim();
  send.setAttribute('aria-label',send.textContent);
  save.textContent=state.vaultUnlocked?words('Save encrypted session','ذخیرهٔ رمزگذاری‌شدهٔ نشست'):words('Set up private archive','تنظیم آرشیو خصوصی');
@@ -276,6 +393,7 @@ function run({routeTools=true}={}){
  if(running||!state||state.busy||state.attachmentLoading||(state.threadReady&&state.archived)||
     !$('message').value.trim())return;
  const message=$('message').value;
+ if(isWorkflowRequest(message)){reviewWorkflow(message);return}
  if(/^\/temporary$/i.test(message.trim())){
   if(window.NexusStudioUI.startConversation(true,{isolated:true}))$('message').focus();
   return;
@@ -316,7 +434,7 @@ config.addEventListener('click',()=>{
  settings.querySelector('summary')?.focus({preventScroll:true});
 });
 select.addEventListener('change',()=>{temporaryModel=false;clearOffer();closeDirectory();refresh()});
-document.addEventListener('nexus-studio-private-clear',()=>{clearOffer();closeDirectory()});
+document.addEventListener('nexus-studio-private-clear',()=>{clearOffer();closeDirectory();clearWorkflow()});
 $('message').addEventListener('input',refresh);
 $('message').addEventListener('keydown',event=>{
  if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&!event.isComposing&&

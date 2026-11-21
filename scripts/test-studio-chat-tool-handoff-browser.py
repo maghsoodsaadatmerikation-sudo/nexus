@@ -220,6 +220,56 @@ window.addEventListener('load',async()=>{
   }
   assert(JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions})===
    JSON.stringify(beforeExplicitRoute),'tool-proposals-do-not-call-provider-or-gateway');
+  // Multi-step workflows are explicit temporary checklists, not automatic
+  // provider/tool plans. Re-entering a plan never contacts a provider.
+  fill('research-query','');
+  const workflowDraft='/plan\n/research fictional study sources\n/data\n/write';
+  fill('message',workflowDraft);
+  assert(chatSend.textContent.includes('Review workflow'),'workflow-chat-command-available');
+  const beforeWorkflow={providerCalls,searchCalls,catalogCalls,connectionActions};
+  chatSend.click();
+  const workflow=$('studio-chat-workflow');
+  assert(!workflow.hidden&&workflow.querySelectorAll('li').length===3,
+   'workflow-has-three-ordered-review-only-steps');
+  assert(workflow.querySelectorAll('li button').length===2&&
+   workflow.querySelectorAll('li button')[1].disabled,
+   'workflow-next-step-locked-until-manual-confirmation');
+  assert($('message').value===workflowDraft&&$('request-review').hidden,
+   'workflow-preserves-draft-and-does-not-submit-model-message');
+  workflow.querySelector('li button').click();
+  assert(NexusStudioFocus.active()==='research-card'&&
+   $('research-query').value==='fictional study sources',
+   'workflow-first-step-opens-research-without-running-it');
+  assert(!workflow.querySelectorAll('li button')[1].disabled,
+   'workflow-first-step-now-requires-explicit-human-completion');
+  workflow.querySelectorAll('li button')[1].click();
+  assert(workflow.querySelectorAll('li')[0].textContent.includes('confirmed by you')&&
+   workflow.querySelectorAll('li button')[1].disabled,
+   'workflow-does-not-advance-second-step-without-review');
+  const second=workflow.querySelector('li:nth-child(2) button');
+  second.click();
+  assert(NexusStudioFocus.active()==='data-card','workflow-second-step-opens-data-review');
+  assert(JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions})===
+   JSON.stringify(beforeWorkflow),'workflow-never-starts-provider-or-research-operations');
+  fill('message',workflowDraft+' modified');
+  assert(workflow.hidden,'workflow-edit-revokes-previous-steps');
+  fill('message','/plan\n/github list pull requests\n/unknown invalid');
+  chatSend.click();
+  assert(!workflow.hidden&&workflow.textContent.includes('Unknown workflow tool')&&
+   $('nexus-zen-offer').hidden,'invalid-plan-stays-local-and-visible');
+  assert(JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions})===
+   JSON.stringify(beforeWorkflow),'invalid-workflow-has-zero-network-side-effects');
+  fill('message','/plan\n/github list pull requests\n/research study');
+  chatSend.click();
+  assert(workflow.querySelectorAll('li').length===2,'valid-plan-can-replace-invalid-plan');
+  document.dispatchEvent(new Event('nexus-studio-private-clear'));
+  assert(workflow.hidden,'privacy-clear-revokes-transient-workflow');
+  fill('message','/plan\n/research study\n/data');
+  chatSend.click();
+  assert(!workflow.hidden,'workflow-can-be-recreated-after-clear');
+  workflow.querySelector(':scope > button').click();
+  assert(workflow.hidden&&$('message').value==='/plan\n/research study\n/data',
+   'discard-workflow-keeps-unsent-chat-text');
   // The local-guide mode retains broad opt-in natural-language discovery.
   // Explicit slash commands still work in both modes.
   chooser.value='guide';chooser.dispatchEvent(new Event('change',{bubbles:true}));
