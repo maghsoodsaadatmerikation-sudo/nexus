@@ -350,3 +350,88 @@ def test_stream_disconnect_closes_silent_upstream_and_releases_capacity(monkeypa
             assert upstream_closed.is_set() and limiter.borrowed_tokens == 0
 
     anyio.run(exercise)
+
+
+
+def test_gemini_adapter_only_uses_google_chat_endpoint_with_server_key(monkeypatch):
+    expected = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
+    with configured(monkeypatch) as c:
+        monkeypatch.setenv('NEXUS_MODEL_ADAPTER', 'gemini')
+        monkeypatch.setenv('NEXUS_MODEL_URL', expected)
+        monkeypatch.setenv('NEXUS_MODEL_ID', 'gemini-test-model')
+        status = c.get('/studio-api/status').json()
+        assert status['configured'] is True
+        assert status['provider_host'] == 'generativelanguage.googleapis.com'
+        assert status['authority'] == 'none'
+        assert status['configuration_id'] != BODY['configuration_id']
+        assert 'provider-secret-not-for-browser' not in json.dumps(status)
+        assert TOKEN not in json.dumps(status)
+        assert c.post('/studio-api/respond', json=BODY, headers=AUTH).status_code == 409
+        for wrong in [
+            'https://provider.example/v1/chat/completions',
+            'https://generativelanguage.googleapis.com/v1beta/models/gemini-test-model:generateContent',
+            'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions?key=secret',
+            'http://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+            'https://generativelanguage.googleapis.com:444/v1beta/openai/chat/completions',
+        ]:
+            monkeypatch.setenv('NEXUS_MODEL_URL', wrong)
+            assert c.get('/studio-api/status').json()['configured'] is False
+        monkeypatch.setenv('NEXUS_MODEL_URL', expected)
+        monkeypatch.delenv('NEXUS_MODEL_API_KEY')
+        assert c.get('/studio-api/status').json()['configured'] is False
+        monkeypatch.setenv('NEXUS_MODEL_API_KEY', 'provider-secret-not-for-browser')
+        monkeypatch.setenv('NEXUS_MODEL_ID', 'unverified-model')
+        assert c.get('/studio-api/status').json()['configured'] is False
+
+
+def test_gemini_adapter_forwards_reviewed_text_only_buffered_request(monkeypatch):
+    received = []
+    def handler(req):
+        p = json.loads(req.content)
+        received.append(req)
+        assert req.url.host == 'generativelanguage.googleapis.com'
+        assert str(req.url) == 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
+        assert req.headers['authorization'] == 'Bearer provider-secret-not-for-browser'
+        assert p['model'] == 'gemini-test-model'
+        assert p['max_tokens'] == 256 and 'max_completion_tokens' not in p
+        assert p['store'] is False and p['stream'] is False
+        assert p['messages'][0] == {'role': 'system', 'content': model.POLICY}
+        assert p['messages'][1:] == BODY['messages']
+        assert 'tools' not in p
+        assert TOKEN not in req.content.decode()
+        return httpx.Response(200, json={'choices': [{'message': {
+            'role': 'assistant', 'content': 'One verified synthetic gateway reply'
+        }, 'finish_reason': 'stop'}]})
+    with configured(monkeypatch, handler) as c:
+        monkeypatch.setenv('NEXUS_MODEL_ADAPTER', 'gemini')
+        monkeypatch.setenv('NEXUS_MODEL_URL', 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions')
+        monkeypatch.setenv('NEXUS_MODEL_ID', 'gemini-test-model')
+        status = c.get('/studio-api/status').json()
+        assert status['configured']
+        request_body = {**BODY, 'configuration_id': status['configuration_id'],
+                        'max_output_tokens': 256}
+        result = c.post('/studio-api/respond', json=request_body, headers=AUTH)
+        assert result.status_code == 200
+        assert result.json()['text'] == 'One verified synthetic gateway reply'
+        assert result.json()['authority'] == 'none'
+        assert result.headers['cache-control'] == 'no-store'
+        assert 'provider-secret-not-for-browser' not in result.text
+        assert c.post('/studio-api/respond', json={
+            **request_body, 'mode': 'thinking'
+        }, headers=AUTH).status_code == 422
+    assert len(received) == 1
+
+
+def test_gemini_adapter_rejects_provider_tool_calls(monkeypatch):
+    def handler(req):
+        return httpx.Response(200, json={'choices': [{
+            'message': {'role': 'assistant', 'content': 'I performed the operation',
+                        'tool_calls': [{'id': 'fake'}]},
+            'finish_reason': 'tool_calls'
+        }]})
+    with configured(monkeypatch, handler) as c:
+        monkeypatch.setenv('NEXUS_MODEL_ADAPTER', 'gemini')
+        monkeypatch.setenv('NEXUS_MODEL_URL', 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions')
+        monkeypatch.setenv('NEXUS_MODEL_ID', 'gemini-test-model')
+        body = {**BODY, 'configuration_id': c.get('/studio-api/status').json()['configuration_id']}
+        assert c.post('/studio-api/respond', json=body, headers=AUTH).status_code == 502
