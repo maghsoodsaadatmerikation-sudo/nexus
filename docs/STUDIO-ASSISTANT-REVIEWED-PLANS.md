@@ -131,3 +131,42 @@ The browser regression verifies that dialog opening and catalog browsing
 are not receipts, an approved provider read enables an exact-matching step,
 the user must confirm that step, and skipping/cancellation are reported
 honestly. Review the exact PR head's CI before merging or publishing.
+
+## Browser-observed local research and code completion (stacked candidate)
+
+Two additional *real* tool-result paths now participate in the reviewed workflow
+checklist, for both the local `/plan` command and the optional gateway plan:
+
+- **Research:** the user must open the Research tool, approve the query in its
+  own consent control, and obtain at least one source lead from a completed
+  provider request. The result is explicitly **untrusted source material**, not
+  proof that the claims in it are accurate.
+- **Code:** the user must open the local JavaScript sandbox, separately approve
+  the exact code and input, and receive a nonempty result from a completed
+  isolated worker run. This is a browser-observed execution, not an independent
+  security attestation. The worker has a runtime limit but no hard memory cap.
+
+Opening a panel, using an old result, entering a failed query, stopping a run,
+or merely checking consent does not unlock workflow completion. Each success
+notifies a **single, ephemeral, kind-matched callback** armed when the exact
+reviewed step opens. The callback is consumed on success and carries only
+the type and, for research, exact approved query; it does not copy code,
+answers, research data or credentials to a persistent store. A new workflow,
+skip, draft edit, changed chat or private clear invalidates the callback and
+pending receipt. **User confirmation is still a separate click** after the
+tool completes, and skipped/self-reported/observed steps are separately
+counted.
+
+The operation-mapping rule also narrows GitHub read receipts: only a request
+that would actually open the `github.pulls` review action can earn an
+approved read receipt. Merely mentioning GitHub in a gateway plan cannot turn
+branch/file/write instructions into successful read receipts.
+
+The browser regression now tests an invalid research run, a successful
+consented new research run, a fresh local code run, rejection of old code
+output as a new receipt, and explicit skip/revocation behavior.
+
+This does **not** add automatic web searches, remote code execution, provider
+account mutation, recurring jobs, memory creation, or autonomous model calls.
+Research and code still use their existing separate human-approval interfaces,
+and all tool outputs remain untrusted until reviewed.

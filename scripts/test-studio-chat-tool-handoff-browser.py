@@ -256,17 +256,30 @@ window.addEventListener('load',async()=>{
   assert(NexusStudioFocus.active()==='research-card'&&
    $('research-query').value==='fictional study sources',
    'workflow-first-step-opens-research-without-running-it');
-  assert(!workflow.querySelectorAll('li button')[1].disabled,
-   'workflow-first-step-now-requires-explicit-human-completion');
+  assert(workflow.querySelectorAll('li button')[1].disabled,
+   'opening-research-cannot-be-mistaken-for-a-completed-run');
+  // Invalid, explicitly approved tool input cannot produce a receipt.
+  fill('research-query','');
+  $('research-consent').checked=true;$('research-run').click();
+  await wait(()=>$('research-run').disabled===false);
+  assert(workflow.querySelectorAll('li button')[1].disabled,
+   'failed-research-cannot-advance-reviewed-workflow');
+  fill('research-query','fictional study sources');
+  $('research-consent').checked=true;$('research-run').click();
+  await wait(()=>!workflow.querySelectorAll('li button')[1].disabled);
+  const workflowSearches=searchCalls-beforeWorkflow.searchCalls;
+  assert(workflowSearches>0&&providerCalls===beforeWorkflow.providerCalls,
+   'explicit-research-runs-while-model-and-other-tools-remain-idle');
   workflow.querySelectorAll('li button')[1].click();
-  assert(workflow.querySelectorAll('li')[0].textContent.includes('confirmed by you')&&
+  assert(workflow.querySelectorAll('li')[0].textContent.includes('local tool completed')&&
    workflow.querySelectorAll('li button')[1].disabled,
-   'workflow-does-not-advance-second-step-without-review');
+   'reviewed-research-result-distinguished-from-manual-report');
   const second=workflow.querySelector('li:nth-child(2) button');
   second.click();
   assert(NexusStudioFocus.active()==='data-card','workflow-second-step-opens-data-review');
   assert(JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions})===
-   JSON.stringify(beforeWorkflow),'workflow-never-starts-provider-or-research-operations');
+   JSON.stringify({...beforeWorkflow,searchCalls:beforeWorkflow.searchCalls+workflowSearches}),
+   'opening-second-workflow-step-never-runs-another-tool');
   fill('message',workflowDraft+' modified');
   assert(workflow.hidden,'workflow-edit-revokes-previous-steps');
   fill('message','/plan\n/github list pull requests\n/unknown invalid');
@@ -274,7 +287,8 @@ window.addEventListener('load',async()=>{
   assert(!workflow.hidden&&workflow.textContent.includes('Unknown workflow tool')&&
    $('nexus-zen-offer').hidden,'invalid-plan-stays-local-and-visible');
   assert(JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions})===
-   JSON.stringify(beforeWorkflow),'invalid-workflow-has-zero-network-side-effects');
+   JSON.stringify({...beforeWorkflow,searchCalls:beforeWorkflow.searchCalls+workflowSearches}),
+   'invalid-workflow-has-zero-network-side-effects');
   fill('message','/plan\n/github list pull requests\n/research study');
   chatSend.click();
   assert(workflow.querySelectorAll('li').length===2,'valid-plan-can-replace-invalid-plan');
@@ -342,7 +356,7 @@ window.addEventListener('load',async()=>{
    assert($('nexus-zen-offer').textContent.includes('Open Research'),'explicit-search-in-chat-offers-research');
    $('nexus-zen-offer').querySelector('button').click();
    assert(NexusStudioFocus.active()==='research-card'&&$('research-query').value===query&&
-    !$('research-consent').checked&&searchCalls===1,'search-handoff-preserves-query-and-waits-for-consent');
+    !$('research-consent').checked&&searchCalls===1+workflowSearches,'search-handoff-preserves-query-and-waits-for-consent');
    NexusStudioFocus.openPanel('conversation-card');
   }
   fill('message','بررسی وضعیت انتشار در رندر');
@@ -363,7 +377,7 @@ window.addEventListener('load',async()=>{
    }))});
   operations=$('studio-connections').querySelector('select');
   assert(operations.value==='render.deploys'&&catalogCalls===2,'render-deployments-preselected');
-  assert(providerCalls===2&&searchCalls===1&&connectionActions===1,'connection-routing-has-no-hidden-provider-side-effects');
+  assert(providerCalls===2&&searchCalls===1+workflowSearches&&connectionActions===1,'connection-routing-has-no-hidden-provider-side-effects');
   $('studio-connections-read').click();
   await wait(()=>$('studio-connection-receipt').textContent.includes('Connection unavailable'));
   assert($('studio-connection-receipt').textContent.includes('Request')===false||
@@ -628,6 +642,45 @@ window.addEventListener('load',async()=>{
   fill('message',receiptPlan+' changed');
   assert(reviewedPlan.hidden,'changing-draft-revokes-scoped-receipts');
   assert(connectionActions===priorRead+1,'no-automatic-connector-retries-or-actions');
+  // Existing code output is NOT a receipt. Only a fresh consented sandbox
+  // run observed after the exact workflow step opened can unlock completion.
+  // A previous private-lock test erased the code field, so create an explicit
+  // old result before opening this new reviewed workflow.
+  $('code-sample').click();
+  $('code-consent').checked=true;$('code-run').click();
+  await wait(()=>$('code-result').textContent.includes('Local calculation'));
+  NexusStudioFocus.openPanel('conversation-card');
+  const codePlan='/plan\n/code\n/write';
+  fill('message',codePlan);$('studio-compose-send').click();
+  const codeWorkflow=$('studio-chat-workflow');
+  assert(codeWorkflow.querySelectorAll('li').length===2,
+   'code-workflow-created-without-running-code');
+  codeWorkflow.querySelector('li button').click();
+  assert(NexusStudioFocus.active()==='code-card'&&
+   codeWorkflow.querySelector('li button:nth-of-type(2)').disabled,
+   'old-code-output-does-not-satisfy-new-reviewed-step');
+  const beforeCodeCalls={providerCalls,searchCalls,catalogCalls,connectionActions};
+  $('code-consent').checked=true;$('code-run').click();
+  await wait(()=>!codeWorkflow.querySelector('li button:nth-of-type(2)').disabled);
+  assert(codeWorkflow.textContent.includes('consented local tool run')&&
+   JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions})===
+   JSON.stringify(beforeCodeCalls),'consented-code-execution-emits-local-only-receipt');
+  codeWorkflow.querySelector('li button:nth-of-type(2)').click();
+  assert(codeWorkflow.querySelector('li').textContent.includes('local tool completed'),
+   'code-step-records-tool-result-not-human-guess');
+  codeWorkflow.querySelector('li:nth-child(2) button:last-of-type').click();
+  assert(codeWorkflow.textContent.includes('local tool runs: 1')&&
+   codeWorkflow.textContent.includes('skipped: 1'),
+   'code-result-counted-separately-from-skipped-step');
+  fill('message',codePlan);$('studio-compose-send').click();
+  codeWorkflow.querySelector('li button').click();
+  assert(codeWorkflow.querySelector('li button:nth-of-type(2)').disabled,
+   'previous-local-receipt-cannot-be-replayed-in-new-workflow');
+  codeWorkflow.querySelector('li button:last-of-type').click();
+  assert(codeWorkflow.querySelector('li').textContent.includes('skipped by you'),
+   'skipping-local-tool-does-not-count-as-an-execution');
+  fill('message','Different draft invalidates local proof');
+  assert(codeWorkflow.hidden,'editing-a-draft-revokes-local-proof');
   $('lock').click();
   assert(!$('reminder-title').value&&!$('reminder-start').value,'lock-clears-reminder-form');
 

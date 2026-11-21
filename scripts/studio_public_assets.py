@@ -5,10 +5,10 @@ import stat
 
 # Bounded Studio asset budget, including local Office text extraction and
 # bilingual decision support in the standalone HTML.
-# Reviewed assistant plan preview adds 7,221 UTF-8 bytes to the previous
-# 612,184-byte public shell. Keep the explicit 625 KiB-class cap; do not
-# silently disable this inventory and size gate as new features arrive.
-MAX_FILE = 625_000
+# Reviewed assistant plan, scoped read receipts and the first local research/
+# code completion hooks require a bounded self-contained shell. Keep the
+# explicit 630,000-byte cap rather than disabling the asset inventory gate.
+MAX_FILE = 630_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000

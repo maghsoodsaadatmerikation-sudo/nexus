@@ -199,6 +199,7 @@ function parseWorkflow(message){
  return {steps};
 }
 function clearWorkflow(){
+ window.NexusLabUI?.clearReviewedStep?.();
  previewController?.abort();previewController=null;previewDraft=null;
  workflowState=null;workflow.hidden=true;workflow.replaceChildren();
 }
@@ -246,13 +247,18 @@ function openReviewedSurface(result,message,{readOperation=null,onReadReceipt=nu
  * gateway-observed completion. Other tools are explicitly self-reported.
  * The presence of any external data is NOT proof of its factual correctness.
  */
-function expectedRead(step,plan){
+function expectedRead(step){
  const kind=step.result.route[0];
  if(kind==='render')return 'render.deploys';
- if(kind==='github'&&(plan.source==='gateway'||
-    /(?:pull\s*requests?|\bpulls\b|\bprs?\b|درخواست(?:‌|\s)*ادغام)/i.test(step.line)))
+ // Never infer a read receipt for a branch/file/write instruction, including
+ // in gateway-generated plans. Match the review dialog's actual operation.
+ if(kind==='github'&&connectionRequest(step.result,step.line).operation==='github.pulls')
   return 'github.pulls';
  return null;
+}
+function expectedLocal(step){
+ const kind=step.result.route[0];
+ return kind==='research'||kind==='code'?kind:null;
 }
 function showWorkflow(){
  if(!workflowState)return;
@@ -262,14 +268,16 @@ function showWorkflow(){
  title.textContent=words('Your reviewed workflow','گردش‌کار قابل بازبینی');
  const info=document.createElement('p');info.className='help';
  info.textContent=words(
-  'Opening a tool is not execution. For GitHub/Render read steps, continue only after an approved gateway response. Other steps are self-reported. You can skip or discard.',
-  'بازکردن ابزار به معنی اجرا نیست. در گام خواندن GitHub/Render فقط پس از پاسخ تأییدشدهٔ درگاه ادامه بده؛ سایر گام‌ها به گزارش خودت ثبت می‌شوند. می‌توانی از گام بگذری یا برنامه را حذف کنی.');
+  'Opening a tool is not execution. Research and local code require a completed reviewed run; GitHub/Render reads need an approved gateway response. Other steps are self-reported. You can skip or discard.',
+  'بازکردن ابزار اجرا نیست. پژوهش و کد محلی به نتیجهٔ اجرای تأییدشده، و خواندن GitHub/Render به پاسخ معتبر درگاه نیاز دارد. سایر گام‌ها با گزارش خودت ثبت می‌شوند. می‌توانی رد کنی یا متوقف شوی.');
  const list=document.createElement('ol');
  plan.steps.forEach((step,i)=>{
   const item=document.createElement('li'),span=document.createElement('span');
   const status=i<plan.index?
    step.outcome==='gateway_read'?
     words('gateway read returned · untrusted data','پاسخ خواندن از درگاه دریافت شد · دادهٔ غیرقابل‌اعتماد'):
+   step.outcome==='local_observed'?
+    words('local tool completed · output untrusted','ابزار محلی اجرا شد · خروجی غیرقابل‌اعتماد'):
    step.outcome==='skipped'?
     words('skipped by you','با انتخاب شما رد شد'):
     words('confirmed by you · not independently verified','به تأیید شما · بدون راستی‌آزمایی مستقل'):
@@ -277,7 +285,8 @@ function showWorkflow(){
   span.textContent=step.line+' · '+status;
   item.append(span);
   if(i===plan.index){
-   const required=expectedRead(step,plan);
+   const required=expectedRead(step),local=expectedLocal(step);
+   const receiptKey=required||local;
    const open=document.createElement('button');open.type='button';open.className='secondary';
    open.textContent=words('Open tool for review','بازکردن ابزار برای بازبینی');
    open.onclick=()=>{
@@ -289,31 +298,47 @@ function showWorkflow(){
         receipt?.kind!=='read'||receipt?.operation!==required)return;
      plan.readReceipt={operation:required};showWorkflow();
     }:null;
+    const localReceiver=local?(receipt)=>{
+     if(workflowState!==plan||!retainedWorkflow()||plan.index!==i||
+        !plan.opened||receipt?.source!=='studio-local-tool'||
+        receipt?.completed!==true||receipt?.kind!==local||
+        (local==='research'&&Boolean(step.result.query)&&
+          receipt.query!==step.result.query))return;
+     plan.readReceipt={operation:local};showWorkflow();
+    }:null;
     if(openReviewedSurface(step.result,step.line,
        required?{readOperation:required,onReadReceipt:receiver}:{})){
-     plan.opened=true;plan.readReceipt=null;showWorkflow();
+     window.NexusLabUI?.clearReviewedStep?.();
+     const armed=!local||window.NexusLabUI?.armReviewedStep?.(local,localReceiver);
+     plan.opened=Boolean(armed);plan.readReceipt=null;showWorkflow();
     }
    };
    const done=document.createElement('button');done.type='button';done.className='secondary';
    done.textContent=required?
-     words('Confirm reviewed read','تأیید دریافت پاسخ خواندن'):
+     words('Confirm reviewed read','تأیید دریافت پاسخ خواندن'):local?
+     words('Confirm tool result','تأیید نتیجهٔ ابزار'):
      words('I completed this step','این گام را انجام دادم');
-   done.disabled=!plan.opened||(Boolean(required)&&plan.readReceipt?.operation!==required);
+   done.disabled=!plan.opened||(Boolean(receiptKey)&&plan.readReceipt?.operation!==receiptKey);
    done.onclick=()=>{
     if(!retainedWorkflow()){clearWorkflow();return}
     if(!validWorkflow()||!plan.opened||
-       (required&&plan.readReceipt?.operation!==required))return;
-    step.outcome=required?'gateway_read':'self_reported';
+       (receiptKey&&plan.readReceipt?.operation!==receiptKey))return;
+    step.outcome=required?'gateway_read':local?'local_observed':'self_reported';
+    window.NexusLabUI?.clearReviewedStep?.();
     plan.index++;plan.opened=false;plan.readReceipt=null;showWorkflow();
    };
    item.append(open,done);
-   if(required){
+   if(receiptKey){
     const note=document.createElement('p');note.className='help';
-    note.textContent=plan.readReceipt?.operation===required?
-      words('Approved read response received; source content remains untrusted.',
+    note.textContent=plan.readReceipt?.operation===receiptKey?
+      required?words('Approved read response received; source content remains untrusted.',
         'پاسخ خواندن تأییدشده دریافت شد؛ محتوای منبع همچنان غیرقابل‌اعتماد است.'):
-      words('Waiting for an approved read in the separate connection dialog.',
-        'در انتظار خواندن تأییدشده در پنجرهٔ اتصال.');
+       words('A consented local tool run returned a result; review it before confirming.',
+        'ابزار محلی با تأیید شما اجرا شد و نتیجه داد؛ پیش از تأیید آن را بررسی کن.'):
+      required?words('Waiting for an approved read in the separate connection dialog.',
+        'در انتظار خواندن تأییدشده در پنجرهٔ اتصال.'):
+       words('Run the tool separately with explicit consent. Failed or canceled attempts do not count.',
+        'ابزار را جداگانه و با تأیید اجرا کن؛ تلاش ناموفق یا لغوشده محاسبه نمی‌شود.');
     item.append(note);
    }
    const skip=document.createElement('button');skip.type='button';skip.className='secondary';
@@ -321,7 +346,8 @@ function showWorkflow(){
    skip.onclick=()=>{
     if(!retainedWorkflow()){clearWorkflow();return}
     if(!validWorkflow())return;
-    step.outcome='skipped';plan.index++;plan.opened=false;plan.readReceipt=null;showWorkflow();
+    step.outcome='skipped';window.NexusLabUI?.clearReviewedStep?.();
+    plan.index++;plan.opened=false;plan.readReceipt=null;showWorkflow();
    };
    item.append(skip);
   }
@@ -334,13 +360,16 @@ function showWorkflow(){
  if(plan.index===plan.steps.length){
   const note=document.createElement('p');note.setAttribute('role','status');
   const verified=plan.steps.filter(s=>s.outcome==='gateway_read').length;
+  const localCount=plan.steps.filter(s=>s.outcome==='local_observed').length;
   const reported=plan.steps.filter(s=>s.outcome==='self_reported').length;
   const skipped=plan.steps.filter(s=>s.outcome==='skipped').length;
   note.textContent=words(
-   'Checklist finished · gateway reads: '+verified+' · self-reported: '+reported+
-    ' · skipped: '+skipped+'. No external result was independently audited.',
-   'پایان فهرست · خواندن درگاه: '+verified+' · گزارش کاربر: '+reported+
-    ' · ردشده: '+skipped+'. هیچ نتیجهٔ خارجی مستقلاً راستی‌آزمایی نشده است.');
+   'Checklist finished · gateway reads: '+verified+' · local tool runs: '+localCount+
+    ' · self-reported: '+reported+' · skipped: '+skipped+
+    '. Results remain untrusted and are not independently audited.',
+   'پایان فهرست · خواندن درگاه: '+verified+' · اجرای ابزار محلی: '+localCount+
+    ' · گزارش کاربر: '+reported+' · ردشده: '+skipped+
+    '. نتایج مستقل راستی‌آزمایی نشده‌اند.');
   workflow.append(note);
  }
  workflow.append(cancel);
