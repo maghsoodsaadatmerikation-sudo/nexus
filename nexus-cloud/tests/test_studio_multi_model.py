@@ -244,3 +244,59 @@ def test_alternate_streaming_and_execution_modes_are_slot_specific(monkeypatch):
         assert client.post("/studio-api/respond", json={**secondary, "mode": "thinking"},
                            headers=AUTH).status_code == 422
         assert client.app.state.model_budget.snapshot()["attempted"] == 0
+
+
+
+def test_secondary_credential_rotation_revokes_the_previous_review(monkeypatch):
+    calls = []
+    with configured(monkeypatch, lambda req: (calls.append(req),
+         httpx.Response(200, json=claude_answer("Old account answer")))[1]) as client:
+        set_secondary(monkeypatch)
+        previous = client.get("/studio-api/status").json()
+        payload = review(previous, "secondary")
+        monkeypatch.setenv("NEXUS_MODEL_SECONDARY_API_KEY", "fresh-private-claude-key")
+        current = client.get("/studio-api/status").json()
+        refreshed = review(current, "secondary")
+        assert refreshed["configuration_id"] != payload["configuration_id"]
+        assert client.post("/studio-api/respond", json=payload, headers=AUTH).status_code == 409
+        assert calls == []
+        response = client.post("/studio-api/respond", json=refreshed, headers=AUTH)
+        assert response.status_code == 200
+        assert calls[0].headers["x-api-key"] == "fresh-private-claude-key"
+
+
+def test_secondary_operator_quality_preflight_and_mock_smoke(monkeypatch):
+    import model_quality_eval as quality
+    with configured(monkeypatch, lambda _: pytest.fail("preflight must be offline")):
+        set_secondary(monkeypatch)
+        assert quality.configuration_preflight("secondary")["status"] == "READY_TO_TEST"
+        assert quality.configuration_preflight("tertiary")["status"] == "NOT_READY"
+        snapshot = model.read_model_catalog()["secondary"]
+        calls = []
+        def handler(request):
+            calls.append(request)
+            assert str(request.url) == model.ANTHROPIC_MESSAGES
+            assert request.headers["x-api-key"] == SECRET_CLAUDE
+            return httpx.Response(200, json=claude_answer(quality.PROBES[0].good_reply))
+        with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as http:
+            output = quality.smoke_live(http, snapshot)
+        assert output["status"] == "PASS"
+        assert output["quality_gate"] == "NOT_RUN"
+        assert len(calls) == 1
+        for secret in (SECRET_CLAUDE, TOKEN):
+            assert secret not in json.dumps(output)
+
+
+def test_model_catalog_excludes_optional_routes_if_primary_auth_is_missing(monkeypatch):
+    with configured(monkeypatch, lambda _: pytest.fail("disabled catalog reached provider")) as client:
+        set_secondary(monkeypatch)
+        monkeypatch.setenv("NEXUS_STUDIO_TOKEN", "short")
+        assert model.read_model_catalog() == {}
+        state = client.get("/studio-api/status").json()
+        assert state["configured"] is False
+        assert "models" not in state
+        assert client.post("/studio-api/respond",
+                           json={"consent": True, "model_slot": "secondary",
+                                 "configuration_id": "a" * 64,
+                                 "messages": [{"role": "user", "content": "Test"}]},
+                           headers=AUTH).status_code == 503
