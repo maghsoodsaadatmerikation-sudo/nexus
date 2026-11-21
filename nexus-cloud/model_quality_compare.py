@@ -135,7 +135,8 @@ def compare_models(
                     "evaluated": 1 if mode == "single_smoke" else report["evaluated"],
                     "passed": (1 if report["status"] == "PASS" else 0)
                               if mode == "single_smoke" else report["passed"],
-                    "failed": (0 if report["status"] == "PASS" else 1)
+                    "failed": (0 if report["status"] == "PASS" or
+                                 report.get("result") == "ERROR" else 1)
                               if mode == "single_smoke" else report["failed"],
                     "errors": (1 if report.get("result") == "ERROR" else 0)
                               if mode == "single_smoke" else report["errors"],
