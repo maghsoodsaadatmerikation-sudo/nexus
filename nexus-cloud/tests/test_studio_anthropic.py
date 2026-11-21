@@ -184,13 +184,14 @@ def test_anthropic_multiple_text_blocks_and_length_receipt(monkeypatch):
 
 
 def test_anthropic_unicode_budget_matches_browser_and_never_returns_private_blocks(monkeypatch):
-    with configured(monkeypatch, lambda _: httpx.Response(
-        200, json=provider_reply("🌙" * 12001)
-    )) as client:
+    def utf8_reply(count):
+        # Prevent JSON ASCII escaping from inflating the synthetic wire size:
+        # this test measures the browser's UTF-16 limit, not the byte limit.
+        raw = json.dumps(provider_reply("🌙" * count), ensure_ascii=False).encode("utf-8")
+        return httpx.Response(200, content=raw, headers={"content-type": "application/json"})
+    with configured(monkeypatch, lambda _: utf8_reply(12001)) as client:
         assert client.post("/studio-api/respond", json=reviewed(client), headers=AUTH).status_code == 502
-    with configured(monkeypatch, lambda _: httpx.Response(
-        200, json=provider_reply("🌙" * 12000)
-    )) as client:
+    with configured(monkeypatch, lambda _: utf8_reply(12000)) as client:
         result = client.post("/studio-api/respond", json=reviewed(client), headers=AUTH)
         assert result.status_code == 200 and len(result.json()["text"]) == 12000
 
