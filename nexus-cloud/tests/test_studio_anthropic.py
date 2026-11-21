@@ -32,6 +32,7 @@ def configured(monkeypatch, handler=None):
     monkeypatch.setenv("NEXUS_MODEL_ID", "synthetic-claude-model")
     monkeypatch.setenv("NEXUS_STUDIO_TOKEN", TOKEN)
     monkeypatch.setenv("NEXUS_MODEL_API_KEY", SECRET)
+    monkeypatch.delenv("NEXUS_MODEL_WORKSPACE_ID", raising=False)
     monkeypatch.delenv("NEXUS_MODEL_STREAMING", raising=False)
     with TestClient(main.app) as client:
         original = client.app.state.client
@@ -255,3 +256,103 @@ def test_anthropic_quality_probe_rejects_tools_and_partial_responses(monkeypatch
         assert report["result"] == "ERROR"
         assert report["error_reason"] == "invalid_response"
         assert report["provider_requests_planned"] == 1
+
+
+WORKSPACE_ID = "wrkspc_011CZkZaBF1tNoB5wlCeusgy"
+
+
+def test_anthropic_workspace_header_is_explicit_and_reviewed(monkeypatch):
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        assert request.headers["anthropic-workspace-id"] == WORKSPACE_ID
+        assert request.headers["x-api-key"] == SECRET
+        assert request.headers["anthropic-version"] == model.ANTHROPIC_API_VERSION
+        return httpx.Response(200, json=provider_reply("Workspace-scoped draft"))
+
+    with configured(monkeypatch, handler) as client:
+        without_workspace = reviewed(client)
+        monkeypatch.setenv("NEXUS_MODEL_WORKSPACE_ID", WORKSPACE_ID)
+        with_workspace = reviewed(client)
+        assert with_workspace["configuration_id"] != without_workspace["configuration_id"]
+        assert client.post("/studio-api/respond", json=without_workspace, headers=AUTH).status_code == 409
+        assert client.app.state.model_budget.snapshot()["attempted"] == 0
+        response = client.post("/studio-api/respond", json=with_workspace, headers=AUTH)
+        assert response.status_code == 200 and response.json()["text"] == "Workspace-scoped draft"
+        assert len(seen) == 1
+        for endpoint in ("/studio-api/status", "/studio-api/operator-readiness"):
+            resp = client.get(endpoint, headers=AUTH)
+            assert resp.status_code == 200
+            assert WORKSPACE_ID not in resp.text and SECRET not in resp.text
+        settings = model.read_model_settings()
+        assert settings is not None and WORKSPACE_ID not in repr(settings)
+
+
+@pytest.mark.parametrize("bad_id", [
+    "wrkspc_", "wrkspc_short", "wrkspc_0123-with-dash",
+    "wrkspc_0123456789\nInjected: yes", " wrkspc_011CZkZaBF1tNoB5wlCeusgy",
+    "wrkspc_011CZkZaBF1tNoB5wlCeusgy ", "wrkspc_" + "z" * 1000,
+    "organization_011CZkZaBF1tNoB5wlCeusgy",
+])
+def test_invalid_workspace_identifier_fails_closed_before_provider(monkeypatch, bad_id):
+    with configured(monkeypatch, lambda _: pytest.fail("invalid workspace reached provider")) as client:
+        monkeypatch.setenv("NEXUS_MODEL_WORKSPACE_ID", bad_id)
+        assert client.get("/studio-api/status").json()["configured"] is False
+        assert client.post("/studio-api/respond", json={}, headers=AUTH).status_code == 503
+        assert client.app.state.model_budget.snapshot()["attempted"] == 0
+
+
+def test_anthropic_workspace_is_not_sent_to_other_provider(monkeypatch):
+    with configured(monkeypatch, lambda _: pytest.fail("invalid adapter forwarded")) as client:
+        monkeypatch.setenv("NEXUS_MODEL_ADAPTER", "generic")
+        monkeypatch.setenv("NEXUS_MODEL_WORKSPACE_ID", WORKSPACE_ID)
+        assert model.read_model_settings() is None
+        assert client.get("/studio-api/status").json()["configured"] is False
+
+
+def test_anthropic_workspace_changes_mid_request_are_not_mixed(monkeypatch):
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers.get("anthropic-workspace-id"))
+        return httpx.Response(200, json=provider_reply("Original workspace"))
+
+    with configured(monkeypatch, handler) as client:
+        monkeypatch.setenv("NEXUS_MODEL_WORKSPACE_ID", WORKSPACE_ID)
+        original = reviewed(client)
+        underlying_reader = model.read_bounded_body
+
+        async def rotate_after_read(*args, **kwargs):
+            raw = await underlying_reader(*args, **kwargs)
+            monkeypatch.setenv("NEXUS_MODEL_WORKSPACE_ID", "wrkspc_0123456789ABCDEF")
+            return raw
+
+        monkeypatch.setattr(model, "read_bounded_body", rotate_after_read)
+        response = client.post("/studio-api/respond", json=original, headers=AUTH)
+        assert response.status_code == 200
+        assert seen == [WORKSPACE_ID]
+        assert client.get("/studio-api/status").json()["configuration_id"] != original["configuration_id"]
+
+
+def test_anthropic_quality_smoke_routes_to_same_reviewed_workspace(monkeypatch):
+    import model_quality_eval as quality
+    with configured(monkeypatch) as client:
+        monkeypatch.setenv("NEXUS_MODEL_WORKSPACE_ID", WORKSPACE_ID)
+        snapshot = model.read_model_settings()
+        assert snapshot is not None
+        probe = quality.PROBES[0]
+        observations = []
+
+        def handler(request):
+            observations.append(request)
+            assert request.headers["anthropic-workspace-id"] == WORKSPACE_ID
+            assert request.headers["x-api-key"] == SECRET
+            assert request.headers["anthropic-version"] == model.ANTHROPIC_API_VERSION
+            return httpx.Response(200, json=provider_reply(probe.good_reply))
+
+        with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as http:
+            report = quality.smoke_live(http, snapshot)
+        assert report["status"] == "PASS"
+        assert len(observations) == 1
+        assert WORKSPACE_ID not in json.dumps(report)
