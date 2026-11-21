@@ -201,6 +201,7 @@ function parseWorkflow(message){
 function clearLocalReviewers(){
  window.NexusLabUI?.clearReviewedStep?.();
  window.NexusQualityUI?.clearReviewedStep?.();
+ window.NexusStudioUI?.clearDocumentReceipt?.();
 }
 function clearWorkflow(){
  clearLocalReviewers();
@@ -262,7 +263,7 @@ function expectedRead(step){
 }
 function expectedLocal(step){
  const kind=step.result.route[0];
- return ['research','code','data'].includes(kind)?kind:null;
+ return ['research','code','data','write'].includes(kind)?kind:null;
 }
 function showWorkflow(){
  if(!workflowState)return;
@@ -272,8 +273,8 @@ function showWorkflow(){
  title.textContent=words('Your reviewed workflow','گردش‌کار قابل بازبینی');
  const info=document.createElement('p');info.className='help';
  info.textContent=words(
-  'Opening a tool is not execution. Research, data analysis and local code need a fresh, observed result; GitHub/Render reads need an approved gateway response. Other steps are self-reported. You may skip or discard.',
-  'بازکردن ابزار اجرا نیست. پژوهش، تحلیل داده و کد محلی نیاز به نتیجهٔ تازه و ثبت‌شده دارند؛ خواندن GitHub/Render نیز پاسخ معتبر درگاه می‌خواهد. گام‌ها قابل رد یا توقف‌اند.');
+  'Opening a tool is not execution. Research, data, code and writing steps need a fresh observed result; writing is only applied to the current session until you save the encrypted archive separately. You can retry review or skip; no tool runs automatically.',
+  'بازکردن ابزار اجرا نیست. پژوهش، داده، کد و نوشتن نیاز به نتیجهٔ تازه دارند. نسخهٔ سند فقط در نشست جاری ثبت می‌شود؛ آرشیو رمزگذاری‌شده باید جداگانه ذخیره شود. بازبینی دوباره و ردکردن مرحله اختیاری است.');
  const list=document.createElement('ol');
  plan.steps.forEach((step,i)=>{
   const item=document.createElement('li'),span=document.createElement('span');
@@ -282,6 +283,8 @@ function showWorkflow(){
     words('gateway read returned · untrusted data','پاسخ خواندن از درگاه دریافت شد · دادهٔ غیرقابل‌اعتماد'):
    step.outcome==='local_observed'?
     words('local tool completed · output untrusted','ابزار محلی اجرا شد · خروجی غیرقابل‌اعتماد'):
+   step.outcome==='document_version'?
+    words('new document version applied · session only','نسخهٔ جدید سند اعمال شد · فقط نشست جاری'):
    step.outcome==='skipped'?
     words('skipped by you','با انتخاب شما رد شد'):
     words('confirmed by you · not independently verified','به تأیید شما · بدون راستی‌آزمایی مستقل'):
@@ -292,7 +295,9 @@ function showWorkflow(){
    const required=expectedRead(step),local=expectedLocal(step);
    const receiptKey=required||local;
    const open=document.createElement('button');open.type='button';open.className='secondary';
-   open.textContent=words('Open tool for review','بازکردن ابزار برای بازبینی');
+   open.textContent=plan.opened?
+     words('Review or retry tool (no automatic run)','بازبینی یا تلاش دوباره (بدون اجرای خودکار)'):
+     words('Open tool for review','بازکردن ابزار برای بازبینی');
    open.onclick=()=>{
     if(!retainedWorkflow()){clearWorkflow();return}
     if(!validWorkflow())return;
@@ -305,13 +310,18 @@ function showWorkflow(){
     const localReceiver=local?(receipt)=>{
      if(workflowState!==plan||!retainedWorkflow()||plan.index!==i||
         !plan.opened||receipt?.completed!==true||receipt?.kind!==local||
-        receipt.source!==(local==='data'?'studio-local-analysis':'studio-local-tool')||
+        receipt.source!==(local==='data'?'studio-local-analysis':
+           local==='write'?'studio-document-version':'studio-local-tool')||
         (local==='data'&&(!/^[a-f0-9]{64}$/.test(receipt.sha256||'')||
           !Number.isInteger(receipt.rows)||receipt.rows<0||
           !Number.isInteger(receipt.columns)||receipt.columns<1))||
+        (local==='write'&&(receipt.persistence!=='session_only'||
+          typeof receipt.versionId!=='string'||!receipt.versionId||
+          !Number.isInteger(receipt.length)||receipt.length<1||receipt.length>100000))||
         (local==='research'&&Boolean(step.result.query)&&
           receipt.query!==step.result.query))return;
-     plan.readReceipt={operation:local,...(local==='data'?{sha256:receipt.sha256}: {})};
+     plan.readReceipt={operation:local,...(local==='data'?{sha256:receipt.sha256}: {}),
+       ...(local==='write'?{versionId:receipt.versionId}: {})};
      showWorkflow();
     }:null;
     if(openReviewedSurface(step.result,step.line,
@@ -319,13 +329,15 @@ function showWorkflow(){
      clearLocalReviewers();
      const armed=!local||(local==='data'?
        window.NexusQualityUI?.armReviewedStep?.(local,localReceiver):
+       local==='write'?window.NexusStudioUI?.armDocumentReceipt?.(local,localReceiver):
        window.NexusLabUI?.armReviewedStep?.(local,localReceiver));
      plan.opened=Boolean(armed);plan.readReceipt=null;showWorkflow();
     }
    };
    const done=document.createElement('button');done.type='button';done.className='secondary';
    done.textContent=required?
-     words('Confirm reviewed read','تأیید دریافت پاسخ خواندن'):local?
+     words('Confirm reviewed read','تأیید دریافت پاسخ خواندن'):
+     local==='write'?words('Confirm new document version','تأیید نسخهٔ جدید سند'):local?
      words('Confirm tool result','تأیید نتیجهٔ ابزار'):
      words('I completed this step','این گام را انجام دادم');
    done.disabled=!plan.opened||(Boolean(receiptKey)&&plan.readReceipt?.operation!==receiptKey);
@@ -333,7 +345,8 @@ function showWorkflow(){
     if(!retainedWorkflow()){clearWorkflow();return}
     if(!validWorkflow()||!plan.opened||
        (receiptKey&&plan.readReceipt?.operation!==receiptKey))return;
-    step.outcome=required?'gateway_read':local?'local_observed':'self_reported';
+    step.outcome=required?'gateway_read':local==='write'?'document_version':
+      local?'local_observed':'self_reported';
     clearLocalReviewers();
     plan.index++;plan.opened=false;plan.readReceipt=null;showWorkflow();
    };
@@ -347,6 +360,8 @@ function showWorkflow(){
          '… identifies source bytes, not correctness. Review before confirming.',
          'داده محلی تحلیل شد؛ SHA256 '+plan.readReceipt.sha256.slice(0,12)+
          '… فقط هویت بایت‌هاست، نه صحت نتیجه. پیش از تأیید بررسی کن.'):
+       local==='write'?words('A changed document version was applied in this tab. Save your encrypted archive separately to keep it.',
+         'نسخهٔ تغییرکردهٔ سند در این برگه اعمال شد. برای نگهداری، آرشیو رمزگذاری‌شده را جداگانه ذخیره کن.'):
        words('A consented local tool run returned a result; review it before confirming.',
         'ابزار محلی با تأیید شما اجرا شد و نتیجه داد؛ پیش از تأیید آن را بررسی کن.'):
       required?words('Waiting for an approved read in the separate connection dialog.',
@@ -375,14 +390,15 @@ function showWorkflow(){
   const note=document.createElement('p');note.setAttribute('role','status');
   const verified=plan.steps.filter(s=>s.outcome==='gateway_read').length;
   const localCount=plan.steps.filter(s=>s.outcome==='local_observed').length;
+  const writing=plan.steps.filter(s=>s.outcome==='document_version').length;
   const reported=plan.steps.filter(s=>s.outcome==='self_reported').length;
   const skipped=plan.steps.filter(s=>s.outcome==='skipped').length;
   note.textContent=words(
    'Checklist finished · gateway reads: '+verified+' · local tool runs: '+localCount+
-    ' · self-reported: '+reported+' · skipped: '+skipped+
+    ' · document versions (session only): '+writing+' · self-reported: '+reported+' · skipped: '+skipped+
     '. Results remain untrusted and are not independently audited.',
    'پایان فهرست · خواندن درگاه: '+verified+' · اجرای ابزار محلی: '+localCount+
-    ' · گزارش کاربر: '+reported+' · ردشده: '+skipped+
+    ' · نسخهٔ سند (فقط نشست): '+writing+' · گزارش کاربر: '+reported+' · ردشده: '+skipped+
     '. نتایج مستقل راستی‌آزمایی نشده‌اند.');
   workflow.append(note);
  }

@@ -701,6 +701,63 @@ window.addEventListener('load',async()=>{
    'skipping-local-tool-does-not-count-as-an-execution');
   fill('message','Different draft invalidates local proof');
   assert(codeWorkflow.hidden,'editing-a-draft-revokes-local-proof');
+  // Writing requires a NEW, nonempty, changed version accepted by the
+  // project state validator. Neither opening the editor nor saving identical
+  // text may unlock a new document-writing workflow.
+  NexusStudioFocus.openPanel('conversation-card');
+  const writePlan='/plan\n/write\n/research manuscript background';
+  fill('message',writePlan);$('studio-compose-send').click();
+  const writing=$('studio-chat-workflow');
+  assert(writing.querySelectorAll('li').length===2&&
+   writing.querySelector('li button:nth-of-type(2)').disabled,
+   'writing-plan-created-without-an-automatic-document-edit');
+  writing.querySelector('li button').click();
+  assert(NexusStudioFocus.active()==='canvas-card'&&
+   writing.querySelector('li button:nth-of-type(2)').disabled,
+   'opening-writing-canvas-does-not-satisfy-save-receipt');
+  fill('document-title','Review-only version witness');
+  $('new-document').click();
+  assert(writing.querySelector('li button:nth-of-type(2)').disabled,
+   'document-creation-is-not-a-version-save');
+  $('save-version').click();
+  assert(writing.querySelector('li button:nth-of-type(2)').disabled,
+   'empty-or-rejected-version-is-not-a-new-writing-result');
+  fill('editor','A locally written paragraph; not sent to any model or provider.');
+  $('save-version').click();
+  assert(!writing.querySelector('li button:nth-of-type(2)').disabled&&
+   writing.textContent.includes('Save your encrypted archive separately'),
+   'new-changed-version-unlocks-session-only-writing-receipt');
+  const currentDoc=NexusStudioUI.snapshot().projects
+   .find(p=>p.id===NexusStudioUI.selection().projectId).documents.find(d=>d.id===$('documents').value);
+  assert(currentDoc.versions.at(-1).text===$('editor').value,
+   'writing-receipt-follows-an-actual-applied-document-version');
+  // Retrying reopens review; it never saves automatically or reuses proof.
+  const versionsBeforeRetry=currentDoc.versions.length;
+  writing.querySelector('li button').click();
+  assert(writing.querySelector('li button:nth-of-type(2)').disabled&&
+   NexusStudioUI.snapshot().projects.find(p=>p.id===NexusStudioUI.selection().projectId)
+    .documents.find(d=>d.id===$('documents').value).versions.length===versionsBeforeRetry,
+   'retry-review-revokes-old-receipt-without-creating-a-version');
+  $('save-version').click();
+  assert(writing.querySelector('li button:nth-of-type(2)').disabled,
+   'saving-identical-document-text-is-not-a-fresh-writing-receipt');
+  fill('editor','Updated manuscript after review and deliberate correction.');
+  $('save-version').click();
+  assert(!writing.querySelector('li button:nth-of-type(2)').disabled,
+   'new-edit-after-retry-produces-new-writing-receipt');
+  writing.querySelector('li button:nth-of-type(2)').click();
+  assert(writing.querySelector('li').textContent.includes('new document version applied'),
+   'writing-step-reports-applied-version-not-provider-persistence');
+  writing.querySelector('li:nth-child(2) button:last-of-type').click();
+  assert(writing.textContent.includes('document versions (session only): 1')&&
+   writing.textContent.includes('skipped: 1'),
+   'final-summary-separates-session-writing-from-skips');
+  fill('message',writePlan);$('studio-compose-send').click();
+  writing.querySelector('li button').click();
+  assert(writing.querySelector('li button:nth-of-type(2)').disabled,
+   'previous-session-writing-receipt-is-not-replayable-in-new-workflow');
+  fill('message','Changed writing task invalidates its old observation');
+  assert(writing.hidden,'changed-writing-goal-revokes-unconfirmed-version');
   $('lock').click();
   assert(!$('reminder-title').value&&!$('reminder-start').value,'lock-clears-reminder-form');
 

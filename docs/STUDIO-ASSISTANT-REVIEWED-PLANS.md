@@ -207,3 +207,41 @@ The new quality UI dependency is explicitly declared in Studio's deterministic
 module graph. The packaged standalone and installable public shells have
 their SHA-256 digest, length and service-worker cache identity re-pinned.
 The HTML remains under the reviewed 630,000-byte public asset ceiling.
+
+## Observed document version application and safe manual retry (stacked candidate)
+
+A reviewed `/write` step is no longer equivalent to opening the writing
+canvas or checking a box. The user must explicitly create/select a document,
+edit text, and click **Save new version** in Studio's existing versioned
+writing canvas. The app's ordinary `mutate` call must validate and apply
+the new document version before the assistant receives a one-time completion
+notification. An empty document, unchanged text, canceled or failed state
+validation, or simply creating a document **does not** count as success.
+
+The receipt contains only: operation kind `write`, an opaque new version
+identifier, text length, and `persistence: session_only`. It carries no
+document content, title, file, attachment, or model prompt. A receipt only
+unlocks a separate confirmation for the currently active exact workflow
+draft and conversation. A new workflow, explicit skip, private clear or
+discard invalidates earlier receipts. The assistant counts an applied
+document version separately from gateway reads, local computation and
+self-reported outcomes.
+
+**Important:** an *applied* document version exists in the currently
+unlocked or temporary project/session. It is NOT guaranteed to survive tab
+close. The user must explicitly save the encrypted browser archive or
+export the document, and keep backups separately. The assistant does
+not silently persist, export, upload or publish anything.
+
+A reviewed step's **Review or retry tool** control only re-opens its tool
+and revokes any earlier step receipt. It never automatically repeats a
+network request, code execution, document save or external account write.
+After an invalid or duplicate save, the user can correct the editor text
+and manually click Save new version again.
+
+Browser regression exercises no implicit document creation, no premature
+completion on opening the canvas, no success from empty/identical saves,
+successful new changed-version application, safe explicit retry with proof
+revocation, and non-replay of an earlier session's writing receipt. All
+UI and PWA shells are rebuilt with deterministic module order and re-pinned
+hashes; the hard public size cap remains enabled at 635,000 bytes.
