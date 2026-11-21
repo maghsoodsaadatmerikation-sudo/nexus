@@ -80,7 +80,7 @@ function layout(){
  if(recording)return;
  if(aspect.value==='portrait'){canvas.width=360;canvas.height=640}
  else{canvas.width=640;canvas.height=360}
- draw();
+ draw(1,6); // Preview the full frame, not the first fade-to-black frame.
 }
 function stopJob(discard=true){
  const job=recording;
