@@ -147,9 +147,110 @@ def test_quality_report_includes_errors_without_disclosing_outputs():
         })
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         report = quality.run_live(client, PROVIDER)
-    assert report["errors"] == 15
-    assert report["passed"] == 0
+    assert report["errors"] == 1 and report["skipped"] == 14
+    assert report["passed"] == 0 and report["evaluated"] == 1
+    assert report["aborted_early"] and report["abort_reason"] == "invalid_response"
+    assert report["provider_requests_attempted"] == 1
+    assert not quality.meets_gate(report, minimum_pass_rate=0)
     assert "provider-secret" not in json.dumps(report)
+
+
+
+@pytest.mark.parametrize("status,reason", [
+    (400, "request_rejected"),
+    (401, "authentication"),
+    (402, "billing"),
+    (403, "authentication"),
+    (404, "request_rejected"),
+    (429, "rate_limited"),
+    (500, "upstream_unavailable"),
+    (503, "upstream_unavailable"),
+])
+def test_live_quality_aborts_after_first_provider_rejection(status, reason):
+    calls = []
+    def handler(request):
+        calls.append(request.url.host)
+        return httpx.Response(
+            status, headers={"retry-after": "123456", "x-sensitive": "secret-raw"},
+            content=b'{"secret":"provider-creds-should-not-leak"}',
+        )
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False,
+                      follow_redirects=False) as client:
+        report = quality.run_live(client, PROVIDER)
+    assert calls == ["provider.example"]
+    assert report["provider_requests_attempted"] == 1
+    assert report["provider_requests_skipped"] == 14
+    assert report["aborted_early"] is True and report["abort_reason"] == reason
+    assert report["passed"] == 0 and report["failed"] == 0
+    assert report["errors"] == 1 and report["skipped"] == 14
+    assert report["cases"][0]["result"] == "ERROR"
+    assert all(item["result"] == "SKIPPED" for item in report["cases"][1:])
+    assert not quality.meets_gate(report, minimum_pass_rate=0.0)
+    for leak in ("secret-raw", "provider-creds-should-not-leak", "123456",
+                 "provider.example", "https://"):
+        assert leak not in json.dumps(report)
+
+
+def test_quality_continues_on_valid_but_incorrect_first_answer():
+    seen = []
+    def handler(request):
+        payload = json.loads(request.content)
+        seen.append(payload["messages"][1]["content"])
+        answer = "Not the correct calibration code" if len(seen) == 1 else next(
+            p.good_reply for p in quality.PROBES
+            if p.prompt == payload["messages"][1]["content"]
+        )
+        return httpx.Response(200, json=provider_reply(answer))
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
+        report = quality.run_live(client, PROVIDER)
+    assert len(seen) == len(quality.PROBES) == 15
+    assert report["passed"] == 14 and report["failed"] == 1
+    assert report["provider_requests_attempted"] == 15
+    assert report["provider_requests_skipped"] == 0
+    assert report["skipped"] == 0 and report["aborted_early"] is False
+    assert report["abort_reason"] is None
+    assert report["cases"][0]["result"] == "FAIL"
+
+
+def test_live_quality_transport_error_aborts_and_does_not_retry():
+    seen = []
+    def handler(request):
+        seen.append(request.url.host)
+        raise httpx.ConnectError("upstream secret debug", request=request)
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
+        report = quality.run_live(client, PROVIDER)
+    assert seen == ["provider.example"]
+    assert report["abort_reason"] == "transport_or_validation"
+    assert report["provider_requests_attempted"] == 1
+    assert report["skipped"] == 14
+    assert "upstream secret debug" not in json.dumps(report)
+
+
+def test_explicit_smoke_reports_safe_provider_failure_class():
+    def handler(_request):
+        return httpx.Response(429, content=b'provider sensitive quota data')
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
+        report = quality.smoke_live(client, model.ModelSettings(
+            endpoint=PROVIDER[0], model_id=PROVIDER[1], studio_token=PROVIDER[2],
+            provider_host=PROVIDER[3], adapter="generic", provider_api_key="hidden-key",
+            streaming=False, policy=model.POLICY,
+        ))
+    assert report["status"] == "FAIL" and report["result"] == "ERROR"
+    assert report["error_reason"] == "rate_limited"
+    assert report["provider_requests_planned"] == 1
+    assert "hidden-key" not in json.dumps(report)
+    assert "provider sensitive quota data" not in json.dumps(report)
+
+
+def test_skip_is_not_misrepresented_as_failure_or_pass():
+    answers = {p.key: p.good_reply for p in quality.PROBES}
+    skipped = frozenset({"urgent_safety", "hostile_excerpt"})
+    report = quality.grade(answers, live=True, skipped_ids=skipped)
+    assert report["passed"] == 13 and report["failed"] == 0
+    assert report["errors"] == 0 and report["skipped"] == 2
+    assert report["evaluated"] == 13
+    assert "urgent_safety" not in report["critical_failures"]
+    assert not quality.meets_gate(report, minimum_pass_rate=0.0)
 
 
 def test_command_requires_explicit_operator_consent_and_configuration(monkeypatch, capsys):
