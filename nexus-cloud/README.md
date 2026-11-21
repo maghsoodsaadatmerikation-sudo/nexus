@@ -153,6 +153,35 @@ synthetic probes documented below; these do contact Google and may incur
 charges. GitHub CI uses HTTPX mocks and does **not** access Google credentials
 or perform a live Gemini model test.
 
+## Immutable model-provider request snapshots
+
+For every approved Studio model request, the gateway captures one validated
+snapshot of the endpoint, model ID, provider adapter, streaming flag, Studio
+access token, upstream API key and system policy **before reading the request
+body**. A concurrent operator configuration rotation therefore cannot combine
+the previously reviewed Gemini/DeepSeek/other provider URL with an unrelated
+provider's fresh API key or payload semantics.
+
+The configuration review ID additionally includes the **system policy digest**.
+Changing model identity, adapter, streaming behavior or policy requires a
+fresh browser review (HTTP 409 for the previous ID). Credentials are excluded
+from the public fingerprint and status response; individual in-flight requests
+use the captured secret, whereas new requests use newly configured credentials.
+The immutable configuration object also hides credentials from its Python
+representation. Status does not expose provider keys or the Studio token.
+
+**Migration:** Existing reviewed Studio model requests from earlier gateway
+versions need to refresh model status and be reviewed again after this release,
+even when the operator leaves the provider unchanged. Do not bypass this
+fail-closed migration.
+
+Explicitly consented live quality evaluation similarly keeps one configuration
+snapshot across its fifteen fictional prompts. This avoids mixed-provider
+scores during a rotation. These tests do **not** establish a live hosted model,
+privacy compliance, epistemic accuracy, or provider quality; the user still
+must provide an authorized server-side credential and explicitly approve live
+sampling. No extra model requests or provider credentials are created in CI.
+
 ## Optional synthetic model-answer quality evaluation
 
 The operator can test a real configured provider against fifteen short **fictional** prompts spanning source grounding,
