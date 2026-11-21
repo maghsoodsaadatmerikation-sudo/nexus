@@ -115,7 +115,10 @@ quality test in this repository's synthetic acceptance suite.
 Set NEXUS_MODEL_ADAPTER=anthropic and the exact endpoint
 **NEXUS_MODEL_URL=https://api.anthropic.com/v1/messages**, alongside the
 operator-selected NEXUS_MODEL_ID, private NEXUS_MODEL_API_KEY and
-independent NEXUS_STUDIO_TOKEN. The adapter uses Anthropic API version
+independent NEXUS_STUDIO_TOKEN. For API keys not scoped to a workspace,
+set the private NEXUS_MODEL_WORKSPACE_ID (a validated wrkspc_ identifier).
+It is never published in Studio status or readiness diagnostics.
+The adapter uses Anthropic API version
 2026-10-21, a top-level system policy and the existing reviewed chat path.
 No tools, native streaming or autonomous execution are enabled.
 NEXUS_MODEL_STREAMING=1 disables Anthropic configuration until corrected.
