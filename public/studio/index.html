@@ -4539,7 +4539,7 @@ const ident=()=>{
 function say(en,fa){notice.textContent=words(en,fa)}
 function refresh(){
  const active=!!source,block=loading||exporting;
- file.disabled=block;fromGenerated.disabled=block||!$('studio-imagegen-preview')?.getAttribute('src');
+ file.disabled=block;fromGenerated.disabled=block; // Validate the source on click; an image may arrive later.
  for(const {slider} of Object.values(sliders))slider.disabled=block||!active;
  reset.disabled=block||!active;download.disabled=block||!active;clear.disabled=block||!active;
  canvas.hidden=!active;
