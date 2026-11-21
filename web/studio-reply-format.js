@@ -162,7 +162,7 @@ const exportStyle = `
  @media print {body {padding: 0;} pre {white-space: pre-wrap;}}
 `;
 
-function exportHtml(sourceDocument, text, {title, format}) {
+function exportHtml(sourceDocument, sections, {title}) {
  const doc = sourceDocument.implementation.createHTMLDocument(title);
  doc.documentElement.lang = sourceDocument.documentElement.lang || 'en';
  doc.documentElement.dir = sourceDocument.documentElement.dir === 'rtl' ? 'rtl' : 'ltr';
@@ -185,13 +185,20 @@ function exportHtml(sourceDocument, text, {title, format}) {
  article.dir = 'auto';
  const heading = doc.createElement('h1');
  heading.textContent = title;
- const content = doc.createElement('div');
- if (format) render(content, text);
- else content.textContent = text;
- article.append(heading, content);
+ article.append(heading);
+ for(const {label,text,format} of sections){
+  const section=doc.createElement('section'), content=doc.createElement('div');
+  if(label){const name=doc.createElement('h2');name.textContent=label;section.append(name);}
+  if(format)render(content,text);else content.textContent=text;
+  section.append(content);article.append(section);
+ }
  doc.body.append(article);
  return '<!doctype html>\n' + doc.documentElement.outerHTML;
 }
 
-globalThis.NexusReplyFormat = Object.freeze({render, exportHtml});
+globalThis.NexusReplyFormat = Object.freeze({
+ render,
+ exportHtml:(doc,text,{title,format})=>exportHtml(doc,[{text,format}],{title}),
+ exportConversation:(doc,sections,title)=>exportHtml(doc,sections,{title})
+});
 })();

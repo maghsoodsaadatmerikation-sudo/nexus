@@ -5,6 +5,31 @@ for(const args of [['wikipedia','','en'],['wikipedia','topic','evil.example'],['
 const u=new URL(L.researchRequest('wikipedia','x & origin=private','fa'));ok(()=>assert.equal(u.hostname,'fa.wikipedia.org'));ok(()=>assert.equal(u.searchParams.get('gsrsearch'),'x & origin=private'));ok(()=>assert.equal(u.searchParams.get('origin'),'*'));
 const wiki={query:{pages:{1:{pageid:1,title:'<img src=x>',extract:'unverified excerpt'}}}};const w=L.results('wikipedia',wiki,'topic');ok(()=>assert.equal(w.length,1));ok(()=>assert.equal(w[0].url,'https://en.wikipedia.org/?curid=1'));ok(()=>assert(L.sourceText(w[0]).includes('Unverified source text')));ok(()=>assert.equal(L.results('wikipedia',{batchcomplete:''},'topic').length,0));ok(()=>assert.throws(()=>L.results('wikipedia',{error:{code:'bad'}},'topic')));
 const c=L.results('crossref',{message:{items:[{DOI:'10.1234/a?b#c',title:['Paper'],author:[{given:'A',family:'B'}],published:{'date-parts':[[2020]]},type:'journal-article'},{DOI:'javascript:bad',title:['bad']}] }},'topic');ok(()=>assert.equal(c.length,1));ok(()=>assert.equal(c[0].kind,'bibliographic-metadata-only'));ok(()=>assert(c[0].url.includes('%3F')&&c[0].url.includes('%23')));ok(()=>assert(!c[0].excerpt.includes('verified finding')));
+const pmcRequest=new URL(L.researchRequest('europepmc','sleep & secret=literal'));
+ok(()=>assert.equal(pmcRequest.origin,'https://www.ebi.ac.uk'));
+ok(()=>assert.equal(pmcRequest.searchParams.get('query'),'sleep & secret=literal'));
+ok(()=>assert.equal(pmcRequest.searchParams.has('secret'),false));
+const pmc={resultList:{result:[
+ {title:'Literature',doi:'10.1234/article',pmid:'42',authorString:'A. Reader',pubYear:'2024',abstractText:'<b>Methods</b> Synthetic abstract.'},
+ null,{title:'Another paper',pmcid:'PMC1234'},{title:'Invalid result',pmid:'javascript:foo'}
+]}};
+const abstracts=L.results('europepmc',pmc,'sleep');
+ok(()=>assert.deepEqual(abstracts.map(x=>[x.url,x.kind]),[
+ ['https://doi.org/10.1234/article','abstract-excerpt'],['https://europepmc.org/article/PMC/PMC1234','bibliographic-metadata-only']
+]));
+ok(()=>assert(abstracts[0].excerpt.includes('Methods Synthetic abstract.')&&!abstracts[0].excerpt.includes('<b>')));
+ok(()=>assert.throws(()=>L.results('europepmc',{},'sleep')));
+const searchHosts=[];
+const broader=await L.researchPlan('all','sleep','en',undefined,undefined,async(url,options)=>{
+ const host=new URL(url).host;searchHosts.push(host);
+ assert.equal(options.credentials,'omit');
+ if(host==='www.ebi.ac.uk')return Response.json(pmc);
+ if(host==='api.crossref.org')return Response.json({message:{items:[{DOI:'10.1234/ARTICLE',title:['Metadata first']}]}});
+ return Response.json(wiki);
+});
+ok(()=>assert.deepEqual(searchHosts,['en.wikipedia.org','api.crossref.org','www.ebi.ac.uk']));
+ok(()=>assert.equal(broader.cards.filter(x=>x.url.toLowerCase()==='https://doi.org/10.1234/article').length,1));
+ok(()=>assert.equal(broader.cards.find(x=>x.url==='https://doi.org/10.1234/article').kind,'abstract-excerpt'));
 let seen;const result=await L.fetchResearch('wikipedia','explicit query','en',undefined,async(url,options)=>{seen={url,options};return new Response(JSON.stringify(wiki))});ok(()=>assert.equal(result.length,1));ok(()=>assert.equal(seen.options.credentials,'omit'));ok(()=>assert.equal(seen.options.redirect,'error'));ok(()=>assert.equal(seen.options.referrerPolicy,'no-referrer'));ok(()=>assert(!('authorization' in (seen.options.headers||{}))));
 await assert.rejects(()=>L.fetchResearch('wikipedia','q','en',undefined,async()=>new Response('x'.repeat(160001))));checks++;
 const batchUrls=[];

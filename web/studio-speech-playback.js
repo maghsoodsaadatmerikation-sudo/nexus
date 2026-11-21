@@ -94,7 +94,7 @@ function next(session) {
   session.engine.speak(utterance);
  } catch { failed(session); }
 }
-function start(text, origin) {
+function start(text, origin, {passive=false}={}) {
  stop();
  trigger = origin;
  panel.hidden = false;
@@ -107,8 +107,7 @@ function start(text, origin) {
  const parts = split(text);
  if (!choices.length || !parts.length || typeof window.SpeechSynthesisUtterance !== 'function') {
   update(null, words('No local playback voice is available.', 'صدای محلی برای پخش در دسترس نیست.'));
-  panel.scrollIntoView({block:'nearest'});
-  close.focus({preventScroll:true});
+  if(!passive){panel.scrollIntoView({block:'nearest'});close.focus({preventScroll:true});}
   return;
  }
  document.dispatchEvent(new Event('nexus-studio-playback-start'));
@@ -124,8 +123,7 @@ function start(text, origin) {
  const session = {engine, choices, parts, index:0, paused:false, utterance:null};
  current = session;
  try { if(engine.paused)engine.resume(); next(session); } catch { failed(session); }
- panel.scrollIntoView({block:'nearest'});
- (pause.disabled ? close : pause).focus({preventScroll:true});
+ if(!passive){panel.scrollIntoView({block:'nearest'});(pause.disabled ? close : pause).focus({preventScroll:true});}
 }
 pause.onclick = () => {
  const session = current;
