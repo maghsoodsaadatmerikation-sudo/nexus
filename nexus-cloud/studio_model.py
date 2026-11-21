@@ -5,6 +5,7 @@ import hmac
 import hashlib
 import json
 import os
+from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 from pathlib import Path
 
@@ -71,27 +72,51 @@ class Completion(BaseModel):
         return value
 
 
-def config():
-    endpoint = os.getenv("NEXUS_MODEL_URL", "").strip()
-    model = os.getenv("NEXUS_MODEL_ID", "").strip()
-    token = os.getenv("NEXUS_STUDIO_TOKEN", "").strip()
+@dataclass(frozen=True, slots=True)
+class ModelSettings:
+    """One validated request's provider identity, credentials and review policy."""
+    endpoint: str
+    model_id: str
+    studio_token: str = field(repr=False)
+    provider_host: str
+    adapter: str
+    provider_api_key: str = field(repr=False)
+    streaming: bool
+    policy: str = field(repr=False)
+
+
+def read_model_settings() -> ModelSettings | None:
+    # Copy the process environment once. The request must not combine an old
+    # reviewed endpoint with a newly rotated key, adapter or streaming flag.
+    env = os.environ.copy()
+    endpoint = env.get("NEXUS_MODEL_URL", "").strip()
+    model = env.get("NEXUS_MODEL_ID", "").strip()
+    token = env.get("NEXUS_STUDIO_TOKEN", "").strip()
+    key = env.get("NEXUS_MODEL_API_KEY", "").strip()
+    kind = env.get("NEXUS_MODEL_ADAPTER", "generic").strip()
     try:
         p = urlsplit(endpoint)
         _ = p.port
     except ValueError:
         return None
-    kind = adapter()
     if (kind not in {"generic", "deepseek", "gemini"} or not model or len(model) > 150
         or len(token) < 32 or not p.hostname
         or p.username is not None or p.password is not None or p.query or p.fragment
         or any(c.isspace() for c in endpoint)
         or not (p.scheme == "https" or (p.scheme == "http" and p.hostname in {"127.0.0.1", "::1"}))):
         return None
-    if kind == "gemini" and (
-        endpoint != GEMINI_CHAT_COMPLETIONS or not os.getenv("NEXUS_MODEL_API_KEY", "").strip()
-    ):
+    if kind == "gemini" and (endpoint != GEMINI_CHAT_COMPLETIONS or not key):
         return None
-    return endpoint, model, token, p.hostname
+    return ModelSettings(endpoint=endpoint, model_id=model, studio_token=token,
+                         provider_host=p.hostname, adapter=kind, provider_api_key=key,
+                         streaming=env.get("NEXUS_MODEL_STREAMING", "") == "1",
+                         policy=POLICY)
+
+
+def config():
+    """Backward-compatible public probe configuration; requests use a snapshot."""
+    c = read_model_settings()
+    return (c.endpoint, c.model_id, c.studio_token, c.provider_host) if c else None
 
 
 def adapter():
@@ -123,10 +148,21 @@ def provider_payload(model_id: str, messages: list[dict], *, stream: bool,
 
 
 def configuration_id(c):
-    suffix = "" if adapter() == "generic" else "\nadapter:" + adapter()
-    if streaming_enabled():
+    """Fingerprint reviewed behavior, never secrets; changes require re-review."""
+    if isinstance(c, ModelSettings):
+        endpoint, model, kind, streaming, policy = (
+            c.endpoint, c.model_id, c.adapter, c.streaming, c.policy)
+    else:
+        # Retain tuple API for offline probes and existing operator scripts.
+        endpoint, model, kind, streaming, policy = (
+            c[0], c[1], adapter(), streaming_enabled(), POLICY)
+    suffix = "" if kind == "generic" else "\nadapter:" + kind
+    if streaming:
         suffix += "\nstreaming:v1"
-    return hashlib.sha256((c[0]+"\n"+c[1]+suffix).encode()).hexdigest()
+    policy_hash = hashlib.sha256(policy.encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        (endpoint + "\n" + model + suffix + "\npolicy-sha256:" + policy_hash).encode("utf-8")
+    ).hexdigest()
 
 
 def streaming_enabled():
@@ -291,22 +327,22 @@ def register(app):
 
     @app.get("/studio-api/status")
     async def model_status():
-        c = config()
-        return JSONResponse({"configured": c is not None, "configuration_id": configuration_id(c) if c else None, "model": c[1] if c else None,
-                             "provider_host": c[3] if c else None, "authority": "none",
-                             **({"streaming": True} if c and streaming_enabled() else {}),
-                             **({"modes": ["standard", "thinking", "non-thinking"], "max_output_tokens": 8192} if c and adapter() == "deepseek" else {})},
+        c = read_model_settings()
+        return JSONResponse({"configured": c is not None, "configuration_id": configuration_id(c) if c else None, "model": c.model_id if c else None,
+                             "provider_host": c.provider_host if c else None, "authority": "none",
+                             **({"streaming": True} if c and c.streaming else {}),
+                             **({"modes": ["standard", "thinking", "non-thinking"], "max_output_tokens": 8192} if c and c.adapter == "deepseek" else {})},
                             headers={"Cache-Control": "no-store"})
 
     async def handle_response(request: Request, stream: bool):
-        c = config()
+        c = read_model_settings()
         if c is None:
             raise HTTPException(503, "No model provider is configured")
         authorization_values = request.headers.getlist("authorization")
         authorization = authorization_values[0] if len(authorization_values) == 1 else ""
-        if not hmac.compare_digest(authorization.encode(), ("Bearer " + c[2]).encode()):
+        if not hmac.compare_digest(authorization.encode(), ("Bearer " + c.studio_token).encode()):
             raise HTTPException(401, "Studio authentication required", headers={"WWW-Authenticate": "Bearer"})
-        if stream and not streaming_enabled():
+        if stream and not c.streaming:
             raise HTTPException(503, "Model streaming is disabled")
         media_values = request.headers.getlist("content-type")
         if len(media_values) != 1 or media_values[0].split(";", 1)[0].strip().lower() != "application/json":
@@ -332,26 +368,26 @@ def register(app):
                 raise HTTPException(409, "Model configuration changed; review again")
             if data.messages[-1].role != "user":
                 raise HTTPException(422, "Final message must be from the user")
-            if data.mode != "standard" and adapter() != "deepseek":
+            if data.mode != "standard" and c.adapter != "deepseek":
                 raise HTTPException(422, "Execution mode is unsupported by this adapter")
-            messages = [{"role": "system", "content": POLICY}]
+            messages = [{"role": "system", "content": c.policy}]
             messages.extend(m.model_dump() for m in data.messages)
             headers = {"accept-encoding": "identity"}
-            key = os.getenv("NEXUS_MODEL_API_KEY", "").strip()
+            key = c.provider_api_key
             if key:
                 headers["authorization"] = "Bearer " + key
-            payload = provider_payload(c[1], messages, stream=stream,
+            payload = provider_payload(c.model_id, messages, stream=stream,
                                        max_output_tokens=data.max_output_tokens,
-                                       mode=data.mode)
+                                       mode=data.mode, adapter_name=c.adapter)
             if stream:
-                return CompletionStream(response_frames(request, c[0], headers, payload),
+                return CompletionStream(response_frames(request, c.endpoint, headers, payload),
                                         media_type="application/x-ndjson",
                                         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
             raw = bytearray()
             # Both first-byte and total-response deadlines apply; no redirects.
             with anyio.fail_after(MODEL_TIMEOUT):
                 async with request.app.state.client.stream(
-                    "POST", c[0], headers=headers, follow_redirects=False,
+                    "POST", c.endpoint, headers=headers, follow_redirects=False,
                     json=payload,
                 ) as upstream:
                     if upstream.status_code != 200:
@@ -366,7 +402,7 @@ def register(app):
                 content, truncated = accepted_buffered_answer(bytes(raw))
             except ValueError:
                 raise HTTPException(502, "Invalid text-only model response") from None
-            return JSONResponse({"text": content, "origin": "model", "model": c[1],
+            return JSONResponse({"text": content, "origin": "model", "model": c.model_id,
                                  "mode": data.mode, "max_output_tokens": data.max_output_tokens,
                                  "truncated": truncated, "authority": "none"},
                                 headers={"Cache-Control": "no-store"})
