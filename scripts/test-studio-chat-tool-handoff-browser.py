@@ -838,7 +838,7 @@ window.addEventListener('load',async()=>{
   $('export-document-pdf').click();
   window.print=originalPrint;
   assert(printSnapshot?.body===$('editor').value&&
-   printSnapshot?.title&&printSnapshot.style.includes('body>main{display:none!important}')&&
+   printSnapshot?.title&&printSnapshot.style.includes('body>:not(#nexus-print-sheet){display:none!important}')&&
    !printSnapshot.body.includes('Fake response'),
    'print-dialog-has-a-document-only-private-safe-plain-text-sheet');
   assert(!exporting.querySelector('li button:nth-of-type(2)').disabled&&
