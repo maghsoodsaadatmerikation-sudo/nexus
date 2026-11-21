@@ -1,7 +1,27 @@
 'use strict';
 const S=NexusStudio,$=id=>document.getElementById(id),vault=new S.Vault(),undoSlot=new S.UndoSlot(),localePacks=new NexusLocales.Registry();
 let data=S.empty(),projectId=null,threadId=null,documentId=null,dirty=false,profileDirty=false,editorDirty=false,revision=0,branchBase=undefined,pending=null,controller=null,busy=false,language='en',modelInfo=null,languageImport=0,sourceViewStamp='';
-let reviewedDocumentStep=null;
+let reviewedDocumentStep=null,reviewedExportStep=null;
+// A download request is NOT verified delivery to disk. Report only a fresh,
+// explicit document-export click that reached the browser download trigger.
+function armExportReceipt(kind,callback){
+ if(kind!=='export'||typeof callback!=='function'||busy)return false;
+ reviewedExportStep={kind,callback,projectId,threadId};return true;
+}
+function clearExportReceipt(){reviewedExportStep=null}
+function reportExportReceipt(format,bytes,editorText){
+ const task=reviewedExportStep;
+ if(!task||task.projectId!==projectId||task.threadId!==threadId||
+    !doc()||typeof editorText!=='string'||!editorText.trim()||
+    !['markdown','docx'].includes(format)||!Number.isInteger(bytes)||
+    bytes<1||bytes>1000000)return;
+ reviewedExportStep=null;
+ const version=doc().versions.at(-1);
+ try{task.callback(Object.freeze({source:'studio-document-export',
+   kind:'export',status:'download_requested',format,bytes,
+   content:'not_transmitted',editorVersion:version?.text===editorText?'saved_version':'draft'}))}
+ catch{/* A receiver cannot rewrite user-approved file generation. */}
+}
 // Single-use browser-only notification after a successful, human-clicked
 // project document version save. This never implies archive persistence.
 function armDocumentReceipt(kind,callback){
@@ -379,7 +399,7 @@ function resetConversation(id){
  for(const key of ['use-memory','use-sources','use-related-chats','use-astrology','astro-historical','study-mode','auto-speak'])$(key).checked=false;
 }
 function resetProject(id){
- clearDocumentReceipt();toolLifecycle('project');
+ clearDocumentReceipt();clearExportReceipt();toolLifecycle('project');
  projectId=id;selectDocument(p()?.documents[0]?.id||null);
  resetConversation(p()?.threads.find(x=>!x.archived&&!x.isolated)?.id||null);
  profileDirty=false;$('source-results').textContent='';fillProfile();
@@ -407,13 +427,21 @@ function openConversation(project,thread){
  return projectId===project&&threadId===thread;
 }
 function applyLanguage(){document.documentElement.lang=language;document.documentElement.dir=localePacks.get(language)?.dir||(language==='fa'?'rtl':'ltr');document.querySelectorAll('[data-t]').forEach(n=>n.textContent=t(n.dataset.t));document.querySelectorAll('[data-placeholder]').forEach(n=>n.placeholder=t(n.dataset.placeholder));render();if(branchBase!==undefined)$('branch-notice').textContent=t('branching')}
-function download(text,name,type='text/plain'){const u=URL.createObjectURL(text instanceof Blob?text:new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
+function download(text,name,type='text/plain'){
+ const blob=text instanceof Blob?text:new Blob([text],{type});
+ const u=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=u;a.download=name;
+ try{a.click()}finally{setTimeout(()=>URL.revokeObjectURL(u),1000)}
+ // A click merely requests a download. Its destination and completion
+ // cannot be observed or claimed by this browser application.
+ return blob.size;
+}
 function downloadWord(title,text,filename){
  if(!text.trim())return status('chatExportWordFailed');
  if(!confirm(t('plain')))return;
  try{
-  download(NexusOfficeZip.writeDocx(title,text),filename);
-  status('chatExportWordDone');
+  const size=download(NexusOfficeZip.writeDocx(title,text),filename);
+  status('chatExportWordDone');return size;
  }catch{status('chatExportWordFailed')}
 }
 
@@ -693,9 +721,19 @@ $('delete-document').onclick=()=>{
 };
 $('versions').onchange=()=>{const a=doc()?.versions.find(x=>x.id===$('versions').value)?.text||'',b=doc()?.versions.at(-1)?.text||'';const left=a.split('\n'),right=b.split('\n');$('version-diff').textContent=Array.from({length:Math.max(left.length,right.length)},(_,i)=>left[i]===right[i]?null:(i+1)+':\n− '+(left[i]??'')+'\n+ '+(right[i]??'')).filter(Boolean).slice(0,200).join('\n')};
 $('load-version').onclick=()=>{if(forms()&&!confirm(t('discard')))return;const v=doc()?.versions.find(x=>x.id===$('versions').value);if(v){$('editor').value=v.text;editorDirty=true;stop()}};
-$('export-document').onclick=()=>{if(doc()&&confirm(t('plain')))download($('editor').value,'nexus-document.md','text/markdown')};
+$('export-document').onclick=()=>{
+ if(!doc()||busy||!confirm(t('plain')))return;
+ const body=$('editor').value;
+ try{
+  const bytes=download(body,'nexus-document.md','text/markdown');
+  reportExportReceipt('markdown',bytes,body);
+ }catch{status('failed')}
+};
 $('export-document-word').onclick=()=>{
- if(doc()&&!busy)downloadWord(doc().title,$('editor').value,'nexus-document.docx');
+ if(!doc()||busy)return;
+ const body=$('editor').value;
+ const bytes=downloadWord(doc().title,body,'nexus-document.docx');
+ if(Number.isInteger(bytes))reportExportReceipt('docx',bytes,body);
 };
 $('canvas-chat').onclick=()=>{
  if($('canvas-chat').disabled)return;
@@ -792,6 +830,8 @@ function appendVisionResult({prompt,answer,selection}){
    return installThread(completed);
   }catch{return false}
 }
-window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',armDocumentReceipt,clearDocumentReceipt,startConversation,openConversation,selection:()=>({projectId,threadId,head:chat()?.head||null,revision,branchBase}),appendVisionResult,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),attachmentLoading,archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
+document.addEventListener('nexus-studio-private-clear',clearExportReceipt);
+window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',
+ armDocumentReceipt,clearDocumentReceipt,armExportReceipt,clearExportReceipt,startConversation,openConversation,selection:()=>({projectId,threadId,head:chat()?.head||null,revision,branchBase}),appendVisionResult,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),attachmentLoading,archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
