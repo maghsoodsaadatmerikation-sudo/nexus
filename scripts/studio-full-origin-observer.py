@@ -130,7 +130,8 @@ def inspect_assets(assets, source_commit, fetch=fetch_live):
         "reviewed_public_files": len(FILES),
         "observed_public_files": len(records),
         "assets": records,
-        "source_manifest_verified": True,
+        # Pure source-comparison helper alone does NOT authenticate a manifest.
+        "source_manifest_verified": False,
         "read_only": True,
         "render_deploy_id_verified": False,
         "public_browser_verified": False,
@@ -153,7 +154,9 @@ def observe_verified(zip_path, manifest_path, commit, fetch=fetch_live):
                 for name, data in sorted(assets.items())}
     if manifest.get("assets") != expected:
         raise ValueError("candidate manifest and checkout disagree")
-    return inspect_assets(assets, commit, fetch=fetch)
+    result = inspect_assets(assets, commit, fetch=fetch)
+    result["source_manifest_verified"] = True
+    return result
 
 
 def main():
