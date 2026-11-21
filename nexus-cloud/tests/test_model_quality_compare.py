@@ -113,7 +113,7 @@ def test_offline_preflight_is_redacted_and_no_network_client(two_models):
 def test_offline_preflight_reports_incomplete_catalog_without_upstream(two_models):
     two_models.setenv("NEXUS_MODEL_SECONDARY_API_KEY", "")
     code, out = comparison.compare_models(mode="check_config", slots="primary,secondary")
-    assert code == 0 and out["status"] == "NOT_READY"
+    assert code == 2 and out["status"] == "NOT_READY"
     assert out["models"][1] == {"slot": "secondary", "configured": False}
     assert out["provider_contact_attempted"] is False
 
