@@ -123,7 +123,7 @@ function intent(value){
  if(reminder)return {route:routes.find(row=>row[0]==='remind'),query:reminder[1]};
  if(window.NexusStudio.asksForChoice(message))return null;
  const s=message.slice(0,340).toLocaleLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ');
- if(!/(بساز|ساخت|تولید|طراحی|بنویس|تنظیم|compose|create|make|generate|write|analy[sz]e|search|find|draw|run|open|list|show|check|اجرا|بررسی|تحلیل|نمایش|نشان\s*بده|وضعیت|جست\s*و\s*جو)/i.test(s))return null;
+ if(!/(بساز|ساخت|تولید|طراحی|بنویس|تنظیم|compose|create|make|generate|write|analy[sz]e|search|find|draw|run|open|launch|list|show|check|اجرا|بررسی|تحلیل|نمایش|نشان\s*بده|وضعیت|باز\s*کن|بازکردن|برو\s+به|جست\s*و\s*جو)/i.test(s))return null;
  const kind=/(github|گیت\s*هاب|گیتهاب|pull requests?|درخواست(?:‌|\s)*ادغام)/i.test(s)?'github':
   /(render|رندر|deployment|deploy)/i.test(s)?'render':
   /(ارکستر|گروه کر|وکال|orchestra|choir|vocal)/i.test(s)?'orchestra':
@@ -131,10 +131,15 @@ function intent(value){
   /(چارت تولد|طالع|astrology|transit)/i.test(s)?'astrology':
   /(نمودار|chart|graph)/i.test(s)?'chart':
   /(کدنویسی|برنامه نویسی|code|javascript|python)/i.test(s)?'code':
-  /(csv|json|داده|فایل|dataset|spreadsheet)/i.test(s)?'data':
+  /(csv|tsv|json|داده|فایل|dataset|spreadsheet|data\s+analysis)/i.test(s)?'data':
   /(پژوهش|منبع علمی|research|wikipedia|crossref)/i.test(s)?'research':
-  /(داستان|متن بنویس|essay|story|draft)/i.test(s)?'write':
-  /(وظایف|task|workflow)/i.test(s)?'tasks':null;
+  /(داستان|متن بنویس|essay|story|draft|writing\s+canvas|ویرایشگر\s+متن)/i.test(s)?'write':
+  /(وظایف|task|workflow)/i.test(s)?'tasks':
+  /(یادآور|reminders?)/i.test(s)?'remind':
+  /(اتصال(?:ات)?|connections?)/i.test(s)?'connections':
+  /(منابع|sources)/i.test(s)?'sources':
+  /(حافظه|memory)/i.test(s)?'memory':
+  /(آسمان|\bsky\b)/i.test(s)?'sky':null;
  const route=routes.find(x=>x[0]===kind);
  const prefix=kind==='research'?/^find\s+/i.exec(message):null;
  const query=kind==='research'||kind==='orchestra'?message.slice(prefix?.[0].length||0):'';
@@ -160,8 +165,22 @@ let offeredDraft=null;
 function clearOffer(){
  offeredDraft=null;offer.hidden=true;offer.replaceChildren();
 }
+/* Model replies are text-only and cannot operate tools. Honor explicit user
+ * requests to open a tool, but never infer permission from a generic question.
+ * A suggestion only opens a separate local/connection review surface.
+ */
+function explicitToolRequest(message){
+ const value=message.trim();
+ return value.startsWith('/')||explicitResearch.test(value)||
+  /^(?:remind me(?: to)?|set (?:a )?reminder(?: for)?|یادآوری کن)\s+/i.test(value)||
+  /^(?:please\s+)?(?:open|launch)\s+/i.test(value)||
+  /^(?:لطفاً\s+)?(?:باز\s*کن|برو\s+به)\s+/u.test(value)||
+  /^(?:please\s+)?analy[sz]e\s+(?:this\s+|the\s+)?(?:csv|tsv|json|dataset|spreadsheet)\b/i.test(value)||
+  /^(?:please\s+)?run\s+(?:this\s+)?javascript\b/i.test(value);
+}
 function suggestion(message){
- if(!window.NexusStudioFocus?.isFocused()||(select.value==='model'&&!message.trimStart().startsWith('/')&&!explicitResearch.test(message.trim())))return null;
+ if(!window.NexusStudioFocus?.isFocused()||
+    (select.value==='model'&&!explicitToolRequest(message)))return null;
  return intent(message);
 }
 function offerTool(message,result){

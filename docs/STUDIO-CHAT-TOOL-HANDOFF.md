@@ -1,5 +1,31 @@
 # Studio: reviewed research, code and data handoff into chat
 
+## Explicit tool requests in AI chat mode
+
+The optional AI model bridge remains **text-only** and cannot execute tools.
+When a user explicitly types a tool action such as `Open the data analysis tool`,
+`Analyze this CSV`, `Run JavaScript`, `Remind me to review the notes`,
+`Open GitHub pull requests` or `باز کن تحلیل داده`, the focused chat composer
+offers a separate, reviewed tool surface instead of implying that the model
+will perform the action. The user can dismiss the offer and preserve the draft,
+or continue to a normal model request with the existing consent review.
+
+Generic questions such as `How do I use GitHub?` and writing prompts remain
+normal conversational requests. Existing slash commands and explicit public
+research requests are still supported. In local-guide mode, the broader
+advisory suggestions are unchanged.
+
+Routing is a bounded local heuristic, **not** an autonomous AI tool planner:
+classification alone never reads an account, accesses a microphone, uploads
+a file, grants a permission, runs code, sets a reminder, or sends a model prompt.
+Connected provider actions are still governed by the connector's separate
+catalog, operation-specific review, and authority checks. UI handoff does not
+prove the linked service or capability is available.
+
+Chromium acceptance covers English/Persian explicit requests, draft
+preservation, the model-mode generic-question boundary, and absence of network
+calls from suggestions alone.
+
 NEXUS Studio now provides an explicit **Use in next chat** action at the
 output location for three existing tools:
 

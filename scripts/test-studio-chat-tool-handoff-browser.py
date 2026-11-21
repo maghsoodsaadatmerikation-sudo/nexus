@@ -182,9 +182,46 @@ window.addEventListener('load',async()=>{
   $('clear-chat-files').click();
   assert(!JSON.stringify(snapshot()).includes('UNTRUSTED synthetic pull request'),
    'cleared-connector-result-not-retained');
-  // Natural-language discovery is opt-in through the local-guide composer.
-  // Explicit slash commands remain available in model mode.
+  // An explicit tool request in AI mode must offer reviewed local/connected
+  // work instead of sending instructions to the text-only model by default.
+  // Generic questions and writing topics must remain normal chat requests.
   const chooser=$('studio-compose-mode');
+  chooser.value='model';chooser.dispatchEvent(new Event('change',{bubbles:true}));
+  const beforeExplicitRoute={providerCalls,searchCalls,catalogCalls,connectionActions};
+  for(const [request,tool] of [
+   ['Open the data analysis tool','Data analysis'],
+   ['Analyze this CSV','Data analysis'],
+   ['Run JavaScript','Code'],
+   ['Remind me to review the notes','Reminders'],
+   ['Open GitHub pull requests','GitHub'],
+   ['Open the writing canvas','Writing'],
+   ['باز کن تحلیل داده','Data analysis'],
+  ]){
+   fill('message',request);
+   assert(chatSend.textContent.includes('Review '+tool),'explicit-ai-mode-'+tool+'-shown');
+   chatSend.click();
+   const proposed=$('nexus-zen-offer');
+   assert(!proposed.hidden&&proposed.textContent.includes('Open '+tool),
+    'explicit-ai-mode-'+tool+'-requires-review');
+   const dismiss=[...proposed.querySelectorAll('button')].find(b=>b.textContent.includes('Keep typing'));
+   assert(Boolean(dismiss),'dismiss-proposal-available');
+   dismiss.click();
+   assert(proposed.hidden&&$('message').value===request,'dismiss-keeps-unsent-request');
+  }
+  for(const request of [
+   'How do I use GitHub pull requests?',
+   'Please write an essay about opening a code editor',
+   'What does data analysis mean?',
+   'Explain when to remind someone about a deadline'
+  ]){
+   fill('message',request);
+   assert(chatSend.textContent.includes('Review before sending')&&$('nexus-zen-offer').hidden,
+    'generic-question-stays-model-chat');
+  }
+  assert(JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions})===
+   JSON.stringify(beforeExplicitRoute),'tool-proposals-do-not-call-provider-or-gateway');
+  // The local-guide mode retains broad opt-in natural-language discovery.
+  // Explicit slash commands still work in both modes.
   chooser.value='guide';chooser.dispatchEvent(new Event('change',{bubbles:true}));
   for(const [request,query] of [
    ['Search for Persian gardens, including water channels','Persian gardens, including water channels'],
