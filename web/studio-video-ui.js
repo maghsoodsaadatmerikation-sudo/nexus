@@ -11,6 +11,8 @@ const box=node('details','studio-video-panel');box.className='studio-vision-pane
 const heading=node('summary'),help=node('p');help.className='help';
 const imageLabel=node('label'),photo=node('input','studio-video-photo');
 photo.type='file';photo.accept='.png,.jpg,.jpeg,image/png,image/jpeg';imageLabel.append(photo);
+const generated=node('button','studio-video-from-generated');
+generated.className='secondary';generated.type='button';
 const audioLabel=node('label'),audio=node('input','studio-video-audio');
 audio.type='file';audio.accept='.wav,.mp3,.ogg,.m4a,audio/wav,audio/mpeg,audio/ogg,audio/mp4';audioLabel.append(audio);
 const controls=node('div');controls.className='row';
@@ -40,7 +42,7 @@ output.preload='metadata';output.hidden=true;
 output.style.cssText='display:block;max-width:100%;max-height:440px;margin:12px auto';
 const info=node('p','studio-video-status');info.className='help';info.setAttribute('role','status');
 info.setAttribute('aria-live','polite');
-box.append(heading,help,imageLabel,audioLabel,controls,canvas,commands,meter,output,info);
+box.append(heading,help,imageLabel,generated,audioLabel,controls,canvas,commands,meter,output,info);
 const insertAfter=$('studio-local-image-panel')||$('studio-imagegen-panel')||$('studio-compose');
 insertAfter.after(box);$('nexus-zen-suggestions').append(shortcut);
 
@@ -107,7 +109,7 @@ function wipe(){
 }
 function refresh(){
  const running=Boolean(recording),unavailable=!mimeType();
- photo.disabled=audio.disabled=aspect.disabled=duration.disabled=fade.disabled=running||loading;
+ photo.disabled=audio.disabled=generated.disabled=aspect.disabled=duration.disabled=fade.disabled=running||loading;
  start.disabled=running||loading||!image||unavailable;
  cancel.disabled=!running;
  clear.disabled=loading;
@@ -138,6 +140,30 @@ async function acceptImage(file){
  }finally{if(ticket===epoch){loading=false;refresh()}}
 }
 photo.addEventListener('change',()=>{if(recording)return;acceptImage(photo.files?.[0])});
+generated.addEventListener('click',async()=>{
+ const preview=$('studio-imagegen-preview');
+ const src=preview?.getAttribute('src')||'';
+ if(!/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/.test(src)||src.length>8_000_150){
+  message('No usable generated image exists in this tab.',
+          'تصویر تولیدشدهٔ قابل استفاده در این برگه موجود نیست.');return;
+ }
+ const ticket=++epoch;
+ if(image?.close)image.close();image=null;previewClear();loading=true;refresh();
+ let candidate;
+ try{
+  await preview.decode();
+  candidate=await createImageBitmap(preview);
+  if(ticket!==epoch){candidate?.close?.();return}
+  if(!candidate.width||!candidate.height||candidate.width>4096||candidate.height>4096||
+     candidate.width*candidate.height>MAX_PIXELS)throw Error('dimensions');
+  image=candidate;photo.value='';layout();
+  message('Generated preview copied locally; no new provider call.',
+          'پیش‌نمایش ساخته‌شده روی دستگاه کپی شد؛ درخواست جدیدی ارسال نشد.');
+ }catch{
+  candidate?.close?.();
+  if(ticket===epoch)message('Could not use the generated image.','استفاده از تصویر ساخته‌شده ممکن نیست.');
+ }finally{if(ticket===epoch){loading=false;refresh()}}
+});
 audio.addEventListener('change',()=>{
  if(recording)return;
  const f=audio.files?.[0];
@@ -262,6 +288,7 @@ function labels(){
   parent.insertBefore(document.createTextNode(words(en,fa)),child)
  };
  labelText(imageLabel,photo,'Photo (PNG/JPEG, ≤ 6 MB)','تصویر (PNG/JPEG تا ۶ مگابایت)');
+ generated.textContent=words('Use generated image from this tab','استفاده از تصویر ساخته‌شده در این برگه');
  labelText(audioLabel,audio,'Optional audio (≤ 8 MB, ≤ 30 s)','صوت اختیاری (تا ۸ مگابایت و ۳۰ ثانیه)');
  labelText(aspectLabel,aspect,'Frame','قالب تصویر');
  labelText(durationLabel,duration,'Duration','مدت');
