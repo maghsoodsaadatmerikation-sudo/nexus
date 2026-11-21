@@ -153,7 +153,7 @@ Availability in ChatGPT varies by account, client and plan.
 | --- | --- | --- |
 | Compose and use answers | Copy an answer, prepare an alternate answer in the focused chat, and stage a paste that would overflow the draft as temporary reviewed text. The paste can be up to 128 KiB. Compatible gateways can show streamed answer text after request approval. Finished replies format Markdown headings, lists, quotes, tables, code and HTTPS links. | Rich-text paste and further formatting such as math. |
 | History, projects and sharing | Local search, branches, archives and transcript export. An individual answer can be downloaded as a readable HTML file. Project instructions, manually curated memory, reviewed excerpts from related chats, and a per-chat temporary mode. | Hosted share links, multi-user access and cross-device sync. |
-| Files, data and writing | One-turn excerpts from supported text files, Word body text, PowerPoint slide text and selectable PDFs, separate spreadsheet analysis and charts, and a versioned writing canvas. | Scanned PDF OCR, PowerPoint speaker notes and graphics, broader Office and audio ingestion, a reusable binary file library and model-assisted editing. |
+| Files, data and writing | One-turn excerpts from supported text files, Word body text, PowerPoint slide text and selectable PDFs, separate spreadsheet analysis and charts, and a versioned writing canvas that can use chat replies and return draft text for review. | Scanned PDF OCR, PowerPoint speaker notes and graphics, broader Office and audio ingestion, a reusable binary file library and model-assisted editing. |
 | Models and tools | Optional authenticated gateway with opt-in streaming, local reflection guide and optional limited device model. Tool recommendations require user review. | Hosted model provisioning and reliable model-driven use of approved tools. |
 
 Short pastes still go into the draft. Studio preserves the draft when staging a
@@ -165,6 +165,16 @@ An operator can enable streamed answers on a [compatible model gateway](../nexus
 While the answer is arriving, Studio shows it as a preview. Successful completion
 adds the full answer to the current branch. Stop and interrupted delivery discard
 the preview and preserve the user draft.
+
+In the focused view, opening a tool keeps the current conversation and its
+composer available. Desktop displays them side by side when space permits.
+**Back to message** closes the tool view and focuses the existing draft.
+Opening or closing a tool does not submit a prompt.
+
+**Copy to canvas** moves a copy of an answer into the editor. Creating the first
+document retains that draft. **Use this draft in chat** stages the current editor
+text as a one-turn attachment. Sending it to a model requires the usual request
+review. The saved document and its versions are independent of that attachment.
 
 Use **Download answer** to save only the selected answer to an unencrypted HTML
 file. The file opens offline and keeps the answer's supported Markdown

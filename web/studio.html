@@ -352,6 +352,25 @@ html.studio-focus-mode{
 #studio-connections::backdrop{background:#0009}
 #studio-connections pre{max-height:30vh;white-space:pre-wrap;overflow-wrap:anywhere}
 
+.studio-focus-mode .studio-chat-with-tool > .card:not([hidden]) {
+  max-width: 920px;
+  margin: 9px auto;
+  min-width: 0;
+}
+.studio-return-to-message {display: block; margin-inline-start: auto;}
+@media (min-width: 1020px) {
+  .studio-focus-mode .grid > .studio-chat-with-tool {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, .94fr);
+    align-items: start;
+    gap: 14px;
+  }
+  .studio-focus-mode .studio-chat-with-tool > .card:not([hidden]) {
+    width: 100%;
+    margin-inline: 0;
+  }
+}
+
 </style></head><body><main>
 <header class="studio-masthead">
   <div class="studio-brand">
@@ -495,7 +514,7 @@ html.studio-focus-mode{
 <p class="help music-en">This version creates synthetic vowel phrases only; it does not pronounce text or imitate anyone's voice. Piano, strings, brass, woodwinds and animal-inspired effects are electronic approximations. You decide what to publish; no external service is called.</p>
 <p class="help music-fa" lang="fa" dir="rtl">در این نسخه آواز مصنوعی با واکه‌های ساده تولید می‌شود و متن را نمی‌خواند یا صدای کسی را تقلید نمی‌کند. سازهای غربی و افکت‌های حیوانات الکترونیکی و تقریبی‌اند؛ هیچ انتشار یا اتصال خودکاری وجود ندارد.</p>
 </section>
-<section class="card" id="canvas-card"><h2 data-t="canvas">Versioned writing canvas</h2><select id="documents" aria-label="Document"></select><input id="document-title" maxlength="120" data-placeholder="documentTitle" aria-label="Document title"><button id="new-document" data-t="newDocument">New document</button><textarea id="editor" maxlength="100000" dir="auto"></textarea><div class="row"><button id="save-version" data-t="saveVersion">Save new version</button><button id="export-document" data-t="exportDocument">Export Markdown</button><button id="export-document-word" type="button" data-t="chatExportWord"></button><button id="delete-document" data-t="deleteDocument">Delete document</button></div><select id="versions" aria-label="Saved document version"></select><button id="load-version" class="secondary" data-t="loadVersion">Load version into editor</button><pre id="version-diff"></pre><p class="help" data-t="canvasHelp">Every saved version remains available, up to 30 per document. Text and code are edited as inert text and never executed.</p></section>
+<section class="card" id="canvas-card"><h2 data-t="canvas">Versioned writing canvas</h2><select id="documents" aria-label="Document"></select><input id="document-title" maxlength="120" data-placeholder="documentTitle" aria-label="Document title"><button id="new-document" data-t="newDocument">New document</button><textarea id="editor" maxlength="100000" dir="auto"></textarea><div class="row"><button id="save-version" data-t="saveVersion">Save new version</button><button id="export-document" data-t="exportDocument">Export Markdown</button><button id="export-document-word" type="button" data-t="chatExportWord"></button><button id="canvas-chat" type="button" class="secondary" data-t="canvasChat"></button><button id="delete-document" data-t="deleteDocument">Delete document</button></div><select id="versions" aria-label="Saved document version"></select><button id="load-version" class="secondary" data-t="loadVersion">Load version into editor</button><pre id="version-diff"></pre><p class="help" data-t="canvasHelp">Every saved version remains available, up to 30 per document. Text and code are edited as inert text and never executed.</p></section>
 </div></div><p class="help" data-t="boundary">NEXUS assists judgment. It cannot make a human decision or take external actions from a conversation.</p>
 <footer class="help" id="nexus-creator" dir="auto">Created by <a href="mailto:maryamnajafi4991@gmail.com">Maryam Najafi · maryamnajafi4991@gmail.com</a></footer>
 </main><script>/* Shared bounded descriptive table engine; no DOM, execution or network. */
@@ -2169,6 +2188,7 @@ Object.assign(FA,{
 });
 const CHAT_CONTEXT_EN={
  temporaryAttachments:'Remove staged attachments before starting a temporary chat.',
+ canvasChat:'Use this draft in chat',canvasDraft:'Canvas draft',
  autoSpeak:'Read completed replies aloud with a local voice',
  useRelatedChats:'Review related excerpts from other chats in this project',
  isolatedChat:'Temporary chat',isolatedChatNote:'This chat stays in this tab. Project context is off. Online model requests still require approval.'
@@ -2176,6 +2196,7 @@ const CHAT_CONTEXT_EN={
 Object.assign(EN,CHAT_CONTEXT_EN);
 Object.assign(FA,{
  temporaryAttachments:'برای شروع گفتگوی موقت، پیوست‌های آماده‌شده را بردار.',
+ canvasChat:'استفاده از این پیش‌نویس در گفتگو',canvasDraft:'پیش‌نویس بوم',
  autoSpeak:'خواندن خودکار پاسخ‌های کامل با صدای محلی',
  useRelatedChats:'بازبینی بخش‌های مرتبط از گفتگوهای دیگر همین پروژه',
  isolatedChat:'گفتگوی موقت',isolatedChatNote:'این گفتگو فقط در همین برگه می‌ماند. زمینهٔ پروژه خاموش است. ارسال به مدل آنلاین همچنان به تأیید تو نیاز دارد.'
@@ -2304,6 +2325,7 @@ function controls(){
  $('training-download').disabled=busy;
 
  $('study-mode').disabled=busy||Boolean(chat()?.archived);
+ $('canvas-chat').disabled=busy||!p()||Boolean(chat()?.archived||chat()?.isolated)||!$('editor').value.trim();
  for(const id of ['new-project','delete-project','new-thread','rename-thread','archive-thread','delete-thread','guide','prepare','apply-profile','new-document','save-version','delete-document','projects','branch','documents','create-vault','unlock','save','backup','restore','erase','language-file'])$(id).disabled=busy;
  $('chat-file').disabled=busy||!chat()||chat().archived;
  $('clear-chat-files').disabled=busy||(!chatAttachments.length&&!$('attach-document').checked);
@@ -2370,8 +2392,12 @@ function renderMessage(n){
   exportWord.type='button';exportWord.className='secondary';exportWord.dataset.chatWord='';
   exportWord.onclick=()=>downloadWord(t('chatExportTitle'),n.text,'nexus-answer.docx');
   const canvas=el('button',t('toCanvas'));
-  canvas.disabled=busy;
-  canvas.onclick=()=>{if($('editor').value&&!confirm(t('discard')))return;$('editor').value=n.text;editorDirty=true;stop()};
+  canvas.disabled=busy;canvas.dataset.chatCanvas='';
+  canvas.onclick=()=>{
+   if(busy||($('editor').value&&$('editor').value!==n.text&&!confirm(t('discard'))))return;
+   $('editor').value=n.text;editorDirty=true;stop();
+   document.dispatchEvent(new Event('nexus-studio-open-canvas'));
+  };
   const speak=el('button',t('speak'));
   speak.type='button';speak.dataset.chatSpeak='';
   speak.onclick=()=>window.NexusSpeechPlayback?.start(body.innerText||n.text,speak);
@@ -2678,9 +2704,14 @@ $('source-file').onchange=event=>{
 $('search-sources').onclick=()=>{if(!p())return;const hits=S.retrieve(p(),$('source-query').value);$('source-results').textContent=(hits.length?hits.map(h=>h.name+':'+h.line+':'+h.offset+'\n'+h.text).join('\n\n'):t('sourceNoMatch'))+(hits.truncated?'\n'+t('sourceLimited'):'')};
 $('new-document').onclick=()=>{
  const title=$('document-title').value.trim();
- if(!p()||!title||(editorDirty&&!confirm(t('discard'))))return;
+ if(!p()||!title||(doc()&&editorDirty&&!confirm(t('discard'))))return;
+ const untitledDraft=doc()?null:$('editor').value;
  const d={id:S.uid(),title,versions:[]};
- mutate(v=>projectIn(v).documents.push(d),{afterCommit:()=>{selectDocument(d.id);$('document-title').value=''}});
+ mutate(v=>projectIn(v).documents.push(d),{afterCommit:()=>{
+  selectDocument(d.id);
+  if(untitledDraft){$('editor').value=untitledDraft;editorDirty=true}
+  $('document-title').value='';
+ }});
 };
 $('documents').onchange=()=>{
  const id=$('documents').value;
@@ -2704,6 +2735,11 @@ $('load-version').onclick=()=>{if(forms()&&!confirm(t('discard')))return;const v
 $('export-document').onclick=()=>{if(doc()&&confirm(t('plain')))download($('editor').value,'nexus-document.md','text/markdown')};
 $('export-document-word').onclick=()=>{
  if(doc()&&!busy)downloadWord(doc().title,$('editor').value,'nexus-document.docx');
+};
+$('canvas-chat').onclick=()=>{
+ if($('canvas-chat').disabled)return;
+ const label=doc()?t('canvasDraft')+' · '+doc().title:t('canvasDraft');
+ stageChatContext(label.slice(0,160),$('editor').value);
 };
 $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+chat().title+'\n\n'+S.path(chat()).map(n=>'## '+t(n.origin==='human'?'human':n.origin==='model'?'model':'local')+'\n\n'+n.text+(n.attached_files?.length?'\n\n'+t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' — '+t('chatFilesNotSaved'):'')).join('\n\n'),'nexus-conversation.md','text/markdown')};
 $('export-thread-html').onclick=()=>{
@@ -3078,6 +3114,11 @@ const tools=[
 const sections=[...targets.map(x=>x[0]),...tools.map(x=>x[0])];
 if(sections.some(id=>!$(id))||!$('language')||!$('conversation-card'))return;
 const main=document.querySelector('body>main');
+const conversation=$('conversation-card'),workspace=conversation.parentElement;
+const returnToMessage=document.createElement('button');
+returnToMessage.type='button';returnToMessage.className='secondary studio-return-to-message';
+returnToMessage.onclick=()=>{openPanel('conversation-card');$('message').focus({preventScroll:true})};
+
 const nav=document.createElement('nav');nav.id='studio-focus-nav';nav.setAttribute('aria-label','Primary Studio navigation');
 const toggle=document.createElement('button');toggle.id='studio-focus-toggle';toggle.type='button';toggle.className='secondary';
 const catalog=document.createElement('button');catalog.id='studio-tools-toggle';catalog.type='button';
@@ -3147,6 +3188,7 @@ function filterTools(){
  noTools.hidden=results!==0;
 }
 function refreshLabels(){
+ returnToMessage.textContent=words('Back to message','بازگشت به پیام');
  toggle.textContent=focused?words('Show all sections','نمایش همهٔ بخش‌ها'):words('Focus on one section','تمرکز بر یک بخش');
  toggle.setAttribute('aria-pressed',String(focused));
  nav.setAttribute('aria-label',words('Primary Studio navigation','ناوبری اصلی نکسوس'));
@@ -3164,8 +3206,13 @@ function refreshLabels(){
 function layout(){
  document.documentElement.classList.toggle('studio-focus-mode',focused);
  nav.hidden=!focused;toolsTray.hidden=!toolsOpen;
- for(const id of sections)$(id).hidden=focused&&(toolsOpen||id!==selected);
- const category=toolsOpen||tools.some(x=>x[0]===selected)?'tools':selected;
+ const usingTool=tools.some(([id])=>id===selected);
+ const paired=focused&&!toolsOpen&&usingTool;
+ workspace.classList.toggle('studio-chat-with-tool',paired);
+ for(const id of sections)$(id).hidden=focused&&(toolsOpen||(id!==selected&&!(paired&&id===conversation.id)));
+ if(paired){if(returnToMessage.parentElement!==$(selected))$(selected).prepend(returnToMessage)}
+ else returnToMessage.remove();
+ const category=toolsOpen||usingTool?'tools':selected;
  for(const button of nav.querySelectorAll('button')){
   const active=focused&&button.dataset.panel===category;
   button.setAttribute('aria-current',active?'page':'false');
@@ -3231,6 +3278,12 @@ observer.observe($('projects'),{childList:true});
 observer.observe($('history'),{childList:true});
 $('language').addEventListener('change',()=>queueMicrotask(()=>{refreshLabels();refreshOnboarding()}));
 document.addEventListener('nexus-studio-open-chat',()=>openPanel('conversation-card'));
+document.addEventListener('nexus-studio-open-canvas',()=>{
+ if(openPanel('canvas-card'))$('editor').focus({preventScroll:true});
+});
+document.addEventListener('nexus-studio-private-clear',()=>{
+ if(focused&&tools.some(([id])=>id===selected))openPanel('conversation-card');
+});
 document.addEventListener('keydown',event=>{
  if(event.key!=='Escape'||!toolsOpen||!toolsTray.contains(document.activeElement))return;
  event.preventDefault();

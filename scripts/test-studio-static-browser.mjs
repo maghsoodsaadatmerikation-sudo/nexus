@@ -258,7 +258,7 @@ try{
    query('');return choices().length===13&&tray.querySelector('[role=status]').hidden;
  })()`),'tool-catalog-search-and-empty-state');
  await js("document.querySelector('#studio-focus-tools button[data-panel=data-card]').click();true");
- assert(await js("NexusStudioFocus.active()==='data-card'&&!document.getElementById('data-card').hidden&&document.getElementById('conversation-card').hidden"),'data-panel-route');
+ assert(await js("NexusStudioFocus.active()==='data-card'&&!document.getElementById('data-card').hidden&&!document.getElementById('conversation-card').hidden"),'data-panel-route-keeps-the-conversation');
  await js("NexusStudioUI.stageChatContext('SYNTHETIC ANALYSIS','SYNTHETIC HANDOFF')"); 
  assert(await js("NexusStudioFocus.active()==='conversation-card'&&document.getElementById('chat-attachment-tray').textContent.includes('SYNTHETIC ANALYSIS')"),'handoff-should-return-to-chat');
  await js("document.getElementById('clear-chat-files').click();document.querySelector('#studio-focus-nav button[data-panel=vault-card]').click();true");

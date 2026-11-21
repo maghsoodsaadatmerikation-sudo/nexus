@@ -39,7 +39,11 @@ window.addEventListener('load',async()=>{
   $('nexus-zen-suggestions').querySelector('button').click();
   assert(NexusStudioFocus.active()==='music-card'&&!$('message').value&&snapshot().projects.length===0,
    'empty-chat-chip-opens-tool-in-one-step');
-  $('nexus-zen-home').click();
+  assert(!$('conversation-card').hidden&&!$('music-card').hidden&&
+   document.documentElement.scrollWidth<=innerWidth+2,'opening-a-tool-keeps-chat-visible-without-overflow');
+  $('music-card').querySelector('.studio-return-to-message').click();
+  assert(NexusStudioFocus.active()==='conversation-card'&&$('music-card').hidden&&
+   document.activeElement===$('message'),'return-to-message-closes-only-tool-and-focuses-composer');
   change('studio-compose-mode','model');fill('message','/research Explicit tool');
   assert(compose.textContent==='Review Research','explicit-tool-discoverable-in-model-mode');
   compose.click();
@@ -58,7 +62,10 @@ window.addEventListener('load',async()=>{
   fill('research-query','Preserve existing research draft');
   fill('message','/research Replacement query');compose.click();offer.querySelector('button').click();
   assert(NexusStudioFocus.active()==='research-card'&&$('research-query').value==='Preserve existing research draft'&&
-   $('message').value==='/research Replacement query','tool-navigation-preserves-both-drafts');
+   $('message').value==='/research Replacement query'&&!$('conversation-card').hidden,'tool-navigation-preserves-both-drafts');
+  $('research-card').querySelector('.studio-return-to-message').click();
+  assert($('research-query').value==='Preserve existing research draft'&&
+   $('message').value==='/research Replacement query'&&network===0,'closing-tool-preserves-both-drafts-and-does-not-send');
   fill('research-query','');$('nexus-zen-home').click();
   fill('message','جست‌وجو کن دربارهٔ پژوهش خواب');compose.click();offer.querySelector('button').click();
   assert($('research-query').value==='دربارهٔ پژوهش خواب'&&network===0,
@@ -524,6 +531,30 @@ window.addEventListener('load',async()=>{
    document.activeElement===$('message'),'opt-in-automatic-read-aloud-uses-local-voice-without-taking-focus');
   $('auto-speak').click();
   assert(playback.hidden,'turning-off-auto-speak-stops-playback');
+  window.confirm=()=>true;
+  fill('project-title','Fresh canvas project');$('new-project').click();$('new-thread').click();
+  fill('message','Give me a draft about an orchard');$('guide').click();
+  const canvasReply=current().threads[0].nodes.at(-1).text;
+  $('messages').querySelector('[data-chat-canvas]').click();
+  assert(NexusStudioFocus.active()==='canvas-card'&&!$('conversation-card').hidden&&
+   $('editor').value===canvasReply&&document.activeElement===$('editor')&&!current().documents.length,
+   'answer-opens-editable-canvas-alongside-chat-without-saving');
+  window.confirm=()=>false;
+  fill('document-title','First canvas document');$('new-document').click();
+  assert($('editor').value===canvasReply&&current().documents[0].versions.length===0,
+   'creating-first-document-preserves-answer-draft');
+  $('save-version').click();
+  assert(current().documents[0].versions[0].text===canvasReply,'draft-saves-as-first-document-version-on-request');
+  const beforeCanvasSend=network,headBeforeCanvasSend=NexusStudioUI.selection().head;
+  fill('editor','Orchard canvas details still in draft.');
+  fill('message','Summarize orchard canvas details');
+  $('canvas-chat').click();
+  assert(NexusStudioFocus.active()==='conversation-card'&&$('canvas-card').hidden&&
+   $('message').value==='Summarize orchard canvas details'&&$('chat-attachment-tray').textContent.includes('First canvas document')&&
+   $('editor').value==='Orchard canvas details still in draft.'&&NexusStudioCompose.mode()==='model'&&
+   NexusStudioUI.selection().head===headBeforeCanvasSend&&network===beforeCanvasSend&&
+   $('request-review').hidden&&current().documents[0].versions.length===1,
+   'canvas-draft-returns-to-same-chat-for-one-turn-review-without-sending-or-saving');
   assert(document.documentElement.scrollWidth<=innerWidth+2,'no-horizontal-overflow');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}

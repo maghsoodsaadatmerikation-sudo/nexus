@@ -305,3 +305,22 @@ html.studio-focus-mode{
 #studio-connections{width:min(94vw,680px);max-height:84vh;padding:16px;border:1px solid var(--studio-line);border-radius:14px;background:var(--studio-card);color:var(--studio-ink)}
 #studio-connections::backdrop{background:#0009}
 #studio-connections pre{max-height:30vh;white-space:pre-wrap;overflow-wrap:anywhere}
+
+.studio-focus-mode .studio-chat-with-tool > .card:not([hidden]) {
+  max-width: 920px;
+  margin: 9px auto;
+  min-width: 0;
+}
+.studio-return-to-message {display: block; margin-inline-start: auto;}
+@media (min-width: 1020px) {
+  .studio-focus-mode .grid > .studio-chat-with-tool {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, .94fr);
+    align-items: start;
+    gap: 14px;
+  }
+  .studio-focus-mode .studio-chat-with-tool > .card:not([hidden]) {
+    width: 100%;
+    margin-inline: 0;
+  }
+}
