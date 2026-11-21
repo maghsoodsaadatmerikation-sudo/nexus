@@ -5,6 +5,8 @@ on:
     paths:
       - 'scripts/studio-live-source-fallback.py'
       - 'scripts/test-studio-live-source-fallback.py'
+      - 'scripts/studio-source-restore-drill.py'
+      - 'scripts/test-studio-source-restore-drill.py'
       - 'scripts/studio-full-origin-observer.py'
       - 'scripts/studio_public_assets.py'
       - 'scripts/png_pixels.py'
@@ -52,6 +54,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/studio-live-source-fallback.py scripts/test-studio-live-source-fallback.py scripts/studio-full-origin-observer.py
           python3 scripts/test-studio-live-source-fallback.py
+          python3 scripts/test-studio-source-restore-drill.py
       - name: Compare currently-live fixed public HTTPS origin to pinned Render source
         working-directory: review
         shell: bash
@@ -87,6 +90,53 @@ jobs:
           assert report['rollback_render_build_artifact_confirmed'] is False
           print('CURRENT LIVE 17-ASSET SOURCE SNAPSHOT MATCHED, PROVIDER ROLLBACK STILL UNVERIFIED')
           PY
+      - name: Reconstitute verified public source ZIP in disposable local root
+        working-directory: review
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/studio-source-restore-drill.py --restore \
+            --zip "$RUNNER_TEMP/nexus-studio-previous-live-source.zip" \
+            --manifest "$RUNNER_TEMP/nexus-studio-previous-live-witness.json" \
+            --dest "$RUNNER_TEMP/nexus-studio-restored-public" \
+            --report "$RUNNER_TEMP/nexus-studio-restore-drill.json"
+          python3 scripts/studio-source-restore-drill.py --verify \
+            --zip "$RUNNER_TEMP/nexus-studio-previous-live-source.zip" \
+            --manifest "$RUNNER_TEMP/nexus-studio-previous-live-witness.json" \
+            --dest "$RUNNER_TEMP/nexus-studio-restored-public" \
+            --report "$RUNNER_TEMP/nexus-studio-restore-drill.json"
+      - name: Exercise historical restored source with isolated real Chromium, synthetic private storage
+        working-directory: review
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/nexus-studio-restored-public/scripts"
+          cp "$GITHUB_WORKSPACE/previous-live/scripts/test-studio-static-browser.mjs" \
+            "$RUNNER_TEMP/nexus-studio-restored-public/scripts/test-studio-static-browser.mjs"
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
+          test -n "$NEXUS_PWA_CHROME"
+          unset NEXUS_STUDIO_PACKAGE_DIR
+          node --check "$RUNNER_TEMP/nexus-studio-restored-public/scripts/test-studio-static-browser.mjs"
+          node "$RUNNER_TEMP/nexus-studio-restored-public/scripts/test-studio-static-browser.mjs" \
+            > "$RUNNER_TEMP/nexus-studio-restore-browser.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])
+          a=json.loads((root/"nexus-studio-restore-drill.json").read_text())
+          b=json.loads((root/"nexus-studio-restore-browser.json").read_text())
+          assert a["source_exact_bytes_reconstituted"] is True
+          assert a["restored_public_files"] == 17
+          assert a["actual_render_rollback_executed"] is False
+          assert a["render_build_artifact_retained_confirmed"] is False
+          assert b["status"] == "PASS" and b["authority"] == "none"
+          assert b["source_sha256"] == a["restored_html_sha256"]
+          assert b["origin"].startswith("http://127.0.0.1:")
+          assert b["actual_offline_navigation"] is True
+          assert b["real_model_tested"] is False and b["real_android_hardware"] is False
+          assert len(b["checks"]) >= 15
+          print("RESTORED SOURCE LOCAL CHROMIUM: PASS; RENDER ROLLBACK STILL UNVERIFIED")
+          PY
       - name: Store source fallback ZIP and independent SHA plus public origin evidence
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
@@ -95,5 +145,7 @@ jobs:
             ${{ runner.temp }}/nexus-studio-previous-live-source.zip
             ${{ runner.temp }}/nexus-studio-previous-live-source.zip.sha256
             ${{ runner.temp }}/nexus-studio-previous-live-witness.json
+            ${{ runner.temp }}/nexus-studio-restore-drill.json
+            ${{ runner.temp }}/nexus-studio-restore-browser.json
           if-no-files-found: error
           retention-days: 30
