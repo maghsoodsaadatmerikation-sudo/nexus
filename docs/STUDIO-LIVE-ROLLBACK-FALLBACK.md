@@ -40,6 +40,16 @@ On successful completion GitHub Actions retains for 30 days:
 
 The archive does **not** include user conversations, encrypted vaults, saved drafts, private environment variables, provider API keys, real model weights, Render service state or Railway Stage D volumes. It does not perform a deploy, a rollback or a recovery of browser IndexedDB storage.
 
+## Disposable ZIP-to-browser restore drill (no Render mutation)
+
+The fallback workflow also proves that the archived source can be **reconstituted into an entirely new, private temporary directory**, rather than relying on the already checked-out live Git source:
+
+1. `scripts/studio-source-restore-drill.py` verifies the 17-file ZIP, its SHA-256 and the exact source manifest. It extracts only reviewed member names using exclusive file creation, never `extractall`, and rechecks every restored byte, MIME-independent SHA and the offline service-worker's HTML pin. It refuses changed PDF workers, extra/private files, symlinks, stale source SHA and existing output directories.
+2. The workflow copies the browser acceptance **test code from the pinned historical Git commit** into the restored temporary source tree, not the original historical `public/studio` checkout. It launches disposable **real Chromium** over a loopback HTTP server to exercise the historical app, its encrypted synthetic browser state, offline navigation and corrupt-cache fail-closed behavior. No owner data or model-provider endpoint is used.
+3. It retains `nexus-studio-restore-drill.json` and `nexus-studio-restore-browser.json` alongside the source-only ZIP, checksum and original live-source witness in one read-only Actions artifact.
+
+**Meaning of success:** exact historical public source was rebuilt from the archived ZIP and ran its version-matched Chromium acceptance on a local temporary server. This is evidence that **source-level recovery is technically practicable**; it is **not** proof that Render retained the provider build artifact, that instant rollback will be offered in the Dashboard, that this workflow actually restored production or that user-encrypted IndexedDB archives survived a real deployment.
+
 ## Required checks before a subsequent authorized promotion
 
 1. Re-read the static Render service and current deploy ID before promotion. **If either differs from this dated snapshot, stop and create a new exact-revision recovery witness.** The workflow's static pin intentionally does not silently follow later deploys.
