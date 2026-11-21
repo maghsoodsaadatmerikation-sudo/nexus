@@ -4715,7 +4715,17 @@ const audioFadeLabel=node('label');audioFadeLabel.className='inline';
 const audioFade=node('input','studio-video-audio-fade');
 audioFade.type='checkbox';audioFade.checked=true;
 const audioFadeText=node('span');audioFadeLabel.append(audioFade,audioFadeText);
-audioMix.append(volumeLabel,audioFadeLabel);
+
+const audioDelayLabel=node('label'),audioDelay=node('select','studio-video-audio-delay');
+const audioSkipLabel=node('label'),audioSkip=node('select','studio-video-audio-skip');
+for(const [value,label] of [['0','0 s'],['0.25','0.25 s'],['0.5','0.5 s'],['1','1 s']]){
+ const o=node('option');o.value=value;o.textContent=label;audioDelay.append(o)
+}
+for(const [value,label] of [['0','0 s'],['0.5','0.5 s'],['1','1 s'],['2','2 s']]){
+ const o=node('option');o.value=value;o.textContent=label;audioSkip.append(o)
+}
+audioDelayLabel.append(audioDelay);audioSkipLabel.append(audioSkip);
+audioMix.append(volumeLabel,audioFadeLabel,audioDelayLabel,audioSkipLabel);
 const canvas=node('canvas','studio-video-canvas');canvas.width=640;canvas.height=360;
 canvas.hidden=true;canvas.setAttribute('role','img');
 canvas.style.cssText='display:block;max-width:100%;max-height:340px;margin:12px auto;border-radius:12px;background:#101618';
@@ -4825,6 +4835,43 @@ function freeScenes(){
  scenes=[];image=null;sceneList.replaceChildren();
  canvas.width=canvas.height=0; // discard raw preview pixels before the next decode
 }
+const splitParts=seconds=>{
+ const start=Math.floor(seconds/2);
+ return [start,seconds-start];
+};
+function canSplit(scene){
+ const px=scene.bitmap.width*scene.bitmap.height;
+ const all=scenes.reduce((sum,part)=>sum+part.bitmap.width*part.bitmap.height,0);
+ const [a,b]=splitParts(scene.seconds);
+ return individual.checked&&scenes.length<MAX_SCENES&&
+  [1,2,3,4,6,8,12].includes(a)&&[1,2,3,4,6,8,12].includes(b)&&
+  all+px<=MAX_TOTAL_PIXELS;
+}
+async function splitScene(scene,index){
+ if(recording||preparing||loading||scenes[index]!==scene||!canSplit(scene))return;
+ const token=epoch,scope=selection();
+ preparing=true;refresh();
+ let clone=null;
+ try{
+  clone=await createImageBitmap(scene.bitmap);
+  if(token!==epoch||scope!==selection()||scenes[index]!==scene||!canSplit(scene)){
+   clone.close?.();return;
+  }
+  const [first,second]=splitParts(scene.seconds);
+  scene.seconds=first;
+  scenes.splice(index+1,0,{
+   bitmap:clone,label:scene.label,seconds:second,motion:scene.motion
+  });
+  image=scenes[0].bitmap;
+  previewClear();layout();listScenes();
+  message('Scene split into two independently editable segments.',
+          'صحنه به دو بخش مستقل و قابل ویرایش تقسیم شد.');
+ }catch{
+  clone?.close?.();
+  if(token===epoch)message('Could not split this scene within memory limits.',
+       'تقسیم صحنه در محدودیت حافظه ممکن نشد.');
+ }finally{if(token===epoch){preparing=false;refresh()}}
+}
 function listScenes(){
  sceneList.replaceChildren();
  scenes.forEach((scene,index)=>{
@@ -4865,13 +4912,14 @@ function listScenes(){
   row.append(motionChoice);
   for(const [action,textEN,textFA] of [
    ['preview','Preview','پیش‌نمایش'],['up','Move up','انتقال به بالا'],
-   ['down','Move down','انتقال به پایین'],['remove','Remove','حذف']]){
+   ['down','Move down','انتقال به پایین'],['split','Split scene','تقسیم صحنه'],['remove','Remove','حذف']]){
    const button=node('button');button.type='button';button.className='secondary';
    button.textContent=words(textEN,textFA);
    button.setAttribute('aria-label',words(textEN,textFA)+' '+(index+1));
    button.dataset.sceneAction=action;
    button.disabled=Boolean(recording||preparing||loading)||
-    (action==='up'&&index===0)||(action==='down'&&index===scenes.length-1);
+    (action==='up'&&index===0)||(action==='down'&&index===scenes.length-1)||
+    (action==='split'&&!canSplit(scene));
    button.addEventListener('click',()=>{
     if(recording||preparing||loading)return;
     if(action==='preview'){
@@ -4880,6 +4928,7 @@ function listScenes(){
      const before=plan.times.slice(0,index).reduce((sum,sec)=>sum+sec,0);
      previewTime(before+plan.times[index]/2,plan.total);return;
     }
+    if(action==='split'){splitScene(scene,index);return}
     if(action==='remove'){
      const removed=scenes.splice(index,1)[0];removed.bitmap.close?.();
     }else{
@@ -4931,7 +4980,7 @@ function wipe(){
 function refresh(){
  const running=Boolean(recording),blocked=running||loading||preparing,unavailable=!mimeType();
  const plan=timeline();
- photo.disabled=audio.disabled=generated.disabled=aspect.disabled=fade.disabled=crossfade.disabled=individual.disabled=transitionLength.disabled=volume.disabled=audioFade.disabled=blocked;
+ photo.disabled=audio.disabled=generated.disabled=aspect.disabled=fade.disabled=crossfade.disabled=individual.disabled=transitionLength.disabled=volume.disabled=audioFade.disabled=audioDelay.disabled=audioSkip.disabled=blocked;
  duration.disabled=blocked||individual.checked;
  scrub.disabled=blocked||!plan;
  timingInfo.textContent=plan?
@@ -4943,7 +4992,8 @@ function refresh(){
   field.disabled=blocked;
  for(const button of sceneList.querySelectorAll('button'))button.disabled=blocked||
   (button.dataset.sceneAction==='up'&&button.closest('[role=listitem]')===sceneList.firstChild)||
-  (button.dataset.sceneAction==='down'&&button.closest('[role=listitem]')===sceneList.lastChild);
+  (button.dataset.sceneAction==='down'&&button.closest('[role=listitem]')===sceneList.lastChild)||
+  (button.dataset.sceneAction==='split'&&!canSplit(scenes[Array.from(sceneList.children).indexOf(button.closest('[role=listitem]'))]));
  start.disabled=blocked||!image||unavailable||!plan;
  cancel.disabled=!running&&!preparing;
  clear.disabled=loading;
@@ -5041,7 +5091,8 @@ async function startRecording(){
  const chosen=timeline(),current=++epoch,scope=selection(),seconds=chosen?.total;
  if(!chosen){message('Choose a valid duration of at most 24 seconds.','مدت معتبر تا سقف ۲۴ ثانیه انتخاب کن.');return}
  preparing=true;previewClear();meter.value=0;layout();refresh();
- let ctx=null,audioBuffer=null,stream=null,recorder=null,audioSource=null,ownJob=null,audioAt=0;
+ let ctx=null,audioBuffer=null,stream=null,recorder=null,audioSource=null,ownJob=null;
+ let gain=null,playable=0,skipSeconds=0,delaySeconds=0;
  try{
   // Construct/resume the audio context directly from the user's click.
   if(music){
@@ -5061,17 +5112,13 @@ async function startRecording(){
   if(ctx&&audioBuffer){
    const destination=ctx.createMediaStreamDestination();
    audioSource=ctx.createBufferSource();audioSource.buffer=audioBuffer;
-   const gain=ctx.createGain();
-   const level=Number(volume.value)/100,playable=Math.min(seconds,audioBuffer.duration);
-   audioAt=ctx.currentTime+0.10;
-   const at=audioAt;
-   const ramp=Math.min(0.5,playable/3);
-   if(audioFade.checked&&level>0&&ramp>0){
-    gain.gain.setValueAtTime(0,at);
-    gain.gain.linearRampToValueAtTime(level,at+ramp);
-    gain.gain.setValueAtTime(level,at+Math.max(ramp,playable-ramp));
-    gain.gain.linearRampToValueAtTime(0,at+playable);
-   }else gain.gain.setValueAtTime(level,at);
+   skipSeconds=Number(audioSkip.value);delaySeconds=Number(audioDelay.value);
+   if(![0,0.5,1,2].includes(skipSeconds)||![0,0.25,0.5,1].includes(delaySeconds))
+    throw Error('audio-offset-invalid');
+   playable=Math.min(seconds-delaySeconds,audioBuffer.duration-skipSeconds);
+   if(!Number.isFinite(playable)||playable<=0.05)throw Error('audio-window-empty');
+   gain=ctx.createGain();
+   gain.gain.value=0; // initialized silently until explicitly scheduled
    audioSource.connect(gain);gain.connect(destination);
    for(const track of destination.stream.getAudioTracks())stream.addTrack(track);
   }
@@ -5107,11 +5154,22 @@ async function startRecording(){
    refresh();
   },{once:true});
   recorder.start(250);
-  if(audioSource){
-   audioSource.start(audioAt);
-   audioSource.stop(audioAt+Math.min(seconds,audioBuffer.duration));
-  }
   const startTime=performance.now();
+  if(audioSource){
+   // Both gain automation and sample offset share an AudioContext clock.
+   // An intentional delay is relative to the beginning of this recording,
+   // not a guarantee of frame-accurate device-specific synchronization.
+   const at=ctx.currentTime+0.10+delaySeconds;
+   const level=Number(volume.value)/100;
+   const ramp=Math.min(0.5,playable/3);
+   if(audioFade.checked&&level>0&&ramp>0){
+    gain.gain.setValueAtTime(0,at);
+    gain.gain.linearRampToValueAtTime(level,at+ramp);
+    gain.gain.setValueAtTime(level,at+Math.max(ramp,playable-ramp));
+    gain.gain.linearRampToValueAtTime(0,at+playable);
+   }else gain.gain.setValueAtTime(level,at);
+   audioSource.start(at,skipSeconds,playable);
+  }
   const step=now=>{
    if(recording!==job||job.discard)return;
    const passed=Math.min(seconds,(now-startTime)/1000);
@@ -5148,8 +5206,8 @@ shortcut.addEventListener('click',()=>{box.open=true;photo.focus({preventScroll:
 function labels(){
  heading.textContent=words('Create a video locally (free)','ساخت ویدیوی محلی (رایگان)');
  help.textContent=words(
-  'Arrange 1–4 scenes with optional contained camera drift, push or pull (no crop). Set clip duration, crossfades, audio volume and fades; preview before recording. Browser-only, no generative AI.',
-  '۱ تا ۴ صحنه با حرکت دوربین محدود، نزدیک‌شدن یا دورشدن بدون برش تنظیم کن. زمان، گذار نرم و شدت صدا را انتخاب و پیش‌نمایش کن. ابزار محلی و غیرمولد است.');
+  'Arrange up to 4 uncropped scenes. Split an eligible scene in independent-timing mode, set contained camera motion, and adjust audio offset/start delay. Local recorder; no generative AI or original-file modification.',
+  'تا ۴ صحنهٔ بدون برش تنظیم کن. در حالت زمان مستقل، صحنهٔ مجاز را دو بخش کن؛ حرکت دوربین، نقطهٔ آغاز صوت و تأخیر صدا را تغییر بده. ضبط محلی است و فایل اصلی تغییر نمی‌کند.');
  const labelText=(parent,child,en,fa)=>{
   if(parent.firstChild?.nodeType===3)parent.firstChild.remove();
   parent.insertBefore(document.createTextNode(words(en,fa)),child)
@@ -5163,6 +5221,8 @@ function labels(){
  labelText(transitionLengthLabel,transitionLength,'Crossfade length','طول گذار نرم');
  volumeText.textContent=words('Audio volume ('+volume.value+'%)','شدت صدا ('+volume.value+'٪)');
  audioFadeText.textContent=words('Audio fade in/out','محوشدن ابتدا و انتهای صدا');
+ labelText(audioDelayLabel,audioDelay,'Audio start delay','تأخیر شروع صدا');
+ labelText(audioSkipLabel,audioSkip,'Skip audio opening','حذف ابتدای صوت از پخش');
  scrubText.textContent=words('Preview timeline','پیش‌نمایش خط زمانی');
  fadeText.textContent=words('Fade in/out','محوشدن آغاز و پایان');
  crossfadeText.textContent=words('Crossfade scenes','گذار نرم بین صحنه‌ها');
@@ -5187,6 +5247,8 @@ volume.addEventListener('input',()=>{
  if(!recording)previewClear();
 });
 audioFade.addEventListener('change',()=>{if(!recording)previewClear()});
+for(const control of [audioDelay,audioSkip])
+ control.addEventListener('change',()=>{if(!recording&&!preparing)previewClear()});
 $('language')?.addEventListener('change',()=>queueMicrotask(labels));
 labels();refresh();
 })();
