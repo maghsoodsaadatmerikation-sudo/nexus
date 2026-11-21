@@ -173,6 +173,152 @@ def test_cli_self_test_is_offline_and_distinguishes_live_from_canned(monkeypatch
     assert report["passed"] == 15 and report["truth_claim"] == "NOT_PROVEN"
 
 
+
+def test_configuration_preflight_is_offline_and_does_not_expose_provider_details(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["model_quality_eval", "--check-config"])
+    monkeypatch.delenv("NEXUS_QUALITY_EVAL_CONSENT", raising=False)
+    monkeypatch.delenv("NEXUS_MODEL_URL", raising=False)
+    assert quality.main() == 2
+    missing = json.loads(capsys.readouterr().out)
+    assert missing["status"] == "NOT_READY"
+    assert missing["valid_configuration"] is False
+    assert missing["provider_contact_attempted"] is False
+
+    monkeypatch.setenv("NEXUS_MODEL_URL", model.GEMINI_CHAT_COMPLETIONS)
+    monkeypatch.setenv("NEXUS_MODEL_ID", "private-staging-model-name")
+    monkeypatch.setenv("NEXUS_MODEL_ADAPTER", "gemini")
+    monkeypatch.setenv("NEXUS_MODEL_API_KEY", "secret-not-for-logs")
+    monkeypatch.setenv("NEXUS_STUDIO_TOKEN", "secret-private-studio-token-0123456789")
+    # If the preflight accidentally creates any transport, this test fails.
+    def network_forbidden(*args, **kwargs):
+        pytest.fail("offline preflight attempted network transport")
+    monkeypatch.setattr(quality.httpx, "Client", network_forbidden)
+    assert quality.main() == 0
+    raw = capsys.readouterr().out
+    good = json.loads(raw)
+    assert good["status"] == "READY_TO_TEST"
+    assert good["valid_configuration"] is True
+    assert good["quality_gate"] == "NOT_RUN"
+    assert good["live_model_evaluated"] is False
+    for sensitive in ("private-staging-model-name", "secret-not-for-logs",
+                      "secret-private-studio-token", "generativelanguage.googleapis.com"):
+        assert sensitive not in raw
+
+
+def test_single_probe_smoke_uses_only_fictional_prompt_and_no_output_secrets(monkeypatch):
+    monkeypatch.setenv("NEXUS_MODEL_URL", PROVIDER[0])
+    monkeypatch.setenv("NEXUS_MODEL_ID", PROVIDER[1])
+    monkeypatch.setenv("NEXUS_STUDIO_TOKEN", PROVIDER[2])
+    monkeypatch.setenv("NEXUS_MODEL_API_KEY", "secret-staging-provider-key")
+    monkeypatch.setenv("NEXUS_MODEL_ADAPTER", "generic")
+    settings = model.read_model_settings()
+    assert settings is not None
+    requests = []
+
+    def handler(request):
+        payload = json.loads(request.content)
+        requests.append(payload)
+        assert request.headers["authorization"] == "Bearer secret-staging-provider-key"
+        assert payload["messages"] == [
+            {"role": "system", "content": settings.policy},
+            {"role": "user", "content": quality.PROBES[0].prompt},
+        ]
+        assert payload["stream"] is False and payload["store"] is False
+        assert payload["max_completion_tokens"] == 256
+        assert "tools" not in payload
+        return httpx.Response(200, json=provider_reply(quality.PROBES[0].good_reply))
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
+        report = quality.smoke_live(client, settings)
+    assert len(requests) == 1
+    assert report["status"] == "PASS"
+    assert report["provider_requests_planned"] == 1
+    assert report["probe_id"] == "supplied_fact"
+    assert report["quality_gate"] == "NOT_RUN"
+    assert report["live_model_evaluated"] is False
+    assert report["truth_claim"] == "NOT_PROVEN"
+    raw = json.dumps(report)
+    for forbidden in ("QN-4821", "secret-staging-provider-key", PROVIDER[0], PROVIDER[1]):
+        assert forbidden not in raw
+
+
+@pytest.mark.parametrize("reply,verdict", [
+    (provider_reply("I cannot determine that from the record."), "FAIL"),
+    ({"choices": [{"message": {"role": "assistant", "content": "QN-4821",
+                              "tool_calls": [{"id": "do-action"}]},
+                  "finish_reason": "tool_calls"}]}, "ERROR"),
+])
+def test_single_probe_smoke_rejects_bad_answers_and_tool_calls(monkeypatch, reply, verdict):
+    monkeypatch.setenv("NEXUS_MODEL_URL", PROVIDER[0])
+    monkeypatch.setenv("NEXUS_MODEL_ID", PROVIDER[1])
+    monkeypatch.setenv("NEXUS_STUDIO_TOKEN", PROVIDER[2])
+    settings = model.read_model_settings()
+    assert settings is not None
+    seen = []
+    def handler(request):
+        seen.append(1)
+        return httpx.Response(200, json=reply)
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
+        report = quality.smoke_live(client, settings)
+    assert seen == [1]
+    assert report["status"] == "FAIL" and report["result"] == verdict
+    assert "QN-4821" not in json.dumps(report)
+
+
+def test_single_probe_smoke_never_follows_redirects(monkeypatch):
+    monkeypatch.setenv("NEXUS_MODEL_URL", PROVIDER[0])
+    monkeypatch.setenv("NEXUS_MODEL_ID", PROVIDER[1])
+    monkeypatch.setenv("NEXUS_STUDIO_TOKEN", PROVIDER[2])
+    settings = model.read_model_settings()
+    assert settings is not None
+    hosts = []
+    def handler(request):
+        hosts.append(request.url.host)
+        return httpx.Response(307, headers={"location": "https://attacker.invalid/secret"})
+    with httpx.Client(transport=httpx.MockTransport(handler),
+                      trust_env=False, follow_redirects=False) as client:
+        report = quality.smoke_live(client, settings)
+    assert hosts == ["provider.example"]
+    assert report["status"] == "FAIL" and report["result"] == "ERROR"
+    assert "attacker.invalid" not in json.dumps(report)
+
+
+def test_smoke_cli_requires_explicit_consent_before_client_creation(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["model_quality_eval", "--smoke-live"])
+    monkeypatch.delenv("NEXUS_QUALITY_EVAL_CONSENT", raising=False)
+    monkeypatch.setenv("NEXUS_MODEL_URL", PROVIDER[0])
+    monkeypatch.setenv("NEXUS_MODEL_ID", PROVIDER[1])
+    monkeypatch.setenv("NEXUS_STUDIO_TOKEN", PROVIDER[2])
+    def forbidden(*args, **kwargs):
+        pytest.fail("smoke started a provider client without consent")
+    monkeypatch.setattr(quality.httpx, "Client", forbidden)
+    assert quality.main() == 2
+    report = json.loads(capsys.readouterr().out)
+    assert report == {"status": "NOT_RUN", "reason": "explicit_operator_consent_required"}
+
+
+def test_smoke_cli_runs_one_request_with_explicit_consent(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["model_quality_eval", "--smoke-live"])
+    monkeypatch.setenv("NEXUS_QUALITY_EVAL_CONSENT", "YES")
+    monkeypatch.setenv("NEXUS_MODEL_URL", PROVIDER[0])
+    monkeypatch.setenv("NEXUS_MODEL_ID", PROVIDER[1])
+    monkeypatch.setenv("NEXUS_STUDIO_TOKEN", PROVIDER[2])
+    monkeypatch.setenv("NEXUS_MODEL_ADAPTER", "generic")
+    real_client_cls = httpx.Client
+    count = []
+    def handler(request):
+        count.append(1)
+        return httpx.Response(200, json=provider_reply(quality.PROBES[0].good_reply))
+    def client_factory(*args, **kwargs):
+        assert kwargs["trust_env"] is False and kwargs["follow_redirects"] is False
+        return real_client_cls(transport=httpx.MockTransport(handler), trust_env=False)
+    monkeypatch.setattr(quality.httpx, "Client", client_factory)
+    assert quality.main() == 0
+    report = json.loads(capsys.readouterr().out)
+    assert count == [1]
+    assert report["status"] == "PASS" and report["quality_gate"] == "NOT_RUN"
+    assert "passed" not in report and "cases" not in report
+
+
 def test_deepseek_quality_payload_uses_compatible_token_budget(monkeypatch):
     monkeypatch.setenv("NEXUS_MODEL_ADAPTER", "deepseek")
     def handler(request):
