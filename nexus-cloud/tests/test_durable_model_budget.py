@@ -149,13 +149,16 @@ def test_changed_directory_inode_fails_closed(tmp_path):
 
 def test_io_error_fail_closed_and_does_not_refund_attempts(tmp_path, monkeypatch):
     root = private_state(tmp_path)
-    b = DurableModelRequestBudget(str(root), 1)
+    b = DurableModelRequestBudget(str(root), 2)
     try:
         assert b.reserve()
         before = b.snapshot()
         def unavailable(_):
             raise OSError("synthetic storage failure")
         monkeypatch.setattr(b, "_commit_locked", unavailable)
+        # There is an available slot, but persistence fails: do not authorize
+        # an upstream call or silently treat the attempt as free.
+        assert before["remaining"] == 1
         assert b.reserve() is False
         assert b.snapshot() == before
     finally:
