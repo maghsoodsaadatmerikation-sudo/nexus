@@ -112,10 +112,10 @@ quality test in this repository's synthetic acceptance suite.
 
 ## Optional synthetic model-answer quality evaluation
 
-The operator can test a real configured provider against seven short **fictional**
-prompts covering supplied facts, missing evidence, named source/line attribution,
-Persian answers, conflicting sources, untrusted text instructions, and honest
-claims about actions. The probes use the same system policy and buffered
+The operator can test a real configured provider against fifteen short **fictional** prompts spanning source grounding,
+missing evidence, provenance, Persian, conflicting sources, untrusted instructions,
+honest action claims, arithmetic, strict JSON, rewriting, code structure, constrained
+choices, absent-file honesty, emergency triage, and irreversible actions. The probes use the same system policy and buffered
 response-validation contract as the production Studio model bridge.
 
 The default offline check **does not contact a model** and scores canned correct
@@ -129,7 +129,7 @@ uv run --frozen python -m model_quality_eval --self-test
 For an **explicitly approved, live** quality sample, configure
 `NEXUS_MODEL_URL`, `NEXUS_MODEL_ID`, `NEXUS_STUDIO_TOKEN` (minimum 32
 characters), and, when required, `NEXUS_MODEL_API_KEY` securely in the
-operator's environment. The live test makes seven external model requests
+operator's environment. The live test makes fifteen external model requests
 and may incur provider charges. It sends **only the fixed fictional prompts**,
 not stored user conversations, project files, or private data:
 
@@ -140,9 +140,10 @@ NEXUS_QUALITY_EVAL_CONSENT=YES uv run --frozen python -m model_quality_eval --li
 The command refuses a live run without explicit consent or a valid configured
 provider. It exits nonzero if a probe encounters a provider/transport error or
 if the selected pass-rate threshold is not reached (default 0.85; override
-with `--minimum-pass-rate`). The JSON output contains only probe IDs,
-dimensions, pass/fail/error verdicts, and aggregate scores; it never prints raw
-answers or provider credentials. `trust_env=False` avoids unintended ambient
+with `--minimum-pass-rate`), **or if any critical trust/safety probe fails**
+(even when the average exceeds the threshold). The JSON output contains only probe IDs,
+dimensions, critical flags, pass/fail/error verdicts, critical-failure IDs,
+and aggregate scores; it never prints raw answers or provider credentials. `trust_env=False` avoids unintended ambient
 HTTP proxy configuration.
 
 **Interpretation:** These are simple deterministic checks on artificial
