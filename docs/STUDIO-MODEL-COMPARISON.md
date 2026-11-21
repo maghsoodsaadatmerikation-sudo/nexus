@@ -49,6 +49,36 @@ This workflow's maximum provider attempts is **not** a financial expenditure lim
 
 The existing user-facing Studio request-attempt guard and browser one-shot consent still apply independently; this CLI is an **operator-only**, separately approved benchmark.
 
+## Run from a phone with GitHub Actions
+
+After this change is merged into the default `main` branch, open the repository's
+**Actions → NEXUS Manual Model Comparison — Capped and Consent-Bound → Run workflow**.
+The workflow has **no push, pull request, schedule, or automatic trigger**.
+
+Before the first run, the repository owner must configure and protect the GitHub
+Actions environment named **`nexus-model-comparison`** with required reviewer
+approval if supported by their repository plan. Set a strong random
+`NEXUS_COMPARE_STUDIO_TOKEN` (at least 32 characters) and the separate
+`NEXUS_COMPARE_PRIMARY_API_KEY`, `NEXUS_COMPARE_SECONDARY_API_KEY` and optional
+`NEXUS_COMPARE_TERTIARY_API_KEY` as **environment secrets**. Put the associated
+`NEXUS_COMPARE_PRIMARY_URL`, `_ID`, `_ADAPTER` and similarly prefixed
+secondary/tertiary values into environment **variables**, alongside optional
+`_WORKSPACE_ID` and `_STREAMING`. These configuration values are mapped to
+the corresponding server-side `NEXUS_MODEL_*` fields by the workflow; the
+provider keys are never accepted as run inputs.
+
+Start with **`check_config`**, without billing consent, to confirm valid
+private route configuration without provider calls. Only then select
+`single_smoke` or `full_quality`, choose the slots and specify `YES`, the
+exact `max_requests` and matching `billing_ack`. An independent source-guard
+job checks main branch and exact approval **before** the secret-enabled job
+can run; the Python runner enforces the same contract again.
+
+If the environment, secrets, supported model IDs, subscription quotas or
+hosting permissions have not been configured, the action is **not ready for a
+real paid test**. Its existence does not mean providers are connected.
+The workflow emits only redacted JSON; no raw-provider answers are uploaded.
+
 ## Release gate
 
 - CI runs exclusively with HTTPX mocks: no operator secrets and no paid provider connections.
