@@ -24,8 +24,9 @@ const modelStrip=document.createElement('div');modelStrip.id='studio-compose-mod
 const modelState=document.createElement('p');modelState.id='studio-compose-model-state';modelState.className='help';modelState.setAttribute('role','status');modelState.setAttribute('aria-live','polite');
 const modelCheck=document.createElement('button');modelCheck.id='studio-compose-model-check';modelCheck.type='button';modelCheck.className='secondary';
 const modelSelectLabel=document.createElement('label');modelSelectLabel.id='studio-compose-choice-label';modelSelectLabel.htmlFor='studio-compose-choice';modelSelectLabel.hidden=true;
+const modelSelectTitle=document.createElement('span');modelSelectTitle.textContent=words('Model','مدل');
 const modelSelect=document.createElement('select');modelSelect.id='studio-compose-choice';
-modelSelectLabel.append(modelSelect);
+modelSelectLabel.append(modelSelectTitle,modelSelect);
 modelStrip.append(modelState,modelSelectLabel,modelCheck);
 const privacy=document.createElement('p');privacy.id='studio-compose-privacy';privacy.className='help';
 privacy.setAttribute('role','note');
@@ -384,10 +385,7 @@ function refresh(){
   }));
  }
  modelSelectLabel.hidden=!model||available.length<2;
- modelSelectLabel.firstChild && (modelSelectLabel.firstChild.nodeType===3?
-  modelSelectLabel.firstChild.textContent=words('Model','مدل'):void 0);
- if(!modelSelectLabel.firstChild||modelSelectLabel.firstChild.nodeType!==3)
-  modelSelectLabel.prepend(document.createTextNode(words('Model','مدل')));
+ modelSelectTitle.textContent=words('Model','مدل');
  modelSelect.value=availability.slot||'primary';
  modelSelect.disabled=state.busy||state.attachmentLoading;
  modelStrip.hidden=!model;
