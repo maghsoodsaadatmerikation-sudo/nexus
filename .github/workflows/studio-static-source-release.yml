@@ -5,6 +5,8 @@ on:
     paths:
       - 'scripts/studio-static-release-gate.py'
       - 'scripts/studio-full-origin-observer.py'
+      - 'scripts/studio-release-decision.py'
+      - 'scripts/test-studio-release-decision.py'
       - 'scripts/test-studio-full-origin-observer.py'
       - 'scripts/test-studio-static-release-gate.py'
       - 'scripts/verify-studio-public.py'
@@ -23,6 +25,8 @@ on:
     paths:
       - 'scripts/studio-static-release-gate.py'
       - 'scripts/studio-full-origin-observer.py'
+      - 'scripts/studio-release-decision.py'
+      - 'scripts/test-studio-release-decision.py'
       - 'scripts/test-studio-full-origin-observer.py'
       - 'scripts/test-studio-static-release-gate.py'
       - 'scripts/verify-studio-public.py'
@@ -71,6 +75,7 @@ jobs:
           python3 scripts/build-studio-static.py --check
           python3 scripts/test-studio-static-release-gate.py
           python3 scripts/test-studio-full-origin-observer.py
+          python3 scripts/test-studio-release-decision.py
           python3 scripts/verify-studio-public.py --self-test
           python3 scripts/test-studio-public-acceptance.py
       - name: Package exact public site and verify source-bound SHA manifest
@@ -144,6 +149,32 @@ jobs:
           assert r["status"] in {"SOURCE_MATCH_ONLY","PUBLIC_SOURCE_DRIFT","INCOMPLETE_PUBLIC_OBSERVATION"}
           print("FULL PUBLIC SOURCE OBSERVATION RECORDED (17/17), NO DEPLOY AUTHORITY")
           PY
+      - name: Evaluate source-bound public readiness and retain explicit HOLD (never deploy)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/studio-release-decision.py \
+            --zip "$RUNNER_TEMP/nexus-studio-static-site.zip" \
+            --manifest "$RUNNER_TEMP/nexus-studio-release-manifest.json" \
+            --observation "$RUNNER_TEMP/nexus-studio-public-all-assets.json" \
+            --source-commit "$GITHUB_SHA" \
+            --out "$RUNNER_TEMP/nexus-studio-release-decision-hold.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ["RUNNER_TEMP"])/"nexus-studio-release-decision-hold.json"
+          r=json.loads(p.read_text())
+          assert r["status"].startswith("HOLD_")
+          assert r["ready_to_promote"] is False
+          assert r["source_manifest_and_zip_verified"] is True
+          assert r["checked_paths"] == 17
+          assert r["render_deploy_identity_confirmed"] is False
+          assert r["render_rollback_artifact_confirmed"] is False
+          assert r["owner_release_approval_confirmed"] is False
+          assert r["deployment_attempted"] is False
+          assert r["authority"] == "none"
+          print("STUDIO RELEASE REVIEW: SOURCE OBSERVATION RECORDED; PRODUCTION REMAINS HOLD")
+          PY
       - name: Retain source-only ZIP, SHA, release dossier and pre-promotion observation
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
@@ -155,5 +186,6 @@ jobs:
             ${{ runner.temp }}/nexus-studio-release-local-browser.json
             ${{ runner.temp }}/nexus-studio-public-before-promotion.json
             ${{ runner.temp }}/nexus-studio-public-all-assets.json
+            ${{ runner.temp }}/nexus-studio-release-decision-hold.json
           if-no-files-found: error
           retention-days: 30
