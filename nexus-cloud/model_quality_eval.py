@@ -267,7 +267,7 @@ def query_provider(client: httpx.Client, provider: tuple[str, str, str, str],
             {"role": "system", "content": POLICY},
             {"role": "user", "content": probe.prompt},
         ],
-        "max_tokens" if adapter() == "deepseek" else "max_completion_tokens": 256,
+        "max_tokens" if adapter() in {"deepseek", "gemini"} else "max_completion_tokens": 256,
     }
     body = bytearray()
     with client.stream(
@@ -304,6 +304,7 @@ def main() -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--self-test", action="store_true", help="Offline, canned synthetic responses")
     mode.add_argument("--live", action="store_true", help="Contact configured provider with synthetic probes")
+    mode.add_argument("--smoke", action="store_true", help="One consented fictional probe, no raw model output")
     parser.add_argument("--minimum-pass-rate", type=float, default=0.85)
     args = parser.parse_args()
     if not 0 <= args.minimum_pass_rate <= 1:
@@ -319,6 +320,27 @@ def main() -> int:
             print(json.dumps({"status": "NOT_RUN", "reason": "model_provider_not_configured"}))
             return 2
         with httpx.Client(trust_env=False, follow_redirects=False) as client:
+            if args.smoke:
+                # Single fictional canary. A pass checks one text-only response,
+                # NOT model quality, readiness for production or tool authority.
+                probe = PROBES[0]
+                try:
+                    result = "PASS" if passes(probe, query_provider(client, provider, probe)) else "FAIL"
+                except (httpx.RequestError, httpx.TimeoutException, ValueError, RecursionError):
+                    result = "ERROR"
+                report = {
+                    "scope": "single_synthetic_provider_canary",
+                    "live_model_evaluated": True,
+                    "source": "fictional_nonpersonal_fixed_probe",
+                    "truth_claim": "NOT_PROVEN",
+                    "authority": "none",
+                    "probe": probe.key,
+                    "requests_attempted": 1,
+                    "result": result,
+                    "status": "PASS" if result == "PASS" else "FAIL",
+                }
+                print(json.dumps(report, sort_keys=True))
+                return 0 if report["status"] == "PASS" else 1
             report = run_live(client, provider)
     report["status"] = "PASS" if meets_gate(report, minimum_pass_rate=args.minimum_pass_rate) else "FAIL"
     print(json.dumps(report, ensure_ascii=False, sort_keys=True))
