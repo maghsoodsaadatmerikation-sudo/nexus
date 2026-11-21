@@ -268,3 +268,25 @@ def test_runner_exception_does_not_print_provider_secrets(two_models):
     assert code == 1 and out["reason"] == "comparison_runner_failure"
     assert "upstream-secret-value" not in json.dumps(out)
     assert out["provider_contact_attempted"] is False
+
+
+
+def test_manual_comparison_workflow_is_explicitly_dispatched_and_secret_protected():
+    from pathlib import Path
+    workflow = (Path(__file__).resolve().parents[2]
+                / ".github/workflows/manual-model-comparison.yml").read_text()
+    assert "\n  workflow_dispatch:" in workflow
+    for forbidden_trigger in ("\n  pull_request:", "\n  push:", "\n  schedule:",
+                              "\n  workflow_run:"):
+        assert forbidden_trigger not in workflow
+    assert "environment: nexus-model-comparison" in workflow
+    assert "needs: source-guard" in workflow
+    assert "refs/heads/main" in workflow
+    assert "cancel-in-progress: false" in workflow
+    assert "I_APPROVE_$((planned))_PROVIDER_REQUESTS" in workflow
+    assert "--max-requests \"$NEXUS_COMPARE_CAP\"" in workflow
+    assert "secrets.NEXUS_COMPARE_PRIMARY_API_KEY" in workflow
+    assert "secrets.NEXUS_COMPARE_SECONDARY_API_KEY" in workflow
+    assert "secrets.NEXUS_COMPARE_STUDIO_TOKEN" in workflow
+    assert "persist-credentials: false" in workflow
+    assert "trust_env" not in workflow or "trust_env=False" in workflow  # Implemented inside Python.
