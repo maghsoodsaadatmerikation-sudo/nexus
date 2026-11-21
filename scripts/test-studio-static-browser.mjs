@@ -219,6 +219,30 @@ try{
  await js("(()=>{const m=document.getElementById('message');m.value='';m.dispatchEvent(new Event('input',{bubbles:true}));return true})()");
  checks.push('first-chat-creates-local-project-and-thread-without-sending-or-losing-draft');
 
+ // Image generation is a separate reviewed, transient model request. Mock the
+ // provider boundary; do not claim this proves real image model quality.
+ stage='mock-image-generation-consent';
+ assert(await js("Boolean(document.getElementById('studio-imagegen-open'))&&Boolean(document.getElementById('studio-imagegen-panel'))"),'image-generation-not-in-chat');
+ await js("(()=>{window.__imageRequests=[];window.__imageFetchOriginal=window.fetch;window.fetch=async function(input,init={}){const url=String(input);if(url.endsWith('/studio-api/image-generation-status')){window.__imageRequests.push({kind:'status'});return new Response(JSON.stringify({configured:true,configuration_id:'a'.repeat(64),model:'mock-image-provider',provider_host:'example.test',authority:'none'}),{status:200,headers:{'content-type':'application/json'}})}if(url.endsWith('/studio-api/generate-image')){window.__imageRequests.push({kind:'generate',method:init.method,credentialMode:init.credentials,body:JSON.parse(init.body)});return new Response(JSON.stringify({authority:'none',model:'mock-image-provider',mime_type:'image/png',image_base64:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMQMgkDAAD4AJ3MaiF4AAAAAElFTkSuQmCC'}),{status:200,headers:{'content-type':'application/json'}})}return window.__imageFetchOriginal.call(this,input,init)};const m=document.getElementById('message');m.value='SYNTHETIC GREEN AND PURPLE LANDSCAPE';m.dispatchEvent(new Event('input'));document.getElementById('studio-imagegen-open').click();document.getElementById('studio-imagegen-use-draft').click();return true})()");
+ assert(await js("document.getElementById('studio-imagegen-panel').open&&document.getElementById('studio-imagegen-prompt').value==='SYNTHETIC GREEN AND PURPLE LANDSCAPE'&&document.getElementById('message').value==='SYNTHETIC GREEN AND PURPLE LANDSCAPE'&&!window.__imageRequests.length"),'image-draft-sent-or-lost');
+ await js("document.getElementById('studio-imagegen-check').click();true");
+ await poll(()=>retryJs("document.getElementById('studio-imagegen-status').textContent.includes('mock-image-provider')"),3500,'image-status-check');
+ assert(await js("window.__imageRequests.length===1&&window.__imageRequests[0].kind==='status'&&document.getElementById('studio-imagegen-approval').hidden"),'image-check-must-not-generate');
+ await js("document.getElementById('studio-imagegen-review').click();true");
+ await poll(()=>retryJs("!document.getElementById('studio-imagegen-approval').hidden"),3500,'image-request-review');
+ assert(await js("window.__imageRequests.every(x=>x.kind==='status')&&document.getElementById('studio-imagegen-exact').textContent.includes('SYNTHETIC GREEN AND PURPLE LANDSCAPE')&&document.getElementById('studio-imagegen-submit').disabled"),'image-review-not-a-send');
+ await js("(()=>{const p=document.getElementById('studio-imagegen-prompt');document.getElementById('studio-imagegen-consent').checked=true;p.value='CHANGED IMAGE PROMPT';p.dispatchEvent(new Event('input'));return true})()");
+ assert(await js("document.getElementById('studio-imagegen-approval').hidden&&document.getElementById('studio-imagegen-submit').disabled"),'image-modification-must-invalidate-review');
+ await js("document.getElementById('studio-imagegen-review').click();true");
+ await poll(()=>retryJs("!document.getElementById('studio-imagegen-approval').hidden"),3500,'image-rereview');
+ await js("document.getElementById('studio-imagegen-consent').click();document.getElementById('studio-imagegen-submit').click();true");
+ await poll(()=>retryJs("!document.getElementById('studio-imagegen-output').hidden"),3500,'mock-image-request');
+ assert(await js("(()=>{const made=window.__imageRequests.filter(x=>x.kind==='generate');const body=made[0]?.body;return made.length===1&&made[0].method==='POST'&&made[0].credentialMode==='omit'&&body?.consent===true&&body.prompt==='CHANGED IMAGE PROMPT'&&body.configuration_id==='a'.repeat(64)&&body.size==='1024x1024'&&document.getElementById('studio-imagegen-preview').getAttribute('src').startsWith('data:image/png;base64,')&&!JSON.stringify(NexusStudioUI.snapshot()).includes('CHANGED IMAGE PROMPT')})()"),'image-not-reviewed-or-private-result-saved');
+ await js("(()=>{document.getElementById('studio-imagegen-clear').click();window.fetch=window.__imageFetchOriginal;const m=document.getElementById('message');m.value='';m.dispatchEvent(new Event('input'));return true})()");
+ assert(await js("document.getElementById('studio-imagegen-output').hidden&&!document.getElementById('studio-imagegen-preview').hasAttribute('src')"),'image-result-not-erased');
+ checks.push('image-generation-requires-exact-review-and-explicit-consent');
+
+
   assert(await js("Boolean(document.getElementById('nexus-zen-menu'))&&Boolean(document.getElementById('nexus-zen-home'))&&getComputedStyle(document.getElementById('studio-focus-nav')).display==='none'"),'zen-home-has-no-tab-clutter');
   await js("document.getElementById('nexus-zen-menu').click();true");
   assert(await js("!document.getElementById('nexus-zen-drawer').hidden&&document.activeElement.id==='nexus-zen-find'"),'zen-menu-not-accessible');
