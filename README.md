@@ -68,8 +68,9 @@ reviewed exact `main` source without Railway or Render.
 A separate opt-in and quota-bounded image-generation gateway has been added to
 the Python cloud adapter source. It can request a single PNG/JPEG from a
 separately configured compatible provider after user review and authorization;
-there is no image-generation model bundled, no funded service, and no Studio
-chat image-generation control in this phase. [Engineering and privacy boundaries](docs/STUDIO-IMAGE-GENERATION.md).
+there is no image-generation model bundled or funded service. The Studio chat
+now includes an explicit generation review and download panel in source, but
+it stays unusable until a real compatible provider is configured and deployed. [Engineering and privacy boundaries](docs/STUDIO-IMAGE-GENERATION.md).
 
 ## NEXUS Music Lab — fully local original music (no Suno)
 
