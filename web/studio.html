@@ -4631,7 +4631,7 @@ const node=(tag,id)=>{const element=document.createElement(tag);if(id)element.id
 const box=node('details','studio-video-panel');box.className='studio-vision-panel';
 const heading=node('summary'),help=node('p');help.className='help';
 const imageLabel=node('label'),photo=node('input','studio-video-photo');
-photo.type='file';photo.accept='.png,.jpg,.jpeg,image/png,image/jpeg';imageLabel.append(photo);
+photo.type='file';photo.multiple=true;photo.accept='.png,.jpg,.jpeg,image/png,image/jpeg';imageLabel.append(photo);
 const generated=node('button','studio-video-from-generated');
 generated.className='secondary';generated.type='button';
 const audioLabel=node('label'),audio=node('input','studio-video-audio');
@@ -4647,7 +4647,13 @@ duration.value='6';durationLabel.append(duration);
 const fadeLabel=node('label');fadeLabel.className='inline';
 const fade=node('input','studio-video-fade');fade.type='checkbox';fade.checked=true;
 const fadeText=node('span');fadeLabel.append(fade,fadeText);
-controls.append(aspectLabel,durationLabel,fadeLabel);
+const transitionLabel=node('label');transitionLabel.className='inline';
+const crossfade=node('input','studio-video-crossfade');crossfade.type='checkbox';crossfade.checked=true;
+const crossfadeText=node('span');transitionLabel.append(crossfade,crossfadeText);
+controls.append(aspectLabel,durationLabel,fadeLabel,transitionLabel);
+const sceneList=node('div','studio-video-scenes');
+sceneList.setAttribute('role','list');
+sceneList.style.cssText='display:grid;gap:6px;margin:10px 0';
 const canvas=node('canvas','studio-video-canvas');canvas.width=640;canvas.height=360;
 canvas.hidden=true;canvas.setAttribute('role','img');
 canvas.style.cssText='display:block;max-width:100%;max-height:340px;margin:12px auto;border-radius:12px;background:#101618';
@@ -4663,12 +4669,13 @@ output.preload='metadata';output.hidden=true;
 output.style.cssText='display:block;max-width:100%;max-height:440px;margin:12px auto';
 const info=node('p','studio-video-status');info.className='help';info.setAttribute('role','status');
 info.setAttribute('aria-live','polite');
-box.append(heading,help,imageLabel,generated,audioLabel,controls,canvas,commands,meter,output,info);
+box.append(heading,help,imageLabel,generated,sceneList,audioLabel,controls,canvas,commands,meter,output,info);
 const insertAfter=$('studio-local-image-panel')||$('studio-imagegen-panel')||$('studio-compose');
 insertAfter.after(box);$('nexus-zen-suggestions').append(shortcut);
 
 const MAX_IMAGE=6_000_000,MAX_AUDIO=8_000_000,MAX_PIXELS=8_000_000,MAX_OUTPUT=32_000_000;
-let image=null,music=null,recording=null,videoURL=null,format=null,epoch=0,loading=false,preparing=false;
+const MAX_SCENES=4,MAX_TOTAL_IMAGE_BYTES=16_000_000,MAX_TOTAL_PIXELS=16_000_000;
+let image=null,scenes=[],music=null,recording=null,videoURL=null,format=null,epoch=0,loading=false,preparing=false;
 let selected=selection();
 function selection(){
  const s=window.NexusStudioUI.selection?.()||{};
@@ -4685,17 +4692,68 @@ function previewClear(){
  if(videoURL)URL.revokeObjectURL(videoURL);
  videoURL=format=null;download.disabled=true;
 }
+function drawBitmap(ctx,bitmap,opacity){
+ if(!bitmap||opacity<=0)return;
+ const scale=Math.min(canvas.width/bitmap.width,canvas.height/bitmap.height);
+ const w=bitmap.width*scale,h=bitmap.height*scale;
+ ctx.globalAlpha=opacity;
+ ctx.drawImage(bitmap,(canvas.width-w)/2,(canvas.height-h)/2,w,h);
+ ctx.globalAlpha=1;
+}
 function draw(t=0,seconds=6){
- const context=canvas.getContext('2d',{alpha:false});
- if(!context||!image)return;
- context.fillStyle='#101618';context.fillRect(0,0,canvas.width,canvas.height);
- const scale=Math.min(canvas.width/image.width,canvas.height/image.height);
- const w=image.width*scale,h=image.height*scale;
- const opacity=fade.checked?
-  Math.min(1,t/0.4,(seconds-t)/0.4):1;
- context.globalAlpha=Math.max(0,Math.min(1,opacity));
- context.drawImage(image,(canvas.width-w)/2,(canvas.height-h)/2,w,h);
- context.globalAlpha=1;
+ const ctx=canvas.getContext('2d',{alpha:false});
+ if(!ctx||!scenes.length)return;
+ ctx.fillStyle='#101618';ctx.fillRect(0,0,canvas.width,canvas.height);
+ const count=scenes.length,segment=seconds/count;
+ const elapsed=Math.max(0,Math.min(seconds,t));
+ const idx=Math.min(count-1,Math.floor(elapsed/segment));
+ const windowStart=(idx+1)*segment;
+ const transition=Math.min(0.35,segment*0.2);
+ const blend=(crossfade.checked&&idx<count-1&&elapsed>windowStart-transition)?
+  Math.max(0,Math.min(1,(elapsed-windowStart+transition)/transition)):0;
+ const outer=fade.checked?Math.max(0,Math.min(1,elapsed/0.4,(seconds-elapsed)/0.4)):1;
+ drawBitmap(ctx,scenes[idx].bitmap,outer*(1-blend));
+ if(blend>0)drawBitmap(ctx,scenes[idx+1].bitmap,outer*blend);
+}
+function freeScenes(){
+ for(const scene of scenes)scene.bitmap.close?.();
+ scenes=[];image=null;sceneList.replaceChildren();
+}
+function listScenes(){
+ sceneList.replaceChildren();
+ scenes.forEach((scene,index)=>{
+  const row=node('div');row.setAttribute('role','listitem');row.className='row';
+  const label=node('span');label.style.cssText='flex:2;min-width:120px;overflow-wrap:anywhere';
+  label.textContent=(index+1)+'. '+scene.label;
+  row.append(label);
+  for(const [action,textEN,textFA] of [
+   ['preview','Preview','پیش‌نمایش'],['up','Move up','انتقال به بالا'],
+   ['down','Move down','انتقال به پایین'],['remove','Remove','حذف']]){
+   const button=node('button');button.type='button';button.className='secondary';
+   button.textContent=words(textEN,textFA);
+   button.setAttribute('aria-label',words(textEN,textFA)+' '+(index+1));
+   button.dataset.sceneAction=action;
+   button.disabled=Boolean(recording||preparing||loading)||
+    (action==='up'&&index===0)||(action==='down'&&index===scenes.length-1);
+   button.addEventListener('click',()=>{
+    if(recording||preparing||loading)return;
+    if(action==='preview'){
+     const sec=Number(duration.value)||6;draw((index+0.5)*sec/scenes.length,sec);return;
+    }
+    if(action==='remove'){
+     const removed=scenes.splice(index,1)[0];removed.bitmap.close?.();
+    }else{
+     const other=index+(action==='up'?-1:1);
+     if(other<0||other>=scenes.length)return;
+     [scenes[index],scenes[other]]=[scenes[other],scenes[index]];
+    }
+    image=scenes[0]?.bitmap||null;
+    previewClear();layout();listScenes();refresh();
+   });
+   row.append(button);
+  }
+  sceneList.append(row);
+ });
 }
 function layout(){
  if(recording)return;
@@ -4724,43 +4782,60 @@ function releaseJob(job){
 function wipe(){
  epoch++;
  stopJob(true);
- if(image?.close)image.close();
- image=music=null;photo.value='';audio.value='';loading=false;preparing=false;
+ freeScenes();
+ music=null;photo.value='';audio.value='';loading=false;preparing=false;
  previewClear();canvas.width=0;canvas.height=0;canvas.hidden=true;meter.value=0;message('','');refresh();
 }
 function refresh(){
  const running=Boolean(recording),blocked=running||loading||preparing,unavailable=!mimeType();
- photo.disabled=audio.disabled=generated.disabled=aspect.disabled=duration.disabled=fade.disabled=blocked;
+ photo.disabled=audio.disabled=generated.disabled=aspect.disabled=duration.disabled=fade.disabled=crossfade.disabled=blocked;
+ for(const button of sceneList.querySelectorAll('button'))button.disabled=blocked||
+  (button.dataset.sceneAction==='up'&&button.closest('[role=listitem]')===sceneList.firstChild)||
+  (button.dataset.sceneAction==='down'&&button.closest('[role=listitem]')===sceneList.lastChild);
  start.disabled=blocked||!image||unavailable;
  cancel.disabled=!running&&!preparing;
  clear.disabled=loading;
  download.disabled=!videoURL;
  canvas.hidden=!image;
 }
-async function acceptImage(file){
- const ticket=++epoch;
- if(image?.close)image.close();image=null;previewClear();
- if(!file){photo.value='';refresh();return}
- if(!['image/png','image/jpeg'].includes(file.type)||file.size<=0||file.size>MAX_IMAGE){
-  photo.value='';message('Select a PNG/JPEG image up to 6 MB.','PNG یا JPEG تا ۶ مگابایت انتخاب کن.');refresh();return;
+async function acceptImages(files){
+ if(recording||preparing||loading)return;
+ const ticket=++epoch,selectedFiles=Array.from(files||[]);
+ freeScenes();previewClear();refresh();
+ if(!selectedFiles.length){photo.value='';return}
+ if(selectedFiles.length>MAX_SCENES||
+    selectedFiles.some(f=>!['image/png','image/jpeg'].includes(f.type)||
+      f.size<=0||f.size>MAX_IMAGE)||
+    selectedFiles.reduce((n,f)=>n+f.size,0)>MAX_TOTAL_IMAGE_BYTES){
+  photo.value='';message('Select up to 4 PNG/JPEG photos (6 MB each, 16 MB total).',
+   'حداکثر ۴ تصویر PNG/JPEG انتخاب کن (هرکدام ۶ و مجموعاً ۱۶ مگابایت).');
+  return;
  }
  loading=true;refresh();
- let candidate;
+ const decoded=[];let pixels=0;
  try{
-  candidate=await createImageBitmap(file,{imageOrientation:'from-image'});
-  if(ticket!==epoch){candidate.close?.();return}
-  if(!candidate.width||!candidate.height||candidate.width>4096||candidate.height>4096||
-      candidate.width*candidate.height>MAX_PIXELS)throw Error('dimensions');
-  image=candidate;layout();
-  message('Photo ready locally; nothing has been uploaded.',
-          'تصویر روی دستگاه آماده است؛ هیچ داده‌ای ارسال نشده است.');
+  for(const f of selectedFiles){
+   const bitmap=await createImageBitmap(f,{imageOrientation:'from-image'});
+   if(ticket!==epoch){bitmap.close?.();throw Error('stale')}
+   if(!bitmap.width||!bitmap.height||bitmap.width>4096||bitmap.height>4096||
+      bitmap.width*bitmap.height>MAX_PIXELS){
+    bitmap.close?.();throw Error('dimensions');
+   }
+   pixels+=bitmap.width*bitmap.height;
+   if(pixels>MAX_TOTAL_PIXELS){bitmap.close?.();throw Error('total-pixels')}
+   decoded.push({bitmap,label:f.name.slice(0,100)});
+  }
+  if(ticket!==epoch)throw Error('stale');
+  scenes=decoded;image=scenes[0].bitmap;layout();listScenes();
+  message('Storyboard loaded locally. Use Preview or move scenes to set order.',
+   'داستان تصویری روی دستگاه آماده شد؛ ترتیب صحنه‌ها را بررسی و جابه‌جا کن.');
  }catch{
-  candidate?.close?.();if(ticket===epoch){photo.value='';
-   message('The selected image could not be decoded within limits.',
-           'تصویر انتخابی در محدودهٔ مجاز قابل بازخوانی نیست.')}
+  for(const scene of decoded)scene.bitmap.close?.();
+  if(ticket===epoch){photo.value='';message('Photos exceeded safe limits or could not be decoded.',
+    'تصویرها خارج از محدودیت ایمن‌اند یا بازخوانی نشدند.')}
  }finally{if(ticket===epoch){loading=false;refresh()}}
 }
-photo.addEventListener('change',()=>{if(recording)return;acceptImage(photo.files?.[0])});
+photo.addEventListener('change',()=>{if(recording||preparing)return;acceptImages(photo.files)});
 generated.addEventListener('click',async()=>{
  const preview=$('studio-imagegen-preview');
  const src=preview?.getAttribute('src')||'';
@@ -4769,7 +4844,7 @@ generated.addEventListener('click',async()=>{
           'تصویر تولیدشدهٔ قابل استفاده در این برگه موجود نیست.');return;
  }
  const ticket=++epoch;
- if(image?.close)image.close();image=null;previewClear();loading=true;refresh();
+ freeScenes();previewClear();loading=true;refresh();
  let candidate;
  try{
   await preview.decode();
@@ -4777,7 +4852,8 @@ generated.addEventListener('click',async()=>{
   if(ticket!==epoch){candidate?.close?.();return}
   if(!candidate.width||!candidate.height||candidate.width>4096||candidate.height>4096||
      candidate.width*candidate.height>MAX_PIXELS)throw Error('dimensions');
-  image=candidate;photo.value='';layout();
+  scenes=[{bitmap:candidate,label:words('Generated image','تصویر ساخته‌شده')}];image=candidate;
+  photo.value='';layout();listScenes();
   message('Generated preview copied locally; no new provider call.',
           'پیش‌نمایش ساخته‌شده روی دستگاه کپی شد؛ درخواست جدیدی ارسال نشد.');
  }catch{
@@ -4798,7 +4874,7 @@ audio.addEventListener('change',()=>{
  }
  music=f;message('Audio selected locally. It is not uploaded.','صوت روی دستگاه انتخاب شد و ارسال نمی‌شود.');
 });
-for(const control of [aspect,duration,fade])
+for(const control of [aspect,duration,fade,crossfade])
  control.addEventListener('change',()=>{if(!recording){previewClear();layout();refresh()}});
 async function startRecording(){
  if(recording||loading||preparing||!image||!mimeType())return;
@@ -4902,24 +4978,26 @@ shortcut.addEventListener('click',()=>{box.open=true;photo.focus({preventScroll:
 function labels(){
  heading.textContent=words('Create a video locally (free)','ساخت ویدیوی محلی (رایگان)');
  help.textContent=words(
-  'Make a 3–12 second silent clip or add your own short audio. Your entire photo remains visible; optional fade adds a gentle transition. Uses your browser, not generative AI. Keep this tab open while recording. Recording quality and supported formats depend on your device.',
-  'یک کلیپ ۳ تا ۱۲ ثانیه‌ای بی‌صدا یا همراه با صوت کوتاه خودت بساز. تمام تصویر بدون برش باقی می‌ماند؛ محوشدن اختیاری گذار ملایمی ایجاد می‌کند. این ابزار محلی است نه هوش مصنوعی مولد. هنگام ضبط برگه را باز نگه دار.');
+  'Make a 3–12 second storyboard with 1–4 uncropped photos, optional crossfades and your audio. Arrange scenes before recording. This browser-only tool does not use generative AI.',
+  'از یک تا چهار تصویر بدون برش، یک کلیپ ۳ تا ۱۲ ثانیه‌ای با گذار نرم و صوت اختیاری بساز. پیش از ضبط ترتیب صحنه‌ها را مشخص کن؛ این ابزار هوش مصنوعی مولد نیست.');
  const labelText=(parent,child,en,fa)=>{
   if(parent.firstChild?.nodeType===3)parent.firstChild.remove();
   parent.insertBefore(document.createTextNode(words(en,fa)),child)
  };
- labelText(imageLabel,photo,'Photo (PNG/JPEG, ≤ 6 MB)','تصویر (PNG/JPEG تا ۶ مگابایت)');
+ labelText(imageLabel,photo,'Photos: 1–4 PNG/JPEG (6 MB each, 16 MB total)','۱ تا ۴ تصویر PNG/JPEG (هرکدام ۶ و مجموعاً ۱۶ مگابایت)');
  generated.textContent=words('Use generated image from this tab','استفاده از تصویر ساخته‌شده در این برگه');
  labelText(audioLabel,audio,'Optional audio (≤ 8 MB, ≤ 30 s)','صوت اختیاری (تا ۸ مگابایت و ۳۰ ثانیه)');
  labelText(aspectLabel,aspect,'Frame','قالب تصویر');
  labelText(durationLabel,duration,'Duration','مدت');
  fadeText.textContent=words('Fade in/out','محوشدن آغاز و پایان');
+ crossfadeText.textContent=words('Crossfade scenes','گذار نرم بین صحنه‌ها');
+ listScenes();
  start.textContent=words('Record locally','شروع ضبط محلی');
  cancel.textContent=words('Stop and discard','توقف و حذف ضبط');
  clear.textContent=words('Clear media','پاک‌سازی فایل‌ها');
  download.textContent=words('Download clip','دانلود ویدیو');
  shortcut.textContent=words('Make video','ساخت ویدیو');
- canvas.setAttribute('aria-label',words('Uncropped photo canvas','پیش‌نمایش بدون برش تصویر'));
+ canvas.setAttribute('aria-label',words('Uncropped storyboard canvas','پیش‌نمایش بدون برش تصاویر'));
  if(!mimeType())message(
   'This browser cannot record a local video in a supported format.',
   'این مرورگر از ضبط ویدیوی محلی با فرمت پشتیبانی‌شده برخوردار نیست.');
