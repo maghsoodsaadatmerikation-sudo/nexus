@@ -63,6 +63,16 @@ source before advertising it as deployed. The separate
 [local Android/Termux ZIP](docs/STUDIO-PHONE-LOCAL.md) can be built from the
 reviewed exact `main` source without Railway or Render.
 
+## Free local image-to-video clips (source candidate)
+
+NEXUS Studio now has a chat-adjacent local video composer in the development
+branch: a PNG/JPEG or explicit generated-image handoff, uncropped landscape or
+portrait frames, optional short background audio, gentle fade, 3–12-second
+recording using the browser's MediaRecorder, and explicit video download.
+This is local browser encoding, **not generative AI video**; browser codec
+support varies, and no hosted video model, deployment or public publishing
+is included. See [bounded video composer design](docs/STUDIO-LOCAL-VIDEO.md).
+
 ## Free local image editor
 
 The Studio chat source now also contains a small, no-upload image editor:
