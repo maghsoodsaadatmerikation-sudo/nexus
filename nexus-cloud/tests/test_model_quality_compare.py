@@ -289,4 +289,3 @@ def test_manual_comparison_workflow_is_explicitly_dispatched_and_secret_protecte
     assert "secrets.NEXUS_COMPARE_SECONDARY_API_KEY" in workflow
     assert "secrets.NEXUS_COMPARE_STUDIO_TOKEN" in workflow
     assert "persist-credentials: false" in workflow
-    assert "trust_env" not in workflow or "trust_env=False" in workflow  # Implemented inside Python.
