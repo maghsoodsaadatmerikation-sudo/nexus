@@ -29,10 +29,11 @@ curl --fail --silent --show-error --max-time 5 http://127.0.0.1:3000/readyz
 ```
 
 The Docker HEALTHCHECK uses `/livez`: quarantine must not create a restart loop.
-Traffic admission monitoring should check `/readyz` separately. The current Render
-Blueprint's root health path is a liveness/UI check; it does not establish this new
-admission-readiness condition. Repository verification of these routes does not
-prove a deployed provider's routing configuration.
+Traffic admission monitoring should check `/readyz` separately. The proposed
+Render Blueprint also uses `/livez` for its ongoing health check and requires
+an independent pre-promotion `/readyz` observation. This distinction avoids
+restarting a deliberately quarantined service. Source verification cannot
+prove a deployed provider's routing or health-check configuration.
 
 Readiness is deliberately limited to the recovery gate. A 200 response is not a
 promise that a subsequent request will pass auth, policy, rate/capacity limits,

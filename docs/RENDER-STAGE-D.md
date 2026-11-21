@@ -11,18 +11,57 @@ The repository root `render.yaml` defines a single paid Docker web service in Fr
 - `NEXUS_DATA_DIR=/data`,
 - `NEXUS_BIND_ADDR=0.0.0.0:3000`,
 - public HTTPS managed by Render,
-- repository deploys gated on passing GitHub checks,
+- HTTP liveness health check on `/livez` (do not use `/readyz` as Render's continuously polled health path: its intentional 503 during recovery quarantine can trigger restart loops),
+- `autoDeployTrigger: off` (manual deployment only; CI success is not release permission),
 - `NEXUS_API_TOKEN` supplied interactively as a secret (`sync: false`).
 
 The service intentionally remains single-instance because the NEXUS workspace store is local durable state. Do not add horizontal scaling while this persistence model is in use.
 
+## Mandatory live-service deployment hold (before any future main merge)
+
+The source Blueprint is configured for manual deployment only, but this is
+**not proof of the settings of any already running Render service**. Its
+name is `nexus-durable-stage-d`; an older service named `nexus` or a
+separate static Studio deployment may have different settings. Never infer
+that updating this Blueprint reconfigures those services.
+
+For each actual Git-connected production service:
+
+1. Identify the service by its Render service ID, linked repository, branch
+   and persistent disk. Do not choose a similarly named service.
+2. In **Service Settings → Auto-Deploy**, set **Off**; independently read
+   back the displayed setting. Turning off automatic deployment does not
+   interrupt the currently running service.
+3. If managed by a Render Blueprint, also disable **Blueprint Auto Sync**;
+   a Blueprint sync is a separate configuration/redeployment path.
+4. Record a sanitized operator receipt containing service ID, linked branch,
+   observed manual-only status, operator identity and observation time.
+   Record no bearer token, API key or customer data.
+5. Do not merge a candidate that would change a production-linked executable
+   until actual full-volume backup, rollback anchor and recovery evidence
+   appropriate to that executable have been independently reviewed.
+
+For release acceptance, **separately** query `GET /readyz` over the actual
+HTTPS origin. Require HTTP 200 and exact `status=ready`; 503 means the restored
+service is quarantined and must not be promoted. This independent readiness
+test does not turn a synthetic/partial backup into production recovery evidence.
+Use `python3 scripts/check-render-readiness.py` with `NEXUS_BASE_URL` set to
+the inspected origin. It sends no bearer token and makes no mutations.
+
+The repository gate `scripts/verify-render-manual-deployment.py` checks the
+exact reviewed source profile and its adversarial test fixtures. It cannot
+query the Render service, block a dashboard/API manual deploy, disable legacy
+service triggers or prove the live Blueprint sync state. The live-service
+check is an **unfulfilled operational dependency** until an operator
+actually verifies it. A successful CI job is never deployment approval.
+
 ## 1. Create the durable service
 
-1. In Render, create a new Blueprint from this repository after `render.yaml` is merged to `main`.
-2. Keep the Blueprint pointed at `main`.
+1. In Render, create a new Blueprint from this repository only after reviewing the candidate and confirming that its Auto Sync is disabled.
+2. Keep the Blueprint pointed at the explicitly reviewed source revision; ensure `Auto-Deploy` is `Off` before promotion.
 3. When Render asks for `NEXUS_API_TOKEN`, provide a long operator-held random secret. Never commit it.
 4. Confirm the service is using the paid `0.5c-512mb` plan and that the `nexus-data` disk is mounted at `/data`.
-5. Wait for the deploy to become live and record the exact Git commit shown by the Render deploy in an independent operator note.
+5. Manually deploy the exact approved Git commit after backup and rollback checks; record the deployed Git commit in an independent operator note.
 6. Confirm that the same 40-character commit has a successful `NEXUS Verification` run in GitHub Actions.
 
 Do not start Stage D against a free/ephemeral service or against a deploy whose exact commit cannot be identified.
