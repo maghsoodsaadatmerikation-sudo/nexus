@@ -132,6 +132,20 @@ window.addEventListener('load',async()=>{
   change('versions',current().documents[0].versions[0].id);assert($('version-diff').textContent.includes('version one')&&$('version-diff').textContent.includes('version two'),'version-diff');$('load-version').click();assert($('editor').value==='version one','load-old-version-into-draft');$('save-version').click();
   const injection='<img src=x onerror=alert(1)>';fill('message',injection);$('guide').click();assert($('messages').textContent.includes(injection)&&!$('messages').querySelector('img'),'untrusted-message-is-inert');
   fill('gateway','https://synthetic.invalid');fill('gateway-token','TRANSIENT ACCESS TOKEN');$('check-model').click();await wait(()=>$('model-status').textContent.includes('synthetic-model'));
+  assert($('studio-compose-model-info').hidden&&$('studio-compose-mode').value==='guide',
+   'local-guide-is-default-and-no-model-availability-is-implied');
+  change('studio-compose-mode','model');
+  const available=NexusStudioUI.modelAvailability();
+  assert(!$('studio-compose-model-info').hidden&&
+   available.checked&&available.configured&&available.model==='synthetic-model'&&
+   $('studio-compose-model-state').textContent.includes('synthetic-model')&&
+   $('studio-compose-model-state').textContent.includes('not verified')&&network===1,
+   'chat-model-choice-shows-only-checked-config-not-fake-live-access');
+  assert($('studio-compose-model-check').type==='button',
+   'checking-model-settings-is-manual-and-separate-from-billable-model-sends');
+  change('studio-compose-mode','guide');
+  assert($('studio-compose-model-info').hidden&&network===1,
+   'switching-to-local-guide-does-not-contact-provider');
   const studyMode=$('study-mode');
   studyMode.click();fill('message','Fractions');$('guide').click();
   assert($('messages').textContent.includes('Local study guide')&&network===1,'study-guide-is-local');
@@ -139,6 +153,14 @@ window.addEventListener('load',async()=>{
   const studyReview=JSON.parse($('request-context').textContent);
   assert(studyReview.response_style==='study'&&studyReview.messages[0].content.includes('User-selected Study mode')&&
    !$('consent').checked&&network===1,'study-uses-reviewed-model-context');
+  change('studio-compose-mode','model');
+  assert($('request-review').hidden&&!$('consent').checked&&
+   !NexusStudioUI.uiStatus().pendingReview,'switching-response-mode-revokes-reviewed-request');
+  $('prepare').click();assert(!$('request-review').hidden,'request-can-be-reviewed-again-after-mode-change');
+  change('studio-compose-mode','guide');
+  assert($('request-review').hidden&&!$('consent').checked&&network===1,
+   'return-to-local-mode-revokes-model-consent-without-provider-call');
+  $('prepare').click();
   studyMode.click();
   assert($('request-review').hidden&&!$('consent').checked,'changing-study-mode-revokes-review');
   assert(!$('decision-mode')&&!$('decision-mode-help'),'decision-guidance-has-no-separate-control');
