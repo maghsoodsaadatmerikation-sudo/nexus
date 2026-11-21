@@ -303,17 +303,65 @@ def run_live(client: httpx.Client, provider: tuple[str, str, str, str] | ModelSe
     return grade(answers, live=True)
 
 
+def smoke_live(client: httpx.Client, provider: ModelSettings) -> dict:
+    """One fictional request; a connection smoke test, never the quality gate.
+
+    We do not record the raw provider answer, exception text, model token or URL.
+    Even a PASS is insufficient for capability or public-release approval.
+    """
+    probe = PROBES[0]  # Fixed fictional factual recall; no user data.
+    try:
+        answer = query_provider(client, provider, probe)
+        result = "PASS" if passes(probe, answer) else "FAIL"
+    except (httpx.RequestError, httpx.TimeoutException, ValueError, RecursionError):
+        result = "ERROR"
+    return {
+        "status": "PASS" if result == "PASS" else "FAIL",
+        "scope": "single_fictional_provider_smoke",
+        "result": result,
+        "probe_id": probe.key,
+        "provider_requests_planned": 1,
+        "provider_contact_attempted": True,
+        "live_model_evaluated": False,
+        "quality_gate": "NOT_RUN",
+        "truth_claim": "NOT_PROVEN",
+        "authority": "none",
+    }
+
+
+def configuration_preflight() -> dict:
+    """Never contact a provider or reveal endpoint, model or credentials."""
+    configured = read_model_settings() is not None
+    return {
+        "status": "READY_TO_TEST" if configured else "NOT_READY",
+        "scope": "configuration_only",
+        "valid_configuration": configured,
+        "provider_contact_attempted": False,
+        "live_model_evaluated": False,
+        "quality_gate": "NOT_RUN",
+        "truth_claim": "NOT_PROVEN",
+        "authority": "none",
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--self-test", action="store_true", help="Offline, canned synthetic responses")
-    mode.add_argument("--live", action="store_true", help="Contact configured provider with synthetic probes")
+    mode.add_argument("--check-config", action="store_true", help="Validate operator configuration offline, with no secrets printed")
+    mode.add_argument("--smoke-live", action="store_true", help="Explicitly contact a configured provider once, using a fictional prompt")
+    mode.add_argument("--live", action="store_true", help="Contact configured provider with all 15 fictional quality probes")
     parser.add_argument("--minimum-pass-rate", type=float, default=0.85)
     args = parser.parse_args()
     if not 0 <= args.minimum_pass_rate <= 1:
         parser.error("minimum pass rate must be between 0 and 1")
+    if args.check_config:
+        report = configuration_preflight()
+        print(json.dumps(report, sort_keys=True))
+        return 0 if report["valid_configuration"] else 2
     if args.self_test:
         report = grade({p.key: p.good_reply for p in PROBES}, live=False)
+        report["status"] = "PASS" if meets_gate(report, minimum_pass_rate=args.minimum_pass_rate) else "FAIL"
     else:
         if os.getenv("NEXUS_QUALITY_EVAL_CONSENT", "") != "YES":
             print(json.dumps({"status": "NOT_RUN", "reason": "explicit_operator_consent_required"}))
@@ -323,8 +371,9 @@ def main() -> int:
             print(json.dumps({"status": "NOT_RUN", "reason": "model_provider_not_configured"}))
             return 2
         with httpx.Client(trust_env=False, follow_redirects=False) as client:
-            report = run_live(client, provider)
-    report["status"] = "PASS" if meets_gate(report, minimum_pass_rate=args.minimum_pass_rate) else "FAIL"
+            report = smoke_live(client, provider) if args.smoke_live else run_live(client, provider)
+        if args.live:
+            report["status"] = "PASS" if meets_gate(report, minimum_pass_rate=args.minimum_pass_rate) else "FAIL"
     print(json.dumps(report, ensure_ascii=False, sort_keys=True))
     return 0 if report["status"] == "PASS" else 1
 
