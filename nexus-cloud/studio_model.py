@@ -5,6 +5,7 @@ import hmac
 import hashlib
 import json
 import os
+import re
 from threading import Lock
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
@@ -84,6 +85,11 @@ def create_model_request_budget():
 # destination is required when Gemini credentials are used, preventing a
 # misconfigured arbitrary host from receiving the provider key.
 GEMINI_CHAT_COMPLETIONS = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+# The Anthropic Messages protocol is NOT OpenAI Chat Completions-compatible.
+# Keep its endpoint and API version exact; never forward its secret to arbitrary URLs.
+ANTHROPIC_MESSAGES = "https://api.anthropic.com/v1/messages"
+ANTHROPIC_API_VERSION = "2026-10-21"
+ANTHROPIC_WORKSPACE_ID_PATTERN = re.compile(r"wrkspc_[A-Za-z0-9]{10,128}\Z")
 POLICY = (
     "You are a non-authoritative NEXUS assistant. Answer the user's actual question "
     "directly, in the user's language unless requested otherwise, with useful detail "
@@ -143,6 +149,7 @@ class ModelSettings:
     provider_api_key: str = field(repr=False)
     streaming: bool
     policy: str = field(repr=False)
+    anthropic_workspace_id: str = field(default="", repr=False)
 
 
 def read_model_settings() -> ModelSettings | None:
@@ -154,12 +161,13 @@ def read_model_settings() -> ModelSettings | None:
     token = env.get("NEXUS_STUDIO_TOKEN", "").strip()
     key = env.get("NEXUS_MODEL_API_KEY", "").strip()
     kind = env.get("NEXUS_MODEL_ADAPTER", "generic").strip()
+    workspace_id = env.get("NEXUS_MODEL_WORKSPACE_ID", "")
     try:
         p = urlsplit(endpoint)
         _ = p.port
     except ValueError:
         return None
-    if (kind not in {"generic", "deepseek", "gemini"} or not model or len(model) > 150
+    if (kind not in {"generic", "deepseek", "gemini", "anthropic"} or not model or len(model) > 150
         or len(token) < 32 or not p.hostname
         or p.username is not None or p.password is not None or p.query or p.fragment
         or any(c.isspace() for c in endpoint)
@@ -167,10 +175,21 @@ def read_model_settings() -> ModelSettings | None:
         return None
     if kind == "gemini" and (endpoint != GEMINI_CHAT_COMPLETIONS or not key):
         return None
+    # Explicit workspace routing is Anthropic-only. Do not silently send traffic
+    # to an unrelated provider when an Anthropic workspace was expected.
+    if workspace_id and (kind != "anthropic" or not ANTHROPIC_WORKSPACE_ID_PATTERN.fullmatch(workspace_id)):
+        return None
+    # Anthropic streaming uses a different SSE event contract. Disable it
+    # explicitly instead of routing provider events through the OpenAI parser.
+    if kind == "anthropic" and (
+        endpoint != ANTHROPIC_MESSAGES or not key
+        or env.get("NEXUS_MODEL_STREAMING", "") == "1"
+    ):
+        return None
     return ModelSettings(endpoint=endpoint, model_id=model, studio_token=token,
                          provider_host=p.hostname, adapter=kind, provider_api_key=key,
                          streaming=env.get("NEXUS_MODEL_STREAMING", "") == "1",
-                         policy=POLICY)
+                         policy=POLICY, anthropic_workspace_id=workspace_id)
 
 
 def config():
@@ -192,12 +211,22 @@ def provider_payload(model_id: str, messages: list[dict], *, stream: bool,
     field. Provider-specific advanced functions are deliberately excluded.
     """
     kind = adapter() if adapter_name is None else adapter_name
-    if kind not in {"generic", "deepseek", "gemini"}:
+    if kind not in {"generic", "deepseek", "gemini", "anthropic"}:
         raise ValueError("Unsupported model adapter")
     if mode not in {"standard", "thinking", "non-thinking"} or (
         mode != "standard" and kind != "deepseek"
     ):
         raise ValueError("Unsupported model mode")
+    if kind == "anthropic":
+        if stream or not messages or messages[0].get("role") != "system":
+            raise ValueError("Anthropic requires a buffered request with a server system policy")
+        if not all(m.get("role") in {"user", "assistant"} for m in messages[1:]):
+            raise ValueError("Unsupported Anthropic conversation role")
+        return {
+            "model": model_id, "system": messages[0]["content"],
+            "messages": messages[1:], "stream": False,
+            "max_tokens": max_output_tokens,
+        }
     payload = {"model": model_id, "messages": messages, "stream": stream}
     if kind != "gemini":
         payload["store"] = False
@@ -212,13 +241,19 @@ def configuration_id(c):
     if isinstance(c, ModelSettings):
         endpoint, model, kind, streaming, policy = (
             c.endpoint, c.model_id, c.adapter, c.streaming, c.policy)
+        workspace_id = c.anthropic_workspace_id
     else:
         # Retain tuple API for offline probes and existing operator scripts.
         endpoint, model, kind, streaming, policy = (
             c[0], c[1], adapter(), streaming_enabled(), POLICY)
+        workspace_id = os.getenv("NEXUS_MODEL_WORKSPACE_ID", "") if kind == "anthropic" else ""
     suffix = "" if kind == "generic" else "\nadapter:" + kind
     if streaming:
         suffix += "\nstreaming:v1"
+    if kind == "anthropic":
+        suffix += "\napi-version:" + ANTHROPIC_API_VERSION
+        if workspace_id:
+            suffix += "\nworkspace-sha256:" + hashlib.sha256(workspace_id.encode("utf-8")).hexdigest()
     policy_hash = hashlib.sha256(policy.encode("utf-8")).hexdigest()
     return hashlib.sha256(
         (endpoint + "\n" + model + suffix + "\npolicy-sha256:" + policy_hash).encode("utf-8")
@@ -227,6 +262,24 @@ def configuration_id(c):
 
 def streaming_enabled():
     return os.getenv("NEXUS_MODEL_STREAMING", "") == "1"
+
+
+def provider_headers(kind: str, api_key: str, workspace_id: str = "") -> dict[str, str]:
+    """One shared, header-injection-resistant authentication contract.
+
+    The operator workspace selector never comes from browser/model content.
+    x-api-key remains supported by Anthropic; no operator Studio token goes up.
+    """
+    if workspace_id and (kind != "anthropic" or not ANTHROPIC_WORKSPACE_ID_PATTERN.fullmatch(workspace_id)):
+        raise ValueError("Invalid Anthropic workspace configuration")
+    if kind == "anthropic":
+        if not api_key:
+            raise ValueError("Anthropic API credential required")
+        out = {"x-api-key": api_key, "anthropic-version": ANTHROPIC_API_VERSION}
+        if workspace_id:
+            out["anthropic-workspace-id"] = workspace_id
+        return out
+    return {"authorization": "Bearer " + api_key} if api_key else {}
 
 
 class CompletionStream(StreamingResponse):
@@ -283,6 +336,36 @@ def accepted_buffered_answer(raw: bytes) -> tuple[str, bool]:
         return content, finish_reason == "length"
     except (KeyError, IndexError, TypeError, ValueError, RecursionError):
         raise ValueError("Invalid text-only model response") from None
+
+
+def accepted_anthropic_answer(raw: bytes) -> tuple[str, bool]:
+    """Accept only a completed Anthropic text-only Message; never expose tools.
+
+    Multiple text blocks may be returned, but tool use, thinking blocks, refusal
+    envelopes, or partial/unknown stop reasons must not become a completed chat.
+    """
+    try:
+        message = json.loads(raw)
+        if (not isinstance(message, dict) or message.get("type") != "message"
+            or message.get("role") != "assistant"
+            or message.get("stop_reason") not in {"end_turn", "max_tokens"}):
+            raise ValueError("Invalid Anthropic message envelope")
+        blocks = message.get("content")
+        if not isinstance(blocks, list) or not 1 <= len(blocks) <= 32:
+            raise ValueError("Invalid Anthropic content blocks")
+        pieces = []
+        for block in blocks:
+            if (not isinstance(block, dict) or block.get("type") != "text"
+                or not isinstance(block.get("text"), str)):
+                raise ValueError("Anthropic response contained a non-text block")
+            pieces.append(block["text"])
+        answer = "".join(pieces)
+        if not answer.strip() or answer_utf16_units(answer) > 24000:
+            raise ValueError("Anthropic answer size or content invalid")
+        answer.encode("utf-8")
+        return answer, message["stop_reason"] == "max_tokens"
+    except (KeyError, TypeError, ValueError, RecursionError, UnicodeError):
+        raise ValueError("Invalid text-only Anthropic response") from None
 
 
 async def sse_data(chunks, deadline):
@@ -475,10 +558,8 @@ def register(app):
                 raise HTTPException(422, "Execution mode is unsupported by this adapter")
             messages = [{"role": "system", "content": c.policy}]
             messages.extend(m.model_dump() for m in data.messages)
-            headers = {"accept-encoding": "identity"}
-            key = c.provider_api_key
-            if key:
-                headers["authorization"] = "Bearer " + key
+            headers = {"accept-encoding": "identity", **provider_headers(
+                c.adapter, c.provider_api_key, c.anthropic_workspace_id)}
             payload = provider_payload(c.model_id, messages, stream=stream,
                                        max_output_tokens=data.max_output_tokens,
                                        mode=data.mode, adapter_name=c.adapter)
@@ -511,7 +592,10 @@ def register(app):
                             raise HTTPException(502, "Model response exceeded limit")
                         raw.extend(chunk)
             try:
-                content, truncated = accepted_buffered_answer(bytes(raw))
+                content, truncated = (
+                    accepted_anthropic_answer(bytes(raw)) if c.adapter == "anthropic"
+                    else accepted_buffered_answer(bytes(raw))
+                )
             except ValueError:
                 raise HTTPException(502, "Invalid text-only model response") from None
             return JSONResponse({"text": content, "origin": "model", "model": c.model_id,

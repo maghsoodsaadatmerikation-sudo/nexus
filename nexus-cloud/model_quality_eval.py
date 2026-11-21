@@ -20,11 +20,13 @@ from studio_model import (
     MODEL_TIMEOUT,
     POLICY,
     accepted_buffered_answer,
+    accepted_anthropic_answer,
     ModelSettings,
     read_model_settings,
     config,
     adapter,
     provider_payload,
+    provider_headers,
 )
 
 
@@ -287,13 +289,14 @@ def query_provider(client: httpx.Client, provider: tuple[str, str, str, str] | M
     if isinstance(provider, ModelSettings):
         endpoint, model_id = provider.endpoint, provider.model_id
         api_key, kind, policy = provider.provider_api_key, provider.adapter, provider.policy
+        workspace_id = provider.anthropic_workspace_id
     else:
         # Compatibility for synthetic HTTPX tests; CLI live evaluation snapshots.
         endpoint, model_id, _studio_token, _hostname = provider
         api_key, kind, policy = os.getenv("NEXUS_MODEL_API_KEY", "").strip(), adapter(), POLICY
-    headers = {"accept-encoding": "identity", "accept": "application/json"}
-    if api_key:
-        headers["authorization"] = "Bearer " + api_key
+        workspace_id = ""  # Legacy tuples cannot prove a reviewed workspace selection.
+    headers = {"accept-encoding": "identity", "accept": "application/json",
+               **provider_headers(kind, api_key, workspace_id)}
     payload = provider_payload(
         model_id,
         [{"role": "system", "content": policy},
@@ -314,7 +317,10 @@ def query_provider(client: httpx.Client, provider: tuple[str, str, str, str] | M
                 raise ProviderProbeError("invalid_response")
             body.extend(chunk)
     try:
-        text, truncated = accepted_buffered_answer(bytes(body))
+        text, truncated = (
+            accepted_anthropic_answer(bytes(body)) if kind == "anthropic"
+            else accepted_buffered_answer(bytes(body))
+        )
     except ValueError:
         raise ProviderProbeError("invalid_response") from None
     if truncated:
