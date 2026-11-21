@@ -210,7 +210,7 @@ window.addEventListener('load',async()=>{
    !branchHtml.includes('TRANSIENT ACCESS TOKEN')&&!branchDoc.querySelector('script,img,iframe,form')&&network===beforeExportCalls,
    'conversation-html-excludes-other-branches-and-context-stays-local');
   const wordButton=formatted.parentElement.querySelector('[data-chat-word]');
-  const editor=$('editor'),originalCanvasText=editor.value;
+  const canvasEditor=$('editor'),originalCanvasText=canvasEditor.value;
   let answerWord,canvasWord,wordName;
   HTMLAnchorElement.prototype.click=function(){wordName=this.download};
   try{
@@ -221,11 +221,11 @@ window.addEventListener('load',async()=>{
    assert(wordName==='nexus-answer.docx'&&answerWord.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'answer-downloads-as-editable-word');
    URL.createObjectURL=blob=>{canvasWord=blob;return previousCreate.call(URL,blob)};
-   editor.value='پیش‌نویس\n\n<draft> &\tfinal';
+   canvasEditor.value='پیش‌نویس\n\n<draft> &\tfinal';
    $('export-document-word').click();
    assert(wordName==='nexus-document.docx'&&canvasWord,'canvas-downloads-as-editable-word');
   }finally{
-   editor.value=originalCanvasText;
+   canvasEditor.value=originalCanvasText;
    URL.createObjectURL=previousCreate;HTMLAnchorElement.prototype.click=previousClick;window.confirm=previousConfirm;
   }
   assert((await NexusOfficeZip.readDocx(answerWord))==='NEXUS answer\n'+formattedReply.trim(),
