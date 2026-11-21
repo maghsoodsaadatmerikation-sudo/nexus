@@ -52,6 +52,12 @@ class ModelRequestBudget:
             self._attempted += 1
             return True
 
+    def snapshot(self) -> dict[str, int]:
+        """Coherent, secret-free counters for authenticated local diagnostics."""
+        with self._lock:
+            return {"limit": self.limit, "attempted": self._attempted,
+                    "remaining": max(0, self.limit - self._attempted)}
+
 
 # Gemini's official OpenAI-compatible Chat Completions endpoint. An exact
 # destination is required when Gemini credentials are used, preventing a
@@ -366,6 +372,44 @@ def register(app):
                              **({"streaming": True} if c and c.streaming else {}),
                              **({"modes": ["standard", "thinking", "non-thinking"], "max_output_tokens": 8192} if c and c.adapter == "deepseek" else {})},
                             headers={"Cache-Control": "no-store"})
+
+    @app.get("/studio-api/operator-readiness")
+    async def operator_readiness(request: Request):
+        """Authenticated, offline staging diagnostics, never a provider probe.
+
+        The separate Studio operator credential works even if a provider is
+        incomplete, allowing safe diagnosis without treating it as configured.
+        """
+        c = read_model_settings()
+        token = c.studio_token if c else os.getenv("NEXUS_STUDIO_TOKEN", "").strip()
+        if len(token) < 32:
+            raise HTTPException(503, "Studio operator diagnostics unavailable")
+        authorization_values = request.headers.getlist("authorization")
+        authorization = authorization_values[0] if len(authorization_values) == 1 else ""
+        if not hmac.compare_digest(authorization.encode(), ("Bearer " + token).encode()):
+            raise HTTPException(401, "Studio authentication required",
+                                headers={"WWW-Authenticate": "Bearer",
+                                         "Cache-Control": "no-store"})
+        budget = request.app.state.model_budget.snapshot()
+        readiness = ("NOT_CONFIGURED" if c is None
+                     else "LOCAL_BUDGET_EXHAUSTED" if budget["remaining"] == 0
+                     else "READY_TO_TEST")
+        return JSONResponse({
+            "readiness": readiness,
+            "configuration_valid": c is not None,
+            "model": c.model_id if c else None,
+            "provider_host": c.provider_host if c else None,
+            "adapter": c.adapter if c else None,
+            "streaming": c.streaming if c else False,
+            "local_request_budget": budget,
+            "budget_scope": "one_process_until_restart",
+            "provider_live_verification": "NOT_RECORDED",
+            "provider_contact_attempted": False,
+            "operator_next_step": ("configure_model_on_server" if c is None
+                                   else "restart_or_set_provider_quota" if budget["remaining"] == 0
+                                   else "explicit_single_probe_smoke"),
+            "authority": "none",
+        }, headers={"Cache-Control": "no-store"})
 
     async def handle_response(request: Request, stream: bool):
         c = read_model_settings()

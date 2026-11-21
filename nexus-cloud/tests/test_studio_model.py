@@ -263,6 +263,121 @@ def test_policy_change_invalidates_review_and_does_not_contact_provider(monkeypa
 
 
 
+def test_operator_readiness_requires_single_valid_studio_bearer_without_provider_contact(monkeypatch):
+    monkeypatch.setenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS", "2")
+    with configured(monkeypatch, lambda _: pytest.fail("diagnostics contacted provider")) as client:
+        endpoint = "/studio-api/operator-readiness"
+        assert client.get(endpoint).status_code == 401
+        assert client.get(endpoint, headers={"authorization": "Bearer wrong"}).status_code == 401
+        assert client.get(endpoint, headers={"authorization": "Basic " + TOKEN}).status_code == 401
+        duplicate_headers = [("authorization", "Bearer " + TOKEN),
+                             ("authorization", "Bearer " + TOKEN)]
+        assert client.get(endpoint, headers=duplicate_headers).status_code == 401
+        assert client.app.state.model_budget.snapshot()["attempted"] == 0
+
+
+def test_operator_readiness_is_redacted_offline_and_uses_atomic_budget_snapshot(monkeypatch):
+    monkeypatch.setenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS", "2")
+    calls = []
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={"choices": [
+            {"message": {"role": "assistant", "content": "Accepted text"},
+             "finish_reason": "stop"}]})
+    with configured(monkeypatch, handler) as client:
+        endpoint = "/studio-api/operator-readiness"
+        ready = client.get(endpoint, headers=AUTH)
+        assert ready.status_code == 200
+        assert ready.headers["cache-control"] == "no-store"
+        payload = ready.json()
+        assert payload == {
+            "readiness": "READY_TO_TEST",
+            "configuration_valid": True,
+            "model": "configured-test-model",
+            "provider_host": "provider.example",
+            "adapter": "generic",
+            "streaming": False,
+            "local_request_budget": {"limit": 2, "attempted": 0, "remaining": 2},
+            "budget_scope": "one_process_until_restart",
+            "provider_live_verification": "NOT_RECORDED",
+            "provider_contact_attempted": False,
+            "operator_next_step": "explicit_single_probe_smoke",
+            "authority": "none",
+        }
+        for secret in [TOKEN, "provider-secret-not-for-browser",
+                       "https://provider.example/v1/chat/completions"]:
+            assert secret not in ready.text
+        assert not calls
+        assert client.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 200
+        state = client.get(endpoint, headers=AUTH).json()
+        assert state["local_request_budget"] == {"limit": 2, "attempted": 1, "remaining": 1}
+        assert state["provider_live_verification"] == "NOT_RECORDED"
+        assert client.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 200
+        exhausted = client.get(endpoint, headers=AUTH).json()
+        assert exhausted["readiness"] == "LOCAL_BUDGET_EXHAUSTED"
+        assert exhausted["local_request_budget"] == {"limit": 2, "attempted": 2, "remaining": 0}
+        assert exhausted["operator_next_step"] == "restart_or_set_provider_quota"
+        assert client.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 429
+        assert len(calls) == 2
+        assert client.get(endpoint, headers=AUTH).json()["local_request_budget"] == exhausted["local_request_budget"]
+
+
+def test_operator_readiness_is_available_without_provider_when_studio_token_is_valid(monkeypatch):
+    monkeypatch.delenv("NEXUS_MODEL_URL", raising=False)
+    monkeypatch.delenv("NEXUS_MODEL_ID", raising=False)
+    monkeypatch.setenv("NEXUS_STUDIO_TOKEN", TOKEN)
+    monkeypatch.setenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS", "1")
+    with TestClient(main.app) as client:
+        response = client.get("/studio-api/operator-readiness", headers=AUTH)
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["readiness"] == "NOT_CONFIGURED"
+        assert payload["configuration_valid"] is False
+        assert payload["model"] is None and payload["provider_host"] is None
+        assert payload["adapter"] is None and payload["streaming"] is False
+        assert payload["operator_next_step"] == "configure_model_on_server"
+        assert payload["local_request_budget"]["remaining"] == 1
+        assert payload["provider_contact_attempted"] is False
+
+
+def test_operator_readiness_unavailable_without_secure_studio_token(monkeypatch):
+    monkeypatch.delenv("NEXUS_MODEL_URL", raising=False)
+    monkeypatch.delenv("NEXUS_STUDIO_TOKEN", raising=False)
+    with TestClient(main.app) as client:
+        assert client.get("/studio-api/operator-readiness").status_code == 503
+    monkeypatch.setenv("NEXUS_STUDIO_TOKEN", "short")
+    with TestClient(main.app) as client:
+        assert client.get("/studio-api/operator-readiness",
+                          headers={"authorization": "Bearer short"}).status_code == 503
+
+
+def test_operator_readiness_reports_gemini_without_verifying_remote_provider(monkeypatch):
+    monkeypatch.setenv("NEXUS_MODEL_ADAPTER", "gemini")
+    monkeypatch.setenv("NEXUS_MODEL_STREAMING", "1")
+    with configured(monkeypatch, lambda _: pytest.fail("diagnostic reached Gemini")) as client:
+        monkeypatch.setenv("NEXUS_MODEL_URL", model.GEMINI_CHAT_COMPLETIONS)
+        response = client.get("/studio-api/operator-readiness", headers=AUTH)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["readiness"] == "READY_TO_TEST"
+        assert body["provider_host"] == "generativelanguage.googleapis.com"
+        assert body["adapter"] == "gemini" and body["streaming"] is True
+        assert body["provider_live_verification"] == "NOT_RECORDED"
+        assert body["provider_contact_attempted"] is False
+        assert "provider-secret-not-for-browser" not in response.text
+
+
+def test_operator_readiness_disabled_budget_never_claims_remote_availability(monkeypatch):
+    monkeypatch.setenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS", "0")
+    with configured(monkeypatch, lambda _: pytest.fail("disabled diagnostic contacted provider")) as client:
+        r = client.get("/studio-api/operator-readiness", headers=AUTH)
+        assert r.status_code == 200
+        assert r.json()["readiness"] == "LOCAL_BUDGET_EXHAUSTED"
+        assert r.json()["local_request_budget"] == {"limit": 0, "attempted": 0, "remaining": 0}
+        assert r.json()["provider_live_verification"] == "NOT_RECORDED"
+        assert client.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 429
+
+
 def test_model_budget_defaults_to_small_local_attempt_limit_and_is_secret_safe(monkeypatch):
     monkeypatch.delenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS", raising=False)
     budget = model.ModelRequestBudget()

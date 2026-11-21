@@ -145,6 +145,48 @@ enabling public users. This code does not automatically provision a model
 provider, turn on a paid service, or deploy any app. The counter deliberately
 does not expose prompts, keys, cost estimates or model replies.
 
+## Private, offline model-readiness diagnostics
+
+Operators can inspect the actual running Studio gateway **without contacting
+the model provider**:
+
+```sh
+curl --fail-with-body \\
+  --header "Authorization: Bearer ${NEXUS_STUDIO_TOKEN}" \\
+  "http://127.0.0.1:8000/studio-api/operator-readiness"
+```
+
+Use the gateway's real HTTPS address instead of loopback for a remotely hosted
+instance. Never paste a real token into a browser URL, screenshot, repository
+issue or shared command history.
+
+The route requires the existing separate Studio operator bearer token (at
+least 32 characters). An absent/short token disables diagnostics, even when
+the model is unconfigured. Missing, wrong and duplicate authorization headers
+are rejected. It returns `Cache-Control: no-store`, never includes model API
+keys, Studio tokens, endpoint paths, user prompts, raw responses, billing data
+or private files, and makes **zero provider requests**.
+
+The response distinguishes:
+- `NOT_CONFIGURED`: the model settings are missing or invalid
+- `READY_TO_TEST`: the settings pass *local* validation and the per-process
+  request guard has remaining attempts; this **does not prove a live model**
+- `LOCAL_BUDGET_EXHAUSTED`: the worker has no remaining local attempts
+
+It also shows the configured adapter/model/hostname (only to authenticated
+operators), streaming setting and atomic in-process
+`local_request_budget: {limit, attempted, remaining}`. The
+`provider_live_verification: NOT_RECORDED` field is intentional:
+NEXUS does not persist independent provider availability or trust evidence.
+`operator_next_step` suggests server configuration, explicit one-question
+smoke or reviewing the local cap; it never initiates these actions.
+
+This endpoint is diagnostic, **not a user interface for API keys**, not a
+cross-worker spending dashboard and not a remote-availability check. Counter
+values change within one worker and reset on restart. Do not enable public
+usage until provider account quotas, credentials, cost limits, stage deployment
+and live-response validation have been independently verified.
+
 ## Optional Gemini model adapter (operator configured, text only)
 
 NEXUS supports an explicitly selected `NEXUS_MODEL_ADAPTER=gemini` using
