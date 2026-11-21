@@ -131,7 +131,8 @@ class SourceRestoreDrillTests(unittest.TestCase):
             "test-studio-source-restore-drill.py",
             "test-studio-static-browser.mjs",
             "nexus-studio-restore-browser.json",
-            "RESTORED_SOURCE_BYTES_VERIFIED",
+            "--verify",
+            "source_exact_bytes_reconstituted",
         ):
             self.assertIn(name, workflow)
         self.assertIn("contents: read", workflow)
