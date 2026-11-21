@@ -23,19 +23,42 @@ for(const [value,title] of [['landscape','Landscape · 16:9'],['portrait','Portr
 const durationLabel=node('label'),duration=node('select','studio-video-duration');
 for(const sec of [3,6,10,12]){const o=node('option');o.value=String(sec);o.textContent=sec+' s';duration.append(o)}
 duration.value='6';durationLabel.append(duration);
+const timingLabel=node('label');timingLabel.className='inline';
+const individual=node('input','studio-video-individual-timing');individual.type='checkbox';
+const timingText=node('span');timingLabel.append(individual,timingText);
 const fadeLabel=node('label');fadeLabel.className='inline';
 const fade=node('input','studio-video-fade');fade.type='checkbox';fade.checked=true;
 const fadeText=node('span');fadeLabel.append(fade,fadeText);
 const transitionLabel=node('label');transitionLabel.className='inline';
 const crossfade=node('input','studio-video-crossfade');crossfade.type='checkbox';crossfade.checked=true;
 const crossfadeText=node('span');transitionLabel.append(crossfade,crossfadeText);
-controls.append(aspectLabel,durationLabel,fadeLabel,transitionLabel);
+const transitionLengthLabel=node('label'),transitionLength=node('select','studio-video-transition-length');
+for(const value of ['0.15','0.35','0.65']){
+ const o=node('option');o.value=value;o.textContent=value+' s';transitionLength.append(o)
+}
+transitionLength.value='0.35';transitionLengthLabel.append(transitionLength);
+controls.append(aspectLabel,durationLabel,timingLabel,fadeLabel,transitionLabel,transitionLengthLabel);
 const sceneList=node('div','studio-video-scenes');
 sceneList.setAttribute('role','list');
 sceneList.style.cssText='display:grid;gap:6px;margin:10px 0';
+const timingInfo=node('output','studio-video-total');timingInfo.setAttribute('aria-live','polite');
+timingInfo.style.cssText='display:block;margin:8px 0';
+const audioMix=node('div');audioMix.className='row';
+const volumeLabel=node('label'),volume=node('input','studio-video-volume');
+volume.type='range';volume.min='0';volume.max='100';volume.step='5';volume.value='70';
+const volumeText=node('span');volumeLabel.append(volumeText,volume);
+const audioFadeLabel=node('label');audioFadeLabel.className='inline';
+const audioFade=node('input','studio-video-audio-fade');
+audioFade.type='checkbox';audioFade.checked=true;
+const audioFadeText=node('span');audioFadeLabel.append(audioFade,audioFadeText);
+audioMix.append(volumeLabel,audioFadeLabel);
 const canvas=node('canvas','studio-video-canvas');canvas.width=640;canvas.height=360;
 canvas.hidden=true;canvas.setAttribute('role','img');
 canvas.style.cssText='display:block;max-width:100%;max-height:340px;margin:12px auto;border-radius:12px;background:#101618';
+const scrubLabel=node('label'),scrub=node('input','studio-video-scrub');
+scrub.type='range';scrub.min='0';scrub.max='6';scrub.step='0.05';scrub.value='0';
+scrub.setAttribute('aria-label','Storyboard preview position');
+const scrubText=node('span');scrubLabel.append(scrubText,scrub);
 const commands=node('div');commands.className='row';
 const start=node('button','studio-video-start'),cancel=node('button','studio-video-cancel');
 const clear=node('button','studio-video-clear'),download=node('button','studio-video-download');
@@ -48,12 +71,12 @@ output.preload='metadata';output.hidden=true;
 output.style.cssText='display:block;max-width:100%;max-height:440px;margin:12px auto';
 const info=node('p','studio-video-status');info.className='help';info.setAttribute('role','status');
 info.setAttribute('aria-live','polite');
-box.append(heading,help,imageLabel,generated,sceneList,audioLabel,controls,canvas,commands,meter,output,info);
+box.append(heading,help,imageLabel,generated,sceneList,timingInfo,audioLabel,audioMix,controls,canvas,scrubLabel,commands,meter,output,info);
 const insertAfter=$('studio-local-image-panel')||$('studio-imagegen-panel')||$('studio-compose');
 insertAfter.after(box);$('nexus-zen-suggestions').append(shortcut);
 
 const MAX_IMAGE=6_000_000,MAX_AUDIO=8_000_000,MAX_PIXELS=8_000_000,MAX_OUTPUT=32_000_000;
-const MAX_SCENES=4,MAX_TOTAL_IMAGE_BYTES=16_000_000,MAX_TOTAL_PIXELS=16_000_000;
+const MAX_SCENES=4,MAX_TOTAL_IMAGE_BYTES=16_000_000,MAX_TOTAL_PIXELS=16_000_000,MAX_DURATION=24;
 let image=null,scenes=[],music=null,recording=null,videoURL=null,format=null,epoch=0,loading=false,preparing=false;
 let selected=selection();
 function selection(){
@@ -79,18 +102,42 @@ function drawBitmap(ctx,bitmap,opacity){
  ctx.drawImage(bitmap,(canvas.width-w)/2,(canvas.height-h)/2,w,h);
  ctx.globalAlpha=1;
 }
-function draw(t=0,seconds=6){
+function timeline(override){
+ if(!scenes.length)return null;
+ const raw=Number(override===undefined?duration.value:override);
+ if(!individual.checked&&![3,6,10,12].includes(raw))return null;
+ const times=individual.checked?scenes.map(scene=>Number(scene.seconds)) :
+  scenes.map(()=>raw/scenes.length);
+ const total=times.reduce((sum,sec)=>sum+sec,0);
+ if(!Number.isFinite(total)||total>MAX_DURATION||total<=0||
+    times.some(sec=>!Number.isFinite(sec)||sec<0.5||sec>12))return null;
+ return {times,total};
+}
+function previewTime(t,full){
+ const spec=timeline(full);
+ if(!spec)return;
+ scrub.max=String(spec.total);
+ scrub.value=String(Math.max(0,Math.min(spec.total,t)));
+ draw(Number(scrub.value),spec.total);
+}
+function draw(t=0,seconds){
  const ctx=canvas.getContext('2d',{alpha:false});
  if(!ctx||!scenes.length)return;
+ const plan=timeline(seconds);
+ if(!plan)return;
  ctx.fillStyle='#101618';ctx.fillRect(0,0,canvas.width,canvas.height);
- const count=scenes.length,segment=seconds/count;
- const elapsed=Math.max(0,Math.min(seconds,t));
- const idx=Math.min(count-1,Math.floor(elapsed/segment));
- const windowStart=(idx+1)*segment;
- const transition=Math.min(0.35,segment*0.2);
- const blend=(crossfade.checked&&idx<count-1&&elapsed>windowStart-transition)?
-  Math.max(0,Math.min(1,(elapsed-windowStart+transition)/transition)):0;
- const outer=fade.checked?Math.max(0,Math.min(1,elapsed/0.4,(seconds-elapsed)/0.4)):1;
+ const elapsed=Math.max(0,Math.min(plan.total,t));
+ let idx=0,sceneStart=0;
+ while(idx<plan.times.length-1&&elapsed>=sceneStart+plan.times[idx]){
+  sceneStart+=plan.times[idx];idx++;
+ }
+ const local=elapsed-sceneStart,sceneSeconds=plan.times[idx];
+ const nextSeconds=plan.times[idx+1]||0;
+ const transition=Math.min(Number(transitionLength.value)||0,sceneSeconds/2,nextSeconds/2);
+ const blend=(crossfade.checked&&idx<plan.times.length-1&&transition>0&&
+   local>sceneSeconds-transition)?
+  Math.max(0,Math.min(1,(local-(sceneSeconds-transition))/transition)):0;
+ const outer=fade.checked?Math.max(0,Math.min(1,elapsed/0.4,(plan.total-elapsed)/0.4)):1;
  drawBitmap(ctx,scenes[idx].bitmap,outer*(1-blend));
  if(blend>0)drawBitmap(ctx,scenes[idx+1].bitmap,outer*blend);
 }
@@ -106,6 +153,20 @@ function listScenes(){
   const label=node('span');label.style.cssText='flex:2;min-width:120px;overflow-wrap:anywhere';
   label.textContent=(index+1)+'. '+scene.label;
   row.append(label);
+  const sceneTiming=node('select');sceneTiming.dataset.sceneSeconds=String(index);
+  sceneTiming.setAttribute('aria-label',words('Scene duration seconds','مدت صحنه به ثانیه')+' '+(index+1));
+  for(const sec of [1,2,3,4,6,8,12]){
+   const option=node('option');option.value=String(sec);option.textContent=sec+' s';
+   sceneTiming.append(option);
+  }
+  sceneTiming.value=String(scene.seconds||3);
+  sceneTiming.disabled=!individual.checked||recording||preparing||loading;
+  sceneTiming.addEventListener('change',()=>{
+   if(recording||preparing||loading)return;
+   scene.seconds=Number(sceneTiming.value);
+   previewClear();layout();refresh();
+  });
+  row.append(sceneTiming);
   for(const [action,textEN,textFA] of [
    ['preview','Preview','پیش‌نمایش'],['up','Move up','انتقال به بالا'],
    ['down','Move down','انتقال به پایین'],['remove','Remove','حذف']]){
@@ -118,7 +179,10 @@ function listScenes(){
    button.addEventListener('click',()=>{
     if(recording||preparing||loading)return;
     if(action==='preview'){
-     const sec=Number(duration.value)||6;draw((index+0.5)*sec/scenes.length,sec);return;
+     const plan=timeline();
+     if(!plan)return;
+     const before=plan.times.slice(0,index).reduce((sum,sec)=>sum+sec,0);
+     previewTime(before+plan.times[index]/2,plan.total);return;
     }
     if(action==='remove'){
      const removed=scenes.splice(index,1)[0];removed.bitmap.close?.();
@@ -140,7 +204,8 @@ function layout(){
  if(recording)return;
  if(aspect.value==='portrait'){canvas.width=360;canvas.height=640}
  else{canvas.width=640;canvas.height=360}
- draw(1,6); // Preview the full frame, not the first fade-to-black frame.
+ const plan=timeline();
+ if(plan)previewTime(plan.times[0]/2,plan.total); // Show first full scene, never an all-black fade frame.
 }
 function stopJob(discard=true){
  const job=recording;
@@ -169,11 +234,18 @@ function wipe(){
 }
 function refresh(){
  const running=Boolean(recording),blocked=running||loading||preparing,unavailable=!mimeType();
- photo.disabled=audio.disabled=generated.disabled=aspect.disabled=duration.disabled=fade.disabled=crossfade.disabled=blocked;
+ const plan=timeline();
+ photo.disabled=audio.disabled=generated.disabled=aspect.disabled=fade.disabled=crossfade.disabled=individual.disabled=transitionLength.disabled=volume.disabled=audioFade.disabled=blocked;
+ duration.disabled=blocked||individual.checked;
+ scrub.disabled=blocked||!plan;
+ timingInfo.textContent=plan?
+  words('Total clip duration: ','مدت کل کلیپ: ')+plan.total.toFixed(2)+' s':
+  scenes.length?words('Duration exceeds 24 seconds; shorten individual scenes.','مدت بیش از ۲۴ ثانیه است؛ زمان صحنه‌ها را کم کن.'):'';
+ for(const field of sceneList.querySelectorAll('select'))field.disabled=blocked||!individual.checked;
  for(const button of sceneList.querySelectorAll('button'))button.disabled=blocked||
   (button.dataset.sceneAction==='up'&&button.closest('[role=listitem]')===sceneList.firstChild)||
   (button.dataset.sceneAction==='down'&&button.closest('[role=listitem]')===sceneList.lastChild);
- start.disabled=blocked||!image||unavailable;
+ start.disabled=blocked||!image||unavailable||!plan;
  cancel.disabled=!running&&!preparing;
  clear.disabled=loading;
  download.disabled=!videoURL;
@@ -204,7 +276,7 @@ async function acceptImages(files){
    }
    pixels+=bitmap.width*bitmap.height;
    if(pixels>MAX_TOTAL_PIXELS){bitmap.close?.();throw Error('total-pixels')}
-   decoded.push({bitmap,label:f.name.slice(0,100)});
+   decoded.push({bitmap,label:f.name.slice(0,100),seconds:3});
   }
   if(ticket!==epoch)throw Error('stale');
   scenes=decoded;image=scenes[0].bitmap;photo.value='';layout();listScenes();
@@ -233,7 +305,7 @@ generated.addEventListener('click',async()=>{
   if(ticket!==epoch){candidate?.close?.();return}
   if(!candidate.width||!candidate.height||candidate.width>4096||candidate.height>4096||
      candidate.width*candidate.height>MAX_PIXELS)throw Error('dimensions');
-  scenes=[{bitmap:candidate,label:words('Generated image','تصویر ساخته‌شده')}];image=candidate;
+  scenes=[{bitmap:candidate,label:words('Generated image','تصویر ساخته‌شده'),seconds:3}];image=candidate;
   photo.value='';layout();listScenes();
   message('Generated preview copied locally; no new provider call.',
           'پیش‌نمایش ساخته‌شده روی دستگاه کپی شد؛ درخواست جدیدی ارسال نشد.');
@@ -255,14 +327,22 @@ audio.addEventListener('change',()=>{
  }
  music=f;message('Audio selected locally. It is not uploaded.','صوت روی دستگاه انتخاب شد و ارسال نمی‌شود.');
 });
-for(const control of [aspect,duration,fade,crossfade])
- control.addEventListener('change',()=>{if(!recording){previewClear();layout();refresh()}});
+for(const control of [aspect,duration,fade,crossfade,transitionLength,individual])
+ control.addEventListener('change',()=>{
+  if(!recording&&!preparing){
+   previewClear();if(control===individual)listScenes();layout();refresh();
+  }
+ });
+scrub.addEventListener('input',()=>{
+ if(recording||preparing||loading||!timeline())return;
+ previewClear();draw(Number(scrub.value),timeline().total);
+});
 async function startRecording(){
  if(recording||loading||preparing||!image||!mimeType())return;
- const current=++epoch,scope=selection(),seconds=Number(duration.value);
- if(![3,6,10,12].includes(seconds)){message('Choose a supported duration.','مدت مجاز را انتخاب کن.');return}
+ const chosen=timeline(),current=++epoch,scope=selection(),seconds=chosen?.total;
+ if(!chosen){message('Choose a valid duration of at most 24 seconds.','مدت معتبر تا سقف ۲۴ ثانیه انتخاب کن.');return}
  preparing=true;previewClear();meter.value=0;layout();refresh();
- let ctx=null,audioBuffer=null,stream=null,recorder=null,audioSource=null,ownJob=null;
+ let ctx=null,audioBuffer=null,stream=null,recorder=null,audioSource=null,ownJob=null,audioAt=0;
  try{
   // Construct/resume the audio context directly from the user's click.
   if(music){
@@ -282,7 +362,17 @@ async function startRecording(){
   if(ctx&&audioBuffer){
    const destination=ctx.createMediaStreamDestination();
    audioSource=ctx.createBufferSource();audioSource.buffer=audioBuffer;
-   const gain=ctx.createGain();gain.gain.value=0.7;
+   const gain=ctx.createGain();
+   const level=Number(volume.value)/100,playable=Math.min(seconds,audioBuffer.duration);
+   audioAt=ctx.currentTime+0.10;
+   const at=audioAt;
+   const ramp=Math.min(0.5,playable/3);
+   if(audioFade.checked&&level>0&&ramp>0){
+    gain.gain.setValueAtTime(0,at);
+    gain.gain.linearRampToValueAtTime(level,at+ramp);
+    gain.gain.setValueAtTime(level,at+Math.max(ramp,playable-ramp));
+    gain.gain.linearRampToValueAtTime(0,at+playable);
+   }else gain.gain.setValueAtTime(level,at);
    audioSource.connect(gain);gain.connect(destination);
    for(const track of destination.stream.getAudioTracks())stream.addTrack(track);
   }
@@ -319,8 +409,8 @@ async function startRecording(){
   },{once:true});
   recorder.start(250);
   if(audioSource){
-   audioSource.start();
-   audioSource.stop(ctx.currentTime+Math.min(seconds,audioBuffer.duration));
+   audioSource.start(audioAt);
+   audioSource.stop(audioAt+Math.min(seconds,audioBuffer.duration));
   }
   const startTime=performance.now();
   const step=now=>{
@@ -359,8 +449,8 @@ shortcut.addEventListener('click',()=>{box.open=true;photo.focus({preventScroll:
 function labels(){
  heading.textContent=words('Create a video locally (free)','ساخت ویدیوی محلی (رایگان)');
  help.textContent=words(
-  'Make a 3–12 second storyboard with 1–4 uncropped photos, optional crossfades and your audio. Arrange scenes before recording. This browser-only tool does not use generative AI.',
-  'از یک تا چهار تصویر بدون برش، یک کلیپ ۳ تا ۱۲ ثانیه‌ای با گذار نرم و صوت اختیاری بساز. پیش از ضبط ترتیب صحنه‌ها را مشخص کن؛ این ابزار هوش مصنوعی مولد نیست.');
+  'Arrange 1–4 uncropped scenes. Use a total preset (3–12 s) or set each scene (maximum 24 s combined), choose transition length and audio volume/fades. Preview before recording. Browser-only, no generative AI.',
+  '۱ تا ۴ تصویر بدون برش مرتب کن. از زمان آماده (۳ تا ۱۲ ثانیه) یا مدت مستقل هر صحنه (مجموعاً تا ۲۴ ثانیه) استفاده کن؛ طول گذار و شدت و محوشدن صوت را تنظیم و پیش‌نمایش کن. ابزار محلی است.');
  const labelText=(parent,child,en,fa)=>{
   if(parent.firstChild?.nodeType===3)parent.firstChild.remove();
   parent.insertBefore(document.createTextNode(words(en,fa)),child)
@@ -369,7 +459,12 @@ function labels(){
  generated.textContent=words('Use generated image from this tab','استفاده از تصویر ساخته‌شده در این برگه');
  labelText(audioLabel,audio,'Optional audio (≤ 8 MB, ≤ 30 s)','صوت اختیاری (تا ۸ مگابایت و ۳۰ ثانیه)');
  labelText(aspectLabel,aspect,'Frame','قالب تصویر');
- labelText(durationLabel,duration,'Duration','مدت');
+ labelText(durationLabel,duration,'Total-duration preset','مدت آمادهٔ کل');
+ timingText.textContent=words('Set durations per scene','زمان مستقل برای هر صحنه');
+ labelText(transitionLengthLabel,transitionLength,'Crossfade length','طول گذار نرم');
+ volumeText.textContent=words('Audio volume ('+volume.value+'%)','شدت صدا ('+volume.value+'٪)');
+ audioFadeText.textContent=words('Audio fade in/out','محوشدن ابتدا و انتهای صدا');
+ scrubText.textContent=words('Preview timeline','پیش‌نمایش خط زمانی');
  fadeText.textContent=words('Fade in/out','محوشدن آغاز و پایان');
  crossfadeText.textContent=words('Crossfade scenes','گذار نرم بین صحنه‌ها');
  listScenes();
@@ -388,6 +483,11 @@ document.addEventListener('nexus-studio-state',()=>{
  const next=selection();if(next!==selected){selected=next;wipe()}else refresh();
 });
 document.addEventListener('nexus-studio-private-clear',wipe);
+volume.addEventListener('input',()=>{
+ volumeText.textContent=words('Audio volume ('+volume.value+'%)','شدت صدا ('+volume.value+'٪)');
+ if(!recording)previewClear();
+});
+audioFade.addEventListener('change',()=>{if(!recording)previewClear()});
 $('language')?.addEventListener('change',()=>queueMicrotask(labels));
 labels();refresh();
 })();

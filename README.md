@@ -69,8 +69,9 @@ NEXUS Studio now has a chat-adjacent local video composer in the development
 branch: up to four ordered PNG/JPEG photos or an explicit generated-image handoff,
 uncropped landscape or
 portrait frames, optional short background audio, gentle in/out and scene
-crossfades, 3–12-second
-recording using the browser's MediaRecorder, and explicit video download.
+crossfades (adjustable duration), per-scene timing up to 24 seconds total,
+preview scrubbing, user-selected audio gain/fades and browser MediaRecorder
+recording with explicit download.
 This is local browser encoding, **not generative AI video**; browser codec
 support varies, and no hosted video model, deployment or public publishing
 is included. See [bounded video composer design](docs/STUDIO-LOCAL-VIDEO.md).
