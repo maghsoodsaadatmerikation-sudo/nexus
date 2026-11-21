@@ -134,16 +134,59 @@ mode and payload. A denied or invalid request cannot drain the limit. A
 permitted attempt is counted **before** its provider connection; failed,
 timed-out, canceled, disconnected, or provider-rejected requests are never
 refunded, because upstream cost may still have occurred. Exhaustion returns
-HTTP `429` with a non-sensitive detail and no upstream provider call. Restart
-the worker to start another local budget.
+HTTP `429` with a non-sensitive detail and no upstream provider call. For
+the default **per-process** budget only, a restart resets the counter.
 
-**Not a hard spending or global request cap:** multiple workers or replicas
-each have a separate in-memory budget; an app restart resets it. An API key
-that is independently used elsewhere is not covered. Provider-side spend
-alerts, account limits, quotas and billing safeguards remain mandatory before
-enabling public users. This code does not automatically provision a model
-provider, turn on a paid service, or deploy any app. The counter deliberately
-does not expose prompts, keys, cost estimates or model replies.
+### Optional durable quota for one Linux host
+
+A single-host installation with a persistent *local* filesystem can opt into
+an owner-private, restart-persistent request count. Create the directory as
+the **same operating-system account that runs FastAPI**:
+
+```sh
+install -d -m 0700 /var/lib/nexus/model-budget
+```
+
+Then supply this **server-only** environment variable:
+
+```sh
+NEXUS_MODEL_BUDGET_DIR=/var/lib/nexus/model-budget
+```
+
+The directory must already exist, be an absolute path, be owned by the
+server's process user, have no group/other permissions, and not be a symlink.
+NEXUS uses a Linux advisory lock on this directory for **all local worker
+processes**, an owner-only counter file, atomic replacement and file/directory
+`fsync`. Restarts or a second worker that uses **the same host directory**
+will **not reset** its count. The existing `0`–`4096` attempt limit is
+shared, and lowering it does not erase recorded attempts. If the directory is
+missing, the counter is corrupt, permissions are unsafe, or storage I/O fails,
+provider requests are **blocked** rather than silently falling back to a new
+per-process allowance.
+
+The private local launcher `scripts/run-local-studio.py` now enables this
+feature automatically, using `provider-model-budget/` inside its existing
+private `--state-dir`. It never inherits a custom budget directory from the
+shell. The counter intentionally survives ordinary launcher restarts.
+
+The authenticated operator-readiness diagnostic reports
+`budget_scope: one_private_host_directory_until_explicit_reset` and a
+shared `local_request_budget`. If storage is inaccessible it reports
+`LOCAL_BUDGET_UNAVAILABLE`, `attempted: null`, and
+`operator_next_step: repair_private_budget_storage` instead of pretending
+the allowance has reset. The in-memory fallback remains available when
+`NEXUS_MODEL_BUDGET_DIR` is **unset**, with scope
+`one_process_until_restart`.
+
+**Limits:** this is still a request-*attempt* count, **not a monetary cap**.
+There is no cross-host, cross-container or cross-replica guarantee, nor
+reliable persistence when the hosting filesystem itself is ephemeral.
+The count may be lost with its volume, deleted by an operator, or bypassed by
+using a provider credential outside NEXUS. File-locking semantics on network
+filesystems are not supported. A container provider may require a separately
+mounted persistent volume, which can cost money. NEXUS does not create one
+or configure third-party billing. Independently enforce provider-side quotas,
+spend caps and API-key controls before authorizing public use.
 
 ## Private, offline model-readiness diagnostics
 
@@ -172,6 +215,8 @@ The response distinguishes:
 - `READY_TO_TEST`: the settings pass *local* validation and the per-process
   request guard has remaining attempts; this **does not prove a live model**
 - `LOCAL_BUDGET_EXHAUSTED`: the worker has no remaining local attempts
+- `LOCAL_BUDGET_UNAVAILABLE`: the explicitly configured private durable
+  quota store is unsafe or unavailable, so all model calls are denied
 
 It also shows the configured adapter/model/hostname (only to authenticated
 operators), streaming setting and atomic in-process
