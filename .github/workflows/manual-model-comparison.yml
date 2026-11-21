@@ -127,7 +127,7 @@ jobs:
         working-directory: nexus-cloud
         run: uv python install 3.13
 
-      - name: Execute bounded synthetic-only comparison with redacted report
+      - name: Execute bounded comparison and independently validate redacted receipt
         working-directory: nexus-cloud
         shell: bash
         run: |
@@ -138,6 +138,30 @@ jobs:
             full_quality) mode_flag="--full" ;;
             *) echo "NOT_RUN: invalid mode" >&2; exit 2 ;;
           esac
+          # Keep the original comparison JSON in runner temp only; it is never
+          # uploaded. Only a strict, redacted and digest-checked receipt survives.
+          raw="$RUNNER_TEMP/nexus-model-comparison-private-report.json"
+          receipt="$RUNNER_TEMP/nexus-model-comparison-evidence.json"
+          compare_result=0
           uv run --frozen python -m model_quality_compare "$mode_flag" \
             --slots "$NEXUS_COMPARE_SLOTS" \
-            --max-requests "$NEXUS_COMPARE_CAP"
+            --max-requests "$NEXUS_COMPARE_CAP" > "$raw" || compare_result=$?
+          uv run --frozen python -m model_compare_evidence --build \
+            --report "$raw" --out "$receipt" \
+            --mode "$NEXUS_COMPARE_MODE" --slots "$NEXUS_COMPARE_SLOTS" \
+            --source-commit "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT"
+          uv run --frozen python -m model_compare_evidence --verify \
+            --artifact "$receipt"
+          # A failed benchmark must stay a failed workflow even when evidence
+          # was recorded successfully: no artifact can create release authority.
+          if [[ "$compare_result" -ne 0 ]]; then exit "$compare_result"; fi
+
+      - name: Preserve audited receipt for 14 days even when benchmark fails
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-model-comparison-evidence
+          path: ${{ runner.temp }}/nexus-model-comparison-evidence.json
+          if-no-files-found: warn
+          retention-days: 14

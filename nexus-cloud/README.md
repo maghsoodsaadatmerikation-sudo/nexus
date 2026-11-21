@@ -138,6 +138,16 @@ cannot be hidden by a high average. A result is **not** a certificate of
 correctness, production readiness or a monetary spending limit. Configure
 provider-side hard quotas before running any paid benchmark.
 
+The manual GitHub Actions workflow also builds a strict allowlisted, source-commit-
+and run-ID-bound JSON audit receipt after each comparison (including failed
+benchmark reports), verifies its SHA-256 digest and stores **only the redacted
+receipt** for 14 days. SHA-256 here detects accidental alteration of a trusted
+copy; it is **not an independent signature or provider attestation**.
+Every receipt is permanently marked as **release HOLD**, regardless of
+model scores. Public web deployment, live account quotas, provider billing,
+Android/archives, provider deploy identity and actual rollback readiness
+remain separately unverified, requiring fresh evidence and owner approval.
+
 See [Operator comparison workflow](../docs/STUDIO-MODEL-COMPARISON.md).
 
 ### Multiple reviewed model routes (opt-in; up to three)
