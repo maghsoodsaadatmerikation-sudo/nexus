@@ -170,16 +170,26 @@ def _validate_report(report: dict, *, mode: str, slots: tuple[str, ...]) -> dict
                  _int(entry["passed"], 0, maximum) and
                  _int(entry["failed"], 0, maximum) and
                  _int(entry["errors"], 0, maximum) and
-                 entry["passed"] + entry["failed"] + entry["errors"] <= entry["evaluated"] and
+                 entry["passed"] + entry["failed"] + entry["errors"] == entry["evaluated"] and
                  type(entry["critical_failures"]) is list and
                  len(entry["critical_failures"]) <= len(CRITICAL_IDS) and
                  all(type(q) is str and q in CRITICAL_IDS for q in entry["critical_failures"]) and
                  len(set(entry["critical_failures"])) == len(entry["critical_failures"]) and
                  type(entry["aborted_early"]) is bool and
-                 (entry["abort_reason"] is None or entry["abort_reason"] in REASONS))
+                 (entry["abort_reason"] is None or
+                  (type(entry["abort_reason"]) is str and entry["abort_reason"] in REASONS)))
         if mode == "single_smoke":
             _require(entry["critical_failures"] == [] and
-                     not entry["aborted_early"])
+                     not entry["aborted_early"] and
+                     entry["status"] == ("PASS" if entry["passed"] == 1 else "FAIL") and
+                     (entry["abort_reason"] is not None) == (entry["errors"] > 0))
+        else:
+            passed_gate = (entry["evaluated"] == MAX_PROBES and
+                           entry["errors"] == 0 and not entry["critical_failures"] and
+                           not entry["aborted_early"] and
+                           entry["passed"] / MAX_PROBES >= 0.85)
+            _require(entry["status"] == ("PASS" if passed_gate else "FAIL") and
+                     entry["aborted_early"] == (entry["abort_reason"] is not None))
         answers.append({k: entry[k] for k in MODEL})
     # The comparator never lets a smoke run declare heuristic comparability.
     complete = len(answers) == n and (mode == "single_smoke" or all(
