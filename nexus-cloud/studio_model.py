@@ -19,6 +19,10 @@ from transport_bounds import read_bounded_body
 MAX_INPUT = 96000
 MAX_OUTPUT = 128000
 MODEL_TIMEOUT = 45
+# Gemini's official OpenAI-compatible Chat Completions endpoint. An exact
+# destination is required when Gemini credentials are used, preventing a
+# misconfigured arbitrary host from receiving the provider key.
+GEMINI_CHAT_COMPLETIONS = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 POLICY = (
     "You are a non-authoritative NEXUS assistant. Answer the user's actual question "
     "directly, in the user's language unless requested otherwise, with useful detail "
@@ -76,16 +80,46 @@ def config():
         _ = p.port
     except ValueError:
         return None
-    if (adapter() not in {"generic", "deepseek"} or not model or len(model) > 150 or len(token) < 32 or not p.hostname
+    kind = adapter()
+    if (kind not in {"generic", "deepseek", "gemini"} or not model or len(model) > 150
+        or len(token) < 32 or not p.hostname
         or p.username is not None or p.password is not None or p.query or p.fragment
         or any(c.isspace() for c in endpoint)
         or not (p.scheme == "https" or (p.scheme == "http" and p.hostname in {"127.0.0.1", "::1"}))):
+        return None
+    if kind == "gemini" and (
+        endpoint != GEMINI_CHAT_COMPLETIONS or not os.getenv("NEXUS_MODEL_API_KEY", "").strip()
+    ):
         return None
     return endpoint, model, token, p.hostname
 
 
 def adapter():
     return os.getenv("NEXUS_MODEL_ADAPTER", "generic").strip()
+
+
+def provider_payload(model_id: str, messages: list[dict], *, stream: bool,
+                     max_output_tokens: int, mode: str = "standard",
+                     adapter_name: str | None = None) -> dict:
+    """Build one shared, text-only wire contract for Studio and live eval.
+
+    Gemini's compatibility endpoint uses max_tokens and has no required store
+    field. Provider-specific advanced functions are deliberately excluded.
+    """
+    kind = adapter() if adapter_name is None else adapter_name
+    if kind not in {"generic", "deepseek", "gemini"}:
+        raise ValueError("Unsupported model adapter")
+    if mode not in {"standard", "thinking", "non-thinking"} or (
+        mode != "standard" and kind != "deepseek"
+    ):
+        raise ValueError("Unsupported model mode")
+    payload = {"model": model_id, "messages": messages, "stream": stream}
+    if kind != "gemini":
+        payload["store"] = False
+    payload["max_tokens" if kind in {"deepseek", "gemini"} else "max_completion_tokens"] = max_output_tokens
+    if mode != "standard":
+        payload["thinking"] = {"type": "enabled" if mode == "thinking" else "disabled"}
+    return payload
 
 
 def configuration_id(c):
@@ -306,10 +340,9 @@ def register(app):
             key = os.getenv("NEXUS_MODEL_API_KEY", "").strip()
             if key:
                 headers["authorization"] = "Bearer " + key
-            payload = {"model": c[1], "messages": messages, "stream": stream, "store": False}
-            payload["max_tokens" if adapter() == "deepseek" else "max_completion_tokens"] = data.max_output_tokens
-            if data.mode != "standard":
-                payload["thinking"] = {"type": "enabled" if data.mode == "thinking" else "disabled"}
+            payload = provider_payload(c[1], messages, stream=stream,
+                                       max_output_tokens=data.max_output_tokens,
+                                       mode=data.mode)
             if stream:
                 return CompletionStream(response_frames(request, c[0], headers, payload),
                                         media_type="application/x-ndjson",
