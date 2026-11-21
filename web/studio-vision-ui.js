@@ -526,3 +526,183 @@ document.addEventListener('nexus-studio-private-clear',resetAll);
 $('language')?.addEventListener('change',()=>queueMicrotask(relabel));
 relabel();refresh();
 })();
+
+
+/* NEXUS local image studio: original pixels remain on-device, full frame only.
+ * Brightness, contrast and saturation are reversible; export is explicit.
+ * This is not a generative model and does not upload images.
+ */
+(() => {'use strict';
+const $=id=>document.getElementById(id);
+if(!$('studio-compose')||!$('nexus-zen-suggestions'))return;
+const words=(en,fa)=>document.documentElement.lang==='fa'?fa:en;
+const el=(tag,id)=>{const node=document.createElement(tag);if(id)node.id=id;return node};
+const panel=el('details','studio-local-image-panel');panel.className='studio-vision-panel';
+const summary=el('summary'),help=el('p');help.className='help';
+const actions=el('div');actions.className='row';
+const fileLabel=el('label'),file=el('input','studio-local-image-file');
+file.type='file';file.accept='.png,.jpg,.jpeg,image/png,image/jpeg';
+fileLabel.append(file);
+const fromGenerated=el('button','studio-local-image-from-generated');
+fromGenerated.className='secondary';fromGenerated.type='button';
+actions.append(fileLabel,fromGenerated);
+const canvas=el('canvas','studio-local-image-canvas');
+canvas.hidden=true;canvas.style.cssText='display:block;width:auto;max-width:100%;max-height:440px;border-radius:12px;margin:12px auto';
+canvas.setAttribute('role','img');
+const controls=el('div','studio-local-image-controls');controls.className='row';
+const channels=[
+ ['brightness',50,150,100],
+ ['contrast',50,150,100],
+ ['saturate',0,200,100]
+];
+const sliders={};
+for(const [key,min,max,initial] of channels){
+ const label=el('label'),caption=el('span'),slider=el('input','studio-local-image-'+key);
+ slider.type='range';slider.min=String(min);slider.max=String(max);slider.step='1';
+ slider.value=String(initial);slider.disabled=true;
+ slider.setAttribute('aria-label',key);label.append(caption,slider);controls.append(label);
+ sliders[key]={caption,slider,initial};
+}
+const buttons=el('div');buttons.className='row';
+const reset=el('button','studio-local-image-reset'),download=el('button','studio-local-image-download'),
+ clear=el('button','studio-local-image-clear'),quick=el('button','studio-local-image-open');
+for(const b of [reset,download,clear,quick]){b.type='button';b.className='secondary'}
+buttons.append(reset,download,clear);
+const notice=el('p','studio-local-image-status');notice.className='help';
+notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');
+panel.append(summary,help,actions,controls,canvas,buttons,notice);
+$('studio-imagegen-panel')?.after(panel);
+if(!panel.parentNode)$('studio-compose').after(panel);
+$('nexus-zen-suggestions').append(quick);
+let original=null,source=null,epoch=0,loading=false,exporting=false,scope=null;
+const MAX_BYTES=6_000_000,MAX_SIDE=4096,MAX_PIXELS=8_000_000;
+const ident=()=>{
+ const s=window.NexusStudioUI?.selection?.()||{};
+ return JSON.stringify([s.projectId||null,s.threadId||null,s.head||null,s.revision||null,s.branchBase||null]);
+};
+function say(en,fa){notice.textContent=words(en,fa)}
+function refresh(){
+ const active=!!source,block=loading||exporting;
+ file.disabled=block;fromGenerated.disabled=block||!$('studio-imagegen-preview')?.getAttribute('src');
+ for(const {slider} of Object.values(sliders))slider.disabled=block||!active;
+ reset.disabled=block||!active;download.disabled=block||!active;clear.disabled=block||!active;
+ canvas.hidden=!active;
+}
+function release(){
+ epoch++;if(original?.close)original.close();
+ original=source=null;scope=null;
+ canvas.width=canvas.height=0;
+ file.value='';
+ for(const {slider,initial} of Object.values(sliders))slider.value=String(initial);
+ say('','');refresh();
+}
+function imageIsBounded(img){
+ return Number.isFinite(img.width)&&Number.isFinite(img.height)&&
+ img.width>0&&img.height>0&&img.width<=MAX_SIDE&&img.height<=MAX_SIDE&&
+ img.width*img.height<=MAX_PIXELS;
+}
+function render(){
+ if(!source)return;
+ const ctx=canvas.getContext('2d',{alpha:true});
+ if(!ctx||!('filter' in ctx)){release();say('This browser does not support local image filters.','این مرورگر از ویرایشگر محلی تصویر پشتیبانی نمی‌کند.');return}
+ const b=sliders.brightness.slider.value,c=sliders.contrast.slider.value,s=sliders.saturate.slider.value;
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+ ctx.filter='brightness('+b+'%) contrast('+c+'%) saturate('+s+'%)';
+ ctx.drawImage(source,0,0,canvas.width,canvas.height);
+ ctx.filter='none';
+}
+async function load(readImage){
+ if(loading||exporting)return;
+ const current=++epoch;
+ loading=true;refresh();
+ let bmp=null;
+ try{
+  bmp=await readImage();
+  if(current!==epoch){bmp?.close?.();return}
+  if(!bmp||!imageIsBounded(bmp))throw Error('dimensions');
+  const ctx=canvas.getContext('2d',{alpha:true});
+  if(!ctx||!('filter' in ctx))throw Error('unsupported');
+  if(original?.close)original.close();
+  original=bmp;source=bmp;scope=ident();
+  canvas.width=bmp.width;canvas.height=bmp.height;
+  for(const {slider,initial} of Object.values(sliders))slider.value=String(initial);
+  render();
+  say('Image loaded locally. The original file is unchanged; no upload occurred.',
+      'تصویر روی دستگاه بارگذاری شد. فایل اصلی تغییر نکرد و هیچ ارسالی انجام نشد.');
+ }catch{
+  bmp?.close?.();
+  if(current===epoch){release();say('Could not decode this image safely (PNG/JPEG, 6 MB, up to 8 megapixels).',
+   'تصویر به‌شکل ایمن باز نشد؛ PNG/JPEG تا ۶ مگابایت و ۸ مگاپیکسل پذیرفته می‌شود.')}
+ }finally{if(current===epoch)loading=false;refresh()}
+}
+file.addEventListener('change',()=>{
+ const picked=file.files?.[0];
+ if(!picked)return;
+ if(!['image/png','image/jpeg'].includes(picked.type)||picked.size<=0||picked.size>MAX_BYTES){
+  release();say('Choose a PNG/JPEG no larger than 6 MB.','فقط PNG/JPEG تا ۶ مگابایت انتخاب کن.');return;
+ }
+ load(()=>createImageBitmap(picked,{imageOrientation:'from-image'}));
+});
+fromGenerated.onclick=()=>{
+ const preview=$('studio-imagegen-preview'),src=preview?.getAttribute('src');
+ if(!src||!/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/.test(src)){
+  say('No valid generated image is available.','تصویر تولیدشدهٔ معتبری موجود نیست.');return;
+ }
+ load(async()=>{
+  const img=new Image();img.src=src;await img.decode();
+  if(!img.naturalWidth||!img.naturalHeight)throw Error('empty');
+  return await createImageBitmap(img);
+ });
+};
+for(const {slider} of Object.values(sliders)){
+ slider.addEventListener('input',()=>{if(source&&!loading&&!exporting)render()});
+}
+reset.onclick=()=>{
+ for(const {slider,initial} of Object.values(sliders))slider.value=String(initial);
+ if(source)render();
+ say('Original appearance restored in the preview.','ظاهر اصلی در پیش‌نمایش بازگردانده شد.');
+};
+download.onclick=async()=>{
+ if(!source||exporting||scope!==ident()){
+  if(scope!==ident()){release();say('Conversation changed. Reopen the image to edit.','گفتگو تغییر کرده؛ تصویر را دوباره باز کن.')}
+  return;
+ }
+ const current=epoch;exporting=true;refresh();
+ try{
+  render();
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+  if(!blob||blob.size>25_000_000)throw Error('export');
+  if(epoch!==current||scope!==ident())return;
+  const url=URL.createObjectURL(blob);
+  try{
+   const a=el('a');a.href=url;a.download='NEXUS-local-edit.png';
+   document.body.append(a);a.click();a.remove();
+  }finally{setTimeout(()=>URL.revokeObjectURL(url),1000)}
+  say('Edited copy downloaded. Your original file was not changed.',
+      'نسخهٔ ویرایش‌شده دریافت شد؛ فایل اصلی بدون تغییر باقی ماند.');
+ }catch{if(epoch===current)say('Could not export this image.','خروجی گرفتن از تصویر ممکن نشد.')}
+ finally{exporting=false;refresh()}
+};
+clear.onclick=release;
+quick.onclick=()=>{panel.open=true;file.focus({preventScroll:true})};
+function relabel(){
+ summary.textContent=words('Edit an image locally (free)','ویرایش محلی تصویر (رایگان)');
+ help.textContent=words(
+  'No AI or network access. Adjust light, contrast and color without cropping. The original stays unchanged. Changes are never saved to chat history; download the edited copy to keep it.',
+  'بدون مدل هوش مصنوعی و بدون ارسال اینترنتی. روشنایی، کنتراست و رنگ را بدون برش تنظیم کن. فایل اصلی تغییر نمی‌کند؛ برای نگه‌داری نسخهٔ ویرایش‌شده آن را دانلود کن.');
+ fileLabel.firstChild?.nodeType===3&&fileLabel.firstChild.remove();
+ fileLabel.insertBefore(document.createTextNode(words('Choose original image','انتخاب تصویر اصلی')),file);
+ fromGenerated.textContent=words('Use last generated image','استفاده از تصویر ساخته‌شده');
+ for(const [name,{caption}] of Object.entries(sliders))
+  caption.textContent=({brightness:words('Brightness','روشنایی'),contrast:words('Contrast','کنتراست'),saturate:words('Saturation','اشباع رنگ')})[name];
+ reset.textContent=words('Reset edits','بازنشانی تغییرات');
+ download.textContent=words('Download edited PNG','دریافت PNG ویرایش‌شده');
+ clear.textContent=words('Clear from this tab','پاک‌کردن از این برگه');
+ quick.textContent=words('Edit image locally','ویرایش محلی تصویر');
+}
+let last=ident();
+document.addEventListener('nexus-studio-state',()=>{const next=ident();if(next!==last){last=next;release()}refresh()});
+document.addEventListener('nexus-studio-private-clear',release);
+$('language')?.addEventListener('change',()=>queueMicrotask(relabel));
+relabel();refresh();
+})();
