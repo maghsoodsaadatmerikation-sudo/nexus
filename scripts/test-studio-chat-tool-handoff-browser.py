@@ -280,6 +280,26 @@ window.addEventListener('load',async()=>{
   assert(JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions})===
    JSON.stringify({...beforeWorkflow,searchCalls:beforeWorkflow.searchCalls+workflowSearches}),
    'opening-second-workflow-step-never-runs-another-tool');
+  assert(workflow.querySelector('li:nth-child(2) button:nth-of-type(2)').disabled,
+   'opening-data-panel-does-not-create-an-analysis-receipt');
+  file('data-file','invalid-workflow.json','[{"score":1,"score":2}]');
+  $('data-run').click();
+  await wait(()=>$('data-status').textContent.includes('Analysis unavailable'));
+  assert(workflow.querySelector('li:nth-child(2) button:nth-of-type(2)').disabled,
+   'failed-duplicate-key-analysis-cannot-advance-workflow');
+  const analysisRunsBefore={providerCalls,searchCalls,catalogCalls,connectionActions};
+  file('data-file','workflow-analysis.csv','Group,Score\\nA,1\\nB,2\\n'.replace(/\\n/g,'\n'));
+  $('data-run').click();
+  await wait(()=>!workflow.querySelector('li:nth-child(2) button:nth-of-type(2)').disabled);
+  assert($('data-status').textContent.includes('Analysis ready')&&
+   workflow.textContent.includes('SHA256 ')&&
+   JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions})===
+     JSON.stringify(analysisRunsBefore),
+   'consented-local-data-run-yields-only-a-provenance-bounded-receipt');
+  workflow.querySelector('li:nth-child(2) button:nth-of-type(2)').click();
+  assert(workflow.querySelector('li:nth-child(2)').textContent.includes('local tool completed')&&
+   workflow.querySelectorAll('li').length===3,
+   'analysis-result-not-inferred-from-panel-open-or-old-file');
   fill('message',workflowDraft+' modified');
   assert(workflow.hidden,'workflow-edit-revokes-previous-steps');
   fill('message','/plan\n/github list pull requests\n/unknown invalid');
