@@ -3926,7 +3926,8 @@ function showWorkflow(){
     }:null;
     const localReceiver=local?(receipt)=>{
      if(workflowState!==plan||!retainedWorkflow()||plan.index!==i||
-        !plan.opened||receipt?.completed!==true||receipt?.kind!==local||
+        !plan.opened||(local!=='export'&&receipt?.completed!==true)||
+        receipt?.kind!==local||
         receipt.source!==(local==='data'?'studio-local-analysis':
            local==='write'?'studio-document-version':
            local==='export'?'studio-document-export':'studio-local-tool')||
