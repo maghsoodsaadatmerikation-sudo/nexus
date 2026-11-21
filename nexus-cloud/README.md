@@ -198,6 +198,49 @@ cd nexus-cloud
 uv run --frozen python -m model_quality_eval --self-test
 ```
 
+### Three-step model readiness ladder
+
+Before spending provider credits or routing any real user prompt, an operator
+can perform progressively stronger checks. No ChatGPT account, Gemini login,
+free quota or cloud model is automatically provisioned by these commands.
+
+**1. Configuration check — zero network requests and no provider charges**
+
+```sh
+cd nexus-cloud
+uv run --frozen python -m model_quality_eval --check-config
+```
+
+This verifies that the selected provider URL, adapter, model ID, separate
+Studio token and any required server-side provider key meet the local
+configuration contract. Output is deliberately redacted: it prints
+`READY_TO_TEST` or `NOT_READY`, never the API key, endpoint, model name
+or Studio token. **READY_TO_TEST does not establish live model availability.**
+
+**2. Single fictional-question smoke — exactly one attempted provider request**
+
+```sh
+NEXUS_QUALITY_EVAL_CONSENT=YES uv run --frozen python -m model_quality_eval --smoke-live
+```
+
+This opt-in check sends only the fixed fictional `supplied_fact` probe through
+the exact production text-only payload/acceptance contract, using the pinned
+model/secret/policy snapshot. It does not send existing conversations, project
+files or personal information, follow redirects or retry. It prints
+`PASS`, `FAIL` or `ERROR` and the probe ID but never the answer or
+credentials. Upstream provider policy, quotas, billing and latency still apply.
+`PASS` means one basic reply met one heuristic criterion; the report
+explicitly states `quality_gate: NOT_RUN` and
+`live_model_evaluated: false` to prevent a smoke test from being mistaken
+for the full acceptance suite.
+
+**3. Full optional quality sample — fifteen provider requests**
+
+After independently verifying permission, cost/quota and model identity,
+use the `--live` command below. That is the larger heuristic quality gate.
+Neither step is production acceptance by itself; human review and staging
+evidence remain necessary.
+
 For an **explicitly approved, live** quality sample, configure
 `NEXUS_MODEL_URL`, `NEXUS_MODEL_ID`, `NEXUS_STUDIO_TOKEN` (minimum 32
 characters), and, when required, `NEXUS_MODEL_API_KEY` securely in the
