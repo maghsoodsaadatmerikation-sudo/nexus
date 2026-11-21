@@ -7,7 +7,9 @@ import stat
 # bilingual decision support in the standalone HTML.
 # The reviewed chat workflow checklist adds ~5.8 KiB to the bundled
 # self-contained shell. Keep a hard asset ceiling and fail closed above it.
-MAX_FILE = 615_000
+# Reviewed chat-model status UI increases the complete static shell by ~4.3 KiB.
+# Keep a strict 620 KiB-class per-file cap (not an unbounded exception).
+MAX_FILE = 620_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000
