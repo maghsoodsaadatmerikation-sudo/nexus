@@ -20,7 +20,10 @@ from studio_model import (
     MODEL_TIMEOUT,
     POLICY,
     accepted_buffered_answer,
+    ModelSettings,
+    read_model_settings,
     config,
+    adapter,
     provider_payload,
 )
 
@@ -251,19 +254,24 @@ def meets_gate(report: dict, *, minimum_pass_rate: float) -> bool:
             and report["pass_rate"] >= minimum_pass_rate)
 
 
-def query_provider(client: httpx.Client, provider: tuple[str, str, str, str],
+def query_provider(client: httpx.Client, provider: tuple[str, str, str, str] | ModelSettings,
                    probe: Probe) -> str:
-    """Use the production bridge's exact reply acceptance contract."""
-    endpoint, model_id, _studio_token, _hostname = provider
+    """Use the exact production payload and an immutable live-provider snapshot."""
+    if isinstance(provider, ModelSettings):
+        endpoint, model_id = provider.endpoint, provider.model_id
+        api_key, kind, policy = provider.provider_api_key, provider.adapter, provider.policy
+    else:
+        # Compatibility for synthetic HTTPX tests; CLI live evaluation snapshots.
+        endpoint, model_id, _studio_token, _hostname = provider
+        api_key, kind, policy = os.getenv("NEXUS_MODEL_API_KEY", "").strip(), adapter(), POLICY
     headers = {"accept-encoding": "identity", "accept": "application/json"}
-    api_key = os.getenv("NEXUS_MODEL_API_KEY", "").strip()
     if api_key:
         headers["authorization"] = "Bearer " + api_key
     payload = provider_payload(
         model_id,
-        [{"role": "system", "content": POLICY},
+        [{"role": "system", "content": policy},
          {"role": "user", "content": probe.prompt}],
-        stream=False, max_output_tokens=256,
+        stream=False, max_output_tokens=256, adapter_name=kind,
     )
     body = bytearray()
     with client.stream(
@@ -284,7 +292,7 @@ def query_provider(client: httpx.Client, provider: tuple[str, str, str, str],
     return text
 
 
-def run_live(client: httpx.Client, provider: tuple[str, str, str, str]) -> dict:
+def run_live(client: httpx.Client, provider: tuple[str, str, str, str] | ModelSettings) -> dict:
     answers = {}
     for probe in PROBES:
         try:
@@ -310,7 +318,7 @@ def main() -> int:
         if os.getenv("NEXUS_QUALITY_EVAL_CONSENT", "") != "YES":
             print(json.dumps({"status": "NOT_RUN", "reason": "explicit_operator_consent_required"}))
             return 2
-        provider = config()
+        provider = read_model_settings()
         if provider is None:
             print(json.dumps({"status": "NOT_RUN", "reason": "model_provider_not_configured"}))
             return 2
