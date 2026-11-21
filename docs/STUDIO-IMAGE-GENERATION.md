@@ -37,14 +37,17 @@ Define these as server-side secrets/settings **outside the repo**:
 | `NEXUS_IMAGE_ENABLED=1` | Explicit opt-in; otherwise always unavailable |
 | `NEXUS_IMAGE_URL` | HTTPS URL ending in `/images/generations`, no user info, query or fragment |
 | `NEXUS_IMAGE_MODEL` | An exact provider-supported model ID |
+| `NEXUS_IMAGE_WIRE_FORMAT` | `gpt` (default: modern images API) or `legacy` (older b64_json-compatible provider) |
 | `NEXUS_IMAGE_API_KEY` | Separate provider credential, at least 8 characters, never exposed to clients |
 | `NEXUS_STUDIO_TOKEN` | Separate Studio access credential, at least 32 characters |
 | `NEXUS_IMAGE_MAX_REQUESTS_PER_PROCESS` | Required integer from 1 to 1000 |
 
-The provider must accept `{model, prompt, size, n:1, response_format:"b64_json"}`
-and return a JSON `data` array containing exactly one image with `b64_json`.
-Some commercial models do **not** implement this wire format. Compatibility
-must be verified against the actual selected provider before enabling.
+The default modern `gpt` mode sends `{model, prompt, size, n:1, output_format:"png"}`;
+modern GPT Image APIs return base64 image data without `response_format`.
+The explicit `legacy` mode instead requests `response_format:"b64_json"` for
+older compatible endpoints. Both require `data` with exactly one `b64_json` image.
+See the [current Images API schema](https://developers.openai.com/api/reference/resources/images/methods/generate).
+Provider-specific compatibility must be verified before enabling.
 
 Use the status response to populate the displayed provider and reviewed
 `configuration_id`; then prepare the exact prompt and size:
