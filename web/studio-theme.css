@@ -324,3 +324,30 @@ html.studio-focus-mode{
     margin-inline: 0;
   }
 }
+
+/* Show the selected provider's actual local configuration, not invented availability. */
+#studio-compose-model-info:not([hidden]) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--studio-line);
+  border-radius: 11px;
+  background: var(--studio-card);
+}
+#studio-compose-model-state {
+  margin: 0;
+  flex: 1 1 225px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: .89rem;
+}
+#studio-compose-model-check {
+  margin: 0;
+  flex: 0 1 auto;
+  min-height: 40px;
+}
+@media (max-width: 480px) {
+  #studio-compose-model-check { flex: 1 1 100%; }
+}

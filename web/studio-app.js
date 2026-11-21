@@ -765,6 +765,21 @@ function appendVisionResult({prompt,answer,selection}){
    return installThread(completed);
   }catch{return false}
 }
-window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,openConversation,selection:()=>({projectId,threadId,head:chat()?.head||null,revision,branchBase}),appendVisionResult,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),attachmentLoading,archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
+function modelAvailability(){
+ // The public model-status endpoint verifies local gateway configuration only.
+ // Never claim that a provider is reachable, billable or ready to answer.
+ if($('model-engine')?.value==='device'){
+  const info=window.NexusDevice?.info();
+  return {kind:'device',checked:Boolean(info),configured:Boolean(info?.ready),
+          model:info?.ready?String(info.model).slice(0,150):null};
+ }
+ let origin;
+ try{origin=gateway()}catch{return {kind:'gateway',checked:false,configured:false}}
+ if(!modelInfo||modelInfo.gateway!==origin)return {kind:'gateway',checked:false,configured:false};
+ return {kind:'gateway',checked:true,configured:modelInfo.configured===true,
+         model:modelInfo.configured?String(modelInfo.model).slice(0,150):null,
+         providerHost:modelInfo.configured?String(modelInfo.provider_host).slice(0,255):null};
+}
+window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,openConversation,selection:()=>({projectId,threadId,head:chat()?.head||null,revision,branchBase}),appendVisionResult,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),attachmentLoading,archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),modelAvailability,revokeModelReview:()=>stop(),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
