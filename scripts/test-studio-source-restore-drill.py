@@ -85,7 +85,6 @@ class SourceRestoreDrillTests(unittest.TestCase):
             self.build()
         self.assertEqual(marker.read_text(), "never overwrite owner content")
         self.assertFalse(self.report.exists())
-        self.dest.rmdir() if not any(self.dest.iterdir()) else None
         self.dest.joinpath("user-content.txt").unlink()
         self.dest.rmdir()
         self.report.write_bytes(b"preserve-output")
