@@ -1,0 +1,114 @@
+name: NEXUS Portable Installable PWA Kit
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/portable-pwa-kit.yml'
+      - 'scripts/build-portable-pwa-kit.py'
+      - 'scripts/test-portable-pwa-kit.py'
+      - 'scripts/test-portable-pwa-browser.mjs'
+      - 'web/offline-pilot.html'
+      - 'public/service-worker.js'
+      - 'public/manifest.json'
+      - 'public/icons/**'
+      - 'docs/PORTABLE-PWA-KIT.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scoped-pwa-acceptance:
+    name: scoped-pwa-acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact candidate without persistent GitHub credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Reject operator credentials and synthetic-only test mode
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+      - name: Verify reproducible scoped PWA and reject malicious archive fixtures
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/build-portable-pwa-kit.py scripts/test-portable-pwa-kit.py
+          python3 scripts/test-portable-pwa-kit.py
+          node --check scripts/test-portable-pwa-browser.mjs
+      - name: Build exact-source package and verify before extraction
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/nexus-portable-delivery" "$RUNNER_TEMP/nexus-portable-site"
+          python3 scripts/build-portable-pwa-kit.py build \
+            "$RUNNER_TEMP/nexus-portable-delivery/nexus-installable-pwa.zip" > "$RUNNER_TEMP/nexus-portable-build.json"
+          python3 scripts/build-portable-pwa-kit.py verify \
+            "$RUNNER_TEMP/nexus-portable-delivery/nexus-installable-pwa.zip" > "$RUNNER_TEMP/nexus-portable-verify.json"
+          python3 - <<'PY'
+          import json,os,zipfile
+          from pathlib import Path
+          t=Path(os.environ['RUNNER_TEMP'])
+          built=json.loads((t/'nexus-portable-build.json').read_text())
+          checked=json.loads((t/'nexus-portable-verify.json').read_text())
+          assert built==checked
+          assert built['status']=='VERIFIED_PORTABLE_PWA_PACKAGE'
+          assert built['git_revision']==os.environ['GITHUB_SHA']
+          assert built['files']==7 and built['release_authorized'] is False
+          with zipfile.ZipFile(t/'nexus-portable-delivery/nexus-installable-pwa.zip') as z:
+              assert len(z.namelist())==7
+              assert all(p.startswith('nexus/') and '..' not in p for p in z.namelist())
+              z.extractall(t/'nexus-portable-site')
+          print('NEXUS PORTABLE PWA: SOURCE-BOUND STATIC PACKAGE PASS')
+          PY
+      - name: Real Chromium scoped install, network outage, no private cache, uninstall
+        env:
+          NEXUS_PORTABLE_DIR: ${{ runner.temp }}/nexus-portable-site/nexus
+        run: |
+          set -euo pipefail
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
+          test -n "$NEXUS_PWA_CHROME"
+          python3 -m http.server 8765 --bind 127.0.0.1 \
+            --directory "$RUNNER_TEMP/nexus-portable-site" > "$RUNNER_TEMP/pwa-http.log" 2>&1 &
+          web_pid=$!
+          trap 'kill "$web_pid" 2>/dev/null || true' EXIT
+          python3 - <<'PY'
+          import time,urllib.request
+          for attempt in range(40):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:8765/nexus/', timeout=2) as r:
+                      assert r.status==200 and b'Offline Decision Workshop' in r.read()
+                  break
+              except Exception:
+                  if attempt==39: raise
+                  time.sleep(.2)
+          PY
+          node scripts/test-portable-pwa-browser.mjs > "$RUNNER_TEMP/nexus-portable-browser.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ['RUNNER_TEMP'])/'nexus-portable-browser.json').read_text())
+          assert r['schema']=='nexus.portable.installable-browser.v1'
+          assert r['status']=='PASS' and len(r['checks'])==8
+          assert r['actual_offline_navigation'] is True
+          assert r['real_android_hardware'] is False
+          assert r['private_data_submitted'] is False
+          assert r['authenticated_rust_tested'] is False
+          assert r['volume_recovery_verified'] is False
+          assert r['production_mutation'] is False and r['authority']=='none'
+          print('NEXUS PORTABLE PWA: REAL SUBPATH CHROMIUM OFFLINE PASS')
+          PY
+      - name: Upload installable site files (public assets only)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-installable-pwa-${{ github.run_id }}
+          path: ${{ runner.temp }}/nexus-portable-delivery/nexus-installable-pwa.zip
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
