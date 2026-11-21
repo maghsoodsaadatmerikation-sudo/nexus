@@ -290,6 +290,7 @@ window.addEventListener('load',async()=>{
    NexusStudioFocus.openPanel('conversation-card');
    const planButton=$('studio-assistant-plan-preview');
    const naturalDraft='Research fictional study then analyze CSV data then draft a report';
+   fill('research-query',''); // Previous /plan step left a reviewed draft; do not overwrite it implicitly.
    fill('gateway-token','studio-preview-token-01234567890123456789');
    fill('message',naturalDraft);
    assert(!planButton.disabled,'assistant-natural-plan-entry-enabled');
