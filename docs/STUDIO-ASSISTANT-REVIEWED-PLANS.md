@@ -61,3 +61,32 @@ Not included: AI-generated planning, autonomous execution, tool chaining,
 workflow persistence, new chat UI controls, a deployed service or proven
 integration to an external provider. This is a backend API source candidate
 for subsequent reviewed UI integration.
+
+## Chat interface integration (stacked UI candidate)
+
+The focused Studio chat adds an explicit **Plan steps** button. With a nonempty
+human-authored 8–1,800-character draft, the user can preview the **exact**
+text in a temporary panel. Clicking **Approve gateway-only preview** sends
+that text to the configured NEXUS Studio gateway with the existing Studio access
+token. There is **no** automatic request from typing, opening the plan panel,
+changing tabs, or merely choosing a model mode. No provider model is called.
+
+The browser strictly validates the returned schema and only permits the eight
+reviewed tool routes. Every step must be an unmodified substring of the user's
+draft and is displayed using textContent. An invalid, oversized, or failed
+response becomes a visible error and never a runnable step. Editing the draft,
+changing the conversation or clearing the private session revokes the preview;
+in-flight responses are aborted or discarded. Every step must still be opened
+and manually marked complete with the existing review-only workflow surface.
+
+The original local **/plan** command remains available without any gateway
+connection, account or external request. This new preview button requires a
+configured gateway and operator-issued Studio token; the optional public
+static website does **not** provide a gateway credential by default. It does
+not turn NEXUS into a fully autonomous assistant. A staged UI result is not
+an execution receipt, and no changes are made to the Rust constitutional
+execution boundary.
+
+Bundled Studio pages and the integrity-pinned static PWA worker must be rebuilt
+from the exact source before release. CI and real-browser tests for the PR head
+must pass; no live publication is asserted.
