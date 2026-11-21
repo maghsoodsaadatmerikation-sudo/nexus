@@ -262,6 +262,109 @@ def test_policy_change_invalidates_review_and_does_not_contact_provider(monkeypa
         assert calls[0]["messages"][0]["content"] == model.POLICY
 
 
+
+def test_model_budget_defaults_to_small_local_attempt_limit_and_is_secret_safe(monkeypatch):
+    monkeypatch.delenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS", raising=False)
+    budget = model.ModelRequestBudget()
+    assert budget.limit == 32
+    assert "secret" not in repr(budget)
+    for _ in range(32):
+        assert budget.reserve() is True
+    assert budget.reserve() is False
+
+
+@pytest.mark.parametrize("value", ["", "-1", "not-a-number", "4097", "99999999999",
+                                     " 2 ", "9" * 5000, "0x1", "1.0"])
+def test_malformed_model_budget_fail_closed_before_provider(monkeypatch, value):
+    monkeypatch.setenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS", value)
+    calls = []
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={"choices": [
+            {"message": {"content": "should never reach provider"}, "finish_reason": "stop"}]})
+    with configured(monkeypatch, handler) as client:
+        assert client.app.state.model_budget.limit == 0
+        response = client.post("/studio-api/respond", json=BODY, headers=AUTH)
+        assert response.status_code == 429
+        assert response.headers.get("cache-control") == "no-store"
+    assert not calls
+
+
+def test_request_budget_charges_only_authorized_reviewed_upstream_attempts(monkeypatch):
+    monkeypatch.setenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS", "2")
+    calls = []
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={"choices": [
+            {"message": {"role": "assistant", "content": "Capped model draft"},
+             "finish_reason": "stop"}]})
+    with configured(monkeypatch, handler) as client:
+        budget = client.app.state.model_budget
+        assert budget.limit == 2
+        assert client.post("/studio-api/respond", json=BODY).status_code == 401
+        assert client.post("/studio-api/respond",
+                           json={**BODY, "consent": False}, headers=AUTH).status_code == 422
+        assert client.post("/studio-api/respond",
+                           json={**BODY, "configuration_id": "0" * 64}, headers=AUTH).status_code == 409
+        assert budget._attempted == 0
+        for _ in range(2):
+            reply = client.post("/studio-api/respond", json=BODY, headers=AUTH)
+            assert reply.status_code == 200
+            assert reply.json()["text"] == "Capped model draft"
+        assert budget._attempted == 2
+        for _ in range(4):
+            capped = client.post("/studio-api/respond", json=BODY, headers=AUTH)
+            assert capped.status_code == 429
+            assert capped.json()["detail"] == "Local model request budget exhausted or disabled"
+        assert len(calls) == 2
+        assert budget._attempted == 2
+
+
+def test_request_budget_counts_stream_and_buffered_against_same_limit(monkeypatch):
+    monkeypatch.setenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS", "1")
+    monkeypatch.setenv("NEXUS_MODEL_STREAMING", "1")
+    calls = []
+    def handler(request):
+        calls.append(request)
+        payload = json.loads(request.content)
+        assert payload["stream"] is True
+        wire = sse({"role": "assistant"}) + sse({"content": "Streamed model draft"}) + sse({}, "stop") + DONE
+        return httpx.Response(200, content=wire,
+                              headers={"content-type": "text/event-stream"})
+    with configured(monkeypatch, handler) as client:
+        reviewed = {**BODY,
+                    "configuration_id": client.get("/studio-api/status").json()["configuration_id"]}
+        response = client.post("/studio-api/respond-stream", json=reviewed, headers=AUTH)
+        assert response.status_code == 200
+        assert any(frame["type"] == "done" for frame in map(json.loads, response.text.splitlines()))
+        assert client.app.state.model_budget._attempted == 1
+        capped = client.post("/studio-api/respond", json=reviewed, headers=AUTH)
+        assert capped.status_code == 429
+    assert len(calls) == 1
+
+
+def test_model_request_budget_is_atomic_under_concurrency():
+    from concurrent.futures import ThreadPoolExecutor
+    budget = model.ModelRequestBudget("3")
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        admitted = list(pool.map(lambda _: budget.reserve(), range(200)))
+    assert admitted.count(True) == 3
+    assert admitted.count(False) == 197
+    assert budget._attempted == 3
+
+
+def test_gateway_restart_recreates_local_budget_not_global_provider_spend(monkeypatch):
+    monkeypatch.setenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS", "1")
+    with configured(monkeypatch) as first:
+        assert first.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 200
+        assert first.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 429
+    # A separate worker/restart gets its own cap. This must not be presented
+    # as a provider-side cost limit or a durable service-wide quota.
+    with configured(monkeypatch) as second:
+        assert second.app.state.model_budget.limit == 1
+        assert second.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 200
+
+
 def test_real_loopback_http_provider_transport(monkeypatch):
     import json
     import threading
