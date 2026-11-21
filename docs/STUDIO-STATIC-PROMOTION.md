@@ -15,15 +15,16 @@ Turn the current reviewed Studio from a GitHub-only/local-phone release into a *
 
 ## How the candidate is constructed
 
-The read-only [`NEXUS Studio Static Source Release Candidate`](https://github.com/maghsoodsaadatmerikation-sudo/nexus/actions/workflows/studio-static-source-release.yml) workflow checks out the exact source commit with no stored credentials; runs `scripts/build-studio-static.py --check`; executes negative ZIP/source/authority tests and a true local Chromium offline/encrypted-session lifecycle; and publishes five artifact files:
+The read-only [`NEXUS Studio Static Source Release Candidate`](https://github.com/maghsoodsaadatmerikation-sudo/nexus/actions/workflows/studio-static-source-release.yml) workflow checks out the exact source commit with no stored credentials; runs `scripts/build-studio-static.py --check`; executes negative ZIP/source/authority tests and a true local Chromium offline/encrypted-session lifecycle; and publishes six artifact files:
 
 1. `nexus-studio-static-site.zip` — exactly 13 public, source-reviewed assets, under `nexus-studio-static-site/`, **no private vault, project, key, provider token, hosted model, APK or runtime data**.
 2. `nexus-studio-static-site.zip.sha256` — independent CI sidecar to compare against the downloaded ZIP.
 3. `nexus-studio-release-manifest.json` — commit pin, SHA-256 and length for every public asset, ZIP digest and explicit `REVIEW_CANDIDATE_ONLY`/`authority:none` release flags.
 4. `nexus-studio-release-local-browser.json` — local synthetic real-Chromium/verified offline-code lifecycle; **not an Android hardware test and not a public release test**.
-5. `nexus-studio-public-before-promotion.json` — fixed-origin, network-only comparison of nine key public assets (HTML, service worker, manifest, both icons and four device-control modules) with statuses `SOURCE_MATCH_ONLY`, `PUBLIC_SOURCE_DRIFT`, or `INCOMPLETE_PUBLIC_OBSERVATION`.
+5. `nexus-studio-public-before-promotion.json` — legacy fixed-origin read-only comparison of nine key public assets (HTML, service worker, manifest, both icons and four device-control modules) with statuses `SOURCE_MATCH_ONLY`, `PUBLIC_SOURCE_DRIFT`, or `INCOMPLETE_PUBLIC_OBSERVATION`.
+6. `nexus-studio-public-all-assets.json` — new **complete fixed-origin HTTPS observation of all 17 source-reviewed files**, including the PDF modules, worker and licenses that the nine-file witness previously omitted. It verifies the exact candidate ZIP and manifest before the first request, keeps strict per-file byte and MIME bounds, compares seven+ nonimage resources byte-exactly, allows only identical decoded RGBA icon pixels when Render reencodes PNGs, never follows redirects and records each path as `MATCH`, `PIXEL_MATCH`, `DRIFT` or `UNREACHABLE`. All statuses are read-only evidence, not deploy authorization.
 
-The workflow deliberately returns *green* when the candidate builds and the public origin is reported as **DRIFT**. A green build check is **not** a production-promotion authorization. Public drift is expected until a separately approved source promotion occurs. The report never treats observed matching source bytes as proof of actual deploy identity, worker activation, offline reliability, user accounts, model-generation readiness, or device ownership.
+The workflow deliberately returns *green* when the candidate builds and the public origin is reported as **DRIFT**. This is a *successful observation*, **not** a successful public release. The added full-asset witness makes 17/17 coverage explicit and detects missing PDF files; its source-parity status cannot establish the actual provider deploy ID or rollback readiness. A green build check is **not** a production-promotion authorization. Public drift is expected until a separately approved source promotion occurs. The report never treats observed matching source bytes as proof of actual deploy identity, worker activation, offline reliability, user accounts, model-generation readiness, or device ownership.
 
 ### Manual verification without publishing
 
@@ -66,5 +67,5 @@ Do not claim a public rollout if any of the following is unresolved: mismatched 
 - A perfect candidate ZIP can still be deployed from the wrong repository, branch, workspace or service. Therefore actual deploy authorization and recorded Render identity remain mandatory.
 - CI observing a stale public site is not a deployment error. That distinction is explicit in the preflight report, and the build must not be presented as a live product update.
 - Source SHA equality does not prove encrypted archives survive a particular owner phone/browser update. The previous no-upload phone self-check remains a separate manual boundary.
-- Nine key public HTTP GETs are not the full runtime proof. They precede, rather than replace, the real public-origin browser tests.
+- Even seventeen fixed public HTTPS asset observations are not the full runtime proof. They precede, rather than replace, the real public-origin browser tests.
 - The older offline Pilot 12 Issue #260 is independent from this Studio deployment, and the original Railway `/data` is still protected. `A_out <= A_in`.
