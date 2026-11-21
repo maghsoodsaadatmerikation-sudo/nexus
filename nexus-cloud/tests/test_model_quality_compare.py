@@ -289,3 +289,26 @@ def test_manual_comparison_workflow_is_explicitly_dispatched_and_secret_protecte
     assert "secrets.NEXUS_COMPARE_SECONDARY_API_KEY" in workflow
     assert "secrets.NEXUS_COMPARE_STUDIO_TOKEN" in workflow
     assert "persist-credentials: false" in workflow
+
+
+
+def test_smoke_upstream_failure_is_error_not_double_counted_failure(two_models):
+    calls = []
+    code, report = comparison.compare_models(
+        mode="single_smoke", slots="primary,secondary", consent="YES",
+        acknowledgement="I_APPROVE_2_PROVIDER_REQUESTS", max_requests="2",
+        client_factory=make_factory(
+            lambda _: httpx.Response(429, content=b'private provider billing data'), calls),
+    )
+    assert code == 1 and report["status"] == "FAIL"
+    assert report["comparison_complete"] is False
+    assert report["provider_requests_attempted"] == 1
+    assert len(report["models"]) == 1
+    observed = report["models"][0]
+    assert observed["status"] == "FAIL"
+    assert observed["passed"] == 0
+    assert observed["failed"] == 0
+    assert observed["errors"] == 1
+    assert observed["evaluated"] == 1
+    assert observed["abort_reason"] == "rate_limited"
+    assert "private provider billing data" not in json.dumps(report)
