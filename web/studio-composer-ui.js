@@ -44,6 +44,7 @@ const routes=Object.freeze([
  ['remind','reminders-card','Reminders','یادآورها','reminder-title','reminders'],
  ['tasks','tasks-card','Tasks','وظایف',null,'task'],
  ['write','canvas-card','Writing','نوشتن',null,''],
+ ['export','canvas-card','Document export','خروجی سند',null,'download'],
  ['sources','sources-card','Sources','منابع',null,''],
  ['astrology','astrology-card','Astrology','اخترشناسی',null,''],
  ['sky','sky-card','Sky','آسمان',null,''],
@@ -128,8 +129,9 @@ function intent(value){
  if(reminder)return {route:routes.find(row=>row[0]==='remind'),query:reminder[1]};
  if(window.NexusStudio.asksForChoice(message))return null;
  const s=message.slice(0,340).toLocaleLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ');
- if(!/(بساز|ساخت|تولید|طراحی|بنویس|تنظیم|compose|create|make|generate|write|analy[sz]e|search|find|draw|run|open|launch|list|show|check|اجرا|بررسی|تحلیل|نمایش|نشان\s*بده|وضعیت|باز\s*کن|بازکردن|برو\s+به|جست\s*و\s*جو)/i.test(s))return null;
- const kind=/(github|گیت\s*هاب|گیتهاب|pull requests?|درخواست(?:‌|\s)*ادغام)/i.test(s)?'github':
+ if(!/(بساز|ساخت|تولید|طراحی|بنویس|تنظیم|compose|create|make|generate|write|export|download|analy[sz]e|search|find|draw|run|open|launch|list|show|check|اجرا|بررسی|تحلیل|نمایش|نشان\s*بده|وضعیت|باز\s*کن|بازکردن|برو\s+به|جست\s*و\s*جو|خروجی\s*بگیر|دریافت)/i.test(s))return null;
+ const kind=/\b(?:export|download)\b|خروجی\s*بگیر|دریافت\s*(?:فایل|سند)/i.test(s)?'export':
+  /(github|گیت\s*هاب|گیتهاب|pull requests?|درخواست(?:‌|\s)*ادغام)/i.test(s)?'github':
   /(render|رندر|deployment|deploy)/i.test(s)?'render':
   /(ارکستر|گروه کر|وکال|orchestra|choir|vocal)/i.test(s)?'orchestra':
   /(آهنگ|اهنگ|موسیقی|ملودی|music|song|melody)/i.test(s)?'music':
@@ -202,6 +204,7 @@ function clearLocalReviewers(){
  window.NexusLabUI?.clearReviewedStep?.();
  window.NexusQualityUI?.clearReviewedStep?.();
  window.NexusStudioUI?.clearDocumentReceipt?.();
+ window.NexusStudioUI?.clearExportReceipt?.();
 }
 function clearWorkflow(){
  clearLocalReviewers();
@@ -263,7 +266,7 @@ function expectedRead(step){
 }
 function expectedLocal(step){
  const kind=step.result.route[0];
- return ['research','code','data','write'].includes(kind)?kind:null;
+ return ['research','code','data','write','export'].includes(kind)?kind:null;
 }
 function showWorkflow(){
  if(!workflowState)return;
@@ -273,8 +276,8 @@ function showWorkflow(){
  title.textContent=words('Your reviewed workflow','گردش‌کار قابل بازبینی');
  const info=document.createElement('p');info.className='help';
  info.textContent=words(
-  'Opening a tool is not execution. Research, data, code and writing steps need a fresh observed result; writing is only applied to the current session until you save the encrypted archive separately. You can retry review or skip; no tool runs automatically.',
-  'بازکردن ابزار اجرا نیست. پژوهش، داده، کد و نوشتن نیاز به نتیجهٔ تازه دارند. نسخهٔ سند فقط در نشست جاری ثبت می‌شود؛ آرشیو رمزگذاری‌شده باید جداگانه ذخیره شود. بازبینی دوباره و ردکردن مرحله اختیاری است.');
+  'Opening a tool is not execution. Research, data, code and writing steps need a fresh observed result; export only confirms a browser download request, never successful file delivery. Writing remains session-only until you save the encrypted archive. You can retry review or skip; no tool runs automatically.',
+  'بازکردن ابزار اجرا نیست. پژوهش، داده، کد و نوشتن نیاز به نتیجهٔ تازه دارند. خروجی فقط ثبت درخواست دانلود است، نه دریافت قطعی فایل. نسخهٔ سند تا ذخیرهٔ جداگانهٔ آرشیو فقط در نشست است. بازبینی دوباره و ردکردن مرحله اختیاری است.');
  const list=document.createElement('ol');
  plan.steps.forEach((step,i)=>{
   const item=document.createElement('li'),span=document.createElement('span');
@@ -285,6 +288,8 @@ function showWorkflow(){
     words('local tool completed · output untrusted','ابزار محلی اجرا شد · خروجی غیرقابل‌اعتماد'):
    step.outcome==='document_version'?
     words('new document version applied · session only','نسخهٔ جدید سند اعمال شد · فقط نشست جاری'):
+   step.outcome==='download_requested'?
+    words('file download requested · delivery unverified','درخواست دانلود فایل · دریافت تأییدنشده'):
    step.outcome==='skipped'?
     words('skipped by you','با انتخاب شما رد شد'):
     words('confirmed by you · not independently verified','به تأیید شما · بدون راستی‌آزمایی مستقل'):
@@ -311,17 +316,26 @@ function showWorkflow(){
      if(workflowState!==plan||!retainedWorkflow()||plan.index!==i||
         !plan.opened||receipt?.completed!==true||receipt?.kind!==local||
         receipt.source!==(local==='data'?'studio-local-analysis':
-           local==='write'?'studio-document-version':'studio-local-tool')||
+           local==='write'?'studio-document-version':
+           local==='export'?'studio-document-export':'studio-local-tool')||
         (local==='data'&&(!/^[a-f0-9]{64}$/.test(receipt.sha256||'')||
           !Number.isInteger(receipt.rows)||receipt.rows<0||
           !Number.isInteger(receipt.columns)||receipt.columns<1))||
         (local==='write'&&(receipt.persistence!=='session_only'||
           typeof receipt.versionId!=='string'||!receipt.versionId||
           !Number.isInteger(receipt.length)||receipt.length<1||receipt.length>100000))||
+        (local==='export'&&(receipt.status!=='download_requested'||
+          receipt.content!=='not_transmitted'||
+          !['markdown','docx'].includes(receipt.format)||
+          !['draft','saved_version'].includes(receipt.editorVersion)||
+          !Number.isInteger(receipt.bytes)||receipt.bytes<1||
+          receipt.bytes>1000000))||
         (local==='research'&&Boolean(step.result.query)&&
           receipt.query!==step.result.query))return;
      plan.readReceipt={operation:local,...(local==='data'?{sha256:receipt.sha256}: {}),
-       ...(local==='write'?{versionId:receipt.versionId}: {})};
+       ...(local==='write'?{versionId:receipt.versionId}: {}),
+       ...(local==='export'?{format:receipt.format,bytes:receipt.bytes,
+         editorVersion:receipt.editorVersion}: {})};
      showWorkflow();
     }:null;
     if(openReviewedSurface(step.result,step.line,
@@ -330,6 +344,7 @@ function showWorkflow(){
      const armed=!local||(local==='data'?
        window.NexusQualityUI?.armReviewedStep?.(local,localReceiver):
        local==='write'?window.NexusStudioUI?.armDocumentReceipt?.(local,localReceiver):
+       local==='export'?window.NexusStudioUI?.armExportReceipt?.(local,localReceiver):
        window.NexusLabUI?.armReviewedStep?.(local,localReceiver));
      plan.opened=Boolean(armed);plan.readReceipt=null;showWorkflow();
     }
@@ -337,7 +352,8 @@ function showWorkflow(){
    const done=document.createElement('button');done.type='button';done.className='secondary';
    done.textContent=required?
      words('Confirm reviewed read','تأیید دریافت پاسخ خواندن'):
-     local==='write'?words('Confirm new document version','تأیید نسخهٔ جدید سند'):local?
+     local==='write'?words('Confirm new document version','تأیید نسخهٔ جدید سند'):
+     local==='export'?words('Confirm download request','تأیید درخواست دانلود'):local?
      words('Confirm tool result','تأیید نتیجهٔ ابزار'):
      words('I completed this step','این گام را انجام دادم');
    done.disabled=!plan.opened||(Boolean(receiptKey)&&plan.readReceipt?.operation!==receiptKey);
@@ -346,7 +362,7 @@ function showWorkflow(){
     if(!validWorkflow()||!plan.opened||
        (receiptKey&&plan.readReceipt?.operation!==receiptKey))return;
     step.outcome=required?'gateway_read':local==='write'?'document_version':
-      local?'local_observed':'self_reported';
+      local==='export'?'download_requested':local?'local_observed':'self_reported';
     clearLocalReviewers();
     plan.index++;plan.opened=false;plan.readReceipt=null;showWorkflow();
    };
@@ -362,6 +378,11 @@ function showWorkflow(){
          '… فقط هویت بایت‌هاست، نه صحت نتیجه. پیش از تأیید بررسی کن.'):
        local==='write'?words('A changed document version was applied in this tab. Save your encrypted archive separately to keep it.',
          'نسخهٔ تغییرکردهٔ سند در این برگه اعمال شد. برای نگهداری، آرشیو رمزگذاری‌شده را جداگانه ذخیره کن.'):
+       local==='export'?words('Browser download requested ('+plan.readReceipt.format+
+         ', '+plan.readReceipt.bytes+' bytes, '+plan.readReceipt.editorVersion+
+         '). Verify that the file was saved and opens correctly on your device.',
+         'درخواست دانلود مرورگر ثبت شد ('+plan.readReceipt.format+
+         '، '+plan.readReceipt.bytes+' بایت). ذخیره و بازشدن فایل را روی دستگاه بررسی کن.'):
        words('A consented local tool run returned a result; review it before confirming.',
         'ابزار محلی با تأیید شما اجرا شد و نتیجه داد؛ پیش از تأیید آن را بررسی کن.'):
       required?words('Waiting for an approved read in the separate connection dialog.',
@@ -391,14 +412,17 @@ function showWorkflow(){
   const verified=plan.steps.filter(s=>s.outcome==='gateway_read').length;
   const localCount=plan.steps.filter(s=>s.outcome==='local_observed').length;
   const writing=plan.steps.filter(s=>s.outcome==='document_version').length;
+  const exports=plan.steps.filter(s=>s.outcome==='download_requested').length;
   const reported=plan.steps.filter(s=>s.outcome==='self_reported').length;
   const skipped=plan.steps.filter(s=>s.outcome==='skipped').length;
   note.textContent=words(
    'Checklist finished · gateway reads: '+verified+' · local tool runs: '+localCount+
-    ' · document versions (session only): '+writing+' · self-reported: '+reported+' · skipped: '+skipped+
+    ' · document versions (session only): '+writing+' · download requests (unverified): '+exports+
+    ' · self-reported: '+reported+' · skipped: '+skipped+
     '. Results remain untrusted and are not independently audited.',
    'پایان فهرست · خواندن درگاه: '+verified+' · اجرای ابزار محلی: '+localCount+
-    ' · نسخهٔ سند (فقط نشست): '+writing+' · گزارش کاربر: '+reported+' · ردشده: '+skipped+
+    ' · نسخهٔ سند (فقط نشست): '+writing+' · درخواست دانلود (تأییدنشده): '+exports+
+    ' · گزارش کاربر: '+reported+' · ردشده: '+skipped+
     '. نتایج مستقل راستی‌آزمایی نشده‌اند.');
   workflow.append(note);
  }
@@ -417,7 +441,7 @@ function reviewWorkflow(message){
  * gateway ONLY after the user reviews the exact text and clicks the second
  * approval button. This does not call a model, run tools or persist a plan.
  */
-const planTools=new Set(['research','data','write','code','music','remind','github','render']);
+const planTools=new Set(['research','data','write','export','code','music','remind','github','render']);
 function planGateway(){
  const raw=$('gateway')?.value.trim()||location.origin;
  const url=new URL(raw);
@@ -534,7 +558,9 @@ function explicitToolRequest(message){
   /^(?:please\s+)?(?:open|launch)\s+/i.test(value)||
   /^(?:لطفاً\s+)?(?:باز\s*کن|برو\s+به)\s+/u.test(value)||
   /^(?:please\s+)?analy[sz]e\s+(?:this\s+|the\s+)?(?:csv|tsv|json|dataset|spreadsheet)\b/i.test(value)||
-  /^(?:please\s+)?run\s+(?:this\s+)?javascript\b/i.test(value);
+  /^(?:please\s+)?run\s+(?:this\s+)?javascript\b/i.test(value)||
+  /^(?:please\s+)?(?:export|download)\s+/i.test(value)||
+  /^(?:لطفاً\s+)?(?:خروجی\s*بگیر|دریافت\s+فایل)/u.test(value);
 }
 function suggestion(message){
  if(!window.NexusStudioFocus?.isFocused()||
