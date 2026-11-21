@@ -20,6 +20,8 @@ from studio_model import (
     MODEL_TIMEOUT,
     POLICY,
     accepted_buffered_answer,
+    accepted_anthropic_answer,
+    ANTHROPIC_API_VERSION,
     ModelSettings,
     read_model_settings,
     config,
@@ -293,7 +295,11 @@ def query_provider(client: httpx.Client, provider: tuple[str, str, str, str] | M
         api_key, kind, policy = os.getenv("NEXUS_MODEL_API_KEY", "").strip(), adapter(), POLICY
     headers = {"accept-encoding": "identity", "accept": "application/json"}
     if api_key:
-        headers["authorization"] = "Bearer " + api_key
+        if kind == "anthropic":
+            headers["x-api-key"] = api_key
+            headers["anthropic-version"] = ANTHROPIC_API_VERSION
+        else:
+            headers["authorization"] = "Bearer " + api_key
     payload = provider_payload(
         model_id,
         [{"role": "system", "content": policy},
@@ -314,7 +320,10 @@ def query_provider(client: httpx.Client, provider: tuple[str, str, str, str] | M
                 raise ProviderProbeError("invalid_response")
             body.extend(chunk)
     try:
-        text, truncated = accepted_buffered_answer(bytes(body))
+        text, truncated = (
+            accepted_anthropic_answer(bytes(body)) if kind == "anthropic"
+            else accepted_buffered_answer(bytes(body))
+        )
     except ValueError:
         raise ProviderProbeError("invalid_response") from None
     if truncated:
