@@ -44,6 +44,19 @@ html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focu
 .studio-focus-mode #guide,.studio-focus-mode #prepare{display:none}
 @media(max-width:480px){.studio-compose-row label{flex:1 1 100%}.studio-compose-row button{flex:1 1 125px}}
 .music-fa{display:none}html[lang="fa"] .music-en{display:none}html[lang="fa"] .music-fa{display:initial}#music-card progress{accent-color:#185e48}#music-card pre{max-height:360px}
+/* The dedicated print sheet is generated ONLY by the explicit user print
+   button. Never include the private Studio interface in PDF/print output. */
+#nexus-print-sheet{display:none}
+@media print{
+ html,body{background:white!important;color:black!important}
+ body>:not(#nexus-print-sheet){display:none!important}
+ body>#nexus-print-sheet{display:block!important;margin:0!important;
+  padding:0!important;color:black!important;background:white!important}
+ #nexus-print-sheet h1{font:700 18pt/1.35 system-ui,sans-serif;margin:0 0 16pt}
+ #nexus-print-sheet pre{font:11pt/1.6 system-ui,sans-serif;white-space:pre-wrap;
+  overflow-wrap:anywhere;max-height:none;overflow:visible;margin:0;unicode-bidi:plaintext}
+ @page{size:auto;margin:20mm}
+}
 :root {
   --studio-ink: #172e28;
   --studio-muted: #4e655d;
@@ -371,20 +384,7 @@ html.studio-focus-mode{
   }
 }
 
-.studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}/* The dedicated print sheet is generated ONLY by the explicit user print
-   button. Never include the private Studio interface in PDF/print output. */
-#nexus-print-sheet{display:none}
-@media print{
- html,body{background:white!important;color:black!important}
- body>:not(#nexus-print-sheet){display:none!important}
- body>#nexus-print-sheet{display:block!important;margin:0!important;
-  padding:0!important;color:black!important;background:white!important}
- #nexus-print-sheet h1{font:700 18pt/1.35 system-ui,sans-serif;margin:0 0 16pt}
- #nexus-print-sheet pre{font:11pt/1.6 system-ui,sans-serif;white-space:pre-wrap;
-  overflow-wrap:anywhere;max-height:none;overflow:visible;margin:0;unicode-bidi:plaintext}
- @page{size:auto;margin:20mm}
-}
-</style></head><body><main>
+.studio-fa{display:none}html[lang="fa"] .studio-en{display:none}html[lang="fa"] .studio-fa{display:revert}</style></head><body><main>
 <header class="studio-masthead">
   <div class="studio-brand">
     <img class="studio-mark" alt="" width="48" height="48" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAAYFBMVEXh6ciW8kpp5hZJyA7vnf2HnH4qlgzbZvymXM2/PPyNOMM0YjcUYAomPDakIfh6IMCKDu1uB8lUG441G19BBX8MGxIFCQcGBAoIAQ0BAQAjAEsDAAYBAAIBAAAAAAUAAADQPNBmAAAE4klEQVR42uVX7ZKrKhDETxBRFMUgor7/W54eTLJJ1tzNnvvv3qlUbaU20zIz3T3I9n8Z7L8MsO7hiL8ECGFZlsvlsixh/gsASncxNnyZEetvANYj3XuDGOy0E8JvAMISs0We80pIWdd2nt4hsHf5Y5XnedVqMwxNXappelMFO6sf+YYzej4BNE2jynJ6cwZ2egA/8pyCVx0BKKWydwjsvACRc0AIqbU2EUClNfrwKYDXeVVVXT+Oo3dNTfllltiTUazfAdZwcQOKj+mjQ44tKbK0OO3jyQmc0/xIN24POxCyMsuylI7wAQC1QFzz/U5CmHeVZmmaJKddYCcU9G0/eu/HgfJX0HBCNqIgOr32gT0//UL0HzA7AnBRisif6wiAGiKp5zcA68FALdu2k1KjALcECGmadsuSJE3TsqxByWc+sId8pGsO7nR937VVJQd3cQvybZ1RfpaCT2mh7BMCe+g++JtzzI+i67q21d65aVJJAgDMISM+pElhH+d5B8D4+5wRAbojn/4A4VLj2WBBBipEQqUsUQ8IN4B1cWN+6OcaAIAbeEWPBg/KCECEShid4RUgEP8P/UgtpaBe9GYcGkpJKV/RJ/IhYfV0ZwS7H8Ac+jE+7Mraxgje9oa8AM/MyhrR7JMtbwN9AcAEBa+4MCPYGxQQrDXRDWgCpa1hCjVlTQqcSJPyG8DmeVsZ0GcOJB8SoPWCC1EUrNjgjIMhYs7B0iTS9H6EG0AwVUf8JfaC/FRx1ozUFia8wVGMdvF/M5BRVbM/AaxLkC3lX380Rf0mRueMcS2pod14VZZtGquyen85wSa1vwEAwUb9MoG2orXRHrBh7gC2/gYQpLEAuEQBzoSAfMZy+kQAf4kAYYfhN36o9/AMsGOBYHgHzVFDnB7L85u3dmM4AIIjpRrzDQDbgw4XTxZ2GCFcsBAwd97yKJDDXZYdPjGM+gwgeifWGL74SKCsMVSFHgUoZXpiyLI7A6/q9fACEI2PQuH8wUUGlrYpAMDE4MnizBj9RveGpOZeANA36jssw2IZGwJASdHHigIIfbRIGI5uYRUQ+rasz2ICQRLSSVaq2UkQDyWBsxmpQAtpQBKYvJdVHGo1bMv+CjAVQCDtq0bSWo8qRE31YExXYUtDpPyYCZfuEl79AKM/nqhU3SJflIcJ1A1kcHhcDE7h3fLqB3QEFStQSrZaywiQlZgtpmauJgWbQw25+TrAF8A6k/ulEaDq6HckhxLMcoY631+tsq0IwIX1xNbJgEs6g6iuADRU8GLQV6ulSrgYnVvC6WKZqQ70rUCfeF7EyxE2E/hvJLkkKmglFvZD/stqi3tnsiYCiO1qGuDf4tFKQxvPUXp4u1xXUuLe8NjvG10DCYB2HdiMy+Pz1fPkioOBimjucjmuqsgnAYx9Tw8PP96RiFMV7ja6M/TA5bK5nrTQ0/dPLlmoohHERQPNbbiren0sq9Zv4aN7IsZZQw0gUG/c5nxH/cdkzbJ8BkC0LrAJqPPaaHSDFMSF/6LPD1ddokPWEMJoIimjtY4PBP7ptk60znCGKIMrhHnizw8AURhZCYQ7gPGn+e/eF4AwQxc1JkH5nAi8hF8AxN0w26Y2EmG8d2/y37/yrMd1bHPXeJP/j29tBBHfnKIA1r957VvX9adXt4/eG9f/66vvh/EH9EWBhH14PlEAAAAASUVORK5CYII=">
