@@ -40,7 +40,7 @@ def complete(answer):
     ({"model_id": "model\necho SECRET"}, "invalid_model_id"),
     ({"model_id": "A" * 151}, "invalid_model_id"),
     ({"provider_key": ""}, "provider_secret_missing"),
-    ({"provider_key": "bad\\nkey"}, "provider_secret_invalid"),
+    ({"provider_key": "bad" + chr(10) + "key"}, "provider_secret_invalid"),
     ({"provider_key": "invalid key"}, "provider_secret_invalid"),
     ({"provider_key": "A" * 513}, "provider_secret_invalid"),
 ])
