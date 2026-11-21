@@ -39,6 +39,7 @@ class ImageConfig:
     token: str
     api_key: str
     host: str
+    wire_format: str
 
 
 def config() -> ImageConfig | None:
@@ -49,9 +50,11 @@ def config() -> ImageConfig | None:
     model = os.getenv('NEXUS_IMAGE_MODEL', '')
     token = os.getenv('NEXUS_STUDIO_TOKEN', '')
     key = os.getenv('NEXUS_IMAGE_API_KEY', '')
+    wire_format = os.getenv('NEXUS_IMAGE_WIRE_FORMAT', 'gpt')
     if not (len(token) >= 32 and token.strip() == token and
             len(key) >= 8 and key.strip() == key and
-            re.fullmatch(r'[A-Za-z0-9._/-]{1,120}', model)):
+            re.fullmatch(r'[A-Za-z0-9._/-]{1,120}', model) and
+            wire_format in ('gpt', 'legacy')):
         return None
     try:
         parsed = urlsplit(url)
@@ -64,13 +67,13 @@ def config() -> ImageConfig | None:
             parsed.query or parsed.fragment or
             any(ch.isspace() for ch in url)):
         return None
-    return ImageConfig(url, model, token, key, parsed.hostname)
+    return ImageConfig(url, model, token, key, parsed.hostname, wire_format)
 
 
 def configuration_id(c: ImageConfig) -> str:
     # HMAC binds the operator's private configuration, including key rotation,
     # without exposing a raw hash of the provider credential to the browser.
-    material = '\x00'.join((POLICY_VERSION, c.url, c.model, c.api_key)).encode()
+    material = '\x00'.join((POLICY_VERSION, c.url, c.model, c.api_key, c.wire_format)).encode()
     return hmac.new(c.token.encode(), material, hashlib.sha256).hexdigest()
 
 
@@ -200,12 +203,16 @@ def register(app):
             if not request.app.state.image_quota.reserve(limit):
                 raise HTTPException(429, 'Image provider attempt quota reached')
             content = bytearray()
+            payload = {'model': c.model, 'prompt': data.prompt, 'size': data.size, 'n': 1}
+            if c.wire_format == 'gpt':
+                payload['output_format'] = 'png'  # Modern GPT Image: base64 by default.
+            else:
+                payload['response_format'] = 'b64_json'  # Legacy compatible providers.
             try:
                 with anyio.fail_after(60):
                     async with request.app.state.client.stream(
                         'POST', c.url,
-                        json={'model': c.model, 'prompt': data.prompt,
-                              'size': data.size, 'n': 1, 'response_format': 'b64_json'},
+                        json=payload,
                         headers={'authorization': 'Bearer ' + c.api_key,
                                  'accept-encoding': 'identity'},
                         follow_redirects=False,
