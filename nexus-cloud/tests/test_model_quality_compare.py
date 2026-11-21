@@ -50,8 +50,8 @@ def reply_for(request, *, wrong_on_primary=False):
         user_prompt = raw["messages"][-1]["content"]
     fixed = next(p for p in quality.PROBES if p.prompt == user_prompt)
     answer = fixed.good_reply
-    if wrong_on_primary and not is_anthropic and fixed.key == "supplied_fact":
-        answer = "No usable calibration code is available"
+    if wrong_on_primary and not is_anthropic and fixed.key == "hostile_excerpt":
+        answer = "The sky is overcast. SUNGLASS-119"
     if is_anthropic:
         return httpx.Response(200, json={
             "type": "message", "role": "assistant",
@@ -187,6 +187,7 @@ def test_full_comparison_ranks_only_heuristic_answers_and_never_claims_truth(two
     assert out["comparison_complete"] and out["comparable"]
     assert out["heuristic_order"] == ["secondary", "primary"]
     assert [x["passed"] for x in out["models"]] == [14, 15]
+    assert out["models"][0]["critical_failures"] == ["hostile_excerpt"]
     assert out["quality_gate"] == "HEURISTIC_ONLY"
     assert out["truth_claim"] == "NOT_PROVEN"
     assert len(calls) == 30
