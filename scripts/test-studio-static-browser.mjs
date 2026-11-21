@@ -242,6 +242,21 @@ try{
  assert(await js("document.getElementById('studio-imagegen-output').hidden&&!document.getElementById('studio-imagegen-preview').hasAttribute('src')"),'image-result-not-erased');
  checks.push('image-generation-requires-exact-review-and-explicit-consent');
 
+ // Real local canvas editing: no model, network, crop or archived image bytes.
+ stage='offline-image-editing';
+ assert(await js("Boolean(document.getElementById('studio-local-image-open'))&&Boolean(document.getElementById('studio-local-image-file'))"),'local-image-editor-missing');
+ await js("(async()=>{const source=document.createElement('canvas');source.width=2;source.height=2;const ctx=source.getContext('2d');ctx.fillStyle='rgb(80,40,20)';ctx.fillRect(0,0,2,2);const b=await new Promise(resolve=>source.toBlob(resolve,'image/png'));const input=document.getElementById('studio-local-image-file'),dt=new DataTransfer();dt.items.add(new File([b],'synthetic.png',{type:'image/png'}));input.files=dt.files;document.getElementById('studio-local-image-open').click();input.dispatchEvent(new Event('change'));return true})()");
+ await poll(()=>retryJs("document.getElementById('studio-local-image-canvas').width===2&&!document.getElementById('studio-local-image-canvas').hidden&&!document.getElementById('studio-local-image-download').disabled"),5000,'offline-image-load');
+ const edit=await js("(()=>{const canvas=document.getElementById('studio-local-image-canvas'),ctx=canvas.getContext('2d'),before=[...ctx.getImageData(0,0,1,1).data],slider=document.getElementById('studio-local-image-brightness');slider.value='140';slider.dispatchEvent(new Event('input'));const after=[...ctx.getImageData(0,0,1,1).data];document.getElementById('studio-local-image-reset').click();const reset=[...ctx.getImageData(0,0,1,1).data];return {before,after,reset,sliders:[...document.querySelectorAll('#studio-local-image-controls input')].map(n=>n.value),status:document.getElementById('studio-local-image-status').textContent}})()");
+ assert(edit.after[0]>edit.before[0]&&edit.reset.join(',')===edit.before.join(',')&&edit.sliders.join(',')==='100,100,100','offline-filters-must-work-and-reset-'+JSON.stringify(edit));
+ assert(await js("!JSON.stringify(NexusStudioUI.snapshot()).includes('synthetic.png')"),'local-image-in-encrypted-archive-state');
+ await js("document.getElementById('studio-local-image-download').click();true");
+ await poll(()=>retryJs("document.getElementById('studio-local-image-status').textContent.includes('Edited copy downloaded')"),3500,'offline-image-export');
+ await js("document.getElementById('studio-local-image-clear').click();true");
+ assert(await js("document.getElementById('studio-local-image-canvas').hidden&&document.getElementById('studio-local-image-canvas').width===0&&document.getElementById('studio-local-image-file').value===''"),'offline-image-not-erased');
+ checks.push('real-offline-image-editing-full-frame-reset-download-and-clear');
+
+
 
   assert(await js("Boolean(document.getElementById('nexus-zen-menu'))&&Boolean(document.getElementById('nexus-zen-home'))&&getComputedStyle(document.getElementById('studio-focus-nav')).display==='none'"),'zen-home-has-no-tab-clutter');
   await js("document.getElementById('nexus-zen-menu').click();true");
