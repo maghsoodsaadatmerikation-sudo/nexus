@@ -24,6 +24,11 @@ const tools=[
 const sections=[...targets.map(x=>x[0]),...tools.map(x=>x[0])];
 if(sections.some(id=>!$(id))||!$('language')||!$('conversation-card'))return;
 const main=document.querySelector('body>main');
+const conversation=$('conversation-card'),workspace=conversation.parentElement;
+const returnToMessage=document.createElement('button');
+returnToMessage.type='button';returnToMessage.className='secondary studio-return-to-message';
+returnToMessage.onclick=()=>{openPanel('conversation-card');$('message').focus({preventScroll:true})};
+
 const nav=document.createElement('nav');nav.id='studio-focus-nav';nav.setAttribute('aria-label','Primary Studio navigation');
 const toggle=document.createElement('button');toggle.id='studio-focus-toggle';toggle.type='button';toggle.className='secondary';
 const catalog=document.createElement('button');catalog.id='studio-tools-toggle';catalog.type='button';
@@ -93,6 +98,7 @@ function filterTools(){
  noTools.hidden=results!==0;
 }
 function refreshLabels(){
+ returnToMessage.textContent=words('Back to message','بازگشت به پیام');
  toggle.textContent=focused?words('Show all sections','نمایش همهٔ بخش‌ها'):words('Focus on one section','تمرکز بر یک بخش');
  toggle.setAttribute('aria-pressed',String(focused));
  nav.setAttribute('aria-label',words('Primary Studio navigation','ناوبری اصلی نکسوس'));
@@ -110,8 +116,13 @@ function refreshLabels(){
 function layout(){
  document.documentElement.classList.toggle('studio-focus-mode',focused);
  nav.hidden=!focused;toolsTray.hidden=!toolsOpen;
- for(const id of sections)$(id).hidden=focused&&(toolsOpen||id!==selected);
- const category=toolsOpen||tools.some(x=>x[0]===selected)?'tools':selected;
+ const usingTool=tools.some(([id])=>id===selected);
+ const paired=focused&&!toolsOpen&&usingTool;
+ workspace.classList.toggle('studio-chat-with-tool',paired);
+ for(const id of sections)$(id).hidden=focused&&(toolsOpen||(id!==selected&&!(paired&&id===conversation.id)));
+ if(paired){if(returnToMessage.parentElement!==$(selected))$(selected).prepend(returnToMessage)}
+ else returnToMessage.remove();
+ const category=toolsOpen||usingTool?'tools':selected;
  for(const button of nav.querySelectorAll('button')){
   const active=focused&&button.dataset.panel===category;
   button.setAttribute('aria-current',active?'page':'false');
@@ -177,6 +188,12 @@ observer.observe($('projects'),{childList:true});
 observer.observe($('history'),{childList:true});
 $('language').addEventListener('change',()=>queueMicrotask(()=>{refreshLabels();refreshOnboarding()}));
 document.addEventListener('nexus-studio-open-chat',()=>openPanel('conversation-card'));
+document.addEventListener('nexus-studio-open-canvas',()=>{
+ if(openPanel('canvas-card'))$('editor').focus({preventScroll:true});
+});
+document.addEventListener('nexus-studio-private-clear',()=>{
+ if(focused&&tools.some(([id])=>id===selected))openPanel('conversation-card');
+});
 document.addEventListener('keydown',event=>{
  if(event.key!=='Escape'||!toolsOpen||!toolsTray.contains(document.activeElement))return;
  event.preventDefault();

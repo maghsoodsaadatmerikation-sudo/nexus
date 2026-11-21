@@ -92,6 +92,7 @@ Object.assign(FA,{
 });
 const CHAT_CONTEXT_EN={
  temporaryAttachments:'Remove staged attachments before starting a temporary chat.',
+ canvasChat:'Use this draft in chat',canvasDraft:'Canvas draft',
  autoSpeak:'Read completed replies aloud with a local voice',
  useRelatedChats:'Review related excerpts from other chats in this project',
  isolatedChat:'Temporary chat',isolatedChatNote:'This chat stays in this tab. Project context is off. Online model requests still require approval.'
@@ -99,6 +100,7 @@ const CHAT_CONTEXT_EN={
 Object.assign(EN,CHAT_CONTEXT_EN);
 Object.assign(FA,{
  temporaryAttachments:'برای شروع گفتگوی موقت، پیوست‌های آماده‌شده را بردار.',
+ canvasChat:'استفاده از این پیش‌نویس در گفتگو',canvasDraft:'پیش‌نویس بوم',
  autoSpeak:'خواندن خودکار پاسخ‌های کامل با صدای محلی',
  useRelatedChats:'بازبینی بخش‌های مرتبط از گفتگوهای دیگر همین پروژه',
  isolatedChat:'گفتگوی موقت',isolatedChatNote:'این گفتگو فقط در همین برگه می‌ماند. زمینهٔ پروژه خاموش است. ارسال به مدل آنلاین همچنان به تأیید تو نیاز دارد.'
@@ -227,6 +229,7 @@ function controls(){
  $('training-download').disabled=busy;
 
  $('study-mode').disabled=busy||Boolean(chat()?.archived);
+ $('canvas-chat').disabled=busy||!p()||Boolean(chat()?.archived||chat()?.isolated)||!$('editor').value.trim();
  for(const id of ['new-project','delete-project','new-thread','rename-thread','archive-thread','delete-thread','guide','prepare','apply-profile','new-document','save-version','delete-document','projects','branch','documents','create-vault','unlock','save','backup','restore','erase','language-file'])$(id).disabled=busy;
  $('chat-file').disabled=busy||!chat()||chat().archived;
  $('clear-chat-files').disabled=busy||(!chatAttachments.length&&!$('attach-document').checked);
@@ -293,8 +296,12 @@ function renderMessage(n){
   exportWord.type='button';exportWord.className='secondary';exportWord.dataset.chatWord='';
   exportWord.onclick=()=>downloadWord(t('chatExportTitle'),n.text,'nexus-answer.docx');
   const canvas=el('button',t('toCanvas'));
-  canvas.disabled=busy;
-  canvas.onclick=()=>{if($('editor').value&&!confirm(t('discard')))return;$('editor').value=n.text;editorDirty=true;stop()};
+  canvas.disabled=busy;canvas.dataset.chatCanvas='';
+  canvas.onclick=()=>{
+   if(busy||($('editor').value&&$('editor').value!==n.text&&!confirm(t('discard'))))return;
+   $('editor').value=n.text;editorDirty=true;stop();
+   document.dispatchEvent(new Event('nexus-studio-open-canvas'));
+  };
   const speak=el('button',t('speak'));
   speak.type='button';speak.dataset.chatSpeak='';
   speak.onclick=()=>window.NexusSpeechPlayback?.start(body.innerText||n.text,speak);
@@ -601,9 +608,14 @@ $('source-file').onchange=event=>{
 $('search-sources').onclick=()=>{if(!p())return;const hits=S.retrieve(p(),$('source-query').value);$('source-results').textContent=(hits.length?hits.map(h=>h.name+':'+h.line+':'+h.offset+'\n'+h.text).join('\n\n'):t('sourceNoMatch'))+(hits.truncated?'\n'+t('sourceLimited'):'')};
 $('new-document').onclick=()=>{
  const title=$('document-title').value.trim();
- if(!p()||!title||(editorDirty&&!confirm(t('discard'))))return;
+ if(!p()||!title||(doc()&&editorDirty&&!confirm(t('discard'))))return;
+ const untitledDraft=doc()?null:$('editor').value;
  const d={id:S.uid(),title,versions:[]};
- mutate(v=>projectIn(v).documents.push(d),{afterCommit:()=>{selectDocument(d.id);$('document-title').value=''}});
+ mutate(v=>projectIn(v).documents.push(d),{afterCommit:()=>{
+  selectDocument(d.id);
+  if(untitledDraft){$('editor').value=untitledDraft;editorDirty=true}
+  $('document-title').value='';
+ }});
 };
 $('documents').onchange=()=>{
  const id=$('documents').value;
@@ -627,6 +639,11 @@ $('load-version').onclick=()=>{if(forms()&&!confirm(t('discard')))return;const v
 $('export-document').onclick=()=>{if(doc()&&confirm(t('plain')))download($('editor').value,'nexus-document.md','text/markdown')};
 $('export-document-word').onclick=()=>{
  if(doc()&&!busy)downloadWord(doc().title,$('editor').value,'nexus-document.docx');
+};
+$('canvas-chat').onclick=()=>{
+ if($('canvas-chat').disabled)return;
+ const label=doc()?t('canvasDraft')+' · '+doc().title:t('canvasDraft');
+ stageChatContext(label.slice(0,160),$('editor').value);
 };
 $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+chat().title+'\n\n'+S.path(chat()).map(n=>'## '+t(n.origin==='human'?'human':n.origin==='model'?'model':'local')+'\n\n'+n.text+(n.attached_files?.length?'\n\n'+t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' — '+t('chatFilesNotSaved'):'')).join('\n\n'),'nexus-conversation.md','text/markdown')};
 $('export-thread-html').onclick=()=>{
