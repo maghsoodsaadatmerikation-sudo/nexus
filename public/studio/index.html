@@ -4769,7 +4769,7 @@ function wipe(){
  stopJob(true);
  if(image?.close)image.close();
  image=music=null;photo.value='';audio.value='';loading=false;preparing=false;
- previewClear();canvas.hidden=true;meter.value=0;message('','');refresh();
+ previewClear();canvas.width=0;canvas.height=0;canvas.hidden=true;meter.value=0;message('','');refresh();
 }
 function refresh(){
  const running=Boolean(recording),blocked=running||loading||preparing,unavailable=!mimeType();
