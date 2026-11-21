@@ -589,7 +589,7 @@ function refresh(){
  canvas.hidden=!active;
 }
 function release(){
- epoch++;if(original?.close)original.close();
+ epoch++;loading=false;exporting=false;if(original?.close)original.close();
  original=source=null;scope=null;
  canvas.width=canvas.height=0;
  file.value='';
@@ -677,7 +677,7 @@ download.onclick=async()=>{
   try{
    const a=el('a');a.href=url;a.download='NEXUS-local-edit.png';
    document.body.append(a);a.click();a.remove();
-  }finally{setTimeout(()=>URL.revokeObjectURL(url),1000)}
+  }finally{setTimeout(()=>URL.revokeObjectURL(url),30000)}
   say('Edited copy downloaded. Your original file was not changed.',
       'نسخهٔ ویرایش‌شده دریافت شد؛ فایل اصلی بدون تغییر باقی ماند.');
  }catch{if(epoch===current)say('Could not export this image.','خروجی گرفتن از تصویر ممکن نشد.')}
