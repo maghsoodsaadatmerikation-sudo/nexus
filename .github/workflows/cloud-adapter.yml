@@ -10,6 +10,7 @@ on:
       - "web/studio.html"
       - ".github/workflows/cloud-adapter.yml"
       - ".github/workflows/cloud-adapter-evidence.yml"
+      - ".github/workflows/manual-gemini-staging.yml"
   pull_request:
     paths:
       - "nexus-cloud/**"
@@ -19,6 +20,7 @@ on:
       - "web/studio.html"
       - ".github/workflows/cloud-adapter.yml"
       - ".github/workflows/cloud-adapter-evidence.yml"
+      - ".github/workflows/manual-gemini-staging.yml"
   workflow_dispatch:
 
 permissions:
