@@ -110,6 +110,18 @@ A gateway-only deployment may use an explicitly configured `NEXUS_STUDIO_ORIGIN`
 with Studio hosted separately. There is no provisioned model or live provider
 quality test in this repository's synthetic acceptance suite.
 
+### Native Anthropic Messages (text-only, opt-in)
+
+Set NEXUS_MODEL_ADAPTER=anthropic and the exact endpoint
+**NEXUS_MODEL_URL=https://api.anthropic.com/v1/messages**, alongside the
+operator-selected NEXUS_MODEL_ID, private NEXUS_MODEL_API_KEY and
+independent NEXUS_STUDIO_TOKEN. The adapter uses Anthropic API version
+2026-10-21, a top-level system policy and the existing reviewed chat path.
+No tools, native streaming or autonomous execution are enabled.
+NEXUS_MODEL_STREAMING=1 disables Anthropic configuration until corrected.
+Local configured status is not proof of real model access. See
+[Anthropic adapter boundaries and offline tests](../docs/STUDIO-ANTHROPIC-ADAPTER.md).
+
 ## Local model request attempt budget
 
 The real-model gateway now has a **conservative per-process provider attempt
