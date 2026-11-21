@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from typing import Literal
 import httpx
 from transport_bounds import read_bounded_body
+from durable_model_budget import DurableModelRequestBudget, UnavailableModelRequestBudget
 
 MAX_INPUT = 96000
 MAX_OUTPUT = 128000
@@ -57,6 +58,26 @@ class ModelRequestBudget:
         with self._lock:
             return {"limit": self.limit, "attempted": self._attempted,
                     "remaining": max(0, self.limit - self._attempted)}
+
+    def close(self) -> None:
+        pass
+
+
+def create_model_request_budget():
+    """Opt-in host-persistent guard, otherwise retain the bounded local guard.
+
+    An explicit but broken durable configuration never silently falls back to
+    the easier-to-reset process counter. Instead all provider calls are denied.
+    """
+    fallback = ModelRequestBudget()
+    if "NEXUS_MODEL_BUDGET_DIR" not in os.environ:
+        return fallback
+    try:
+        return DurableModelRequestBudget(
+            os.environ["NEXUS_MODEL_BUDGET_DIR"], fallback.limit
+        )
+    except (OSError, ValueError, TypeError):
+        return UnavailableModelRequestBudget(fallback.limit)
 
 
 # Gemini's official OpenAI-compatible Chat Completions endpoint. An exact
@@ -392,6 +413,7 @@ def register(app):
                                          "Cache-Control": "no-store"})
         budget = request.app.state.model_budget.snapshot()
         readiness = ("NOT_CONFIGURED" if c is None
+                     else "LOCAL_BUDGET_UNAVAILABLE" if budget["attempted"] is None
                      else "LOCAL_BUDGET_EXHAUSTED" if budget["remaining"] == 0
                      else "READY_TO_TEST")
         return JSONResponse({
@@ -402,11 +424,15 @@ def register(app):
             "adapter": c.adapter if c else None,
             "streaming": c.streaming if c else False,
             "local_request_budget": budget,
-            "budget_scope": "one_process_until_restart",
+            "budget_scope": getattr(request.app.state.model_budget, "scope",
+                                     "one_process_until_restart"),
             "provider_live_verification": "NOT_RECORDED",
             "provider_contact_attempted": False,
             "operator_next_step": ("configure_model_on_server" if c is None
-                                   else "restart_or_set_provider_quota" if budget["remaining"] == 0
+                                   else "repair_private_budget_storage"
+                                   if budget["attempted"] is None
+                                   else "restart_or_set_provider_quota"
+                                   if budget["remaining"] == 0
                                    else "explicit_single_probe_smoke"),
             "authority": "none",
         }, headers={"Cache-Control": "no-store"})
