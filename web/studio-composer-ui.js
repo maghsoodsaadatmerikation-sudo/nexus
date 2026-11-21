@@ -218,7 +218,7 @@ function workflowError(reason){
  close.textContent=words('Close','بستن');close.onclick=()=>{clearWorkflow();$('message').focus()};
  workflow.append(p,close);
 }
-function openReviewedSurface(result,message){
+function openReviewedSurface(result,message,{readOperation=null,onReadReceipt=null}={}){
  const state=window.NexusStudioUI.uiStatus();
  if(!state||state.busy||state.attachmentLoading||state.archived)return false;
  const [,panel,,,field]=result.route;
@@ -230,48 +230,100 @@ function openReviewedSurface(result,message){
  }
  if(panel==='studio-connections'){
   const request=connectionRequest(result,message);
+  if(readOperation){request.operation=readOperation;request.onReadReceipt=onReadReceipt}
   if(!window.NexusStudioConnections?.openFor?.(request)){
+   // Never silently replace a receipt-bound action with an unbound dialog.
+   if(readOperation)return false;
    const entry=$('studio-connections-open');
    if(entry&&!entry.disabled)entry.click();
   }
- }else window.NexusStudioFocus?.openPanel(panel);
+  return $('studio-connections')?.open===true;
+ }
+ window.NexusStudioFocus?.openPanel(panel);
  return true;
+}
+/* Only previously reviewed, read-only connector routes may yield a
+ * gateway-observed completion. Other tools are explicitly self-reported.
+ * The presence of any external data is NOT proof of its factual correctness.
+ */
+function expectedRead(step,plan){
+ const kind=step.result.route[0];
+ if(kind==='render')return 'render.deploys';
+ if(kind==='github'&&(plan.source==='gateway'||
+    /(?:pull\s*requests?|\bpulls\b|\bprs?\b|درخواست(?:‌|\s)*ادغام)/i.test(step.line)))
+  return 'github.pulls';
+ return null;
 }
 function showWorkflow(){
  if(!workflowState)return;
  workflow.hidden=false;workflow.replaceChildren();
+ const plan=workflowState;
  const title=document.createElement('strong');
  title.textContent=words('Your reviewed workflow','گردش‌کار قابل بازبینی');
  const info=document.createElement('p');info.className='help';
  info.textContent=words(
-  'Temporary checklist only. Opening a step does not run it. Mark each step done yourself after completing it in the separate tool.',
-  'فهرست موقت است. بازکردن هر گام آن را اجرا نمی‌کند. پس از انجام کار در ابزار مربوطه، گام را خودت تکمیل‌شده علامت بزن.');
+  'Opening a tool is not execution. For GitHub/Render read steps, continue only after an approved gateway response. Other steps are self-reported. You can skip or discard.',
+  'بازکردن ابزار به معنی اجرا نیست. در گام خواندن GitHub/Render فقط پس از پاسخ تأییدشدهٔ درگاه ادامه بده؛ سایر گام‌ها به گزارش خودت ثبت می‌شوند. می‌توانی از گام بگذری یا برنامه را حذف کنی.');
  const list=document.createElement('ol');
- workflowState.steps.forEach((step,i)=>{
+ plan.steps.forEach((step,i)=>{
   const item=document.createElement('li'),span=document.createElement('span');
-  span.textContent=step.line+' · '+(i<workflowState.index?
-   words('confirmed by you','به تأیید شما'):
-   i===workflowState.index?words('current','گام فعلی'):words('not started','شروع‌نشده'));
+  const status=i<plan.index?
+   step.outcome==='gateway_read'?
+    words('gateway read returned · untrusted data','پاسخ خواندن از درگاه دریافت شد · دادهٔ غیرقابل‌اعتماد'):
+   step.outcome==='skipped'?
+    words('skipped by you','با انتخاب شما رد شد'):
+    words('confirmed by you · not independently verified','به تأیید شما · بدون راستی‌آزمایی مستقل'):
+   i===plan.index?words('current','گام فعلی'):words('not started','شروع‌نشده');
+  span.textContent=step.line+' · '+status;
   item.append(span);
-  if(i===workflowState.index){
+  if(i===plan.index){
+   const required=expectedRead(step,plan);
    const open=document.createElement('button');open.type='button';open.className='secondary';
    open.textContent=words('Open tool for review','بازکردن ابزار برای بازبینی');
    open.onclick=()=>{
     if(!retainedWorkflow()){clearWorkflow();return}
     if(!validWorkflow())return;
-    if(openReviewedSurface(step.result,step.line)){
-     workflowState.opened=true;showWorkflow();
+    const receiver=required?(receipt)=>{
+     if(workflowState!==plan||!retainedWorkflow()||plan.index!==i||
+        !plan.opened||receipt?.source!=='studio-connection-response'||
+        receipt?.kind!=='read'||receipt?.operation!==required)return;
+     plan.readReceipt={operation:required};showWorkflow();
+    }:null;
+    if(openReviewedSurface(step.result,step.line,
+       required?{readOperation:required,onReadReceipt:receiver}:{})){
+     plan.opened=true;plan.readReceipt=null;showWorkflow();
     }
    };
    const done=document.createElement('button');done.type='button';done.className='secondary';
-   done.textContent=words('I completed this step','این گام را انجام دادم');
-   done.disabled=!workflowState.opened;
+   done.textContent=required?
+     words('Confirm reviewed read','تأیید دریافت پاسخ خواندن'):
+     words('I completed this step','این گام را انجام دادم');
+   done.disabled=!plan.opened||(Boolean(required)&&plan.readReceipt?.operation!==required);
    done.onclick=()=>{
     if(!retainedWorkflow()){clearWorkflow();return}
-    if(!validWorkflow()||!workflowState.opened)return;
-    workflowState.index++;workflowState.opened=false;showWorkflow();
+    if(!validWorkflow()||!plan.opened||
+       (required&&plan.readReceipt?.operation!==required))return;
+    step.outcome=required?'gateway_read':'self_reported';
+    plan.index++;plan.opened=false;plan.readReceipt=null;showWorkflow();
    };
    item.append(open,done);
+   if(required){
+    const note=document.createElement('p');note.className='help';
+    note.textContent=plan.readReceipt?.operation===required?
+      words('Approved read response received; source content remains untrusted.',
+        'پاسخ خواندن تأییدشده دریافت شد؛ محتوای منبع همچنان غیرقابل‌اعتماد است.'):
+      words('Waiting for an approved read in the separate connection dialog.',
+        'در انتظار خواندن تأییدشده در پنجرهٔ اتصال.');
+    item.append(note);
+   }
+   const skip=document.createElement('button');skip.type='button';skip.className='secondary';
+   skip.textContent=words('Skip this step','ردکردن این گام');
+   skip.onclick=()=>{
+    if(!retainedWorkflow()){clearWorkflow();return}
+    if(!validWorkflow())return;
+    step.outcome='skipped';plan.index++;plan.opened=false;plan.readReceipt=null;showWorkflow();
+   };
+   item.append(skip);
   }
   list.append(item);
  });
@@ -279,10 +331,16 @@ function showWorkflow(){
  cancel.textContent=words('Discard workflow','حذف گردش‌کار');
  cancel.onclick=()=>{clearWorkflow();$('message').focus()};
  workflow.append(title,info,list);
- if(workflowState.index===workflowState.steps.length){
+ if(plan.index===plan.steps.length){
   const note=document.createElement('p');note.setAttribute('role','status');
-  note.textContent=words('All steps marked done by you; NEXUS has not verified external results.',
-   'همهٔ گام‌ها به تأیید شما رسیدند؛ نکسوس نتیجهٔ خارجی را راستی‌آزمایی نکرده است.');
+  const verified=plan.steps.filter(s=>s.outcome==='gateway_read').length;
+  const reported=plan.steps.filter(s=>s.outcome==='self_reported').length;
+  const skipped=plan.steps.filter(s=>s.outcome==='skipped').length;
+  note.textContent=words(
+   'Checklist finished · gateway reads: '+verified+' · self-reported: '+reported+
+    ' · skipped: '+skipped+'. No external result was independently audited.',
+   'پایان فهرست · خواندن درگاه: '+verified+' · گزارش کاربر: '+reported+
+    ' · ردشده: '+skipped+'. هیچ نتیجهٔ خارجی مستقلاً راستی‌آزمایی نشده است.');
   workflow.append(note);
  }
  workflow.append(cancel);
@@ -291,7 +349,8 @@ function reviewWorkflow(message){
  closeDirectory();clearOffer();clearWorkflow();
  const parsed=parseWorkflow(message);
  if(parsed.error){workflowError(parsed.error);return}
- workflowState={draft:message,scope:workflowScope(),steps:parsed.steps,index:0,opened:false};
+ workflowState={draft:message,scope:workflowScope(),steps:parsed.steps,index:0,
+  opened:false,readReceipt:null,source:'local'};
  showWorkflow();
 }
 
@@ -382,7 +441,8 @@ function stageAssistantPlan(){
    if(previewDraft!==staged||$('message').value!==draft||workflowScope()!==staged.scope||
       window.NexusStudioUI.uiStatus().busy||window.NexusStudioUI.uiStatus().archived)return;
    const steps=checkedPlan(parsed,draft);
-   workflowState={draft,scope:staged.scope,steps,index:0,opened:false};
+   workflowState={draft,scope:staged.scope,steps,index:0,opened:false,
+    readReceipt:null,source:'gateway'};
    previewDraft=null;previewController=null;showWorkflow();
   }catch{
    if(previewDraft===staged&&!controller.signal.aborted){
