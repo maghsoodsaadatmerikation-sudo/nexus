@@ -59,8 +59,12 @@ def evaluate(
         return declined("explicit_billing_acknowledgement_required")
     if not MODEL_ID_PATTERN.fullmatch(model_id):
         return declined("invalid_model_id")
-    if not provider_key.strip():
+    if not provider_key:
         return declined("provider_secret_missing")
+    if len(provider_key) > 512 or any(
+        ord(char) < 33 or ord(char) > 126 for char in provider_key
+    ):
+        return declined("provider_secret_invalid")
 
     # Only the exact Gemini compatibility URL is used. Never accept an
     # operator-supplied endpoint or an untrusted provider host in this workflow.
@@ -69,7 +73,7 @@ def evaluate(
         "NEXUS_MODEL_URL": GEMINI_CHAT_COMPLETIONS,
         "NEXUS_MODEL_ID": model_id,
         "NEXUS_MODEL_ADAPTER": "gemini",
-        "NEXUS_MODEL_API_KEY": provider_key.strip(),
+        "NEXUS_MODEL_API_KEY": provider_key,
         "NEXUS_STUDIO_TOKEN": token_urlsafe(48),
         "NEXUS_MODEL_STREAMING": "0",
     }
