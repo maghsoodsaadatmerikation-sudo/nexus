@@ -247,7 +247,7 @@ window.addEventListener('load',async()=>{
   const workflow=$('studio-chat-workflow');
   assert(!workflow.hidden&&workflow.querySelectorAll('li').length===3,
    'workflow-has-three-ordered-review-only-steps');
-  assert(workflow.querySelectorAll('li button').length===2&&
+  assert(workflow.querySelectorAll('li button').length===3&&
    workflow.querySelectorAll('li button')[1].disabled,
    'workflow-next-step-locked-until-manual-confirmation');
   assert($('message').value===workflowDraft&&$('request-review').hidden,
@@ -300,7 +300,7 @@ window.addEventListener('load',async()=>{
     planCalls===0,'assistant-plan-exact-draft-displayed-before-gateway-request');
    workflow.querySelector('button').click();
    await wait(()=>planCalls===1&&workflow.querySelectorAll('li').length===3);
-   assert(workflow.querySelectorAll('li button').length===2&&
+   assert(workflow.querySelectorAll('li button').length===3&&
     workflow.querySelectorAll('li button')[1].disabled,
     'assistant-plan-gateway-result-requires-separate-tool-review');
    assert(JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions})===
@@ -587,6 +587,47 @@ window.addEventListener('load',async()=>{
    'explicit-download-produces-calendar-event-and-alarm');
   assert(JSON.stringify(snapshot())===reminderState&&providerCalls===beforeReminderCalls,
    'reminder-export-leaves-chat-and-model-untouched');
+  // A reviewed connector step needs an actual read response, not merely
+  // a dialog open, catalog load, or self-reported successful execution.
+  NexusStudioFocus.openPanel('conversation-card');
+  const receiptPlan='/plan\n/github list pull requests\n/write';
+  fill('message',receiptPlan);
+  $('studio-compose-send').click();
+  const reviewedPlan=$('studio-chat-workflow');
+  assert(reviewedPlan.querySelectorAll('li').length===2,'receipt-workflow-created');
+  assert(reviewedPlan.querySelector('li button:nth-of-type(2)').disabled,
+   'read-not-confirmed-before-open');
+  const priorRead=connectionActions;
+  reviewedPlan.querySelector('li button').click();
+  assert($('studio-connections').open,'receipt-step-opened-connector-review');
+  assert(reviewedPlan.querySelector('li button:nth-of-type(2)').disabled&&
+   connectionActions===priorRead,'tool-open-is-not-a-read-receipt');
+  $('studio-connections-load').click();
+  await wait(()=>$('studio-connections').querySelector('select').value==='github.pulls');
+  assert(reviewedPlan.querySelector('li button:nth-of-type(2)').disabled,
+   'catalog-is-not-a-read-receipt');
+  $('studio-connections-read').click();
+  await wait(()=>connectionActions===priorRead+1&&!reviewedPlan.querySelector('li button:nth-of-type(2)').disabled);
+  assert(reviewedPlan.textContent.includes('Approved read response received'),
+   'reviewed-provider-read-unlocks-receipt-bound-step');
+  await closeConnection();
+  reviewedPlan.querySelector('li button:nth-of-type(2)').click();
+  assert(reviewedPlan.querySelector('li').textContent.includes('gateway read returned')&&
+   reviewedPlan.querySelectorAll('li').length===2,
+   'gateway-read-result-distinguished-from-self-report');
+  reviewedPlan.querySelector('li:nth-child(2) button:last-of-type').click();
+  assert(reviewedPlan.textContent.includes('gateway reads: 1')&&
+   reviewedPlan.textContent.includes('skipped: 1')&&
+   !reviewedPlan.textContent.includes('All steps marked done'),
+   'skipped-step-not-reported-as-a-successful-execution');
+  fill('message',receiptPlan);
+  $('studio-compose-send').click();
+  reviewedPlan.querySelector('li button:last-of-type').click();
+  assert(reviewedPlan.querySelector('li').textContent.includes('skipped by you'),
+   'skip-is-not-gateway-receipt');
+  fill('message',receiptPlan+' changed');
+  assert(reviewedPlan.hidden,'changing-draft-revokes-scoped-receipts');
+  assert(connectionActions===priorRead+1,'no-automatic-connector-retries-or-actions');
   $('lock').click();
   assert(!$('reminder-title').value&&!$('reminder-start').value,'lock-clears-reminder-form');
 
