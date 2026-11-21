@@ -40,10 +40,21 @@ NEXUS_MODEL_ADAPTER=anthropic
 NEXUS_MODEL_URL=https://api.anthropic.com/v1/messages
 NEXUS_MODEL_ID=OPERATOR_SELECTED_SUPPORTED_MODEL_ID
 NEXUS_MODEL_API_KEY=SECRET_IN_PRIVATE_SERVER_ENVIRONMENT
+NEXUS_MODEL_WORKSPACE_ID=OPTIONAL_WRKSPC_ID_FOR_UNSCOPED_KEY
 NEXUS_STUDIO_TOKEN=RANDOM_PRIVATE_TOKEN_AT_LEAST_32_CHARACTERS
 NEXUS_MODEL_STREAMING=0
 NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS=8
 ~~~
+
+For keys that are not scoped to a workspace, Anthropic requires the
+anthropic-workspace-id request header. NEXUS sends this only when the operator
+sets NEXUS_MODEL_WORKSPACE_ID to a valid wrkspc_ identifier in the private
+server environment. Invalid or misplaced workspace IDs disable the model
+configuration before any outbound model request. Workspace ID is included in
+the reviewed configuration fingerprint and never returned in public model
+status or authenticated readiness responses. Keys created for one workspace
+normally require no additional workspace selector. This is not a user-selectable
+browser setting or an authorization bypass.
 
 One provider adapter is active per server configuration. Reconfiguration of
 provider identity, policy or API version changes the reviewed ID and requires
