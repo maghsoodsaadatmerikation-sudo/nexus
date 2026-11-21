@@ -63,6 +63,14 @@ source before advertising it as deployed. The separate
 [local Android/Termux ZIP](docs/STUDIO-PHONE-LOCAL.md) can be built from the
 reviewed exact `main` source without Railway or Render.
 
+## Image generation API foundation (not enabled)
+
+A separate opt-in and quota-bounded image-generation gateway has been added to
+the Python cloud adapter source. It can request a single PNG/JPEG from a
+separately configured compatible provider after user review and authorization;
+there is no image-generation model bundled, no funded service, and no Studio
+chat image-generation control in this phase. [Engineering and privacy boundaries](docs/STUDIO-IMAGE-GENERATION.md).
+
 ## NEXUS Music Lab — fully local original music (no Suno)
 
 NEXUS Studio now includes a **native procedural music composition and sound
