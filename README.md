@@ -63,6 +63,24 @@ source before advertising it as deployed. The separate
 [local Android/Termux ZIP](docs/STUDIO-PHONE-LOCAL.md) can be built from the
 reviewed exact `main` source without Railway or Render.
 
+## Free local image editor
+
+The Studio chat source now also contains a small, no-upload image editor:
+full-frame brightness, contrast and saturation controls with reset and explicit
+PNG download. It works with a local PNG/JPEG or a generated preview in the same
+tab. The original is never overwritten. This is **manual Canvas editing, not
+AI-powered generation or image-to-image editing**. The public hosted release
+remains separate from this draft branch.
+
+## Image generation API foundation (not enabled)
+
+A separate opt-in and quota-bounded image-generation gateway has been added to
+the Python cloud adapter source. It can request a single PNG/JPEG from a
+separately configured compatible provider after user review and authorization;
+there is no image-generation model bundled or funded service. The Studio chat
+now includes an explicit generation review and download panel in source, but
+it stays unusable until a real compatible provider is configured and deployed. [Engineering and privacy boundaries](docs/STUDIO-IMAGE-GENERATION.md).
+
 ## NEXUS Music Lab — fully local original music (no Suno)
 
 NEXUS Studio now includes a **native procedural music composition and sound

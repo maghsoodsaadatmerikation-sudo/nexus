@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import studio_connections
 import studio_model
 import studio_vision
+import studio_image_generation
 from transport_bounds import read_bounded_body
 
 
@@ -68,6 +69,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.model_limiter = anyio.CapacityLimiter(4)
         app.state.model_budget = studio_model.create_model_request_budget()
         app.state.vision_quota = studio_vision.ProcessVisionQuota()
+        app.state.image_quota = studio_image_generation.ProcessQuota()
+        app.state.image_limiter = anyio.CapacityLimiter(2)
         app.state.gateway_limiter = anyio.CapacityLimiter(MAX_DELEGATED_REQUESTS)
         try:
             yield
@@ -88,6 +91,7 @@ app = FastAPI(
 
 studio_model.register(app)
 studio_vision.register(app)
+studio_image_generation.register(app)
 studio_connections.register(app)
 if studio_origin := os.getenv("NEXUS_STUDIO_ORIGIN", "").strip():
     app.add_middleware(CORSMiddleware, allow_origins=[studio_origin],
