@@ -165,6 +165,103 @@ def test_changed_provider_requires_new_review(monkeypatch):
         assert c.post('/studio-api/respond',json=BODY,headers=AUTH).status_code==409
 
 
+def test_provider_settings_snapshot_is_frozen_and_secret_safe(monkeypatch):
+    from dataclasses import FrozenInstanceError
+    with configured(monkeypatch):
+        settings = model.read_model_settings()
+        assert settings is not None and settings.adapter == "generic"
+        assert settings.provider_api_key == "provider-secret-not-for-browser"
+        assert settings.studio_token == TOKEN
+        assert settings.policy == model.POLICY
+        assert "provider-secret-not-for-browser" not in repr(settings)
+        assert TOKEN not in repr(settings)
+        with pytest.raises(FrozenInstanceError):
+            settings.adapter = "gemini"
+        assert model.config() == (settings.endpoint, settings.model_id,
+                                  settings.studio_token, settings.provider_host)
+
+
+@pytest.mark.parametrize("initial_kind", ["generic", "gemini"])
+def test_mid_request_rotation_does_not_mix_provider_key_adapter_or_policy(monkeypatch, initial_kind):
+    monkeypatch.setenv("NEXUS_MODEL_ADAPTER", initial_kind)
+    seen = []
+    old_policy = model.POLICY
+    def handler(req):
+        seen.append((str(req.url), req.headers.get("authorization"), json.loads(req.content)))
+        return httpx.Response(200, json={"choices": [
+            {"message": {"role": "assistant", "content": "Snapshot accepted"},
+             "finish_reason": "stop"},
+        ]})
+
+    with configured(monkeypatch, handler) as c:
+        if initial_kind == "gemini":
+            monkeypatch.setenv("NEXUS_MODEL_URL", model.GEMINI_CHAT_COMPLETIONS)
+        original = model.read_model_settings()
+        assert original is not None and original.adapter == initial_kind
+        reviewed = {**BODY, "configuration_id": model.configuration_id(original)}
+        unmodified_reader = model.read_bounded_body
+        switched = False
+
+        async def rotate_after_read(*args, **kwargs):
+            nonlocal switched
+            result = await unmodified_reader(*args, **kwargs)
+            if not switched:
+                switched = True
+                other = "gemini" if initial_kind == "generic" else "generic"
+                monkeypatch.setenv("NEXUS_MODEL_ADAPTER", other)
+                monkeypatch.setenv("NEXUS_MODEL_URL",
+                                   model.GEMINI_CHAT_COMPLETIONS if other == "gemini"
+                                   else "https://other-provider.example/v1/chat/completions")
+                monkeypatch.setenv("NEXUS_MODEL_ID", "new-model-after-review")
+                monkeypatch.setenv("NEXUS_MODEL_API_KEY", "rotated-upstream-secret")
+                monkeypatch.setenv("NEXUS_STUDIO_TOKEN", "new-studio-token-01234567890123456789")
+                monkeypatch.setenv("NEXUS_MODEL_STREAMING", "1")
+                monkeypatch.setattr(model, "POLICY", old_policy + " Rotated policy.")
+            return result
+
+        monkeypatch.setattr(model, "read_bounded_body", rotate_after_read)
+        response = c.post("/studio-api/respond", json=reviewed, headers=AUTH)
+        assert response.status_code == 200, response.text
+        assert response.json()["text"] == "Snapshot accepted"
+        assert response.json()["model"] == original.model_id
+        assert len(seen) == 1
+        destination, provider_auth, payload = seen[0]
+        assert destination == original.endpoint
+        assert provider_auth == "Bearer provider-secret-not-for-browser"
+        assert payload["model"] == original.model_id
+        assert payload["messages"][0] == {"role": "system", "content": old_policy}
+        assert payload["max_tokens" if initial_kind == "gemini" else "max_completion_tokens"] == 2048
+        assert ("store" not in payload) if initial_kind == "gemini" else (payload["store"] is False)
+        assert "rotated-upstream-secret" not in json.dumps(payload)
+        assert c.get("/studio-api/status").json()["configuration_id"] != reviewed["configuration_id"]
+        assert c.post("/studio-api/respond", json=reviewed, headers=AUTH).status_code == 401
+        updated_auth = {"authorization": "Bearer new-studio-token-01234567890123456789"}
+        assert c.post("/studio-api/respond", json=reviewed, headers=updated_auth).status_code == 409
+        assert len(seen) == 1
+
+
+def test_policy_change_invalidates_review_and_does_not_contact_provider(monkeypatch):
+    calls = []
+    def handler(req):
+        calls.append(json.loads(req.content))
+        return httpx.Response(200, json={"choices": [
+            {"message": {"role": "assistant", "content": "Current policy answer"},
+             "finish_reason": "stop"},
+        ]})
+    with configured(monkeypatch, handler) as c:
+        old_id = c.get("/studio-api/status").json()["configuration_id"]
+        assert old_id == BODY["configuration_id"]
+        monkeypatch.setattr(model, "POLICY", model.POLICY + " Updated reviewed constraints.")
+        new_id = c.get("/studio-api/status").json()["configuration_id"]
+        assert new_id != old_id
+        assert c.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 409
+        assert not calls
+        response = c.post("/studio-api/respond",
+                          json={**BODY, "configuration_id": new_id}, headers=AUTH)
+        assert response.status_code == 200
+        assert calls[0]["messages"][0]["content"] == model.POLICY
+
+
 def test_real_loopback_http_provider_transport(monkeypatch):
     import json
     import threading
