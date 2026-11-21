@@ -88,6 +88,28 @@ provider may charge and may retain requests; the client labels those risks.
 Real-provider compatibility and image quality are not verified by the
 synthetic browser test.
 
+## Free on-device image editing
+
+An additional **Edit an image locally (free)** panel is available beside the
+chat composer. It uses the browser's Canvas API (not a generative model) to
+reversibly adjust brightness, contrast and saturation. It accepts a user-selected
+PNG/JPEG up to 6 MB and can also copy the most recent generated image from the
+same tab after the user selects **Use last generated image**. No cropping,
+upscaling or face/body modification is performed; the original is untouched.
+
+Image dimensions are bounded to 4,096 pixels per side and 8 megapixels.
+The edits preserve the full frame and may be reset. The user must choose
+**Download edited PNG** to export a new local copy; images, names and edits are
+not added to chat history or encrypted project archives. Switching chats,
+clearing private state or selecting Clear releases the in-memory bitmap.
+Canvas encoding may strip original metadata; do not rely on metadata retention.
+
+This panel performs **no network requests** and does not need an API key.
+Its pixel changes are deterministic browser filters, **not AI-powered semantic
+image editing**. Browser support, image quality and real Android device
+performance require separate acceptance tests. Large decodes may temporarily
+use significant RAM on low-memory phones.
+
 ## Resource and security boundaries
 
 - Request body: at most 10,000 bytes; prompt: at most 2,000 characters.
