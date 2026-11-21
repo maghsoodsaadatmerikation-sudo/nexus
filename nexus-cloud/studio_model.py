@@ -5,6 +5,7 @@ import hmac
 import hashlib
 import json
 import os
+import re
 from threading import Lock
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
@@ -88,6 +89,7 @@ GEMINI_CHAT_COMPLETIONS = "https://generativelanguage.googleapis.com/v1beta/open
 # Keep its endpoint and API version exact; never forward its secret to arbitrary URLs.
 ANTHROPIC_MESSAGES = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_API_VERSION = "2026-10-21"
+ANTHROPIC_WORKSPACE_ID_PATTERN = re.compile(r"wrkspc_[A-Za-z0-9]{10,128}\Z")
 POLICY = (
     "You are a non-authoritative NEXUS assistant. Answer the user's actual question "
     "directly, in the user's language unless requested otherwise, with useful detail "
@@ -147,6 +149,7 @@ class ModelSettings:
     provider_api_key: str = field(repr=False)
     streaming: bool
     policy: str = field(repr=False)
+    anthropic_workspace_id: str = field(default="", repr=False)
 
 
 def read_model_settings() -> ModelSettings | None:
@@ -158,6 +161,7 @@ def read_model_settings() -> ModelSettings | None:
     token = env.get("NEXUS_STUDIO_TOKEN", "").strip()
     key = env.get("NEXUS_MODEL_API_KEY", "").strip()
     kind = env.get("NEXUS_MODEL_ADAPTER", "generic").strip()
+    workspace_id = env.get("NEXUS_MODEL_WORKSPACE_ID", "")
     try:
         p = urlsplit(endpoint)
         _ = p.port
@@ -171,6 +175,10 @@ def read_model_settings() -> ModelSettings | None:
         return None
     if kind == "gemini" and (endpoint != GEMINI_CHAT_COMPLETIONS or not key):
         return None
+    # Explicit workspace routing is Anthropic-only. Do not silently send traffic
+    # to an unrelated provider when an Anthropic workspace was expected.
+    if workspace_id and (kind != "anthropic" or not ANTHROPIC_WORKSPACE_ID_PATTERN.fullmatch(workspace_id)):
+        return None
     # Anthropic streaming uses a different SSE event contract. Disable it
     # explicitly instead of routing provider events through the OpenAI parser.
     if kind == "anthropic" and (
@@ -181,7 +189,7 @@ def read_model_settings() -> ModelSettings | None:
     return ModelSettings(endpoint=endpoint, model_id=model, studio_token=token,
                          provider_host=p.hostname, adapter=kind, provider_api_key=key,
                          streaming=env.get("NEXUS_MODEL_STREAMING", "") == "1",
-                         policy=POLICY)
+                         policy=POLICY, anthropic_workspace_id=workspace_id)
 
 
 def config():
@@ -233,15 +241,19 @@ def configuration_id(c):
     if isinstance(c, ModelSettings):
         endpoint, model, kind, streaming, policy = (
             c.endpoint, c.model_id, c.adapter, c.streaming, c.policy)
+        workspace_id = c.anthropic_workspace_id
     else:
         # Retain tuple API for offline probes and existing operator scripts.
         endpoint, model, kind, streaming, policy = (
             c[0], c[1], adapter(), streaming_enabled(), POLICY)
+        workspace_id = os.getenv("NEXUS_MODEL_WORKSPACE_ID", "") if kind == "anthropic" else ""
     suffix = "" if kind == "generic" else "\nadapter:" + kind
     if streaming:
         suffix += "\nstreaming:v1"
     if kind == "anthropic":
         suffix += "\napi-version:" + ANTHROPIC_API_VERSION
+        if workspace_id:
+            suffix += "\nworkspace-sha256:" + hashlib.sha256(workspace_id.encode("utf-8")).hexdigest()
     policy_hash = hashlib.sha256(policy.encode("utf-8")).hexdigest()
     return hashlib.sha256(
         (endpoint + "\n" + model + suffix + "\npolicy-sha256:" + policy_hash).encode("utf-8")
@@ -250,6 +262,24 @@ def configuration_id(c):
 
 def streaming_enabled():
     return os.getenv("NEXUS_MODEL_STREAMING", "") == "1"
+
+
+def provider_headers(kind: str, api_key: str, workspace_id: str = "") -> dict[str, str]:
+    """One shared, header-injection-resistant authentication contract.
+
+    The operator workspace selector never comes from browser/model content.
+    x-api-key remains supported by Anthropic; no operator Studio token goes up.
+    """
+    if workspace_id and (kind != "anthropic" or not ANTHROPIC_WORKSPACE_ID_PATTERN.fullmatch(workspace_id)):
+        raise ValueError("Invalid Anthropic workspace configuration")
+    if kind == "anthropic":
+        if not api_key:
+            raise ValueError("Anthropic API credential required")
+        out = {"x-api-key": api_key, "anthropic-version": ANTHROPIC_API_VERSION}
+        if workspace_id:
+            out["anthropic-workspace-id"] = workspace_id
+        return out
+    return {"authorization": "Bearer " + api_key} if api_key else {}
 
 
 class CompletionStream(StreamingResponse):
@@ -528,14 +558,8 @@ def register(app):
                 raise HTTPException(422, "Execution mode is unsupported by this adapter")
             messages = [{"role": "system", "content": c.policy}]
             messages.extend(m.model_dump() for m in data.messages)
-            headers = {"accept-encoding": "identity"}
-            key = c.provider_api_key
-            if key:
-                if c.adapter == "anthropic":
-                    headers["x-api-key"] = key
-                    headers["anthropic-version"] = ANTHROPIC_API_VERSION
-                else:
-                    headers["authorization"] = "Bearer " + key
+            headers = {"accept-encoding": "identity", **provider_headers(
+                c.adapter, c.provider_api_key, c.anthropic_workspace_id)}
             payload = provider_payload(c.model_id, messages, stream=stream,
                                        max_output_tokens=data.max_output_tokens,
                                        mode=data.mode, adapter_name=c.adapter)
