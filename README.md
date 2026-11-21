@@ -66,8 +66,10 @@ reviewed exact `main` source without Railway or Render.
 ## Free local image-to-video clips (source candidate)
 
 NEXUS Studio now has a chat-adjacent local video composer in the development
-branch: a PNG/JPEG or explicit generated-image handoff, uncropped landscape or
-portrait frames, optional short background audio, gentle fade, 3–12-second
+branch: up to four ordered PNG/JPEG photos or an explicit generated-image handoff,
+uncropped landscape or
+portrait frames, optional short background audio, gentle in/out and scene
+crossfades, 3–12-second
 recording using the browser's MediaRecorder, and explicit video download.
 This is local browser encoding, **not generative AI video**; browser codec
 support varies, and no hosted video model, deployment or public publishing
