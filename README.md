@@ -71,7 +71,8 @@ uncropped landscape or
 portrait frames, optional short background audio, gentle in/out and scene
 crossfades (adjustable duration), per-scene timing up to 24 seconds total,
 preview scrubbing, per-scene contained camera motion without cropping,
-user-selected audio gain/fades and browser MediaRecorder
+source-audio skip/start delay, optional non-destructive scene splitting (up
+to four still-image segments), user-selected audio gain/fades and browser MediaRecorder
 recording with explicit download.
 This is local browser encoding, **not generative AI video**; browser codec
 support varies, and no hosted video model, deployment or public publishing
