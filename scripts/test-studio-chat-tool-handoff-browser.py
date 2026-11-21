@@ -644,6 +644,11 @@ window.addEventListener('load',async()=>{
   assert(connectionActions===priorRead+1,'no-automatic-connector-retries-or-actions');
   // Existing code output is NOT a receipt. Only a fresh consented sandbox
   // run observed after the exact workflow step opened can unlock completion.
+  // A previous private-lock test erased the code field, so create an explicit
+  // old result before opening this new reviewed workflow.
+  $('code-sample').click();
+  $('code-consent').checked=true;$('code-run').click();
+  await wait(()=>$('code-result').textContent.includes('Local calculation'));
   NexusStudioFocus.openPanel('conversation-card');
   const codePlan='/plan\n/code\n/write';
   fill('message',codePlan);$('studio-compose-send').click();
