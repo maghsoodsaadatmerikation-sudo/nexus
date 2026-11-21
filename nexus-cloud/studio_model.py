@@ -76,11 +76,19 @@ def config():
         _ = p.port
     except ValueError:
         return None
-    if (adapter() not in {"generic", "deepseek"} or not model or len(model) > 150 or len(token) < 32 or not p.hostname
+    selected_adapter = adapter()
+    if (selected_adapter not in {"generic", "deepseek", "gemini"} or not model or len(model) > 150 or len(token) < 32 or not p.hostname
         or p.username is not None or p.password is not None or p.query or p.fragment
         or any(c.isspace() for c in endpoint)
         or not (p.scheme == "https" or (p.scheme == "http" and p.hostname in {"127.0.0.1", "::1"}))):
         return None
+    # Gemini uses Google's OpenAI-compatible Chat Completions endpoint. Do
+    # not allow a Gemini credential to be forwarded to a configurable host.
+    if selected_adapter == "gemini":
+        if (endpoint != "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+            or len(os.getenv("NEXUS_MODEL_API_KEY", "").strip()) < 16
+            or not model.startswith("gemini-")):
+            return None
     return endpoint, model, token, p.hostname
 
 
@@ -307,7 +315,7 @@ def register(app):
             if key:
                 headers["authorization"] = "Bearer " + key
             payload = {"model": c[1], "messages": messages, "stream": stream, "store": False}
-            payload["max_tokens" if adapter() == "deepseek" else "max_completion_tokens"] = data.max_output_tokens
+            payload["max_tokens" if adapter() in {"deepseek", "gemini"} else "max_completion_tokens"] = data.max_output_tokens
             if data.mode != "standard":
                 payload["thinking"] = {"type": "enabled" if data.mode == "thinking" else "disabled"}
             if stream:
