@@ -5,10 +5,10 @@ import stat
 
 # Bounded Studio asset budget, including local Office text extraction and
 # bilingual decision support in the standalone HTML.
-# Reviewed assistant planning, consented local results, and new document-
-# version receipts require a bounded self-contained shell. Retain an
-# explicit 635,000-byte limit and the unchanged reviewed asset inventory.
-MAX_FILE = 635_000
+# Reviewed assistant plans and local document generation now include
+# explicit Markdown/DOCX download-request and private print/PDF-dialog checks.
+# Keep the strict, checked 645,000-byte cap and reviewed asset inventory.
+MAX_FILE = 645_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000
