@@ -37,7 +37,7 @@ class ModelRequestBudget:
         raw = os.getenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS") if raw_limit is None else raw_limit
         if raw is None:
             limit = DEFAULT_MODEL_REQUEST_LIMIT
-        elif raw.isascii() and raw.isdecimal() and 0 <= int(raw) <= MAX_MODEL_REQUEST_LIMIT:
+        elif raw.isascii() and raw.isdecimal() and len(raw) <= 4 and 0 <= int(raw) <= MAX_MODEL_REQUEST_LIMIT:
             limit = int(raw)
         else:
             limit = 0  # Invalid operator configuration fails closed.
