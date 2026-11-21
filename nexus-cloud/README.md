@@ -83,6 +83,16 @@ the secure upstream through `NEXUS_CORE_URL`.
 - `tests/test_contract.py` - transport-boundary contract tests
 - `pyproject.toml` / `uv.lock` - locked Python environment
 
+## Optional image generation edge (disabled by default)
+
+A separate reviewed `POST /studio-api/generate-image` and
+`GET /studio-api/image-generation-status` are available in source. These endpoints
+require an operator-configured compatible image provider, explicit consent,
+Studio authentication, a configuration fingerprint, and an attempt quota.
+Only bounded PNG/JPEG base64 output is accepted; no generated image is retained
+by NEXUS. This **does not** enable image generation in the Studio chat UI or
+prove provider availability. See [configuration, limitations and tests](../docs/STUDIO-IMAGE-GENERATION.md).
+
 ## Optional Studio model bridge
 
 This adapter also exposes `/studio-api/status` and `/studio-api/respond`. Model
