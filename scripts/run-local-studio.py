@@ -80,6 +80,12 @@ def main():
         helpers = pilot_helpers()
         state = args.state_dir.absolute()
         helpers.private_directory(state)
+        # The local pilot has a private state directory already, so use a
+        # host-durable counter by default instead of resetting model allowance
+        # whenever uvicorn is restarted. Never inherit an arbitrary budget
+        # directory override from the ambient shell.
+        model_budget_dir = state / "provider-model-budget"
+        helpers.private_directory(model_budget_dir)
         lock_fd = os.open(state / "operator.lock",
                           os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
         helpers.check_private_file(lock_fd)
@@ -100,7 +106,7 @@ def main():
         # external CORS origins or unrelated service credentials into this child.
         env = {"PATH": os.defpath, "LANG": "C.UTF-8", "PYTHONNOUSERSITE": "1",
                "PYTHONDONTWRITEBYTECODE": "1", "NEXUS_STUDIO_TOKEN": token, **provider_env,
-               **budget_env, **connector_env}
+               **budget_env, "NEXUS_MODEL_BUDGET_DIR": str(model_budget_dir), **connector_env}
         signal.signal(signal.SIGTERM, stop)
         signal.signal(signal.SIGINT, stop)
         process = subprocess.Popen(
