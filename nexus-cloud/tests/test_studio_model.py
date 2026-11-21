@@ -468,6 +468,70 @@ def test_model_request_budget_is_atomic_under_concurrency():
     assert budget._attempted == 3
 
 
+
+def test_durable_budget_prevents_model_calls_after_gateway_restart(monkeypatch, tmp_path):
+    root = tmp_path / "model-budget"
+    root.mkdir(mode=0o700)
+    monkeypatch.setenv("NEXUS_MODEL_BUDGET_DIR", str(root))
+    monkeypatch.setenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS", "1")
+    calls = []
+    def handler(request):
+        calls.append(1)
+        return httpx.Response(200, json={"choices": [
+            {"message": {"role": "assistant", "content": "A safe bounded model draft"},
+             "finish_reason": "stop"}]})
+    with configured(monkeypatch, handler) as client:
+        status = client.get("/studio-api/operator-readiness", headers=AUTH).json()
+        assert status["budget_scope"] == "one_private_host_directory_until_explicit_reset"
+        assert status["readiness"] == "READY_TO_TEST"
+        assert status["local_request_budget"] == {"limit": 1, "attempted": 0, "remaining": 1}
+        assert client.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 200
+    with configured(monkeypatch, handler) as client:
+        status = client.get("/studio-api/operator-readiness", headers=AUTH).json()
+        assert status["budget_scope"] == "one_private_host_directory_until_explicit_reset"
+        assert status["readiness"] == "LOCAL_BUDGET_EXHAUSTED"
+        assert status["local_request_budget"] == {"limit": 1, "attempted": 1, "remaining": 0}
+        assert client.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 429
+        assert client.app.state.model_budget.snapshot()["attempted"] == 1
+    assert calls == [1]
+
+
+def test_durable_budget_storage_unavailable_denies_provider_and_reports_honestly(monkeypatch, tmp_path):
+    monkeypatch.setenv("NEXUS_MODEL_BUDGET_DIR", str(tmp_path / "missing-dir"))
+    monkeypatch.setenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS", "3")
+    with configured(monkeypatch, lambda _: pytest.fail("fail-closed quota reached provider")) as client:
+        status = client.get("/studio-api/operator-readiness", headers=AUTH)
+        assert status.status_code == 200
+        payload = status.json()
+        assert payload["readiness"] == "LOCAL_BUDGET_UNAVAILABLE"
+        assert payload["budget_scope"] == "durable_store_unavailable"
+        assert payload["local_request_budget"] == {"limit": 3, "attempted": None, "remaining": 0}
+        assert payload["operator_next_step"] == "repair_private_budget_storage"
+        assert client.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 429
+
+
+def test_durable_budget_corruption_mid_gateway_denies_next_request(monkeypatch, tmp_path):
+    root = tmp_path / "private-budget"
+    root.mkdir(mode=0o700)
+    monkeypatch.setenv("NEXUS_MODEL_BUDGET_DIR", str(root))
+    monkeypatch.setenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS", "2")
+    calls = []
+    def handler(request):
+        calls.append(1)
+        return httpx.Response(200, json={"choices": [
+            {"message": {"content": "Safe draft"}, "finish_reason": "stop"}]})
+    with configured(monkeypatch, handler) as client:
+        assert client.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 200
+        counter = root / "model-attempts.counter"
+        counter.write_text("invalid\n")
+        assert client.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 429
+        status = client.get("/studio-api/operator-readiness", headers=AUTH).json()
+        assert status["readiness"] == "LOCAL_BUDGET_UNAVAILABLE"
+        assert status["budget_scope"] == "one_private_host_directory_until_explicit_reset"
+        assert status["local_request_budget"]["attempted"] is None
+        assert calls == [1]
+
+
 def test_gateway_restart_recreates_local_budget_not_global_provider_spend(monkeypatch):
     monkeypatch.setenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS", "1")
     with configured(monkeypatch) as first:
