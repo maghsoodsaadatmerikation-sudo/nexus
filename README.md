@@ -63,6 +63,15 @@ source before advertising it as deployed. The separate
 [local Android/Termux ZIP](docs/STUDIO-PHONE-LOCAL.md) can be built from the
 reviewed exact `main` source without Railway or Render.
 
+## Free local image editor
+
+The Studio chat source now also contains a small, no-upload image editor:
+full-frame brightness, contrast and saturation controls with reset and explicit
+PNG download. It works with a local PNG/JPEG or a generated preview in the same
+tab. The original is never overwritten. This is **manual Canvas editing, not
+AI-powered generation or image-to-image editing**. The public hosted release
+remains separate from this draft branch.
+
 ## Image generation API foundation (not enabled)
 
 A separate opt-in and quota-bounded image-generation gateway has been added to
