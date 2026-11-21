@@ -209,6 +209,30 @@ window.addEventListener('load',async()=>{
   assert(!branchHtml.includes('BRANCHED QUESTION')&&!branchHtml.includes('REVIEWED SECRET MEMORY')&&
    !branchHtml.includes('TRANSIENT ACCESS TOKEN')&&!branchDoc.querySelector('script,img,iframe,form')&&network===beforeExportCalls,
    'conversation-html-excludes-other-branches-and-context-stays-local');
+  const wordButton=formatted.parentElement.querySelector('[data-chat-word]');
+  const canvasEditor=$('editor'),originalCanvasText=canvasEditor.value;
+  let answerWord,canvasWord,wordName;
+  HTMLAnchorElement.prototype.click=function(){wordName=this.download};
+  try{
+   URL.createObjectURL=blob=>{answerWord=blob;return previousCreate.call(URL,blob)};
+   window.confirm=()=>false;wordButton.click();
+   assert(!answerWord,'declining-word-download-produces-no-file');
+   window.confirm=()=>true;wordButton.click();
+   assert(wordName==='nexus-answer.docx'&&answerWord.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'answer-downloads-as-editable-word');
+   URL.createObjectURL=blob=>{canvasWord=blob;return previousCreate.call(URL,blob)};
+   canvasEditor.value='پیش‌نویس\n\n<draft> &\tfinal';
+   $('export-document-word').click();
+   assert(wordName==='nexus-document.docx'&&canvasWord,'canvas-downloads-as-editable-word');
+  }finally{
+   canvasEditor.value=originalCanvasText;
+   URL.createObjectURL=previousCreate;HTMLAnchorElement.prototype.click=previousClick;window.confirm=previousConfirm;
+  }
+  assert((await NexusOfficeZip.readDocx(answerWord))==='NEXUS answer\n'+formattedReply.trim(),
+   'word-answer-roundtrip-preserves-answer-only-including-code-and-persian');
+  assert((await NexusOfficeZip.readDocx(canvasWord))==='PRIVATE DOC\nپیش‌نویس\n\n<draft> &\tfinal'&&
+   JSON.stringify(snapshot())===beforeExport&&network===beforeExportCalls,
+   'word-canvas-includes-unsaved-text-and-stays-local');
   const spoken=[];
   let pauses=0,resumes=0,cancellations=0,paused=false;
   const localEnglish={name:'Local English',lang:'en-US',localService:true};

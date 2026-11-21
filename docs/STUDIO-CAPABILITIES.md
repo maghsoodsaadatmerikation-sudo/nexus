@@ -27,7 +27,7 @@ judgment workspace or migrate the separate Android prototype's local archives.
 | Custom assistant instructions | Separate prototype | Project preferences included as untrusted user context, below the fixed server policy |
 | File-grounded context | File desk and manual excerpts | UTF-8 TXT/Markdown/CSV/TSV/JSON lexical retrieval; exact passages and source/line labels visible before sending |
 | Writing canvas | Downloadable files, no versioned editor | 20 documents per project, 30 immutable saved versions, comparison and explicit restoration into a draft |
-| Conversation/document export | Separate tools | Plaintext Markdown export requires confirmation; encrypted session export remains separate |
+| Conversation/document export | Separate tools | Unencrypted Markdown, HTML and editable Word exports require confirmation. Encrypted session export remains available. |
 | Long conversation handling | Session cap | The model receives a bounded recent path, with omitted earlier-message count shown; no fabricated summary |
 | Generative text model | Deterministic guide, no model | Optional authenticated server bridge; requires an operator-configured real provider |
 | Stop and late-response isolation | No model transport | Abort waiting and reject stale responses after edits, project changes or lock |
@@ -168,7 +168,14 @@ the preview and preserve the user draft.
 
 Use **Download answer** to save only the selected answer to an unencrypted HTML
 file. The file opens offline and keeps the answer's supported Markdown
-formatting. **Download active branch as HTML** exports the selected conversation path,
+formatting.
+
+**Download Word (.docx)** saves the selected answer as editable text, including
+line breaks and the original Markdown markers. The writing canvas can export
+its current text and document title in the same format, including unsaved edits.
+Both Word exports run locally and require confirmation.
+
+**Download active branch as HTML** exports the selected conversation path,
 with speaker labels, supported Markdown and citations. The file opens offline
 and can be printed. Project memory, source files, unselected branches and
 model request credentials are outside the exported transcript. The file is

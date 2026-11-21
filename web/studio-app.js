@@ -55,6 +55,7 @@ Object.assign(EN,{
  chatCopy:'Copy answer',chatCopyDone:'Answer copied to the clipboard.',
  chatCopyFailed:'Clipboard access is unavailable. Select the answer text to copy it.',
  chatExportThread:'Download active branch as HTML',chatExport:'Download answer',chatExportTitle:'NEXUS answer',
+ chatExportWord:'Download Word (.docx)',chatExportWordDone:'Word download requested.',chatExportWordFailed:'Word export needs text within the supported size.',
  chatExportConfirm:'Download this answer as an unencrypted HTML file?',chatExportDone:'HTML download requested.',
  chatPasteName:'Pasted text',chatPasteAdded:'Long paste attached locally. Add a question and review the excerpts before sending.',
  chatPasteLimit:'The draft was kept. Paste less text or remove an attachment to make room.'
@@ -63,6 +64,7 @@ Object.assign(FA,{
  chatCopy:'کپی پاسخ',chatCopyDone:'پاسخ در کلیپ‌بورد کپی شد.',
  chatCopyFailed:'دسترسی به کلیپ‌بورد ممکن نیست. متن پاسخ را انتخاب و کپی کن.',
  chatExportThread:'دریافت شاخهٔ فعال به‌صورت HTML',chatExport:'دریافت فایل پاسخ',chatExportTitle:'پاسخ نکسوس',
+ chatExportWord:'دریافت Word (.docx)',chatExportWordDone:'درخواست دانلود Word ثبت شد.',chatExportWordFailed:'برای دریافت Word، متن باید در محدودهٔ حجم مجاز باشد.',
  chatExportConfirm:'همین پاسخ را به‌صورت فایل HTML بدون رمزگذاری دانلود می‌کنی؟',chatExportDone:'درخواست دانلود HTML ثبت شد.',
  chatPasteName:'متن چسبانده‌شده',chatPasteAdded:'متن بلند به‌صورت محلی پیوست شد. پرسشت را بنویس و گزیده‌ها را پیش از ارسال بازبینی کن.',
  chatPasteLimit:'پیش‌نویس حفظ شد. متن کوتاه‌تری بچسبان یا یکی از پیوست‌ها را بردار.'
@@ -237,7 +239,7 @@ function controls(){
  const regenerate=$('regenerate');
  regenerate.hidden=thread?.nodes.find(node=>node.id===thread.head)?.role!=='assistant';
  regenerate.disabled=regenerate.hidden||busy||thread.archived||branchBase!==undefined||hasChatDraft();
- $('attach-document').disabled=busy||!chat()||chat().archived||chat().isolated||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(storageSnapshot().lossRisk?'unsaved':(vault.unlocked?'saved':'temporary'));renderStorage();window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
+ $('attach-document').disabled=busy||!chat()||chat().archived||chat().isolated||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare'])$(id).disabled=busy||!chat()||chat().archived;for(const id of ['save-version','export-document','export-document-word','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(storageSnapshot().lossRisk?'unsaved':(vault.unlocked?'saved':'temporary'));renderStorage();window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
 function mutate(fn,{undoable=false,afterCommit}={}){
  if(busy)return false;
  const before=data,next=S.copy(data),selection={projectId,threadId,documentId};
@@ -287,13 +289,16 @@ function renderMessage(n){
    download(html,'nexus-answer.html','text/html;charset=utf-8');
    status('chatExportDone');
   };
+  const exportWord=el('button',t('chatExportWord'));
+  exportWord.type='button';exportWord.className='secondary';exportWord.dataset.chatWord='';
+  exportWord.onclick=()=>downloadWord(t('chatExportTitle'),n.text,'nexus-answer.docx');
   const canvas=el('button',t('toCanvas'));
   canvas.disabled=busy;
   canvas.onclick=()=>{if($('editor').value&&!confirm(t('discard')))return;$('editor').value=n.text;editorDirty=true;stop()};
   const speak=el('button',t('speak'));
   speak.type='button';speak.dataset.chatSpeak='';
   speak.onclick=()=>window.NexusSpeechPlayback?.start(body.innerText||n.text,speak);
-  item.append(copy,exportAnswer,canvas,speak);
+  item.append(copy,exportAnswer,exportWord,canvas,speak);
  }
  return item;
 }
@@ -363,7 +368,16 @@ function openConversation(project,thread){
  return projectId===project&&threadId===thread;
 }
 function applyLanguage(){document.documentElement.lang=language;document.documentElement.dir=localePacks.get(language)?.dir||(language==='fa'?'rtl':'ltr');document.querySelectorAll('[data-t]').forEach(n=>n.textContent=t(n.dataset.t));document.querySelectorAll('[data-placeholder]').forEach(n=>n.placeholder=t(n.dataset.placeholder));render();if(branchBase!==undefined)$('branch-notice').textContent=t('branching')}
-function download(text,name,type='text/plain'){const u=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
+function download(text,name,type='text/plain'){const u=URL.createObjectURL(text instanceof Blob?text:new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
+function downloadWord(title,text,filename){
+ if(!text.trim())return status('chatExportWordFailed');
+ if(!confirm(t('plain')))return;
+ try{
+  download(NexusOfficeZip.writeDocx(title,text),filename);
+  status('chatExportWordDone');
+ }catch{status('chatExportWordFailed')}
+}
+
 async function operation(fn,success='apply'){
  if(busy)return;languageImport++;const rev=revision,abort=new AbortController();controller=abort;busy=true;controls();
  try{await fn(rev,abort);if(rev===revision)status(success)}catch(error){if(rev===revision)status(error?.message==='archive-damaged'?'archiveDamaged':'failed')}
@@ -611,6 +625,9 @@ $('delete-document').onclick=()=>{
 $('versions').onchange=()=>{const a=doc()?.versions.find(x=>x.id===$('versions').value)?.text||'',b=doc()?.versions.at(-1)?.text||'';const left=a.split('\n'),right=b.split('\n');$('version-diff').textContent=Array.from({length:Math.max(left.length,right.length)},(_,i)=>left[i]===right[i]?null:(i+1)+':\n− '+(left[i]??'')+'\n+ '+(right[i]??'')).filter(Boolean).slice(0,200).join('\n')};
 $('load-version').onclick=()=>{if(forms()&&!confirm(t('discard')))return;const v=doc()?.versions.find(x=>x.id===$('versions').value);if(v){$('editor').value=v.text;editorDirty=true;stop()}};
 $('export-document').onclick=()=>{if(doc()&&confirm(t('plain')))download($('editor').value,'nexus-document.md','text/markdown')};
+$('export-document-word').onclick=()=>{
+ if(doc()&&!busy)downloadWord(doc().title,$('editor').value,'nexus-document.docx');
+};
 $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+chat().title+'\n\n'+S.path(chat()).map(n=>'## '+t(n.origin==='human'?'human':n.origin==='model'?'model':'local')+'\n\n'+n.text+(n.attached_files?.length?'\n\n'+t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' — '+t('chatFilesNotSaved'):'')).join('\n\n'),'nexus-conversation.md','text/markdown')};
 $('export-thread-html').onclick=()=>{
  const thread=chat();
