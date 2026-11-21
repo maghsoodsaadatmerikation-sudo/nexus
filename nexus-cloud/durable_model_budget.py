@@ -14,7 +14,6 @@ import fcntl
 import os
 import secrets
 import stat
-from pathlib import Path
 from threading import Lock
 
 COUNTER_NAME = "model-attempts.counter"
@@ -136,35 +135,34 @@ class DurableModelRequestBudget:
             except FileNotFoundError:
                 pass
 
-    def _transaction(self, *, consume: bool) -> dict:
+    def _transaction(self, *, consume: bool) -> tuple[dict, bool]:
         with self._lock:
             fcntl.flock(self._fd, fcntl.LOCK_EX)
             try:
                 self._check_directory()
                 current = self._read_locked()
-                if consume and current < self.limit:
+                reserved = consume and current < self.limit
+                if reserved:
+                    # One critical section covers read, admission, persist,
+                    # and durable fsync. A competing worker cannot overdraw.
                     self._commit_locked(current + 1)
                     current += 1
-                return {"limit": self.limit, "attempted": current,
-                        "remaining": max(0, self.limit - current)}
+                return ({"limit": self.limit, "attempted": current,
+                         "remaining": max(0, self.limit - current)}, reserved)
             finally:
                 fcntl.flock(self._fd, fcntl.LOCK_UN)
 
     def reserve(self) -> bool:
         try:
-            before = self._transaction(consume=False)
-            if before["remaining"] == 0:
-                return False
-            # Re-check under a fresh exclusive lock: another process may
-            # exhaust the budget between the first read and this attempt.
-            after = self._transaction(consume=True)
-            return after["attempted"] == before["attempted"] + 1
+            _, reserved = self._transaction(consume=True)
+            return reserved
         except (OSError, ValueError, TypeError):
             return False
 
     def snapshot(self) -> dict:
         try:
-            return self._transaction(consume=False)
+            values, _ = self._transaction(consume=False)
+            return values
         except (OSError, ValueError, TypeError):
             return {"limit": self.limit, "attempted": None, "remaining": 0}
 
