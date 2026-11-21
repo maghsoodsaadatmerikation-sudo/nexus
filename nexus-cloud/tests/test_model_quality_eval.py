@@ -73,6 +73,43 @@ def test_live_probe_uses_production_policy_and_text_only_acceptance(monkeypatch)
     assert "provider-secret" not in json.dumps(report)
 
 
+def test_live_quality_samples_keep_single_provider_snapshot_across_rotation(monkeypatch):
+    monkeypatch.setenv("NEXUS_MODEL_URL", PROVIDER[0])
+    monkeypatch.setenv("NEXUS_MODEL_ID", PROVIDER[1])
+    monkeypatch.setenv("NEXUS_STUDIO_TOKEN", PROVIDER[2])
+    monkeypatch.setenv("NEXUS_MODEL_API_KEY", "original-evaluation-key")
+    monkeypatch.setenv("NEXUS_MODEL_ADAPTER", "generic")
+    snapshot = model.read_model_settings()
+    assert snapshot is not None
+    original_policy = snapshot.policy
+    seen = []
+
+    def handler(request):
+        payload = json.loads(request.content)
+        seen.append(payload)
+        assert str(request.url) == PROVIDER[0]
+        assert request.headers["authorization"] == "Bearer original-evaluation-key"
+        assert payload["model"] == PROVIDER[1]
+        assert payload["messages"][0]["content"] == original_policy
+        assert payload["max_completion_tokens"] == 256
+        assert payload["store"] is False and "thinking" not in payload
+        if len(seen) == 1:
+            monkeypatch.setenv("NEXUS_MODEL_ADAPTER", "gemini")
+            monkeypatch.setenv("NEXUS_MODEL_URL", model.GEMINI_CHAT_COMPLETIONS)
+            monkeypatch.setenv("NEXUS_MODEL_ID", "rotated-model")
+            monkeypatch.setenv("NEXUS_MODEL_API_KEY", "rotated-key")
+            monkeypatch.setattr(model, "POLICY", "Changed operator policy")
+        answer = next(p.good_reply for p in quality.PROBES
+                      if p.prompt == payload["messages"][1]["content"])
+        return httpx.Response(200, json=provider_reply(answer))
+
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
+        report = quality.run_live(client, snapshot)
+    assert report["passed"] == 15 and report["critical_failures"] == []
+    assert len(seen) == 15 and report["live_model_evaluated"] is True
+    assert "original-evaluation-key" not in json.dumps(report)
+
+
 @pytest.mark.parametrize("response", [
     httpx.Response(307, headers={"location": "https://other.example/trap"}),
     httpx.Response(200, json={"choices": [{"message": {"role": "tool",
