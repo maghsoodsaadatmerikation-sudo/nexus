@@ -1,8 +1,9 @@
 # NEXUS Studio — reviewed image generation API (source candidate)
 
 **Status:** API source only; operator-disabled by default. No image provider, subscription,
-server deployment, end-user Studio image composer, safety review or public release is implied.
-This is a foundation for an optional user-reviewed image feature, not local image synthesis.
+server deployment, safety review or public release is implied.
+Studio now includes a chat-adjacent image-generation review panel (source candidate),
+not local image synthesis or a deployed image service.
 
 ## What is implemented
 
@@ -25,8 +26,9 @@ This is a foundation for an optional user-reviewed image feature, not local imag
   requesting browser/client until explicitly saved elsewhere.
 
 The API validates that `consent` is exactly boolean `true`; it does not prove a
-human really reviewed a screen. A future client needs an actual visible approval
-step before invoking this endpoint.
+human really reviewed a screen. Studio's companion UI displays an exact provider,
+prompt and size review before the user checks consent and invokes this endpoint;
+all calls and final download remain explicitly user-triggered.
 
 ## Operator configuration
 
@@ -68,6 +70,23 @@ Send only after explicit approval with
 The response provides `image_base64`, `mime_type`, `model`, `authority:none`
 and `storage:not-retained-by-nexus`. Displaying or downloading the image is
 a separate user-facing task, not a server-side automated action.
+
+## Chat user interface (source candidate)
+
+The chat composer displays a **Generate image** chip and an adjacent, collapsible
+panel. A user can copy the current unsent chat draft into the image prompt
+without modifying the draft; choose square, landscape or portrait; check the
+provider status without uploading the prompt; review the exact provider and
+prompt; and separately approve one generation request. Editing the prompt,
+size or gateway settings invalidates prior review. Output appears only in the
+current tab with an explicit download action. Switching conversations or
+clearing private state removes the in-memory result and pending approval.
+
+The panel is **not a free or on-device generator**: it only works after a
+compatible gateway has been deployed and authorized by the operator. The
+provider may charge and may retain requests; the client labels those risks.
+Real-provider compatibility and image quality are not verified by the
+synthetic browser test.
 
 ## Resource and security boundaries
 
