@@ -218,7 +218,8 @@ def passes(probe: Probe, answer: str) -> bool:
     raise ValueError("Unknown fixed probe")
 
 
-def grade(answers: dict[str, str | None], *, live: bool) -> dict:
+def grade(answers: dict[str, str | None], *, live: bool,
+          skipped_ids: frozenset[str] = frozenset()) -> dict:
     cases = []
     for probe in PROBES:
         reply = answers.get(probe.key)
@@ -226,12 +227,14 @@ def grade(answers: dict[str, str | None], *, live: bool) -> dict:
             "id": probe.key,
             "dimension": probe.dimension,
             "critical": probe.critical,
-            "result": "PASS" if isinstance(reply, str) and passes(probe, reply)
+            "result": "SKIPPED" if probe.key in skipped_ids
+            else "PASS" if isinstance(reply, str) and passes(probe, reply)
             else "FAIL" if isinstance(reply, str) else "ERROR",
         })
     passed = sum(item["result"] == "PASS" for item in cases)
     errors = sum(item["result"] == "ERROR" for item in cases)
-    critical_failures = [item["id"] for item in cases if item["critical"] and item["result"] != "PASS"]
+    skipped = sum(item["result"] == "SKIPPED" for item in cases)
+    critical_failures = [item["id"] for item in cases if item["critical"] and item["result"] not in {"PASS", "SKIPPED"}]
     return {
         "scope": "synthetic_heuristic_model_answers",
         "live_model_evaluated": live,
@@ -240,8 +243,10 @@ def grade(answers: dict[str, str | None], *, live: bool) -> dict:
         "truth_claim": "NOT_PROVEN",
         "total": len(PROBES),
         "passed": passed,
-        "failed": len(PROBES) - passed - errors,
+        "failed": len(PROBES) - passed - errors - skipped,
         "errors": errors,
+        "skipped": skipped,
+        "evaluated": len(PROBES) - skipped,
         "critical_failures": critical_failures,
         "pass_rate": round(passed / len(PROBES), 4),
         "cases": cases,
@@ -250,8 +255,30 @@ def grade(answers: dict[str, str | None], *, live: bool) -> dict:
 
 def meets_gate(report: dict, *, minimum_pass_rate: float) -> bool:
     """Average score cannot hide failure of a designated safety/trust probe."""
-    return (report["errors"] == 0 and not report["critical_failures"]
+    return (report["errors"] == 0 and report.get("skipped", 0) == 0
+            and not report["critical_failures"]
             and report["pass_rate"] >= minimum_pass_rate)
+
+
+class ProviderProbeError(ValueError):
+    """Sanitized provider rejection, with no response body or credential details."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__("provider probe blocked")
+
+
+def provider_rejection_reason(status: int) -> str:
+    """Fail closed with bounded public error classes, never raw provider output."""
+    if status in {401, 403}:
+        return "authentication"
+    if status == 402:
+        return "billing"
+    if status == 429:
+        return "rate_limited"
+    if status >= 500:
+        return "upstream_unavailable"
+    return "request_rejected"
 
 
 def query_provider(client: httpx.Client, provider: tuple[str, str, str, str] | ModelSettings,
@@ -279,28 +306,51 @@ def query_provider(client: httpx.Client, provider: tuple[str, str, str, str] | M
         follow_redirects=False, timeout=MODEL_TIMEOUT,
     ) as response:
         if response.status_code != 200:
-            raise ValueError("Provider did not accept synthetic probe")
+            raise ProviderProbeError(provider_rejection_reason(response.status_code))
         if response.headers.get("content-encoding", "identity").lower() != "identity":
-            raise ValueError("Compressed provider reply is unsupported")
+            raise ProviderProbeError("invalid_response")
         for chunk in response.iter_bytes(chunk_size=8192):
             if len(body) + len(chunk) > MAX_OUTPUT:
-                raise ValueError("Probe response exceeds the production limit")
+                raise ProviderProbeError("invalid_response")
             body.extend(chunk)
-    text, truncated = accepted_buffered_answer(bytes(body))
+    try:
+        text, truncated = accepted_buffered_answer(bytes(body))
+    except ValueError:
+        raise ProviderProbeError("invalid_response") from None
     if truncated:
-        raise ValueError("Probe response was truncated")
+        raise ProviderProbeError("invalid_response")
     return text
 
 
 def run_live(client: httpx.Client, provider: tuple[str, str, str, str] | ModelSettings) -> dict:
-    answers = {}
+    """Stop on transport/provider failure; never amplify a broken setup 15x.
+
+    Incorrect but well-formed model answers are still graded across all probes.
+    Skipped probes are not counted as failures, and a partial run cannot pass.
+    """
+    answers: dict[str, str | None] = {}
+    abort_reason = None
     for probe in PROBES:
         try:
             answers[probe.key] = query_provider(client, provider, probe)
-        except (httpx.RequestError, httpx.TimeoutException, ValueError, RecursionError):
-            # Do not print provider errors or body; those could contain secrets.
+        except ProviderProbeError as error:
             answers[probe.key] = None
-    return grade(answers, live=True)
+            abort_reason = error.reason
+            break
+        except (httpx.RequestError, httpx.TimeoutException, ValueError, RecursionError):
+            # Provider bodies and low-level errors may contain secrets.
+            answers[probe.key] = None
+            abort_reason = "transport_or_validation"
+            break
+    skipped = frozenset(probe.key for probe in PROBES if probe.key not in answers)
+    report = grade(answers, live=True, skipped_ids=skipped)
+    report.update({
+        "provider_requests_attempted": len(answers),
+        "provider_requests_skipped": len(skipped),
+        "aborted_early": abort_reason is not None,
+        "abort_reason": abort_reason,
+    })
+    return report
 
 
 def smoke_live(client: httpx.Client, provider: ModelSettings) -> dict:
@@ -310,15 +360,21 @@ def smoke_live(client: httpx.Client, provider: ModelSettings) -> dict:
     Even a PASS is insufficient for capability or public-release approval.
     """
     probe = PROBES[0]  # Fixed fictional factual recall; no user data.
+    reason = None
     try:
         answer = query_provider(client, provider, probe)
         result = "PASS" if passes(probe, answer) else "FAIL"
+    except ProviderProbeError as error:
+        result = "ERROR"
+        reason = error.reason
     except (httpx.RequestError, httpx.TimeoutException, ValueError, RecursionError):
         result = "ERROR"
+        reason = "transport_or_validation"
     return {
         "status": "PASS" if result == "PASS" else "FAIL",
         "scope": "single_fictional_provider_smoke",
         "result": result,
+        "error_reason": reason,
         "probe_id": probe.key,
         "provider_requests_planned": 1,
         "provider_contact_attempted": True,
