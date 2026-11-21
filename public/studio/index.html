@@ -3572,6 +3572,7 @@ directoryToggle.setAttribute('aria-controls',directory.id);
 const planPreview=document.createElement('button');
 planPreview.type='button';planPreview.className='secondary';
 planPreview.id='studio-assistant-plan-preview';
+planPreview.dataset.en='Plan steps';planPreview.dataset.fa='برنامه‌ریزی مراحل';
 suggestions.append(planPreview);
 function closeDirectory(){
  directory.hidden=true;directoryItems.replaceChildren();
