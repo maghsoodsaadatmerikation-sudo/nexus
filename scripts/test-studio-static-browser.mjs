@@ -267,15 +267,15 @@ try{
  if(videoSupported){
   await js("(()=>{document.getElementById('studio-video-aspect').value='portrait';document.getElementById('studio-video-aspect').dispatchEvent(new Event('change'));document.getElementById('studio-video-duration').value='3';return true})()");
   assert(await js("document.getElementById('studio-video-canvas').width===360&&document.getElementById('studio-video-canvas').height===640&&!document.getElementById('studio-video-start').disabled"),'video-portrait-and-duration');
-  await js("document.getElementById('studio-video-start').click();true");
+  await js("(()=>{window.__videoCreateURL=URL.createObjectURL;window.__videoBlob=null;URL.createObjectURL=function(blob){window.__videoBlob=blob;return window.__videoCreateURL.call(URL,blob)};document.getElementById('studio-video-start').click();return true})()");
   assert(await js("document.getElementById('studio-video-download').disabled"),'video-was-downloaded-before-user-action');
   await poll(()=>retryJs("!document.getElementById('studio-video-preview').hidden&&!!document.getElementById('studio-video-preview').src"),11000,'video-local-render');
-  const videoProof=await js("(async()=>{const player=document.getElementById('studio-video-preview'),r=await fetch(player.src),buffer=await r.arrayBuffer(),bytes=new Uint8Array(buffer.slice(0,12));return {length:buffer.byteLength,mime:r.headers.get('content-type'),prefix:[...bytes],status:document.getElementById('studio-video-status').textContent,downloadDisabled:document.getElementById('studio-video-download').disabled}})()");
+  const videoProof=await js("(async()=>{const blob=window.__videoBlob;if(!blob)return null;const data=new Uint8Array(await blob.arrayBuffer());return {length:data.byteLength,mime:blob.type,prefix:[...data.slice(0,12)],status:document.getElementById('studio-video-status').textContent,downloadDisabled:document.getElementById('studio-video-download').disabled}})()");
   const isWebm=videoProof.prefix.slice(0,4).join(',')==='26,69,223,163';
   const isMp4=String.fromCharCode(...videoProof.prefix.slice(4,8))==='ftyp';
   assert(videoProof.length>1000&&videoProof.length<=32000000&&(isWebm||isMp4)&&!videoProof.downloadDisabled,'local-video-file-invalid-'+JSON.stringify(videoProof));
   assert(await js("!JSON.stringify(NexusStudioUI.snapshot()).includes('PRIVATE-VIDEO-FIXTURE')&&performance.getEntriesByType('resource').every(x=>!x.name.includes('/studio-api/generate-video'))"),'video-must-not-upload-or-archive');
-  await js("document.getElementById('studio-video-clear').click();true");
+  await js("(()=>{document.getElementById('studio-video-clear').click();URL.createObjectURL=window.__videoCreateURL;delete window.__videoBlob;delete window.__videoCreateURL;return true})()");
   assert(await js("document.getElementById('studio-video-preview').hidden&&document.getElementById('studio-video-photo').value===''&&document.getElementById('studio-video-canvas').width===0&&document.getElementById('studio-video-download').disabled"),'video-private-clear-failed');
   checks.push('real-local-image-to-video-output-uncropped-portrait-and-private');
  }else{
