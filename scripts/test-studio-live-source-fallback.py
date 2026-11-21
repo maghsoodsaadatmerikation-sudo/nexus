@@ -22,7 +22,7 @@ class SourceFallbackTests(unittest.TestCase):
         self.zip_path = self.root / "old-live-source.zip"
         self.report_path = self.root / "old-live-public-witness.json"
         assets = fallback.gate.source_assets()
-        self.assets = {name: assets[name] for name in fallback.LEGACY_FILES}
+        self.assets = {name: assets[name] for name in fallback.FILES}
         self.fetch = lambda name: self.assets[name]
 
     def build(self, fetch=None):
@@ -48,7 +48,7 @@ class SourceFallbackTests(unittest.TestCase):
         self.assertEqual(report["data_included"], "public_static_source_only")
         with zipfile.ZipFile(self.zip_path) as zipped:
             self.assertEqual(zipped.namelist(), sorted(
-                fallback.BUNDLE+"/"+name for name in fallback.LEGACY_FILES))
+                fallback.BUNDLE+"/"+name for name in fallback.FILES))
         one = self.zip_path.read_bytes()
         self.zip_path.unlink()
         self.report_path.unlink()
@@ -70,6 +70,57 @@ class SourceFallbackTests(unittest.TestCase):
             self.build(fetch=unreachable)
         self.assertFalse(self.zip_path.exists())
         self.assertFalse(self.report_path.exists())
+
+    def test_missing_or_modified_pdf_worker_blocks_publishing_fallback(self):
+        self.assertIn("pdf/pdf.worker.min.mjs", self.assets)
+        self.assertIn("pdf/pdf.min.mjs", self.assets)
+        def bad_worker(name):
+            return b"synthetic-stale-PDF" if name == "pdf/pdf.worker.min.mjs" else self.assets[name]
+        with self.assertRaises(ValueError):
+            self.build(fetch=bad_worker)
+        self.assertFalse(self.zip_path.exists())
+        self.assertFalse(self.report_path.exists())
+        def missing_pdf(name):
+            if name == "pdf/studio-pdf.mjs":
+                raise TimeoutError("synthetic-network-failure")
+            return self.assets[name]
+        with self.assertRaises(ValueError):
+            self.build(fetch=missing_pdf)
+        self.assertFalse(self.zip_path.exists())
+
+    def test_pdf_worker_is_included_with_strict_per_asset_limit(self):
+        self.assertGreater(fallback.asset_limit("pdf/pdf.worker.min.mjs"),
+                           fallback.gate.MAX_FILE)
+        self.build()
+        report = fallback.verify(self.zip_path, self.report_path)
+        self.assertEqual(report["reviewed_file_count"], 17)
+        self.assertEqual(len(report["observed_paths"]), 17)
+        self.assertEqual(len(report["source_assets"]), 17)
+        self.assertIn("pdf/pdf.worker.min.mjs", report["source_assets"])
+        self.assertIs(report["provider_metadata_rechecked_during_workflow"], False)
+
+    def test_report_rejects_unreviewed_fields_and_unchecked_source_assets(self):
+        import json
+        self.build()
+        baseline = json.loads(self.report_path.read_text())
+        bad = copy.deepcopy(baseline)
+        bad["model_api_key"] = "SYNTHETIC_SECRET"
+        self.report_path.write_text(json.dumps(bad))
+        with self.assertRaises(ValueError):
+            fallback.verify(self.zip_path, self.report_path)
+        bad = copy.deepcopy(baseline)
+        bad["source_assets"].pop("pdf/pdf.worker.min.mjs")
+        self.report_path.write_text(json.dumps(bad))
+        with self.assertRaises(ValueError):
+            fallback.verify(self.zip_path, self.report_path)
+        self.report_path.write_text(json.dumps(baseline))
+        self.assertEqual(fallback.verify(self.zip_path, self.report_path), baseline)
+
+    def test_fixed_https_observer_is_shared_with_seventeen_asset_release_review(self):
+        self.assertIs(fallback.origin.fetch_live.__module__.startswith("nexus_studio"), True)
+        self.assertEqual(fallback.origin.gate.ORIGIN, fallback.gate.ORIGIN)
+        with self.assertRaises(ValueError):
+            fallback.origin.fetch_live("../operator/private-key.env")
 
     def test_existing_output_is_never_overwritten(self):
         self.zip_path.write_bytes(b"owner-previous-file")
@@ -113,6 +164,7 @@ class SourceFallbackTests(unittest.TestCase):
             ("rollback_action_available_in_connector", True),
             ("real_user_archive_recovered", True),
             ("no_new_service_or_cost", False),
+            ("provider_metadata_rechecked_during_workflow", True),
             ("data_included", "source_plus_private"),
             ("archive_sha256", "0"*64),
         ):
@@ -125,8 +177,8 @@ class SourceFallbackTests(unittest.TestCase):
         self.report_path.write_text(json.dumps(baseline))
         self.assertEqual(fallback.verify(self.zip_path, self.report_path)["authority"], "none")
 
-    def test_report_requires_all_nine_public_exact_matches(self):
-        good={name:"MATCH" for name in fallback.gate.OBSERVE}
+    def test_report_requires_all_seventeen_public_exact_matches(self):
+        good={name:"MATCH" for name in fallback.FILES}
         report = fallback.make_report(self.assets, good, "a"*64)
         self.assertTrue(report["origin_matches_pinned_live_source"])
         with self.assertRaises(ValueError):
@@ -144,11 +196,11 @@ class SourceFallbackTests(unittest.TestCase):
             fallback.make_report(self.assets, good, "UNPINNED")
 
     def test_public_only_allowlist(self):
-        self.assertEqual(len(fallback.LEGACY_FILES), 13)
-        self.assertEqual(len(fallback.gate.OBSERVE), 9)
+        self.assertEqual(len(fallback.FILES), 17)
+        self.assertEqual(len(set(fallback.FILES)), 17)
         self.assertEqual(fallback.SERVICE, "srv-dbrjurc9v7es73cqe0v0")
-        self.assertEqual(fallback.LIVE_COMMIT, "8b5da6a192e6be68283282afcb2ac9b5d0fdcd91")
-        self.assertEqual(fallback.LIVE_DEPLOY, "dep-dbvvvil9fdbs73c6qb80")
+        self.assertEqual(fallback.LIVE_COMMIT, "826c91e2053f716b9aa7e40713f3c568e5272eba")
+        self.assertEqual(fallback.LIVE_DEPLOY, "dep-dc0j4sh7lnhs738r3r00")
 
 
 if __name__ == "__main__":
