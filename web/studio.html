@@ -4709,8 +4709,8 @@ function stopJob(discard=true){
  job.discard ||= discard;
  if(job.frame)cancelAnimationFrame(job.frame);
  if(job.watchdog)clearTimeout(job.watchdog);
- try{if(job.recorder?.state==='recording')job.recorder.stop()}
- catch{releaseJob(job)}
+ try{if(job.recorder?.state==='recording')job.recorder.stop();else{job.discard=true;releaseJob(job)}}
+ catch{job.discard=true;releaseJob(job)}
 }
 function releaseJob(job){
  if(job.frame)cancelAnimationFrame(job.frame);
@@ -4805,7 +4805,7 @@ async function startRecording(){
  const current=++epoch,scope=selection(),seconds=Number(duration.value);
  if(![3,6,10,12].includes(seconds)){message('Choose a supported duration.','مدت مجاز را انتخاب کن.');return}
  preparing=true;previewClear();meter.value=0;layout();refresh();
- let ctx=null,audioBuffer=null,stream=null,recorder=null,audioSource=null;
+ let ctx=null,audioBuffer=null,stream=null,recorder=null,audioSource=null,ownJob=null;
  try{
   // Construct/resume the audio context directly from the user's click.
   if(music){
@@ -4834,7 +4834,7 @@ async function startRecording(){
    mimeType:selectedMime,videoBitsPerSecond:950000,audioBitsPerSecond:96000});
   const job={recorder,stream,audioContext:ctx,audioSource,frame:0,watchdog:0,
    parts:[],size:0,discard:false,type:recorder.mimeType||selectedMime,finished:false};
-  recording=job;preparing=false;refresh();
+  ownJob=job;recording=job;preparing=false;refresh();
   recorder.addEventListener('dataavailable',event=>{
    if(job.discard||!event.data?.size)return;
    job.size+=event.data.size;
@@ -4878,7 +4878,7 @@ async function startRecording(){
   job.watchdog=setTimeout(()=>{if(recording===job)stopJob(false)},(seconds+2)*1000);
   message('Recording locally; keep this tab open.','ضبط روی دستگاه در حال اجراست؛ این برگه را باز نگه دار.');
  }catch{
-  if(recording){stopJob(true)}
+  if(ownJob&&recording===ownJob){stopJob(true)}
   else{
    for(const track of stream?.getTracks()||[])track.stop();
    try{audioSource?.stop()}catch{}
