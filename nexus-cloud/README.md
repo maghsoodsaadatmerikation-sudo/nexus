@@ -256,10 +256,30 @@ The command refuses a live run without explicit consent or a valid configured
 provider. It exits nonzero if a probe encounters a provider/transport error or
 if the selected pass-rate threshold is not reached (default 0.85; override
 with `--minimum-pass-rate`), **or if any critical trust/safety probe fails**
-(even when the average exceeds the threshold). The JSON output contains only probe IDs,
-dimensions, critical flags, pass/fail/error verdicts, critical-failure IDs,
-and aggregate scores; it never prints raw answers or provider credentials. `trust_env=False` avoids unintended ambient
-HTTP proxy configuration.
+(even when the average exceeds the threshold).
+
+**Fail-fast on provider failure:** if the first attempted probe encounters a
+401/403 authentication failure, 402 billing failure, 429 rate limit, upstream
+5xx rejection, malformed response, timeout or connection error, the evaluator
+stops rather than sending the remaining 14 requests. A later failure likewise
+stops the rest. There are **no retries, credential refresh attempts, or automatic
+fallback providers**. A well-formed answer that is simply wrong does **not**
+stop the evaluation: all remaining probes still run.
+
+Results distinguish `PASS`, `FAIL`, `ERROR` and **`SKIPPED`** (unattempted),
+with `provider_requests_attempted`, `provider_requests_skipped`,
+`aborted_early`, and `abort_reason`. Partial evaluations **cannot pass**,
+even at a zero pass-rate threshold. Provider errors use fixed public classes
+(`authentication`, `billing`, `rate_limited`, `request_rejected`,
+`upstream_unavailable`, `invalid_response`, `transport_or_validation`).
+HTTP error response bodies, URL, tokens, raw answers, and exception text are
+never copied into the JSON report.
+
+The single-question `--smoke-live` check now also includes a sanitized
+`error_reason` on failure. The JSON quality report contains only probe IDs,
+dimensions, critical flags, outcome categories, failure IDs and aggregate
+counts; it never prints raw answers or provider credentials. `trust_env=False`
+avoids unintended ambient HTTP proxy configuration.
 
 **Interpretation:** These are simple deterministic checks on artificial
 examples, not independent fact verification, a safety certification, a
