@@ -17,13 +17,29 @@ window.addEventListener('load',async()=>{
  let providerCalls=0,searchCalls=0,catalogCalls=0,connectionActions=0;
  let crossrefCalls=0,rejectCrossref=false;
  let branchEnabled=false,delayRead=false,releaseRead,readSignal;
- let branchPreviews=0,branchWrites=0;
+ let branchPreviews=0,branchWrites=0,planCalls=0,invalidPlan=false,delayPlan=false,releasePlan;
  const branchBase='d'.repeat(40);
  const closeConnection=async()=>{const d=$('studio-connections');const closed=new Promise(r=>d.addEventListener('close',r,{once:true}));$('studio-connections-close').click();await closed};
  window.confirm=()=>true;
  window.fetch=async(url,options={})=>{
   if(String(url).endsWith('/studio-api/status'))return new Response(JSON.stringify({configured:true,model:'synthetic',provider_host:'synthetic.invalid',configuration_id:'a'.repeat(64)}));
   if(String(url).endsWith('/studio-api/respond')){providerCalls++;return new Response(JSON.stringify({text:'Fake response',model:'synthetic',origin:'model',authority:'none'}))}
+  if(String(url).endsWith('/studio-api/assistant/plan-preview')){
+   planCalls++;
+   assert(options.method==='POST'&&JSON.parse(options.body).consent===true,
+    'assistant-preview-explicit-consent-on-wire');
+   assert(options.headers.authorization==='Bearer '+$('gateway-token').value.trim(),
+    'assistant-preview-only-uses-studio-gateway-token');
+   if(delayPlan)await new Promise(resolve=>{releasePlan=resolve});
+   return Response.json(invalidPlan?{kind:'review_only',steps:[{tool:'shell',instruction:'Run everything'}]}:{
+    kind:'review_only',authority:'none',execution:'not_started',
+    provider_requests:0,tools_executed:0,steps:[
+     {number:1,tool:'research',command:'/research',instruction:'Research fictional study',status:'not_started',requires_separate_user_review:true},
+     {number:2,tool:'data',command:'/data',instruction:'analyze CSV data',status:'not_started',requires_separate_user_review:true},
+     {number:3,tool:'write',command:'/write',instruction:'draft a report',status:'not_started',requires_separate_user_review:true}
+    ]
+   });
+  }
   if(String(url).endsWith('/studio-api/connections')){
    catalogCalls++;
    return new Response(JSON.stringify({connections:[
@@ -270,7 +286,49 @@ window.addEventListener('load',async()=>{
   workflow.querySelector(':scope > button').click();
   assert(workflow.hidden&&$('message').value==='/plan\n/research study\n/data',
    'discard-workflow-keeps-unsent-chat-text');
-  // The local-guide mode retains broad opt-in natural-language discovery.
+  // Natural-language preview requires independent gateway approval.
+   NexusStudioFocus.openPanel('conversation-card');
+   const planButton=$('studio-assistant-plan-preview');
+   const naturalDraft='Research fictional study then analyze CSV data then draft a report';
+   fill('gateway-token','studio-preview-token-01234567890123456789');
+   fill('message',naturalDraft);
+   assert(!planButton.disabled,'assistant-natural-plan-entry-enabled');
+   const beforePlan={providerCalls,searchCalls,catalogCalls,connectionActions};
+   planButton.click();
+   assert(!workflow.hidden&&workflow.querySelector('pre').textContent===naturalDraft&&
+    planCalls===0,'assistant-plan-exact-draft-displayed-before-gateway-request');
+   workflow.querySelector('button').click();
+   await wait(()=>planCalls===1&&workflow.querySelectorAll('li').length===3);
+   assert(workflow.querySelectorAll('li button').length===2&&
+    workflow.querySelectorAll('li button')[1].disabled,
+    'assistant-plan-gateway-result-requires-separate-tool-review');
+   assert(JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions})===
+    JSON.stringify(beforePlan),'assistant-preview-does-not-execute-model-or-tools');
+   assert($('message').value===naturalDraft,'assistant-preview-preserves-user-draft');
+   workflow.querySelector('li button').click();
+   assert(NexusStudioFocus.active()==='research-card'&&
+    $('research-query').value==='fictional study','assistant-plan-opens-review-surface-only');
+   fill('message',naturalDraft+' altered');
+   assert(workflow.hidden,'assistant-plan-revoked-on-draft-edit');
+   invalidPlan=true;fill('message',naturalDraft);planButton.click();
+   workflow.querySelector('button').click();
+   await wait(()=>planCalls===2&&workflow.textContent.includes('Preview unavailable'));
+   assert(workflow.querySelectorAll('li').length===0,
+    'assistant-malformed-gateway-result-cannot-create-workflow');
+   invalidPlan=false;
+   planButton.click();
+   assert(planCalls===2,'assistant-restage-never-sends-automatically');
+   delayPlan=true;
+   workflow.querySelector('button').click();
+   await wait(()=>planCalls===3&&Boolean(releasePlan));
+   fill('message','A changed draft cancels the pending plan');
+   releasePlan();
+   await new Promise(resolve=>setTimeout(resolve,50));
+   delayPlan=false;releasePlan=null;
+   assert(workflow.hidden,'assistant-inflight-plan-revoked-by-edit');
+   assert(JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions})===
+    JSON.stringify(beforePlan),'assistant-plan-never-spends-or-executes');
+   // The local-guide mode retains broad opt-in natural-language discovery.
   // Explicit slash commands still work in both modes.
   chooser.value='guide';chooser.dispatchEvent(new Event('change',{bubbles:true}));
   for(const [request,query] of [
