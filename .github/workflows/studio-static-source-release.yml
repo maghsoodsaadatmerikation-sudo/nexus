@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'scripts/studio-static-release-gate.py'
+      - 'scripts/studio-full-origin-observer.py'
+      - 'scripts/test-studio-full-origin-observer.py'
       - 'scripts/test-studio-static-release-gate.py'
       - 'scripts/verify-studio-public.py'
       - 'scripts/studio_public_assets.py'
@@ -20,6 +22,8 @@ on:
     branches: [main]
     paths:
       - 'scripts/studio-static-release-gate.py'
+      - 'scripts/studio-full-origin-observer.py'
+      - 'scripts/test-studio-full-origin-observer.py'
       - 'scripts/test-studio-static-release-gate.py'
       - 'scripts/verify-studio-public.py'
       - 'scripts/studio_public_assets.py'
@@ -66,6 +70,7 @@ jobs:
           python3 scripts/test-studio-template-contract.py
           python3 scripts/build-studio-static.py --check
           python3 scripts/test-studio-static-release-gate.py
+          python3 scripts/test-studio-full-origin-observer.py
           python3 scripts/verify-studio-public.py --self-test
           python3 scripts/test-studio-public-acceptance.py
       - name: Package exact public site and verify source-bound SHA manifest
@@ -116,6 +121,29 @@ jobs:
           assert r["status"] in {"SOURCE_MATCH_ONLY","PUBLIC_SOURCE_DRIFT","INCOMPLETE_PUBLIC_OBSERVATION"}
           print("PUBLIC ORIGIN DRIFT OBSERVED; NO PRODUCTION RELEASE AUTHORITY")
           PY
+      - name: Inspect every source-reviewed public asset over fixed HTTPS (no deployment)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/studio-full-origin-observer.py \
+            --zip "$RUNNER_TEMP/nexus-studio-static-site.zip" \
+            --manifest "$RUNNER_TEMP/nexus-studio-release-manifest.json" \
+            --source-commit "$GITHUB_SHA" \
+            --out "$RUNNER_TEMP/nexus-studio-public-all-assets.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ["RUNNER_TEMP"])/"nexus-studio-public-all-assets.json"
+          r=json.loads(p.read_text())
+          assert r["reviewed_public_files"]==17 and r["observed_public_files"]==17
+          assert r["read_only"] is True and r["source_manifest_verified"] is True
+          assert r["production_promotion_authorized"] is False
+          assert r["rollback_provider_artifact_verified"] is False
+          assert r["render_deploy_id_verified"] is False
+          assert r["authority"]=="none"
+          assert r["status"] in {"SOURCE_MATCH_ONLY","PUBLIC_SOURCE_DRIFT","INCOMPLETE_PUBLIC_OBSERVATION"}
+          print("FULL PUBLIC SOURCE OBSERVATION RECORDED (17/17), NO DEPLOY AUTHORITY")
+          PY
       - name: Retain source-only ZIP, SHA, release dossier and pre-promotion observation
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
@@ -126,5 +154,6 @@ jobs:
             ${{ runner.temp }}/nexus-studio-release-manifest.json
             ${{ runner.temp }}/nexus-studio-release-local-browser.json
             ${{ runner.temp }}/nexus-studio-public-before-promotion.json
+            ${{ runner.temp }}/nexus-studio-public-all-assets.json
           if-no-files-found: error
           retention-days: 30
