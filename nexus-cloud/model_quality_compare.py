@@ -92,8 +92,9 @@ def compare_models(
     # A single immutable snapshot keeps model/key/URL combinations together.
     catalog = read_model_catalog()
     if mode == "check_config":
-        return 0, {
-            "status": "READY_TO_TEST" if all(x in catalog for x in selection) else "NOT_READY",
+        all_configured = all(x in catalog for x in selection)
+        return (0 if all_configured else 2), {
+            "status": "READY_TO_TEST" if all_configured else "NOT_READY",
             "scope": "offline_config_only",
             "models": [{"slot": slot, "configured": slot in catalog} for slot in selection],
             "provider_requests_planned_for_full_quality": MAX_PROBES * len(selection),
