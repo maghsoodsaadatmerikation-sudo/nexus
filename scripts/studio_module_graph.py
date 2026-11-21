@@ -52,6 +52,7 @@ MODULES = (
     Module("/*STUDIO_COMPOSER_UI*/", "studio-composer-ui.js", "NexusStudioCompose",
            ("NexusStudio", "NexusStudioUI", "NexusStudioFocus"), ("NexusStudioConnections",)),
     Module("/*STUDIO_VISION_UI*/", "studio-vision-ui.js", "NexusStudioVision", ("NexusStudioUI",)),
+    Module("/*STUDIO_VIDEO_UI*/", "studio-video-ui.js", None, ("NexusStudioUI",)),
     Module("/*STUDIO_SPEECH_PLAYBACK*/", "studio-speech-playback.js", "NexusSpeechPlayback"),
     Module("/*STUDIO_VOICE_UI*/", "studio-voice-ui.js", None, ("NexusStudioUI", "NexusSpeechPlayback")),
     Module("/*STUDIO_CALENDAR*/", "studio-calendar.js", "NexusCalendar"),
