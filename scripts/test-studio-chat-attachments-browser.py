@@ -34,6 +34,23 @@ window.addEventListener('load',async()=>{
  };
  try{
   assert(!!$('chat-file')&&!!$('chat-attachment-tray')&&!!$('attach-document'),'composer-attachment-controls');
+  assert(!$('chat-file').disabled,'attachment-picker-is-available-before-first-conversation');
+  fill('message','A first question about orchard notes');
+  attach('unsupported.bin','No supported document');
+  await wait(()=>$('status').textContent===EN.chatAttachmentInvalid);
+  assert(!NexusStudioUI.snapshot().projects.length&&!network,'invalid-first-file-does-not-create-a-conversation');
+  const dropped=new DataTransfer();
+  dropped.items.add(new File(['Orchard notes from the first drop.'],'first-drop.txt'));
+  const drop=new DragEvent('drop',{dataTransfer:dropped,bubbles:true,cancelable:true});
+  $('message').dispatchEvent(drop);
+  await wait(()=>$('chat-attachment-tray').textContent.includes('first-drop.txt'));
+  assert(drop.defaultPrevented&&thread().nodes.length===0&&
+   $('message').value==='A first question about orchard notes'&&$('chat-file-panel').open&&
+   NexusStudioCompose.mode()==='model'&&$('request-review').hidden&&!network,
+   'first-file-drop-starts-a-draft-without-sending-or-losing-the-question');
+  $('clear-chat-files').click();
+  assert(NexusStudioCompose.mode()==='guide','clearing-direct-file-restores-local-guide');
+  $('lock').click();
   fill('project-title','CHAT MATERIALS');$('new-project').click();$('new-thread').click();
   assert($('chat-file').disabled===false,'attached-only-with-chat');
   fill('gateway','https://gateway.example');
@@ -182,6 +199,8 @@ window.addEventListener('load',async()=>{
   File.prototype.arrayBuffer=()=>new Promise(resolve=>release=resolve);
   attach('late.docx',wordBytes);
   await wait(()=>typeof release==='function');
+  assert($('studio-compose-send').disabled&&$('prepare').disabled&&$('request-review').hidden&&
+   $('chat-file').disabled&&!$('clear-chat-files').disabled,'read-suspends-send-and-can-be-cleared');
   $('lock').click();
   release(wordBytes.buffer);
   await sleep(100);File.prototype.arrayBuffer=original;

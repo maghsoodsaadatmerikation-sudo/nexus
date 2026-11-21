@@ -176,6 +176,12 @@ document retains that draft. **Use this draft in chat** stages the current edito
 text as a one-turn attachment. Sending it to a model requires the usual request
 review. The saved document and its versions are independent of that attachment.
 
+Select a supported text, Word or PowerPoint file from the attachment picker,
+or drop it onto the message field. A valid first attachment can start a local
+conversation while keeping the typed question. NEXUS reads the file on the
+device and stages its text for review. A failed batch leaves the draft and any
+earlier attachments intact. Only reviewed excerpts are sent on approval.
+
 Use **Download answer** to save only the selected answer to an unencrypted HTML
 file. The file opens offline and keeps the answer's supported Markdown
 formatting.

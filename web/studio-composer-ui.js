@@ -217,7 +217,7 @@ function refresh(){
  if(!state)return;
  if(temporaryModel&&!state.hasChatAttachments){select.value='guide';temporaryModel=false}
  if(offeredDraft!==null&&($('message').value!==offeredDraft||state.archived))clearOffer();
- const model=select.value==='model',ready=!state.busy&&(!state.threadReady||!state.archived);
+ const model=select.value==='model',ready=!state.busy&&!state.attachmentLoading&&(!state.threadReady||!state.archived);
  $('message').placeholder=words('Ask NEXUS anything…','هرچه می‌خواهی از نکسوس بپرس…');
  heading.textContent=model?words('AI model options','گزینه‌های مدل هوش مصنوعی'):words('Local guide · change mode','راهنمای محلی · تغییر حالت');
  box.setAttribute('aria-label',words('Conversation actions','گزینه‌های گفتگو'));
@@ -254,7 +254,7 @@ function run({routeTools=true}={}){
  // The send button can briefly lag a newly created first conversation.
  // Authoritative UI state and the draft, not a stale disabled flag, gate work.
  const state=window.NexusStudioUI.uiStatus();
- if(running||!state||state.busy||(state.threadReady&&state.archived)||
+ if(running||!state||state.busy||state.attachmentLoading||(state.threadReady&&state.archived)||
     !$('message').value.trim())return;
  const message=$('message').value;
  if(/^\/temporary$/i.test(message.trim())){
