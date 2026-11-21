@@ -1,10 +1,13 @@
-name: NEXUS Studio Previous-Live Public Source Fallback
+name: NEXUS Studio Current-Live Complete Public Source Fallback
 
 on:
   pull_request:
     paths:
       - 'scripts/studio-live-source-fallback.py'
       - 'scripts/test-studio-live-source-fallback.py'
+      - 'scripts/studio-full-origin-observer.py'
+      - 'scripts/studio_public_assets.py'
+      - 'scripts/png_pixels.py'
       - '.github/workflows/studio-live-source-fallback.yml'
       - 'docs/STUDIO-LIVE-ROLLBACK-FALLBACK.md'
   workflow_dispatch:
@@ -14,7 +17,7 @@ permissions:
 
 jobs:
   verify-current-live-public-source-fallback:
-    name: fallback-nine-live-source-hashes-no-deploy
+    name: fallback-seventeen-live-source-hashes-no-deploy
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     permissions:
@@ -29,7 +32,7 @@ jobs:
       - name: Checkout immutable current live Render source snapshot
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: 8b5da6a192e6be68283282afcb2ac9b5d0fdcd91
+          ref: 826c91e2053f716b9aa7e40713f3c568e5272eba
           path: previous-live
           persist-credentials: false
       - name: Reject ambient provider credentials and unexpected live Git commit
@@ -40,14 +43,14 @@ jobs:
           test -z "${RAILWAY_TOKEN:-}"
           test -z "${RAILWAY_API_TOKEN:-}"
           test -z "${NEXUS_MODEL_API_KEY:-}"
-          test "$(git -C previous-live rev-parse HEAD)" = "8b5da6a192e6be68283282afcb2ac9b5d0fdcd91"
+          test "$(git -C previous-live rev-parse HEAD)" = "826c91e2053f716b9aa7e40713f3c568e5272eba"
           test "$(git -C review rev-parse HEAD)" = "$GITHUB_SHA"
       - name: Verify synthetic negative cases, archive reproducibility and exact live SHA
         working-directory: review
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/studio-live-source-fallback.py scripts/test-studio-live-source-fallback.py
+          python3 -m py_compile scripts/studio-live-source-fallback.py scripts/test-studio-live-source-fallback.py scripts/studio-full-origin-observer.py
           python3 scripts/test-studio-live-source-fallback.py
       - name: Compare currently-live fixed public HTTPS origin to pinned Render source
         working-directory: review
@@ -68,7 +71,11 @@ jobs:
           from pathlib import Path
           report=json.loads((Path(os.environ['RUNNER_TEMP'])/'nexus-studio-previous-live-witness.json').read_text())
           assert report['origin_matches_pinned_live_source'] is True
-          assert len(report['observed_paths'])==9
+          assert len(report['observed_paths'])==17
+          assert report['reviewed_file_count']==17
+          assert len(report['source_assets'])==17
+          assert {item['path'] for item in report['observed_paths']}==set(report['source_assets'])
+          assert report['provider_metadata_rechecked_during_workflow'] is False
           for item in report['observed_paths']:
             if item['path'] in {'icons/nexus-192.png','icons/nexus-512.png'}:
               assert item['status'] in {'MATCH','PIXEL_MATCH'}
@@ -78,7 +85,7 @@ jobs:
           assert report['production_deploy_executed'] is False
           assert report['actual_rollback_executed'] is False
           assert report['rollback_render_build_artifact_confirmed'] is False
-          print('LIVE STATIC SOURCE BACKUP IS MATCHED, NO RENDER DEPLOYMENT OR ROLLBACK PERFORMED')
+          print('CURRENT LIVE 17-ASSET SOURCE SNAPSHOT MATCHED, PROVIDER ROLLBACK STILL UNVERIFIED')
           PY
       - name: Store source fallback ZIP and independent SHA plus public origin evidence
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f

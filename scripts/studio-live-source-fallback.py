@@ -18,7 +18,7 @@ import sys
 import tempfile
 import zipfile
 from png_pixels import pixel_digest
-from studio_public_assets import LEGACY_FILES
+from studio_public_assets import FILES, asset_limit, check_public_tree
 
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "studio-static-release-gate.py"
@@ -26,11 +26,19 @@ _spec = importlib.util.spec_from_file_location("nexus_static_release_gate", SCRI
 gate = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(gate)
 
-LIVE_COMMIT = "8b5da6a192e6be68283282afcb2ac9b5d0fdcd91"
-LIVE_DEPLOY = "dep-dbvvvil9fdbs73c6qb80"
+# Compare all 17 reviewed files with fixed-origin HTTPS fetch, strict
+# MIME/size bounds and no credential or redirect support.
+_obs_spec = importlib.util.spec_from_file_location(
+    "nexus_studio_complete_origin", HERE / "studio-full-origin-observer.py"
+)
+origin = importlib.util.module_from_spec(_obs_spec)
+_obs_spec.loader.exec_module(origin)
+
+LIVE_COMMIT = "826c91e2053f716b9aa7e40713f3c568e5272eba"
+LIVE_DEPLOY = "dep-dc0j4sh7lnhs738r3r00"
 SERVICE = "srv-dbrjurc9v7es73cqe0v0"
 WORKSPACE = "tea-dabhioe10ojc73acbs8g"
-SCHEMA = "nexus.studio.live-source-fallback.v1"
+SCHEMA = "nexus.studio.live-source-fallback.v2"
 BUNDLE = "nexus-studio-previous-live-source"
 MAX_RESULT = 10_000
 
@@ -46,17 +54,10 @@ def check_old_root(root):
     if rev != LIVE_COMMIT:
         raise ValueError("BLOCKED: old checkout does not match known live Git SHA")
     source = root / "public/studio"
-    found = sorted(str(p.relative_to(source)) for p in source.rglob("*") if p.is_file())
-    if found != sorted(LEGACY_FILES):
-        raise ValueError("BLOCKED: historical source asset list differs")
-    assets = {}
-    for name in LEGACY_FILES:
-        target = source / name
-        st = target.lstat()
-        if target.is_symlink() or not stat.S_ISREG(st.st_mode) or \
-                st.st_nlink != 1 or not (0 < st.st_size <= gate.MAX_FILE):
-            raise ValueError("BLOCKED: unsafe historical asset")
-        assets[name] = target.read_bytes()
+    # Refuse private/unlisted files and any symlinks; allow the separate
+    # PDF worker's bounded 1.3MB maximum.
+    reviewed_paths = check_public_tree(source)
+    assets = {name: reviewed_paths[name].read_bytes() for name in FILES}
     if b"const EXPECTED_SHA256='" + sha(assets["index.html"]).encode() + b"'" not in \
             assets["service-worker.js"]:
         raise ValueError("BLOCKED: historical worker does not pin historical HTML")
@@ -64,9 +65,9 @@ def check_old_root(root):
 
 
 def compare_live(assets, fetch=None):
-    fetch = fetch or gate.live_fetch
+    fetch = fetch or origin.fetch_live
     statuses = {}
-    for name in gate.OBSERVE:
+    for name in FILES:
         try:
             current = fetch(name)
         except Exception:
@@ -103,9 +104,9 @@ def archive(assets, target):
 
 
 def make_report(assets, statuses, zip_sha):
-    if set(statuses) != set(gate.OBSERVE):
+    if set(statuses) != set(FILES):
         raise ValueError("BLOCKED: incomplete public observation")
-    if set(assets) != set(LEGACY_FILES):
+    if set(assets) != set(FILES):
         raise ValueError("BLOCKED: unexpected fallback asset set")
     if not re.fullmatch(r"[0-9a-f]{64}", zip_sha):
         raise ValueError("BLOCKED: invalid package digest")
@@ -124,12 +125,13 @@ def make_report(assets, statuses, zip_sha):
         "origin_matches_pinned_live_source": True,
         "png_icons_compared_by_rgba_pixels": True,
         "observed_paths": [{"path": name, "status": statuses[name]}
-                           for name in gate.OBSERVE],
-        "reviewed_file_count": len(LEGACY_FILES),
+                           for name in FILES],
+        "reviewed_file_count": len(FILES),
         "source_assets": {name: {"bytes": len(assets[name]), "sha256": sha(assets[name])}
                           for name in sorted(assets)},
         "archive_sha256": zip_sha,
         "data_included": "public_static_source_only",
+        "provider_metadata_rechecked_during_workflow": False,
         "rollback_render_build_artifact_confirmed": False,
         "rollback_action_available_in_connector": False,
         "actual_rollback_executed": False,
@@ -153,8 +155,8 @@ def build(old_root, dest_zip, dest_report, fetch=None):
         # Only reviewed public filenames and bounded result codes. No response
         # body, URL query, user content or server error text is logged.
         print("LIVE SOURCE MISMATCH: " + json.dumps(
-            [{"path": name, "status": statuses[name]} for name in gate.OBSERVE
-             if statuses[name] != "MATCH"], sort_keys=True), file=sys.stderr)
+            [{"path": name, "status": statuses[name]} for name in FILES
+             if statuses[name] not in ("MATCH", "PIXEL_MATCH")], sort_keys=True), file=sys.stderr)
         raise ValueError("BLOCKED: live public HTML/worker/assets do not match proposed fallback")
     try:
         archive(assets, dest_zip)
@@ -178,10 +180,22 @@ def verify(zip_path, manifest_path):
             manifest_path.stat().st_size > MAX_RESULT:
         raise ValueError("BLOCKED: invalid fallback files")
     manifest = json.loads(manifest_path.read_text())
+    if set(manifest) != {
+        "schema", "live_service_id_at_snapshot", "render_workspace_id_at_snapshot",
+        "current_live_deploy_at_snapshot", "source_commit", "origin",
+        "origin_matches_pinned_live_source", "png_icons_compared_by_rgba_pixels",
+        "observed_paths", "reviewed_file_count", "source_assets", "archive_sha256",
+        "data_included", "provider_metadata_rechecked_during_workflow",
+        "rollback_render_build_artifact_confirmed", "rollback_action_available_in_connector",
+        "actual_rollback_executed", "production_deploy_executed",
+        "real_user_archive_recovered", "no_new_service_or_cost", "authority",
+    }:
+        raise ValueError("BLOCKED: unreviewed report fields")
     if manifest.get("schema") != SCHEMA or manifest.get("source_commit") != LIVE_COMMIT or \
             manifest.get("live_service_id_at_snapshot") != SERVICE or \
             manifest.get("render_workspace_id_at_snapshot") != WORKSPACE or \
             manifest.get("data_included") != "public_static_source_only" or \
+            manifest.get("provider_metadata_rechecked_during_workflow") is not False or \
             manifest.get("rollback_action_available_in_connector") is not False or \
             manifest.get("real_user_archive_recovered") is not False or \
             manifest.get("no_new_service_or_cost") is not True or \
@@ -193,30 +207,34 @@ def verify(zip_path, manifest_path):
             manifest.get("production_deploy_executed") is not False or \
             manifest.get("rollback_render_build_artifact_confirmed") is not False or \
             manifest.get("archive_sha256") != sha(zip_path.read_bytes()) or \
-            manifest.get("reviewed_file_count") != len(LEGACY_FILES):
+            manifest.get("reviewed_file_count") != len(FILES):
         raise ValueError("BLOCKED: fallback evidence/authority invalid")
+    if set(manifest.get("source_assets", {})) != set(FILES):
+        raise ValueError("BLOCKED: complete source asset inventory required")
     with zipfile.ZipFile(zip_path) as zipped:
         infos = zipped.infolist()
-        if len(infos) != len(LEGACY_FILES):
+        if len(infos) != len(FILES):
             raise ValueError("BLOCKED: unexpected fallback member count")
         assets = {}
         for member in infos:
             if not member.filename.startswith(BUNDLE + "/") or \
-                    member.filename[len(BUNDLE)+1:] not in LEGACY_FILES or \
-                    member.filename in assets or \
+                    member.filename[len(BUNDLE)+1:] not in FILES or \
+                    member.filename[len(BUNDLE)+1:] in assets or \
                     member.is_dir() or member.compress_type != zipfile.ZIP_STORED or \
                     not stat.S_ISREG(member.external_attr >> 16) or \
-                    member.file_size > gate.MAX_FILE:
+                    member.file_size > asset_limit(member.filename[len(BUNDLE)+1:]):
                 raise ValueError("BLOCKED: unsafe fallback entry")
             assets[member.filename[len(BUNDLE)+1:]] = zipped.read(member)
+    if set(assets) != set(FILES):
+        raise ValueError("BLOCKED: missing reviewed source files")
     expected = {name: {"bytes": len(data), "sha256": sha(data)}
                 for name, data in sorted(assets.items())}
     if manifest.get("source_assets") != expected:
         raise ValueError("BLOCKED: fallback ZIP asset hashes differ")
     observed = manifest.get("observed_paths")
-    if not isinstance(observed, list) or len(observed) != len(gate.OBSERVE):
+    if not isinstance(observed, list) or len(observed) != len(FILES):
         raise ValueError("BLOCKED: missing public live source match")
-    for expected_name, item in zip(gate.OBSERVE, observed):
+    for expected_name, item in zip(FILES, observed):
         if not isinstance(item, dict) or item.get("path") != expected_name or \
                 item.get("status") not in (("MATCH", "PIXEL_MATCH") if
                 expected_name in ("icons/nexus-192.png", "icons/nexus-512.png")
