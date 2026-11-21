@@ -371,6 +371,19 @@ html.studio-focus-mode{
   }
 }
 
+/* The dedicated print sheet is generated ONLY by the explicit user print
+   button. Never include the private Studio interface in PDF/print output. */
+#nexus-print-sheet{display:none}
+@media print{
+ html,body{background:white!important;color:black!important}
+ body>:not(#nexus-print-sheet){display:none!important}
+ body>#nexus-print-sheet{display:block!important;margin:0!important;
+  padding:0!important;color:black!important;background:white!important}
+ #nexus-print-sheet h1{font:700 18pt/1.35 system-ui,sans-serif;margin:0 0 16pt}
+ #nexus-print-sheet pre{font:11pt/1.6 system-ui,sans-serif;white-space:pre-wrap;
+  overflow-wrap:anywhere;max-height:none;overflow:visible;margin:0;unicode-bidi:plaintext}
+ @page{size:auto;margin:20mm}
+}
 </style></head><body><main>
 <header class="studio-masthead">
   <div class="studio-brand">
@@ -514,7 +527,7 @@ html.studio-focus-mode{
 <p class="help music-en">This version creates synthetic vowel phrases only; it does not pronounce text or imitate anyone's voice. Piano, strings, brass, woodwinds and animal-inspired effects are electronic approximations. You decide what to publish; no external service is called.</p>
 <p class="help music-fa" lang="fa" dir="rtl">در این نسخه آواز مصنوعی با واکه‌های ساده تولید می‌شود و متن را نمی‌خواند یا صدای کسی را تقلید نمی‌کند. سازهای غربی و افکت‌های حیوانات الکترونیکی و تقریبی‌اند؛ هیچ انتشار یا اتصال خودکاری وجود ندارد.</p>
 </section>
-<section class="card" id="canvas-card"><h2 data-t="canvas">Versioned writing canvas</h2><select id="documents" aria-label="Document"></select><input id="document-title" maxlength="120" data-placeholder="documentTitle" aria-label="Document title"><button id="new-document" data-t="newDocument">New document</button><textarea id="editor" maxlength="100000" dir="auto"></textarea><div class="row"><button id="save-version" data-t="saveVersion">Save new version</button><button id="export-document" data-t="exportDocument">Export Markdown</button><button id="export-document-word" type="button" data-t="chatExportWord"></button><button id="canvas-chat" type="button" class="secondary" data-t="canvasChat"></button><button id="delete-document" data-t="deleteDocument">Delete document</button></div><select id="versions" aria-label="Saved document version"></select><button id="load-version" class="secondary" data-t="loadVersion">Load version into editor</button><pre id="version-diff"></pre><p class="help" data-t="canvasHelp">Every saved version remains available, up to 30 per document. Text and code are edited as inert text and never executed.</p></section>
+<section class="card" id="canvas-card"><h2 data-t="canvas">Versioned writing canvas</h2><select id="documents" aria-label="Document"></select><input id="document-title" maxlength="120" data-placeholder="documentTitle" aria-label="Document title"><button id="new-document" data-t="newDocument">New document</button><textarea id="editor" maxlength="100000" dir="auto"></textarea><div class="row"><button id="save-version" data-t="saveVersion">Save new version</button><button id="export-document" data-t="exportDocument">Export Markdown</button><button id="export-document-word" type="button" data-t="chatExportWord"></button><button id="export-document-pdf" type="button" data-t="documentPrintPdf">Print / Save PDF</button><button id="canvas-chat" type="button" class="secondary" data-t="canvasChat"></button><button id="delete-document" data-t="deleteDocument">Delete document</button></div><select id="versions" aria-label="Saved document version"></select><button id="load-version" class="secondary" data-t="loadVersion">Load version into editor</button><pre id="version-diff"></pre><p class="help" data-t="canvasHelp">Every saved version remains available, up to 30 per document. Text and code are edited as inert text and never executed.</p></section>
 </div></div><p class="help" data-t="boundary">NEXUS assists judgment. It cannot make a human decision or take external actions from a conversation.</p>
 <footer class="help" id="nexus-creator" dir="auto">Created by <a href="mailto:maryamnajafi4991@gmail.com">Maryam Najafi · maryamnajafi4991@gmail.com</a></footer>
 </main><script>/* Shared bounded descriptive table engine; no DOM, execution or network. */
@@ -2097,7 +2110,28 @@ root.NexusOfficeZip=Object.freeze({readDocx,readPptx,writeDocx,OFFICE_MAX_BYTES}
 </script><script>'use strict';
 const S=NexusStudio,$=id=>document.getElementById(id),vault=new S.Vault(),undoSlot=new S.UndoSlot(),localePacks=new NexusLocales.Registry();
 let data=S.empty(),projectId=null,threadId=null,documentId=null,dirty=false,profileDirty=false,editorDirty=false,revision=0,branchBase=undefined,pending=null,controller=null,busy=false,language='en',modelInfo=null,languageImport=0,sourceViewStamp='';
-let reviewedDocumentStep=null;
+let reviewedDocumentStep=null,reviewedExportStep=null,removePrintSheet=null;
+// A download request is NOT verified delivery to disk. Report only a fresh,
+// explicit document-export click that reached the browser download trigger.
+function armExportReceipt(kind,callback){
+ if(kind!=='export'||typeof callback!=='function'||busy)return false;
+ reviewedExportStep={kind,callback,projectId,threadId};return true;
+}
+function clearExportReceipt(){reviewedExportStep=null;removePrintSheet?.()}
+function reportExportReceipt(format,bytes,editorText){
+ const task=reviewedExportStep;
+ if(!task||task.projectId!==projectId||task.threadId!==threadId||
+    !doc()||typeof editorText!=='string'||!editorText.trim()||
+    !['markdown','docx','print'].includes(format)||!Number.isInteger(bytes)||
+    (format==='print'?bytes!==0:bytes<1||bytes>1000000))return;
+ reviewedExportStep=null;
+ const version=doc().versions.at(-1);
+ try{task.callback(Object.freeze({source:'studio-document-export',
+   kind:'export',status:format==='print'?'print_requested':'download_requested',
+   format,bytes,
+   content:'not_transmitted',editorVersion:version?.text===editorText?'saved_version':'draft'}))}
+ catch{/* A receiver cannot rewrite user-approved file generation. */}
+}
 // Single-use browser-only notification after a successful, human-clicked
 // project document version save. This never implies archive persistence.
 function armDocumentReceipt(kind,callback){
@@ -2120,6 +2154,8 @@ let chatAttachments=[],attachmentEpoch=0,attachmentLoading=false,trainingReview=
 const EN={subtitle:'An AI assistant built to support human judgment.',projects:'Projects',projectName:'New project name',createProject:'Create project',deleteProject:'Delete project',history:'Conversation history',search:'Search all conversations',showArchived:'Include archived',newChat:'New conversation',archive:'Private archive',archiveHelp:'Saving is explicit and encrypted in this browser. Keep an encrypted backup and its passphrase separately.',pass:'Passphrase: at least 12 characters',repeat:'Repeat for a new archive or backup',createVault:'Create archive',unlock:'Unlock',lock:'Lock & clear',save:'Save session',backup:'Encrypted backup',restore:'Open encrypted file',erase:'Erase archive',conversation:'Conversation',rename:'Rename',archiveChat:'Archive / reopen',deleteChat:'Delete chat',exportChat:'Export transcript',temporary:'Until you explicitly save, this session exists only in this tab. Closing it can lose your work.',message:'Your message',useMemory:"Include this project's reviewed memory",useSources:'Include relevant project source excerpts',guide:'Use local reflection guide',prepare:'Prepare model request',regenerate:'Prepare another answer',stop:'Stop',modelSettings:'Optional generative model connection',modelHelp:'An operator must configure a model gateway. A ChatGPT subscription is not an API credential. Provider keys stay on the gateway; only its access token is entered here, for this tab.',checkModel:'Check configured model',requestReview:'Exact context to send',consent:'Send this exact context to the configured provider once.',send:'Send approved request',profile:'Project assistant & memory',instructions:'Custom instructions (preferences, not authority)',memories:'Reviewed memory — one item per line, up to 30',applyProfile:'Apply project preferences',memoryHelp:'Nothing is learned automatically. Memory is isolated to this project and sent only when selected. Removing memory does not remove earlier transcript text.',sources:'Local source search',sourceHelp:'Select UTF-8 TXT, Markdown, CSV, TSV or JSON files together, up to 256 KiB each and 12 per project. A batch is added only if every file is valid. Excerpts are local lexical search results, not verified facts. Files are never executed.',sourceQuery:'Words to find in project sources',searchSources:'Search sources',canvas:'Versioned writing canvas',documentTitle:'Document title',newDocument:'New document',saveVersion:'Save new version',exportDocument:'Export Markdown',deleteDocument:'Delete document',loadVersion:'Load version into editor',canvasHelp:'Every saved version remains available, up to 30 per document. Text and code are edited as inert text and never executed.',boundary:'NEXUS assists judgment. It cannot make a human decision or take external actions from a conversation.',unsaved:'Temporary session / unsaved changes',saved:'Applied session saved as encrypted data. Unapplied form text is excluded.',failed:'Operation failed. Check input, capacity, passphrase or archive conflicts. Work has not been silently overwritten.',discard:'Replace or delete this work? Unsaved work and form text can be lost.',plain:'Export unencrypted text? It may include private information.',needApply:'Apply preferences / astrology profiles and save document versions before saving/exporting the session.',branching:'Your next message creates a new branch; the original remains available.',local:'Guide — not a generative model',human:'You',model:'Model draft',edit:'Edit into a new branch',toCanvas:'Copy to canvas',speak:'Read aloud (device voice)',empty:'Create a project, then choose New conversation.',noModel:'No model configured. Local guide remains available.',configured:'Configured model',apply:'Applied locally. Save explicitly to retain this change.'};
 Object.assign(EN,{languagePacks:'Interface language packs',languageHelp:'Up to eight complete translation packs can be kept in this tab. They contain labels only, not your projects.',languageTemplate:'Download English label template',gatewayOrigin:'Model gateway origin',gatewayAccess:'Gateway access token (not the provider API key)'});
 const FA={subtitle:'دستیار هوش مصنوعی برای کمک به قضاوت انسانی.',projects:'پروژه‌ها',projectName:'نام پروژهٔ جدید',createProject:'ساخت پروژه',deleteProject:'حذف پروژه',history:'تاریخچهٔ گفتگو',search:'جست‌وجو در همهٔ گفتگوها',showArchived:'نمایش بایگانی‌شده‌ها',newChat:'گفتگوی جدید',archive:'آرشیو خصوصی',archiveHelp:'ذخیره‌سازی دستی و رمزگذاری‌شده در همین مرورگر است. پشتیبان رمزگذاری‌شده و گذرواژه را جدا نگه دار.',pass:'گذرواژه: حداقل ۱۲ نویسه',repeat:'تکرار برای آرشیو یا پشتیبان جدید',createVault:'ساخت آرشیو',unlock:'بازکردن قفل',lock:'قفل و پاک‌کردن صفحه',save:'ذخیرهٔ نشست',backup:'پشتیبان رمزگذاری‌شده',restore:'بازکردن فایل رمزگذاری‌شده',erase:'حذف آرشیو',conversation:'گفتگو',rename:'تغییر نام',archiveChat:'بایگانی / بازگردانی',deleteChat:'حذف گفتگو',exportChat:'خروجی گفتگو',temporary:'تا وقتی خودت ذخیره نکنی، این نشست فقط در همین برگه است. بستن آن ممکن است کار را از بین ببرد.',message:'پیام تو',useMemory:'حافظهٔ بازبینی‌شدهٔ همین پروژه را اضافه کن',useSources:'بخش‌های مرتبط منابع پروژه را اضافه کن',guide:'استفاده از راهنمای تأمل محلی',prepare:'آماده‌سازی درخواست مدل',regenerate:'آماده‌سازی پاسخ دیگر',stop:'توقف',modelSettings:'اتصال اختیاری مدل مولد',modelHelp:'مدیر سرور باید درگاه مدل را پیکربندی کند. اشتراک ChatGPT کلید API نیست. کلید مدل روی سرور می‌ماند؛ فقط توکن دسترسی درگاه در همین برگه وارد می‌شود.',checkModel:'بررسی مدل پیکربندی‌شده',requestReview:'متن دقیق ارسالی',consent:'این متن دقیق را یک بار به ارائه‌دهندهٔ پیکربندی‌شده بفرست.',send:'ارسال درخواست تأییدشده',profile:'دستیار و حافظهٔ پروژه',instructions:'دستورهای سفارشی — ترجیح، نه اختیار',memories:'حافظهٔ بازبینی‌شده — هر مورد یک خط، حداکثر ۳۰ مورد',applyProfile:'اعمال ترجیحات پروژه',memoryHelp:'یادگیری خودکار انجام نمی‌شود. حافظه فقط به همین پروژه تعلق دارد و با انتخاب تو ارسال می‌شود. حذف حافظه متن گفتگوهای قبلی را حذف نمی‌کند.',sources:'جست‌وجوی منابع محلی',sourceHelp:'فایل‌های متنی UTF-8 با قالب TXT، Markdown، CSV، TSV و JSON را گروهی انتخاب کن؛ هر فایل تا ۲۵۶ کیبی‌بایت و حداکثر ۱۲ فایل در پروژه. گروه فقط وقتی وارد می‌شود که همهٔ فایل‌ها معتبر باشند. نتیجهٔ جست‌وجوی واژگانی تأیید حقیقت نیست. فایل‌ها اجرا نمی‌شوند.',sourceQuery:'عبارت جست‌وجو در منابع پروژه',searchSources:'جست‌وجوی منابع',canvas:'ویرایشگر نسخه‌دار نوشته',documentTitle:'عنوان سند',newDocument:'سند جدید',saveVersion:'ذخیرهٔ نسخهٔ جدید',exportDocument:'خروجی Markdown',deleteDocument:'حذف سند',loadVersion:'بازکردن نسخه در ویرایشگر',canvasHelp:'هر نسخهٔ ذخیره‌شده تا سقف ۳۰ نسخه حفظ می‌شود. متن و کد اجرا نمی‌شوند.',boundary:'نکسوس به قضاوت کمک می‌کند؛ از داخل گفتگو تصمیم انسانی نمی‌گیرد و اقدام خارجی انجام نمی‌دهد.',unsaved:'نشست موقت / تغییرات ذخیره‌نشده',saved:'نشست اعمال‌شده رمزگذاری و ذخیره شد. متن فرم‌های اعمال‌نشده ذخیره نمی‌شود.',failed:'عملیات ناموفق بود. ورودی، ظرفیت، گذرواژه یا تداخل آرشیو را بررسی کن. کار بدون اطلاع بازنویسی نشده است.',discard:'این کار جایگزین یا حذف شود؟ تغییرات ذخیره‌نشده ممکن است از دست بروند.',plain:'خروجی متن بدون رمزگذاری تهیه شود؟ ممکن است شامل اطلاعات خصوصی باشد.',needApply:'پیش از ذخیره یا خروجی نشست، پروفایل‌ها و ترجیحات را اعمال و نسخهٔ سند را ذخیره کن.',branching:'پیام بعدی شاخهٔ تازه می‌سازد؛ شاخهٔ اصلی باقی می‌ماند.',local:'راهنما — پاسخ مدل مولد نیست',human:'تو',model:'پیش‌نویس مدل',edit:'ویرایش در شاخهٔ تازه',toCanvas:'کپی به ویرایشگر',speak:'خواندن با صدای دستگاه',empty:'یک پروژه بساز، سپس گفتگوی جدید را انتخاب کن.',noModel:'مدل پیکربندی نشده؛ راهنمای محلی در دسترس است.',configured:'مدل پیکربندی‌شده',apply:'محلی اعمال شد. برای نگهداری، خودت ذخیره کن.'};
+Object.assign(EN,{documentPrintPdf:'Print / Save as PDF',documentPrintRequested:'Print dialog requested. Choose Save as PDF and verify the resulting file.'});
+Object.assign(FA,{documentPrintPdf:'چاپ / ذخیره به PDF',documentPrintRequested:'درخواست چاپ ثبت شد. در مرورگر گزینهٔ ذخیره به PDF را انتخاب و فایل را بررسی کن.'});
 Object.assign(FA,{languagePacks:'بسته‌های زبان رابط',languageHelp:'تا هشت بستهٔ ترجمهٔ کامل در همین برگه نگه داشته می‌شوند. فقط برچسب‌ها را شامل می‌شوند، نه پروژه‌هایت.',languageTemplate:'دانلود الگوی برچسب‌های انگلیسی',gatewayOrigin:'آدرس درگاه مدل',gatewayAccess:'توکن درگاه — کلید API ارائه‌دهنده نیست'});
 Object.assign(EN,{archiveDamaged:'The browser archive is damaged or unsupported. It was not replaced; your open session remains available for encrypted backup.'});
 Object.assign(FA,{archiveDamaged:'آرشیو مرورگر آسیب‌دیده یا ناسازگار است؛ جایگزین نشد. نشست باز برای تهیهٔ پشتیبان رمزگذاری‌شده در دسترس است.'});
@@ -2370,7 +2406,7 @@ function controls(){
  const regenerate=$('regenerate');
  regenerate.hidden=thread?.nodes.find(node=>node.id===thread.head)?.role!=='assistant';
  regenerate.disabled=regenerate.hidden||busy||thread.archived||branchBase!==undefined||hasChatDraft();
- $('attach-document').disabled=busy||!chat()||chat().archived||chat().isolated||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare'])$(id).disabled=busy||attachmentLoading||!chat()||chat().archived;for(const id of ['save-version','export-document','export-document-word','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||attachmentLoading||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(storageSnapshot().lossRisk?'unsaved':(vault.unlocked?'saved':'temporary'));renderStorage();window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
+ $('attach-document').disabled=busy||!chat()||chat().archived||chat().isolated||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare'])$(id).disabled=busy||attachmentLoading||!chat()||chat().archived;for(const id of ['save-version','export-document','export-document-word','export-document-pdf','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||attachmentLoading||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(storageSnapshot().lossRisk?'unsaved':(vault.unlocked?'saved':'temporary'));renderStorage();window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
 function mutate(fn,{undoable=false,afterCommit}={}){
  if(busy)return false;
  const before=data,next=S.copy(data),selection={projectId,threadId,documentId};
@@ -2475,7 +2511,7 @@ function resetConversation(id){
  for(const key of ['use-memory','use-sources','use-related-chats','use-astrology','astro-historical','study-mode','auto-speak'])$(key).checked=false;
 }
 function resetProject(id){
- clearDocumentReceipt();toolLifecycle('project');
+ clearDocumentReceipt();clearExportReceipt();toolLifecycle('project');
  projectId=id;selectDocument(p()?.documents[0]?.id||null);
  resetConversation(p()?.threads.find(x=>!x.archived&&!x.isolated)?.id||null);
  profileDirty=false;$('source-results').textContent='';fillProfile();
@@ -2503,13 +2539,47 @@ function openConversation(project,thread){
  return projectId===project&&threadId===thread;
 }
 function applyLanguage(){document.documentElement.lang=language;document.documentElement.dir=localePacks.get(language)?.dir||(language==='fa'?'rtl':'ltr');document.querySelectorAll('[data-t]').forEach(n=>n.textContent=t(n.dataset.t));document.querySelectorAll('[data-placeholder]').forEach(n=>n.placeholder=t(n.dataset.placeholder));render();if(branchBase!==undefined)$('branch-notice').textContent=t('branching')}
-function download(text,name,type='text/plain'){const u=URL.createObjectURL(text instanceof Blob?text:new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
+function download(text,name,type='text/plain'){
+ const blob=text instanceof Blob?text:new Blob([text],{type});
+ const u=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=u;a.download=name;
+ try{a.click()}finally{setTimeout(()=>URL.revokeObjectURL(u),1000)}
+ // A click merely requests a download. Its destination and completion
+ // cannot be observed or claimed by this browser application.
+ return blob.size;
+}
+function printDocument(){
+ if(!doc()||busy)return;
+ const title=doc().title,body=$('editor').value;
+ if(!body.trim()||!confirm(t('plain')))return;
+ removePrintSheet?.();
+ const sheet=document.createElement('section');
+ sheet.id='nexus-print-sheet';sheet.setAttribute('aria-hidden','true');
+ sheet.setAttribute('dir','auto');
+ const heading=document.createElement('h1'),content=document.createElement('pre');
+ heading.textContent=title;content.textContent=body;
+ sheet.append(heading,content);document.body.append(sheet);
+ const cleanup=()=>{
+  window.removeEventListener('afterprint',cleanup);
+  sheet.remove();if(removePrintSheet===cleanup)removePrintSheet=null;
+ };
+ removePrintSheet=cleanup;
+ window.addEventListener('afterprint',cleanup,{once:true});
+ try{
+  window.print(); // The user chooses Print or Save as PDF in the browser.
+  reportExportReceipt('print',0,body);
+  status('documentPrintRequested');
+ }catch{cleanup();status('failed')}
+ // Browser print dialogs are not reliable completion APIs. Always release
+ // the private print-only copy, even if afterprint never fires.
+ setTimeout(cleanup,30000);
+}
 function downloadWord(title,text,filename){
  if(!text.trim())return status('chatExportWordFailed');
  if(!confirm(t('plain')))return;
  try{
-  download(NexusOfficeZip.writeDocx(title,text),filename);
-  status('chatExportWordDone');
+  const size=download(NexusOfficeZip.writeDocx(title,text),filename);
+  status('chatExportWordDone');return size;
  }catch{status('chatExportWordFailed')}
 }
 
@@ -2789,10 +2859,21 @@ $('delete-document').onclick=()=>{
 };
 $('versions').onchange=()=>{const a=doc()?.versions.find(x=>x.id===$('versions').value)?.text||'',b=doc()?.versions.at(-1)?.text||'';const left=a.split('\n'),right=b.split('\n');$('version-diff').textContent=Array.from({length:Math.max(left.length,right.length)},(_,i)=>left[i]===right[i]?null:(i+1)+':\n− '+(left[i]??'')+'\n+ '+(right[i]??'')).filter(Boolean).slice(0,200).join('\n')};
 $('load-version').onclick=()=>{if(forms()&&!confirm(t('discard')))return;const v=doc()?.versions.find(x=>x.id===$('versions').value);if(v){$('editor').value=v.text;editorDirty=true;stop()}};
-$('export-document').onclick=()=>{if(doc()&&confirm(t('plain')))download($('editor').value,'nexus-document.md','text/markdown')};
-$('export-document-word').onclick=()=>{
- if(doc()&&!busy)downloadWord(doc().title,$('editor').value,'nexus-document.docx');
+$('export-document').onclick=()=>{
+ if(!doc()||busy||!confirm(t('plain')))return;
+ const body=$('editor').value;
+ try{
+  const bytes=download(body,'nexus-document.md','text/markdown');
+  reportExportReceipt('markdown',bytes,body);
+ }catch{status('failed')}
 };
+$('export-document-word').onclick=()=>{
+ if(!doc()||busy)return;
+ const body=$('editor').value;
+ const bytes=downloadWord(doc().title,body,'nexus-document.docx');
+ if(Number.isInteger(bytes))reportExportReceipt('docx',bytes,body);
+};
+$('export-document-pdf').onclick=printDocument;
 $('canvas-chat').onclick=()=>{
  if($('canvas-chat').disabled)return;
  const label=doc()?t('canvasDraft')+' · '+doc().title:t('canvasDraft');
@@ -2888,7 +2969,9 @@ function appendVisionResult({prompt,answer,selection}){
    return installThread(completed);
   }catch{return false}
 }
-window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',armDocumentReceipt,clearDocumentReceipt,startConversation,openConversation,selection:()=>({projectId,threadId,head:chat()?.head||null,revision,branchBase}),appendVisionResult,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),attachmentLoading,archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
+document.addEventListener('nexus-studio-private-clear',clearExportReceipt);
+window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',
+ armDocumentReceipt,clearDocumentReceipt,armExportReceipt,clearExportReceipt,startConversation,openConversation,selection:()=>({projectId,threadId,head:chat()?.head||null,revision,branchBase}),appendVisionResult,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),attachmentLoading,archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
 </script><script>'use strict';
@@ -3571,6 +3654,7 @@ const routes=Object.freeze([
  ['remind','reminders-card','Reminders','یادآورها','reminder-title','reminders'],
  ['tasks','tasks-card','Tasks','وظایف',null,'task'],
  ['write','canvas-card','Writing','نوشتن',null,''],
+ ['export','canvas-card','Document export','خروجی سند',null,'download'],
  ['sources','sources-card','Sources','منابع',null,''],
  ['astrology','astrology-card','Astrology','اخترشناسی',null,''],
  ['sky','sky-card','Sky','آسمان',null,''],
@@ -3655,8 +3739,9 @@ function intent(value){
  if(reminder)return {route:routes.find(row=>row[0]==='remind'),query:reminder[1]};
  if(window.NexusStudio.asksForChoice(message))return null;
  const s=message.slice(0,340).toLocaleLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ');
- if(!/(بساز|ساخت|تولید|طراحی|بنویس|تنظیم|compose|create|make|generate|write|analy[sz]e|search|find|draw|run|open|launch|list|show|check|اجرا|بررسی|تحلیل|نمایش|نشان\s*بده|وضعیت|باز\s*کن|بازکردن|برو\s+به|جست\s*و\s*جو)/i.test(s))return null;
- const kind=/(github|گیت\s*هاب|گیتهاب|pull requests?|درخواست(?:‌|\s)*ادغام)/i.test(s)?'github':
+ if(!/(بساز|ساخت|تولید|طراحی|بنویس|تنظیم|compose|create|make|generate|write|export|download|analy[sz]e|search|find|draw|run|open|launch|list|show|check|اجرا|بررسی|تحلیل|نمایش|نشان\s*بده|وضعیت|باز\s*کن|بازکردن|برو\s+به|جست\s*و\s*جو|خروجی\s*بگیر|دریافت)/i.test(s))return null;
+ const kind=/\b(?:export|download)\b|خروجی\s*بگیر|دریافت\s*(?:فایل|سند)/i.test(s)?'export':
+  /(github|گیت\s*هاب|گیتهاب|pull requests?|درخواست(?:‌|\s)*ادغام)/i.test(s)?'github':
   /(render|رندر|deployment|deploy)/i.test(s)?'render':
   /(ارکستر|گروه کر|وکال|orchestra|choir|vocal)/i.test(s)?'orchestra':
   /(آهنگ|اهنگ|موسیقی|ملودی|music|song|melody)/i.test(s)?'music':
@@ -3729,6 +3814,7 @@ function clearLocalReviewers(){
  window.NexusLabUI?.clearReviewedStep?.();
  window.NexusQualityUI?.clearReviewedStep?.();
  window.NexusStudioUI?.clearDocumentReceipt?.();
+ window.NexusStudioUI?.clearExportReceipt?.();
 }
 function clearWorkflow(){
  clearLocalReviewers();
@@ -3790,7 +3876,7 @@ function expectedRead(step){
 }
 function expectedLocal(step){
  const kind=step.result.route[0];
- return ['research','code','data','write'].includes(kind)?kind:null;
+ return ['research','code','data','write','export'].includes(kind)?kind:null;
 }
 function showWorkflow(){
  if(!workflowState)return;
@@ -3800,8 +3886,8 @@ function showWorkflow(){
  title.textContent=words('Your reviewed workflow','گردش‌کار قابل بازبینی');
  const info=document.createElement('p');info.className='help';
  info.textContent=words(
-  'Opening a tool is not execution. Research, data, code and writing steps need a fresh observed result; writing is only applied to the current session until you save the encrypted archive separately. You can retry review or skip; no tool runs automatically.',
-  'بازکردن ابزار اجرا نیست. پژوهش، داده، کد و نوشتن نیاز به نتیجهٔ تازه دارند. نسخهٔ سند فقط در نشست جاری ثبت می‌شود؛ آرشیو رمزگذاری‌شده باید جداگانه ذخیره شود. بازبینی دوباره و ردکردن مرحله اختیاری است.');
+  'Opening a tool is not execution. Research, data, code and writing steps need a fresh observed result; export only confirms a browser download request, never successful file delivery. Writing remains session-only until you save the encrypted archive. You can retry review or skip; no tool runs automatically.',
+  'بازکردن ابزار اجرا نیست. پژوهش، داده، کد و نوشتن نیاز به نتیجهٔ تازه دارند. خروجی فقط ثبت درخواست دانلود است، نه دریافت قطعی فایل. نسخهٔ سند تا ذخیرهٔ جداگانهٔ آرشیو فقط در نشست است. بازبینی دوباره و ردکردن مرحله اختیاری است.');
  const list=document.createElement('ol');
  plan.steps.forEach((step,i)=>{
   const item=document.createElement('li'),span=document.createElement('span');
@@ -3812,6 +3898,10 @@ function showWorkflow(){
     words('local tool completed · output untrusted','ابزار محلی اجرا شد · خروجی غیرقابل‌اعتماد'):
    step.outcome==='document_version'?
     words('new document version applied · session only','نسخهٔ جدید سند اعمال شد · فقط نشست جاری'):
+   step.outcome==='download_requested'?
+    words('file download requested · delivery unverified','درخواست دانلود فایل · دریافت تأییدنشده'):
+   step.outcome==='print_requested'?
+    words('print dialog requested · Save as PDF unverified','درخواست پنجرهٔ چاپ · ذخیرهٔ PDF تأییدنشده'):
    step.outcome==='skipped'?
     words('skipped by you','با انتخاب شما رد شد'):
     words('confirmed by you · not independently verified','به تأیید شما · بدون راستی‌آزمایی مستقل'):
@@ -3838,17 +3928,29 @@ function showWorkflow(){
      if(workflowState!==plan||!retainedWorkflow()||plan.index!==i||
         !plan.opened||receipt?.completed!==true||receipt?.kind!==local||
         receipt.source!==(local==='data'?'studio-local-analysis':
-           local==='write'?'studio-document-version':'studio-local-tool')||
+           local==='write'?'studio-document-version':
+           local==='export'?'studio-document-export':'studio-local-tool')||
         (local==='data'&&(!/^[a-f0-9]{64}$/.test(receipt.sha256||'')||
           !Number.isInteger(receipt.rows)||receipt.rows<0||
           !Number.isInteger(receipt.columns)||receipt.columns<1))||
         (local==='write'&&(receipt.persistence!=='session_only'||
           typeof receipt.versionId!=='string'||!receipt.versionId||
           !Number.isInteger(receipt.length)||receipt.length<1||receipt.length>100000))||
+        (local==='export'&&(
+          !['download_requested','print_requested'].includes(receipt.status)||
+          receipt.content!=='not_transmitted'||
+          !['markdown','docx','print'].includes(receipt.format)||
+          (receipt.format==='print')!==(receipt.status==='print_requested')||
+          !['draft','saved_version'].includes(receipt.editorVersion)||
+          !Number.isInteger(receipt.bytes)||
+          (receipt.format==='print'?receipt.bytes!==0:
+            receipt.bytes<1||receipt.bytes>1000000)))||
         (local==='research'&&Boolean(step.result.query)&&
           receipt.query!==step.result.query))return;
      plan.readReceipt={operation:local,...(local==='data'?{sha256:receipt.sha256}: {}),
-       ...(local==='write'?{versionId:receipt.versionId}: {})};
+       ...(local==='write'?{versionId:receipt.versionId}: {}),
+       ...(local==='export'?{format:receipt.format,bytes:receipt.bytes,
+         status:receipt.status,editorVersion:receipt.editorVersion}: {})};
      showWorkflow();
     }:null;
     if(openReviewedSurface(step.result,step.line,
@@ -3857,6 +3959,7 @@ function showWorkflow(){
      const armed=!local||(local==='data'?
        window.NexusQualityUI?.armReviewedStep?.(local,localReceiver):
        local==='write'?window.NexusStudioUI?.armDocumentReceipt?.(local,localReceiver):
+       local==='export'?window.NexusStudioUI?.armExportReceipt?.(local,localReceiver):
        window.NexusLabUI?.armReviewedStep?.(local,localReceiver));
      plan.opened=Boolean(armed);plan.readReceipt=null;showWorkflow();
     }
@@ -3864,7 +3967,8 @@ function showWorkflow(){
    const done=document.createElement('button');done.type='button';done.className='secondary';
    done.textContent=required?
      words('Confirm reviewed read','تأیید دریافت پاسخ خواندن'):
-     local==='write'?words('Confirm new document version','تأیید نسخهٔ جدید سند'):local?
+     local==='write'?words('Confirm new document version','تأیید نسخهٔ جدید سند'):
+     local==='export'?words('Confirm file or print request','تأیید درخواست فایل یا چاپ'):local?
      words('Confirm tool result','تأیید نتیجهٔ ابزار'):
      words('I completed this step','این گام را انجام دادم');
    done.disabled=!plan.opened||(Boolean(receiptKey)&&plan.readReceipt?.operation!==receiptKey);
@@ -3873,7 +3977,7 @@ function showWorkflow(){
     if(!validWorkflow()||!plan.opened||
        (receiptKey&&plan.readReceipt?.operation!==receiptKey))return;
     step.outcome=required?'gateway_read':local==='write'?'document_version':
-      local?'local_observed':'self_reported';
+      local==='export'?plan.readReceipt?.status:local?'local_observed':'self_reported';
     clearLocalReviewers();
     plan.index++;plan.opened=false;plan.readReceipt=null;showWorkflow();
    };
@@ -3889,6 +3993,14 @@ function showWorkflow(){
          '… فقط هویت بایت‌هاست، نه صحت نتیجه. پیش از تأیید بررسی کن.'):
        local==='write'?words('A changed document version was applied in this tab. Save your encrypted archive separately to keep it.',
          'نسخهٔ تغییرکردهٔ سند در این برگه اعمال شد. برای نگهداری، آرشیو رمزگذاری‌شده را جداگانه ذخیره کن.'):
+       local==='export'?plan.readReceipt.status==='print_requested'?
+        words('Browser print dialog requested. Select Save as PDF; verify the file yourself. No PDF was automatically generated or confirmed.',
+         'پنجرهٔ چاپ مرورگر درخواست شد. گزینهٔ ذخیره به PDF را انتخاب و فایل را خودت بررسی کن؛ ذخیرهٔ فایل تأیید نشده است.'):
+        words('Browser download requested ('+plan.readReceipt.format+
+         ', '+plan.readReceipt.bytes+' bytes, '+plan.readReceipt.editorVersion+
+         '). Verify that the file was saved and opens correctly on your device.',
+         'درخواست دانلود مرورگر ثبت شد ('+plan.readReceipt.format+
+         '، '+plan.readReceipt.bytes+' بایت). ذخیره و بازشدن فایل را روی دستگاه بررسی کن.'):
        words('A consented local tool run returned a result; review it before confirming.',
         'ابزار محلی با تأیید شما اجرا شد و نتیجه داد؛ پیش از تأیید آن را بررسی کن.'):
       required?words('Waiting for an approved read in the separate connection dialog.',
@@ -3918,14 +4030,18 @@ function showWorkflow(){
   const verified=plan.steps.filter(s=>s.outcome==='gateway_read').length;
   const localCount=plan.steps.filter(s=>s.outcome==='local_observed').length;
   const writing=plan.steps.filter(s=>s.outcome==='document_version').length;
+  const exports=plan.steps.filter(s=>s.outcome==='download_requested').length;
+  const prints=plan.steps.filter(s=>s.outcome==='print_requested').length;
   const reported=plan.steps.filter(s=>s.outcome==='self_reported').length;
   const skipped=plan.steps.filter(s=>s.outcome==='skipped').length;
   note.textContent=words(
    'Checklist finished · gateway reads: '+verified+' · local tool runs: '+localCount+
-    ' · document versions (session only): '+writing+' · self-reported: '+reported+' · skipped: '+skipped+
+    ' · document versions (session only): '+writing+' · download requests (unverified): '+exports+
+    ' · print dialogs (unverified): '+prints+' · self-reported: '+reported+' · skipped: '+skipped+
     '. Results remain untrusted and are not independently audited.',
    'پایان فهرست · خواندن درگاه: '+verified+' · اجرای ابزار محلی: '+localCount+
-    ' · نسخهٔ سند (فقط نشست): '+writing+' · گزارش کاربر: '+reported+' · ردشده: '+skipped+
+    ' · نسخهٔ سند (فقط نشست): '+writing+' · درخواست دانلود (تأییدنشده): '+exports+
+    ' · چاپ (تأییدنشده): '+prints+' · گزارش کاربر: '+reported+' · ردشده: '+skipped+
     '. نتایج مستقل راستی‌آزمایی نشده‌اند.');
   workflow.append(note);
  }
@@ -3944,7 +4060,7 @@ function reviewWorkflow(message){
  * gateway ONLY after the user reviews the exact text and clicks the second
  * approval button. This does not call a model, run tools or persist a plan.
  */
-const planTools=new Set(['research','data','write','code','music','remind','github','render']);
+const planTools=new Set(['research','data','write','export','code','music','remind','github','render']);
 function planGateway(){
  const raw=$('gateway')?.value.trim()||location.origin;
  const url=new URL(raw);
@@ -4061,7 +4177,9 @@ function explicitToolRequest(message){
   /^(?:please\s+)?(?:open|launch)\s+/i.test(value)||
   /^(?:لطفاً\s+)?(?:باز\s*کن|برو\s+به)\s+/u.test(value)||
   /^(?:please\s+)?analy[sz]e\s+(?:this\s+|the\s+)?(?:csv|tsv|json|dataset|spreadsheet)\b/i.test(value)||
-  /^(?:please\s+)?run\s+(?:this\s+)?javascript\b/i.test(value);
+  /^(?:please\s+)?run\s+(?:this\s+)?javascript\b/i.test(value)||
+  /^(?:please\s+)?(?:export|download)\s+/i.test(value)||
+  /^(?:لطفاً\s+)?(?:خروجی\s*بگیر|دریافت\s+فایل)/u.test(value);
 }
 function suggestion(message){
  if(!window.NexusStudioFocus?.isFocused()||
