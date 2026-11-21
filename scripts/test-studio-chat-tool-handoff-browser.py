@@ -222,6 +222,7 @@ window.addEventListener('load',async()=>{
    JSON.stringify(beforeExplicitRoute),'tool-proposals-do-not-call-provider-or-gateway');
   // Multi-step workflows are explicit temporary checklists, not automatic
   // provider/tool plans. Re-entering a plan never contacts a provider.
+  fill('research-query','');
   const workflowDraft='/plan\n/research fictional study sources\n/data\n/write';
   fill('message',workflowDraft);
   assert(chatSend.textContent.includes('Review workflow'),'workflow-chat-command-available');
@@ -255,7 +256,7 @@ window.addEventListener('load',async()=>{
   fill('message','/plan\n/github list pull requests\n/unknown invalid');
   chatSend.click();
   assert(!workflow.hidden&&workflow.textContent.includes('Unknown workflow tool')&&
-   !$('nexus-zen-offer').hidden===false,'invalid-plan-stays-local-and-visible');
+   $('nexus-zen-offer').hidden,'invalid-plan-stays-local-and-visible');
   assert(JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions})===
    JSON.stringify(beforeWorkflow),'invalid-workflow-has-zero-network-side-effects');
   fill('message','/plan\n/github list pull requests\n/research study');
