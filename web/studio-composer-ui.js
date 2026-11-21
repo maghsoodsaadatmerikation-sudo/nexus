@@ -290,6 +290,8 @@ function showWorkflow(){
     words('new document version applied · session only','نسخهٔ جدید سند اعمال شد · فقط نشست جاری'):
    step.outcome==='download_requested'?
     words('file download requested · delivery unverified','درخواست دانلود فایل · دریافت تأییدنشده'):
+   step.outcome==='print_requested'?
+    words('print dialog requested · Save as PDF unverified','درخواست پنجرهٔ چاپ · ذخیرهٔ PDF تأییدنشده'):
    step.outcome==='skipped'?
     words('skipped by you','با انتخاب شما رد شد'):
     words('confirmed by you · not independently verified','به تأیید شما · بدون راستی‌آزمایی مستقل'):
@@ -324,18 +326,21 @@ function showWorkflow(){
         (local==='write'&&(receipt.persistence!=='session_only'||
           typeof receipt.versionId!=='string'||!receipt.versionId||
           !Number.isInteger(receipt.length)||receipt.length<1||receipt.length>100000))||
-        (local==='export'&&(receipt.status!=='download_requested'||
+        (local==='export'&&(
+          !['download_requested','print_requested'].includes(receipt.status)||
           receipt.content!=='not_transmitted'||
-          !['markdown','docx'].includes(receipt.format)||
+          !['markdown','docx','print'].includes(receipt.format)||
+          (receipt.format==='print')!==(receipt.status==='print_requested')||
           !['draft','saved_version'].includes(receipt.editorVersion)||
-          !Number.isInteger(receipt.bytes)||receipt.bytes<1||
-          receipt.bytes>1000000))||
+          !Number.isInteger(receipt.bytes)||
+          (receipt.format==='print'?receipt.bytes!==0:
+            receipt.bytes<1||receipt.bytes>1000000)))||
         (local==='research'&&Boolean(step.result.query)&&
           receipt.query!==step.result.query))return;
      plan.readReceipt={operation:local,...(local==='data'?{sha256:receipt.sha256}: {}),
        ...(local==='write'?{versionId:receipt.versionId}: {}),
        ...(local==='export'?{format:receipt.format,bytes:receipt.bytes,
-         editorVersion:receipt.editorVersion}: {})};
+         status:receipt.status,editorVersion:receipt.editorVersion}: {})};
      showWorkflow();
     }:null;
     if(openReviewedSurface(step.result,step.line,
@@ -353,7 +358,7 @@ function showWorkflow(){
    done.textContent=required?
      words('Confirm reviewed read','تأیید دریافت پاسخ خواندن'):
      local==='write'?words('Confirm new document version','تأیید نسخهٔ جدید سند'):
-     local==='export'?words('Confirm download request','تأیید درخواست دانلود'):local?
+     local==='export'?words('Confirm file or print request','تأیید درخواست فایل یا چاپ'):local?
      words('Confirm tool result','تأیید نتیجهٔ ابزار'):
      words('I completed this step','این گام را انجام دادم');
    done.disabled=!plan.opened||(Boolean(receiptKey)&&plan.readReceipt?.operation!==receiptKey);
@@ -362,7 +367,7 @@ function showWorkflow(){
     if(!validWorkflow()||!plan.opened||
        (receiptKey&&plan.readReceipt?.operation!==receiptKey))return;
     step.outcome=required?'gateway_read':local==='write'?'document_version':
-      local==='export'?'download_requested':local?'local_observed':'self_reported';
+      local==='export'?plan.readReceipt?.status:local?'local_observed':'self_reported';
     clearLocalReviewers();
     plan.index++;plan.opened=false;plan.readReceipt=null;showWorkflow();
    };
@@ -378,7 +383,10 @@ function showWorkflow(){
          '… فقط هویت بایت‌هاست، نه صحت نتیجه. پیش از تأیید بررسی کن.'):
        local==='write'?words('A changed document version was applied in this tab. Save your encrypted archive separately to keep it.',
          'نسخهٔ تغییرکردهٔ سند در این برگه اعمال شد. برای نگهداری، آرشیو رمزگذاری‌شده را جداگانه ذخیره کن.'):
-       local==='export'?words('Browser download requested ('+plan.readReceipt.format+
+       local==='export'?plan.readReceipt.status==='print_requested'?
+        words('Browser print dialog requested. Select Save as PDF; verify the file yourself. No PDF was automatically generated or confirmed.',
+         'پنجرهٔ چاپ مرورگر درخواست شد. گزینهٔ ذخیره به PDF را انتخاب و فایل را خودت بررسی کن؛ ذخیرهٔ فایل تأیید نشده است.'):
+        words('Browser download requested ('+plan.readReceipt.format+
          ', '+plan.readReceipt.bytes+' bytes, '+plan.readReceipt.editorVersion+
          '). Verify that the file was saved and opens correctly on your device.',
          'درخواست دانلود مرورگر ثبت شد ('+plan.readReceipt.format+
@@ -413,16 +421,17 @@ function showWorkflow(){
   const localCount=plan.steps.filter(s=>s.outcome==='local_observed').length;
   const writing=plan.steps.filter(s=>s.outcome==='document_version').length;
   const exports=plan.steps.filter(s=>s.outcome==='download_requested').length;
+  const prints=plan.steps.filter(s=>s.outcome==='print_requested').length;
   const reported=plan.steps.filter(s=>s.outcome==='self_reported').length;
   const skipped=plan.steps.filter(s=>s.outcome==='skipped').length;
   note.textContent=words(
    'Checklist finished · gateway reads: '+verified+' · local tool runs: '+localCount+
     ' · document versions (session only): '+writing+' · download requests (unverified): '+exports+
-    ' · self-reported: '+reported+' · skipped: '+skipped+
+    ' · print dialogs (unverified): '+prints+' · self-reported: '+reported+' · skipped: '+skipped+
     '. Results remain untrusted and are not independently audited.',
    'پایان فهرست · خواندن درگاه: '+verified+' · اجرای ابزار محلی: '+localCount+
     ' · نسخهٔ سند (فقط نشست): '+writing+' · درخواست دانلود (تأییدنشده): '+exports+
-    ' · گزارش کاربر: '+reported+' · ردشده: '+skipped+
+    ' · چاپ (تأییدنشده): '+prints+' · گزارش کاربر: '+reported+' · ردشده: '+skipped+
     '. نتایج مستقل راستی‌آزمایی نشده‌اند.');
   workflow.append(note);
  }
