@@ -9,7 +9,9 @@ import stat
 # self-contained shell. Keep a hard asset ceiling and fail closed above it.
 # Reviewed chat-model status UI increases the complete static shell by ~4.3 KiB.
 # Keep a strict 620 KiB-class per-file cap (not an unbounded exception).
-MAX_FILE = 620_000
+# Three reviewable model slots add ~4.7 KiB to the checked static HTML shell.
+# Maintain a strict per-asset ceiling; keep independent PDF worker limit.
+MAX_FILE = 625_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000
