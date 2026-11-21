@@ -578,6 +578,67 @@ window.addEventListener('load',async()=>{
    $('request-review').hidden&&current().documents[0].versions.length===1,
    'canvas-draft-returns-to-same-chat-for-one-turn-review-without-sending-or-saving');
   assert(document.documentElement.scrollWidth<=innerWidth+2,'no-horizontal-overflow');
+
+  // Model catalog is discovered explicitly, never inferred from a name or
+  // treated as proof of provider access. No real provider is contacted here.
+  window.confirm=()=>true;
+  $('clear-chat-files').click();$('new-thread').click();
+  const beforeMulti=network,slotReply='Reviewed secondary answer',slotId='b'.repeat(64);
+  window.fetch=async(url,options={})=>{
+   network++;
+   if(String(url).endsWith('/status'))return new Response(JSON.stringify({
+    configured:true,configuration_id:'a'.repeat(64),model:'synthetic-model',
+    provider_host:'primary.example',authority:'none',models:[
+     {slot:'primary',configuration_id:'a'.repeat(64),model:'synthetic-model',provider_host:'primary.example'},
+     {slot:'secondary',configuration_id:slotId,model:'secondary-model',provider_host:'secondary.example'}
+    ]
+   }));
+   posted=JSON.parse(options.body);
+   return new Response(JSON.stringify({
+    text:slotReply,origin:'model',model:'secondary-model',authority:'none',truncated:false
+   }));
+  };
+  fill('gateway','https://private-test-multimodel.invalid');
+  change('studio-compose-mode','model');
+  assert(NexusStudioUI.availableModelOptions().length===0,
+   'changing-gateway-invalidates-previous-provider-catalog');
+  $('studio-compose-model-check').click();
+  await wait(()=>NexusStudioUI.availableModelOptions().length===2);
+  assert(network===beforeMulti+1&&!$('studio-compose-choice-label').hidden&&
+   $('studio-compose-choice').options.length===2&&
+   NexusStudioUI.modelAvailability().model==='synthetic-model',
+   'model-check-lists-only-two-real-configured-synthetic-slots');
+  fill('message','Please provide a reviewed synthetic answer');
+  $('prepare').click();assert(!$('request-review').hidden,
+   'first-provider-exact-context-review-exists');
+  const approvedPrimary=JSON.parse($('request-context').textContent);
+  assert(approvedPrimary.model_slot==='primary'&&
+   !$('consent').checked,'default-selection-is-primary-without-consent');
+  change('studio-compose-choice','secondary');
+  assert(NexusStudioUI.modelAvailability().model==='secondary-model'&&
+   $('request-review').hidden&&!$('consent').checked&&network===beforeMulti+1,
+   'switching-model-revokes-stale-approval-without-provider-call');
+  $('prepare').click();
+  const exact=JSON.parse($('request-context').textContent);
+  assert(exact.model_slot==='secondary'&&exact.model==='secondary-model'&&
+   !$('consent').checked,'secondary-exact-context-review-shows-actual-model');
+  const proposed=NexusStudioUI.uiStatus();
+  assert(proposed.pendingReview,'secondary-review-needs-independent-approval');
+  $('consent').click();$('send-model').click();
+  await wait(()=>$('request-review').hidden);
+  assert(posted.model_slot==='secondary'&&posted.configuration_id===slotId&&
+   !JSON.stringify(posted).includes('TRANSIENT ACCESS TOKEN')&&
+   $('messages').textContent.includes(slotReply)&&network===beforeMulti+2,
+   'selected-secondary-request-uses-only-reviewed-slot-and-config');
+  fill('message','Another draft for the primary model');$('prepare').click();
+  assert(!$('request-review').hidden,'new-secondary-review-opened');
+  change('studio-compose-choice','primary');
+  assert($('request-review').hidden&&!$('consent').checked&&
+   $('message').value==='Another draft for the primary model'&&
+   network===beforeMulti+2,'changing-back-to-primary-preserves-draft-and-revokes-consent');
+  assert(document.documentElement.scrollWidth<=innerWidth+2,
+   'multi-model-selector-stays-in-viewport');
+
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
 });
