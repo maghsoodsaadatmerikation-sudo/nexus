@@ -1,0 +1,143 @@
+name: NEXUS Manual Model Comparison — Capped and Consent-Bound
+
+# No push, pull_request, workflow_run, or schedule trigger.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Offline check, one fictional probe per model, or full 15-case evaluation"
+        required: true
+        type: choice
+        default: check_config
+        options: [check_config, single_smoke, full_quality]
+      slots:
+        description: "Select two or three configured model slots"
+        required: true
+        type: choice
+        default: "primary,secondary"
+        options: ["primary,secondary", "primary,tertiary", "secondary,tertiary", "primary,secondary,tertiary"]
+      consent:
+        description: "Live only: explicit provider-contact consent"
+        required: true
+        type: choice
+        default: "NO"
+        options: ["NO", "YES"]
+      max_requests:
+        description: "Live only: exact count (2, 3, 30 or 45)"
+        required: false
+        type: string
+        default: ""
+      billing_ack:
+        description: "Live only: I_APPROVE_<N>_PROVIDER_REQUESTS"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexus-manual-model-comparison
+  cancel-in-progress: false
+
+jobs:
+  source-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    env:
+      COMPARE_MODE: ${{ inputs.mode }}
+      COMPARE_SLOTS: ${{ inputs.slots }}
+      COMPARE_CONSENT: ${{ inputs.consent }}
+      COMPARE_ACK: ${{ inputs.billing_ack }}
+      COMPARE_CAP: ${{ inputs.max_requests }}
+    steps:
+      - name: Require reviewed main branch and approvals before secrets become accessible
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "NOT_RUN: main branch required" >&2
+            exit 2
+          fi
+          case "$COMPARE_SLOTS" in
+            primary,secondary|primary,tertiary|secondary,tertiary) count=2 ;;
+            primary,secondary,tertiary) count=3 ;;
+            *) echo "NOT_RUN: invalid slots" >&2; exit 2 ;;
+          esac
+          case "$COMPARE_MODE" in
+            check_config) echo "OFFLINE configuration check"; exit 0 ;;
+            single_smoke) planned="$count" ;;
+            full_quality) planned=$((count * 15)) ;;
+            *) echo "NOT_RUN: invalid mode" >&2; exit 2 ;;
+          esac
+          if [[ "$COMPARE_CONSENT" != "YES" || "$COMPARE_CAP" != "$planned" ||
+                "$COMPARE_ACK" != "I_APPROVE_$((planned))_PROVIDER_REQUESTS" ]]; then
+            echo "NOT_RUN: explicit exact request-count approval required" >&2
+            exit 2
+          fi
+          echo "Guard passed without contacting a model provider"
+
+  guarded-compare:
+    needs: source-guard
+    # Operator creates this protected GitHub environment with approval reviewers.
+    environment: nexus-model-comparison
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      NEXUS_COMPARE_MODE: ${{ inputs.mode }}
+      NEXUS_COMPARE_SLOTS: ${{ inputs.slots }}
+      NEXUS_COMPARE_CAP: ${{ inputs.max_requests }}
+      NEXUS_MODEL_COMPARE_CONSENT: ${{ inputs.consent }}
+      NEXUS_MODEL_COMPARE_ACK: ${{ inputs.billing_ack }}
+      NEXUS_STUDIO_TOKEN: ${{ secrets.NEXUS_COMPARE_STUDIO_TOKEN }}
+      NEXUS_MODEL_URL: ${{ vars.NEXUS_COMPARE_PRIMARY_URL }}
+      NEXUS_MODEL_ID: ${{ vars.NEXUS_COMPARE_PRIMARY_ID }}
+      NEXUS_MODEL_ADAPTER: ${{ vars.NEXUS_COMPARE_PRIMARY_ADAPTER }}
+      NEXUS_MODEL_API_KEY: ${{ secrets.NEXUS_COMPARE_PRIMARY_API_KEY }}
+      NEXUS_MODEL_WORKSPACE_ID: ${{ secrets.NEXUS_COMPARE_PRIMARY_WORKSPACE_ID }}
+      NEXUS_MODEL_STREAMING: ${{ vars.NEXUS_COMPARE_PRIMARY_STREAMING }}
+      NEXUS_MODEL_SECONDARY_URL: ${{ vars.NEXUS_COMPARE_SECONDARY_URL }}
+      NEXUS_MODEL_SECONDARY_ID: ${{ vars.NEXUS_COMPARE_SECONDARY_ID }}
+      NEXUS_MODEL_SECONDARY_ADAPTER: ${{ vars.NEXUS_COMPARE_SECONDARY_ADAPTER }}
+      NEXUS_MODEL_SECONDARY_API_KEY: ${{ secrets.NEXUS_COMPARE_SECONDARY_API_KEY }}
+      NEXUS_MODEL_SECONDARY_WORKSPACE_ID: ${{ secrets.NEXUS_COMPARE_SECONDARY_WORKSPACE_ID }}
+      NEXUS_MODEL_SECONDARY_STREAMING: ${{ vars.NEXUS_COMPARE_SECONDARY_STREAMING }}
+      NEXUS_MODEL_TERTIARY_URL: ${{ vars.NEXUS_COMPARE_TERTIARY_URL }}
+      NEXUS_MODEL_TERTIARY_ID: ${{ vars.NEXUS_COMPARE_TERTIARY_ID }}
+      NEXUS_MODEL_TERTIARY_ADAPTER: ${{ vars.NEXUS_COMPARE_TERTIARY_ADAPTER }}
+      NEXUS_MODEL_TERTIARY_API_KEY: ${{ secrets.NEXUS_COMPARE_TERTIARY_API_KEY }}
+      NEXUS_MODEL_TERTIARY_WORKSPACE_ID: ${{ secrets.NEXUS_COMPARE_TERTIARY_WORKSPACE_ID }}
+      NEXUS_MODEL_TERTIARY_STREAMING: ${{ vars.NEXUS_COMPARE_TERTIARY_STREAMING }}
+    steps:
+      - name: Checkout exact reviewed commit without persistent token
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install pinned uv without caching provider data
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        with:
+          version: "0.12.4"
+          enable-cache: "false"
+          working-directory: nexus-cloud
+
+      - name: Install project Python
+        working-directory: nexus-cloud
+        run: uv python install 3.13
+
+      - name: Execute bounded synthetic-only comparison with redacted report
+        working-directory: nexus-cloud
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$NEXUS_COMPARE_MODE" in
+            check_config) mode_flag="--check-config" ;;
+            single_smoke) mode_flag="--smoke" ;;
+            full_quality) mode_flag="--full" ;;
+            *) echo "NOT_RUN: invalid mode" >&2; exit 2 ;;
+          esac
+          uv run --frozen python -m model_quality_compare "$mode_flag" \
+            --slots "$NEXUS_COMPARE_SLOTS" \
+            --max-requests "$NEXUS_COMPARE_CAP"

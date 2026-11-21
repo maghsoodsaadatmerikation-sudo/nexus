@@ -125,6 +125,21 @@ NEXUS_MODEL_STREAMING=1 disables Anthropic configuration until corrected.
 Local configured status is not proof of real model access. See
 [Anthropic adapter boundaries and offline tests](../docs/STUDIO-ANTHROPIC-ADAPTER.md).
 
+### Comparative provider testing (operator-only)
+
+`python model_quality_compare.py --check-config --slots primary,secondary`
+checks that two configured routes exist **without opening an HTTP client**.
+Real smoke or full comparisons require separate explicit approval for the exact
+2–3 or 30–45 provider requests, plus an exact matching global attempt ceiling.
+The comparison uses only fixed fictional probes and never prints user messages,
+raw model answers, API credentials or provider URLs. All selected model routes
+are evaluated against the same 15-case text-only heuristic; critical failures
+cannot be hidden by a high average. A result is **not** a certificate of
+correctness, production readiness or a monetary spending limit. Configure
+provider-side hard quotas before running any paid benchmark.
+
+See [Operator comparison workflow](../docs/STUDIO-MODEL-COMPARISON.md).
+
 ### Multiple reviewed model routes (opt-in; up to three)
 
 One Studio gateway can expose three **explicitly operator-configured** models
