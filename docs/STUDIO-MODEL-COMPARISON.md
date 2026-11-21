@@ -63,7 +63,8 @@ approval if supported by their repository plan. Set a strong random
 `NEXUS_COMPARE_TERTIARY_API_KEY` as **environment secrets**. Put the associated
 `NEXUS_COMPARE_PRIMARY_URL`, `_ID`, `_ADAPTER` and similarly prefixed
 secondary/tertiary values into environment **variables**, alongside optional
-`_WORKSPACE_ID` and `_STREAMING`. These configuration values are mapped to
+`_STREAMING`. Put each optional `NEXUS_COMPARE_<SLOT>_WORKSPACE_ID` into
+**environment secrets**, not visible configuration variables. These configuration values are mapped to
 the corresponding server-side `NEXUS_MODEL_*` fields by the workflow; the
 provider keys are never accepted as run inputs.
 
