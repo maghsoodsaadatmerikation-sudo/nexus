@@ -90,8 +90,8 @@ A separate reviewed `POST /studio-api/generate-image` and
 require an operator-configured compatible image provider, explicit consent,
 Studio authentication, a configuration fingerprint, and an attempt quota.
 Only bounded PNG/JPEG base64 output is accepted; no generated image is retained
-by NEXUS. This **does not** enable image generation in the Studio chat UI or
-prove provider availability. See [configuration, limitations and tests](../docs/STUDIO-IMAGE-GENERATION.md).
+by NEXUS. The Studio chat source now contains an explicit review/consent panel for
+this API. This **does not** provision a model or prove production availability. See [configuration, limitations and tests](../docs/STUDIO-IMAGE-GENERATION.md).
 
 ## Optional Studio model bridge
 
