@@ -148,6 +148,33 @@ def test_deepseek_quality_payload_uses_compatible_token_budget(monkeypatch):
     assert result == quality.PROBES[0].good_reply
 
 
+
+def test_gemini_quality_probe_uses_exact_production_payload_without_live_network(monkeypatch):
+    monkeypatch.setenv("NEXUS_MODEL_ADAPTER", "gemini")
+    monkeypatch.setenv("NEXUS_MODEL_API_KEY", "server-only-gemini-key")
+    provider = (model.GEMINI_CHAT_COMPLETIONS, "gemini-operator-selected-model",
+                "server-side-studio-token", "generativelanguage.googleapis.com")
+    called = []
+    def handler(request):
+        payload = json.loads(request.content)
+        called.append(payload)
+        assert str(request.url) == model.GEMINI_CHAT_COMPLETIONS
+        assert request.headers["authorization"] == "Bearer server-only-gemini-key"
+        assert payload == model.provider_payload(
+            provider[1],
+            [{"role": "system", "content": model.POLICY},
+             {"role": "user", "content": quality.PROBES[0].prompt}],
+            stream=False, max_output_tokens=256,
+        )
+        assert "store" not in payload and "max_completion_tokens" not in payload
+        assert payload["max_tokens"] == 256 and "tools" not in payload
+        return httpx.Response(200, json=provider_reply(quality.PROBES[0].good_reply))
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
+        answer = quality.query_provider(client, provider, quality.PROBES[0])
+    assert answer == quality.PROBES[0].good_reply
+    assert len(called) == 1
+
+
 @pytest.mark.parametrize("key,wrong", [
     ("arithmetic", "64"),
     ("structured_json", '{"project":"Atlas","count":"3","approved":false}'),
