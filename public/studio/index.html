@@ -3568,7 +3568,12 @@ directoryToggle.id='studio-open-capability-directory';
 directoryToggle.type='button';directoryToggle.className='secondary';
 directoryToggle.dataset.en='All tools';directoryToggle.dataset.fa='همهٔ ابزارها';
 directoryToggle.setAttribute('aria-controls',directory.id);
-suggestions.append(directoryToggle);
+ suggestions.append(directoryToggle);
+const planPreview=document.createElement('button');
+planPreview.type='button';planPreview.className='secondary';
+planPreview.id='studio-assistant-plan-preview';
+planPreview.dataset.en='Plan steps';planPreview.dataset.fa='برنامه‌ریزی مراحل';
+suggestions.append(planPreview);
 function closeDirectory(){
  directory.hidden=true;directoryItems.replaceChildren();
  directoryToggle.setAttribute('aria-expanded','false');
@@ -3665,7 +3670,7 @@ const workflow=document.createElement('section');
 workflow.id='studio-chat-workflow';workflow.className='studio-compose';
 workflow.hidden=true;workflow.setAttribute('aria-label','Reviewed workflow');
 directory.after(workflow);
-let workflowState=null;
+let workflowState=null,previewDraft=null,previewController=null;
 function workflowScope(){
  const selection=window.NexusStudioUI.selection?.()||{};
  return JSON.stringify([selection.projectId||null,selection.threadId||null]);
@@ -3689,6 +3694,7 @@ function parseWorkflow(message){
  return {steps};
 }
 function clearWorkflow(){
+ previewController?.abort();previewController=null;previewDraft=null;
  workflowState=null;workflow.hidden=true;workflow.replaceChildren();
 }
 function retainedWorkflow(){
@@ -3777,13 +3783,118 @@ function showWorkflow(){
  workflow.append(cancel);
 }
 function reviewWorkflow(message){
- closeDirectory();clearOffer();
+ closeDirectory();clearOffer();clearWorkflow();
  const parsed=parseWorkflow(message);
  if(parsed.error){workflowError(parsed.error);return}
  workflowState={draft:message,scope:workflowScope(),steps:parsed.steps,index:0,opened:false};
  showWorkflow();
 }
 
+/* Optional gateway-only preview. The draft is exposed to the operator's
+ * gateway ONLY after the user reviews the exact text and clicks the second
+ * approval button. This does not call a model, run tools or persist a plan.
+ */
+const planTools=new Set(['research','data','write','code','music','remind','github','render']);
+function planGateway(){
+ const raw=$('gateway')?.value.trim()||location.origin;
+ const url=new URL(raw);
+ if((url.protocol!=='https:'&&!(url.protocol==='http:'&&
+     ['127.0.0.1','[::1]'].includes(url.hostname)))||
+    url.username||url.password||url.search||url.hash||!['','/'].includes(url.pathname))throw Error('gateway');
+ return url.origin;
+}
+async function planResponse(response){
+ if(!response.ok||response.headers.get('content-type')?.split(';')[0].trim().toLowerCase()!=='application/json'||!response.body)
+  throw Error('gateway-response');
+ const reader=response.body.getReader(),chunks=[];let size=0;
+ try{
+  while(true){
+   const {done,value}=await reader.read();if(done)break;
+   size+=value.byteLength;if(size>16000)throw Error('gateway-response');
+   chunks.push(value);
+  }
+  const bytes=new Uint8Array(size);let offset=0;
+  for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength}
+  return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+ }finally{await reader.cancel().catch(()=>{})}
+}
+function checkedPlan(result,draft){
+ if(result?.kind!=='review_only'||result?.authority!=='none'||
+    result.execution!=='not_started'||result.provider_requests!==0||
+    result.tools_executed!==0||!Array.isArray(result.steps)||
+    result.steps.length<2||result.steps.length>6)throw Error('untrusted-plan');
+ return result.steps.map((item,i)=>{
+  if(!item||item.number!==i+1||item.status!=='not_started'||
+     item.requires_separate_user_review!==true||!planTools.has(item.tool)||
+     item.command!=='/'+item.tool||typeof item.instruction!=='string'||
+     !item.instruction.trim()||item.instruction.length>260||
+     !draft.includes(item.instruction))throw Error('untrusted-plan');
+  const route=routes.find(row=>row[0]===item.tool);
+  if(!route)throw Error('untrusted-plan');
+  const query=item.tool==='research'?item.instruction.replace(
+   /^(?:\/research\b|research\b|search\s+(?:the\s+web\s+)?(?:for\s+)?|پژوهش\b|جست\s*[‌ ]*و\s*[‌ ]*جو(?:\s+کن)?\b)/i,'').trim():'';
+  return {line:item.instruction,result:{route,query}};
+ });
+}
+function stageAssistantPlan(){
+ const state=window.NexusStudioUI.uiStatus(),draft=$('message').value;
+ if(!state||state.busy||state.attachmentLoading||state.archived||
+    draft.trim().length<8||draft.length>1800)return;
+ closeDirectory();clearOffer();clearWorkflow();
+ const staged={draft,scope:workflowScope()};previewDraft=staged;
+ workflow.hidden=false;
+ const title=document.createElement('strong');
+ title.textContent=words('Preview an assistant workflow','پیش‌نمایش برنامهٔ دستیار');
+ const description=document.createElement('p');
+ description.className='help';description.textContent=words(
+  'Review the exact text below. Approving sends it once to your configured NEXUS gateway, not to a model provider. No tool runs; you will separately review each proposed step.',
+  'متن دقیق زیر را بررسی کن. با تأیید، متن فقط یک‌بار به درگاه پیکربندی‌شدهٔ نکسوس فرستاده می‌شود، نه به ارائه‌دهندهٔ مدل. هیچ ابزاری اجرا نمی‌شود و هر گام بازبینی جداگانه دارد.');
+ const exact=document.createElement('pre');exact.dir='auto';exact.textContent=draft.trim();
+ const status=document.createElement('p');status.setAttribute('role','status');
+ const approve=document.createElement('button');approve.type='button';
+ approve.textContent=words('Approve gateway-only preview','تأیید پیش‌نمایش در درگاه');
+ const cancel=document.createElement('button');cancel.type='button';cancel.className='secondary';
+ cancel.textContent=words('Cancel','لغو');cancel.onclick=()=>{clearWorkflow();$('message').focus()};
+ approve.onclick=async()=>{
+  if(previewDraft!==staged||$('message').value!==draft||workflowScope()!==staged.scope||
+     window.NexusStudioUI.uiStatus().busy)return;
+  const token=$('gateway-token')?.value.trim()||'';
+  let origin;
+  try{origin=planGateway();if(token.length<32)throw Error('token')}
+  catch{status.textContent=words('Configure the NEXUS gateway and Studio access token in model settings first.',
+   'ابتدا درگاه نکسوس و توکن دسترسی استودیو را در تنظیمات مدل وارد کن.');return}
+  const controller=new AbortController();previewController=controller;
+  approve.disabled=true;
+  status.textContent=words('Requesting a gateway-only preview…','در حال دریافت پیش‌نمایش از درگاه…');
+  const timeout=setTimeout(()=>controller.abort(),15000);
+  try{
+   const response=await fetch(origin+'/studio-api/assistant/plan-preview',{
+    method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+token},
+    body:JSON.stringify({consent:true,goal:draft.trim()}),cache:'no-store',
+    redirect:'error',signal:controller.signal
+   });
+   const parsed=await planResponse(response);
+   if(previewDraft!==staged||$('message').value!==draft||workflowScope()!==staged.scope||
+      window.NexusStudioUI.uiStatus().busy||window.NexusStudioUI.uiStatus().archived)return;
+   const steps=checkedPlan(parsed,draft);
+   workflowState={draft,scope:staged.scope,steps,index:0,opened:false};
+   previewDraft=null;previewController=null;showWorkflow();
+  }catch{
+   if(previewDraft===staged&&!controller.signal.aborted){
+    status.textContent=words('Preview unavailable or invalid. Your draft is unchanged; no tools were run.',
+     'پیش‌نمایش در دسترس نیست یا معتبر نبود. پیش‌نویس تغییر نکرده و ابزاری اجرا نشده است.');
+   }else if(previewDraft===staged){
+    status.textContent=words('Preview canceled or timed out. No tools were run.',
+     'پیش‌نمایش لغو شد یا زمان آن به پایان رسید. ابزاری اجرا نشده است.');
+   }
+  }finally{
+   clearTimeout(timeout);
+   if(previewController===controller)previewController=null;
+   if(previewDraft===staged)approve.disabled=false;
+  }
+ };
+ workflow.append(title,description,exact,approve,cancel,status);
+}
 let offeredDraft=null;
 function clearOffer(){
  offeredDraft=null;offer.hidden=true;offer.replaceChildren();
@@ -3847,6 +3958,11 @@ function refresh(){
  if(temporaryModel&&!state.hasChatAttachments){select.value='guide';temporaryModel=false}
  if(offeredDraft!==null&&($('message').value!==offeredDraft||state.archived))clearOffer();
  if(workflowState&&!retainedWorkflow())clearWorkflow();
+ if(previewDraft&&($('message').value!==previewDraft.draft||workflowScope()!==previewDraft.scope||
+    state.archived||state.busy))clearWorkflow();
+ planPreview.textContent=words('Plan steps','برنامه‌ریزی مراحل');
+ planPreview.disabled=state.busy||state.attachmentLoading||state.archived||
+  $('message').value.trim().length<8||$('message').value.length>1800;
  const model=select.value==='model',ready=!state.busy&&!state.attachmentLoading&&(!state.threadReady||!state.archived);
  $('message').placeholder=words('Ask NEXUS anything…','هرچه می‌خواهی از نکسوس بپرس…');
  heading.textContent=model?words('AI model options','گزینه‌های مدل هوش مصنوعی'):words('Local guide · change mode','راهنمای محلی · تغییر حالت');
@@ -3914,6 +4030,7 @@ function run({routeTools=true}={}){
  }finally{running=false;refresh()}
 }
 send.addEventListener('click',()=>run());
+planPreview.addEventListener('click',stageAssistantPlan);
 save.addEventListener('click',()=>{
  const state=window.NexusStudioUI.uiStatus();
  if(!state||state.busy||save.disabled)return;
