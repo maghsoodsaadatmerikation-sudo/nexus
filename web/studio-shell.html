@@ -49,7 +49,7 @@ html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focu
 #nexus-print-sheet{display:none}
 @media print{
  html,body{background:white!important;color:black!important}
- body>main{display:none!important}
+ body>:not(#nexus-print-sheet){display:none!important}
  body>#nexus-print-sheet{display:block!important;margin:0!important;
   padding:0!important;color:black!important;background:white!important}
  #nexus-print-sheet h1{font:700 18pt/1.35 system-ui,sans-serif;margin:0 0 16pt}
