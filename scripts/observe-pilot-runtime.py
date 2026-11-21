@@ -9,6 +9,38 @@ import urllib.parse
 import urllib.request
 
 LIMIT = 16384
+HEALTH_LIMIT = 128
+
+
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('duplicate JSON property')
+        result[key] = value
+    return result
+
+
+def no_store(headers):
+    return 'no-store' in {part.strip().lower() for part in headers.get('Cache-Control', '').split(',')}
+
+
+def health_status(response, expected):
+    """Only canonical, explicitly non-cacheable gateway health JSON counts."""
+    headers = response.headers
+    content_type = headers.get('Content-Type', '').split(';', 1)[0].strip().lower()
+    if content_type != 'application/json' or not no_store(headers):
+        return None
+    raw = response.read(HEALTH_LIMIT + 1)
+    if len(raw) > HEALTH_LIMIT:
+        return None
+    try:
+        body = json.loads(raw, object_pairs_hook=unique_object)
+    except (UnicodeError, ValueError):
+        return None
+    if type(body) is dict and body == {'status': expected}:
+        return expected
+    return None
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -44,13 +76,26 @@ def observe(base, expected, timeout=10):
                         record['error'] = 'identity_size_limit'
                     else:
                         try:
-                            candidate = json.loads(raw)
+                            candidate = json.loads(raw, object_pairs_hook=unique_object)
                             if isinstance(candidate, dict):
                                 identity = candidate
                             else:
                                 record['error'] = 'invalid_identity'
                         except (ValueError, UnicodeError):
                             record['error'] = 'invalid_identity'
+                elif path in ('/livez', '/readyz'):
+                    expected_state = ('alive' if path == '/livez' and response.code == 200
+                                      else 'ready' if path == '/readyz' and response.code == 200
+                                      else 'quarantined' if path == '/readyz' and response.code == 503
+                                      else None)
+                    if expected_state:
+                        state = health_status(response, expected_state)
+                        if state is None:
+                            record['error'] = 'invalid_health_response'
+                        else:
+                            record['health_state'] = state
+                elif response.code == 401 and not no_store(response.headers):
+                    record['error'] = 'private_no_store_missing'
         except (urllib.error.URLError, TimeoutError, OSError):
             # Avoid logging URLs, response bodies, credentials or exception details.
             record['error'] = 'transport_error'
@@ -65,12 +110,18 @@ def observe(base, expected, timeout=10):
         blockers.append('runtime_identity_unverified')
     elif not match:
         blockers.append('candidate_not_observed')
-    for path in ('/livez', '/readyz'):
-        if observations[path].get('http_status') != 200:
+    for path, expected_state in (('/livez', 'alive'), ('/readyz', 'ready')):
+        record = observations[path]
+        if record.get('http_status') != 200:
             blockers.append(path[1:] + '_not_200')
+        elif record.get('health_state') != expected_state:
+            blockers.append(path[1:] + '_invalid_body_or_headers')
     for path in ('/v1/workspaces', '/v1/requests/nexus-public-observation'):
-        if observations[path].get('http_status') != 401:
+        record = observations[path]
+        if record.get('http_status') != 401:
             blockers.append('unauthenticated_get_not_401:' + path)
+        elif record.get('error'):
+            blockers.append('unauthenticated_get_cacheable:' + path)
     return {'schema': 'nexus.pilot.public-observation.v1',
             'observed_at_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'origin': base.rstrip('/'), 'expected_source_tree_sha256': expected,

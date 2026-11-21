@@ -14,9 +14,13 @@ DIGEST = 'a' * 64
 
 
 class Response(io.BytesIO):
-    def __init__(self, code, body=b''):
+    def __init__(self, code, body=b'', headers=None):
         super().__init__(body)
         self.code = code
+        self.headers = headers if headers is not None else {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'private, no-store',
+        }
 
 
 class RuntimeTests(unittest.TestCase):
@@ -27,14 +31,18 @@ class RuntimeTests(unittest.TestCase):
             calls.append(request)
             path = observer.urllib.parse.urlsplit(request.full_url).path
             if path in overrides:
-                code, body = overrides[path]
+                args = overrides[path]
             elif path == '/v1/runtime-identity':
-                code, body = 200, json.dumps({'schema': 'nexus.runtime-identity.v1',
+                args = (200, json.dumps({'schema': 'nexus.runtime-identity.v1',
                     'authority': 'non_authoritative_build_metadata',
-                    'source_tree_sha256': digest}).encode()
+                    'source_tree_sha256': digest}).encode())
+            elif path == '/livez':
+                args = (200, b'{"status":"alive"}')
+            elif path == '/readyz':
+                args = (200, b'{"status":"ready"}')
             else:
-                code, body = (200 if path in ('/livez', '/readyz') else 401), b''
-            return Response(code, body)
+                args = (401, b'')
+            return Response(*args)
         with patch('urllib.request.OpenerDirector.open', side_effect=open_request):
             result = observer.observe('https://example.test', DIGEST)
         self.assertEqual(len(calls), 5)
@@ -50,13 +58,56 @@ class RuntimeTests(unittest.TestCase):
         self.assertIn('candidate_not_observed', self.run_observation('b' * 64)['blockers'])
 
     def test_quarantine_and_exposed_route(self):
-        r = self.run_observation(overrides={'/readyz': (503, b''), '/v1/workspaces': (200, b'private')})
+        r = self.run_observation(overrides={'/readyz': (503, b'{"status":"quarantined"}'), '/v1/workspaces': (200, b'private')})
         self.assertIn('readyz_not_200', r['blockers'])
         self.assertIn('unauthenticated_get_not_401:/v1/workspaces', r['blockers'])
+        self.assertEqual(r['observations']['/readyz']['health_state'], 'quarantined')
         self.assertNotIn('private', json.dumps(r))
 
+
+    def test_health_false_green_is_blocked(self):
+        for path, state in (('/livez', 'alive'), ('/readyz', 'ready')):
+            bad = (
+                b'', b'200 OK', b'{}', b'[]', b'{"status":"quarantined"}',
+                b'{"status":"' + state.encode() + b'","extra":1}',
+                b'{"status":"dead","status":"' + state.encode() + b'"}',
+                b'x' * (observer.HEALTH_LIMIT + 1), b'\xff', b'{',
+            )
+            for body in bad:
+                with self.subTest(path=path, body=body[:50]):
+                    result = self.run_observation(overrides={path: (200, body)})
+                    self.assertIn(path[1:] + '_invalid_body_or_headers', result['blockers'])
+                    self.assertNotIn('health_state', result['observations'][path])
+
+    def test_health_wrong_type_or_cache_is_blocked(self):
+        for path, state in (('/livez', 'alive'), ('/readyz', 'ready')):
+            for headers in (
+                {'Content-Type': 'text/html', 'Cache-Control': 'no-store'},
+                {'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300'},
+                {'Content-Type': 'application/json'},
+                {'Cache-Control': 'no-store'},
+            ):
+                with self.subTest(path=path, headers=headers):
+                    r = self.run_observation(overrides={path: (200, ('{"status":"%s"}' % state).encode(), headers)})
+                    self.assertIn(path[1:] + '_invalid_body_or_headers', r['blockers'])
+
+    def test_valid_health_header_variants(self):
+        for path, state in (('/livez', 'alive'), ('/readyz', 'ready')):
+            r = self.run_observation(overrides={path: (200, ('{"status":"%s"}' % state).encode(),
+                {'Content-Type': 'Application/JSON; charset=UTF-8', 'Cache-Control': 'public, NO-STORE'})})
+            self.assertEqual(r['public_checks'], 'SATISFIED')
+
+    def test_private_unauthenticated_responses_must_not_be_cached(self):
+        for path in ('/v1/workspaces', '/v1/requests/nexus-public-observation'):
+            r = self.run_observation(overrides={path: (401, b'ignored private body', {'Cache-Control': 'max-age=60'})})
+            self.assertIn('unauthenticated_get_cacheable:' + path, r['blockers'])
+            self.assertNotIn('ignored private body', json.dumps(r))
+
     def test_identity_bounded_and_malformed(self):
-        for body in (b'x' * (observer.LIMIT + 1), b'[]', b'{', b'\xff'):
+        for body in (b'x' * (observer.LIMIT + 1), b'[]', b'{', b'\xff',
+                     (b'{"schema":"invalid","schema":"nexus.runtime-identity.v1",'
+                      b'"authority":"non_authoritative_build_metadata","source_tree_sha256":"'
+                      + DIGEST.encode() + b'"}')):
             with self.subTest(body_length=len(body)):
                 self.assertIn('runtime_identity_unverified', self.run_observation(overrides={'/v1/runtime-identity': (200, body)})['blockers'])
 
