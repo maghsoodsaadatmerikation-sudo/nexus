@@ -8,7 +8,6 @@ cost, provider uptime, or production readiness.
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
 import json
 import os
 
@@ -109,7 +108,8 @@ def compare_models(
     # An exact call-count acknowledgement, NOT a monetary estimate.
     if acknowledgement != f"I_APPROVE_{planned}_PROVIDER_REQUESTS":
         return decline("exact_request_count_acknowledgement_required")
-    if not max_requests.isascii() or not max_requests.isdecimal() or max_requests != str(planned):
+    if (not isinstance(max_requests, str) or not max_requests.isascii()
+        or not max_requests.isdecimal() or max_requests != str(planned)):
         return decline("exact_global_attempt_cap_required")
     if any(slot not in catalog for slot in selection):
         return decline("selected_model_unconfigured")
