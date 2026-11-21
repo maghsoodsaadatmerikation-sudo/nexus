@@ -419,7 +419,7 @@ window.addEventListener('load',async()=>{
   // A single frozen catalog drives quick buttons, slash routing and the
   // opt-in palette. Browsing a tool never requests credentials or executes it.
   const catalog=NexusStudioCompose.catalog();
-  assert(Object.isFrozen(catalog)&&catalog.length===16&&catalog.every(Object.isFrozen),
+  assert(Object.isFrozen(catalog)&&catalog.length===17&&catalog.every(Object.isFrozen),
    'capability-catalog-is-read-only-and-complete');
   assert(new Set(catalog.map(x=>x.command)).size===catalog.length,
    'capability-commands-unique');
