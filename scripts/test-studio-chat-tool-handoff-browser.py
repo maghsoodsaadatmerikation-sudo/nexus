@@ -441,7 +441,7 @@ window.addEventListener('load',async()=>{
   fill('message','/tools');
   assert(chatSend.textContent.includes('Capabilities'),'tools-command-discovered');
   chatSend.click();
-  assert(!palette.hidden&&palette.querySelector('div').children.length===16,
+  assert(!palette.hidden&&palette.querySelector('div').children.length===17,
    'capability-palette-shows-all-reviewable-tools');
   assert(JSON.stringify({catalogCalls,connectionActions,providerCalls,searchCalls})===
    JSON.stringify(networkBefore),'capability-browser-has-no-network-effects');
