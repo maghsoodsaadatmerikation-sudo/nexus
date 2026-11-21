@@ -342,7 +342,7 @@ async function startRecording(){
  const chosen=timeline(),current=++epoch,scope=selection(),seconds=chosen?.total;
  if(!chosen){message('Choose a valid duration of at most 24 seconds.','مدت معتبر تا سقف ۲۴ ثانیه انتخاب کن.');return}
  preparing=true;previewClear();meter.value=0;layout();refresh();
- let ctx=null,audioBuffer=null,stream=null,recorder=null,audioSource=null,ownJob=null;
+ let ctx=null,audioBuffer=null,stream=null,recorder=null,audioSource=null,ownJob=null,audioAt=0;
  try{
   // Construct/resume the audio context directly from the user's click.
   if(music){
@@ -364,7 +364,8 @@ async function startRecording(){
    audioSource=ctx.createBufferSource();audioSource.buffer=audioBuffer;
    const gain=ctx.createGain();
    const level=Number(volume.value)/100,playable=Math.min(seconds,audioBuffer.duration);
-   const at=ctx.currentTime+0.05;
+   audioAt=ctx.currentTime+0.10;
+   const at=audioAt;
    const ramp=Math.min(0.5,playable/3);
    if(audioFade.checked&&level>0&&ramp>0){
     gain.gain.setValueAtTime(0,at);
@@ -408,7 +409,6 @@ async function startRecording(){
   },{once:true});
   recorder.start(250);
   if(audioSource){
-   const audioAt=ctx.currentTime+0.05;
    audioSource.start(audioAt);
    audioSource.stop(audioAt+Math.min(seconds,audioBuffer.duration));
   }
