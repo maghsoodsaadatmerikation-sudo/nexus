@@ -292,6 +292,11 @@ def configuration_id(c):
     suffix = "" if kind == "generic" else "\nadapter:" + kind
     if isinstance(c, ModelSettings) and c.slot != "primary":
         suffix += "\nmodel-slot:" + c.slot
+        # A private HMAC tag invalidates reviewed routing when the selected
+        # alternative credential changes, without revealing its raw API key.
+        suffix += "\ncredential-tag:" + hmac.new(
+            c.studio_token.encode("utf-8"), c.provider_api_key.encode("utf-8"),
+            hashlib.sha256).hexdigest()
     if streaming:
         suffix += "\nstreaming:v1"
     if kind == "anthropic":
