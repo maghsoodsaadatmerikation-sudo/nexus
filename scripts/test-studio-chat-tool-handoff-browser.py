@@ -288,7 +288,7 @@ window.addEventListener('load',async()=>{
   assert(workflow.querySelector('li:nth-child(2) button:nth-of-type(2)').disabled,
    'failed-duplicate-key-analysis-cannot-advance-workflow');
   const analysisRunsBefore={providerCalls,searchCalls,catalogCalls,connectionActions};
-  file('data-file','workflow-analysis.csv','Group,Score\\nA,1\\nB,2\\n'.replace(/\\n/g,'\n'));
+  file('data-file','workflow-analysis.csv','Group,Score\nA,1\nB,2\n');
   $('data-run').click();
   await wait(()=>!workflow.querySelector('li:nth-child(2) button:nth-of-type(2)').disabled);
   assert($('data-status').textContent.includes('Analysis ready')&&
