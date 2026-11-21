@@ -97,6 +97,7 @@ function draw(t=0,seconds=6){
 function freeScenes(){
  for(const scene of scenes)scene.bitmap.close?.();
  scenes=[];image=null;sceneList.replaceChildren();
+ canvas.width=canvas.height=0; // discard raw preview pixels before the next decode
 }
 function listScenes(){
  sceneList.replaceChildren();
@@ -127,6 +128,7 @@ function listScenes(){
      [scenes[index],scenes[other]]=[scenes[other],scenes[index]];
     }
     image=scenes[0]?.bitmap||null;
+    photo.value=''; // no hidden references to removed/reordered original File objects
     previewClear();layout();listScenes();refresh();
    });
    row.append(button);
@@ -205,7 +207,7 @@ async function acceptImages(files){
    decoded.push({bitmap,label:f.name.slice(0,100)});
   }
   if(ticket!==epoch)throw Error('stale');
-  scenes=decoded;image=scenes[0].bitmap;layout();listScenes();
+  scenes=decoded;image=scenes[0].bitmap;photo.value='';layout();listScenes();
   message('Storyboard loaded locally. Use Preview or move scenes to set order.',
    'داستان تصویری روی دستگاه آماده شد؛ ترتیب صحنه‌ها را بررسی و جابه‌جا کن.');
  }catch{
