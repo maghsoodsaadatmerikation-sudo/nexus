@@ -44,6 +44,19 @@ html.studio-focus-mode:has(input:focus,textarea:focus,select:focus) #studio-focu
 .studio-focus-mode #guide,.studio-focus-mode #prepare{display:none}
 @media(max-width:480px){.studio-compose-row label{flex:1 1 100%}.studio-compose-row button{flex:1 1 125px}}
 .music-fa{display:none}html[lang="fa"] .music-en{display:none}html[lang="fa"] .music-fa{display:initial}#music-card progress{accent-color:#185e48}#music-card pre{max-height:360px}
+/* The dedicated print sheet is generated ONLY by the explicit user print
+   button. Never include the private Studio interface in PDF/print output. */
+#nexus-print-sheet{display:none}
+@media print{
+ html,body{background:white!important;color:black!important}
+ body>:not(#nexus-print-sheet){display:none!important}
+ body>#nexus-print-sheet{display:block!important;margin:0!important;
+  padding:0!important;color:black!important;background:white!important}
+ #nexus-print-sheet h1{font:700 18pt/1.35 system-ui,sans-serif;margin:0 0 16pt}
+ #nexus-print-sheet pre{font:11pt/1.6 system-ui,sans-serif;white-space:pre-wrap;
+  overflow-wrap:anywhere;max-height:none;overflow:visible;margin:0;unicode-bidi:plaintext}
+ @page{size:auto;margin:20mm}
+}
 :root {
   --studio-ink: #172e28;
   --studio-muted: #4e655d;
@@ -371,19 +384,6 @@ html.studio-focus-mode{
   }
 }
 
-/* The dedicated print sheet is generated ONLY by the explicit user print
-   button. Never include the private Studio interface in PDF/print output. */
-#nexus-print-sheet{display:none}
-@media print{
- html,body{background:white!important;color:black!important}
- body>:not(#nexus-print-sheet){display:none!important}
- body>#nexus-print-sheet{display:block!important;margin:0!important;
-  padding:0!important;color:black!important;background:white!important}
- #nexus-print-sheet h1{font:700 18pt/1.35 system-ui,sans-serif;margin:0 0 16pt}
- #nexus-print-sheet pre{font:11pt/1.6 system-ui,sans-serif;white-space:pre-wrap;
-  overflow-wrap:anywhere;max-height:none;overflow:visible;margin:0;unicode-bidi:plaintext}
- @page{size:auto;margin:20mm}
-}
 </style></head><body><main>
 <header class="studio-masthead">
   <div class="studio-brand">
