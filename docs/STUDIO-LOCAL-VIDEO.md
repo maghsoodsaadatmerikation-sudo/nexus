@@ -10,11 +10,20 @@ Inside chat-first Studio, open **Make video**, select **1–4 PNG/JPEG images** 
 one image-generation preview from the same browser tab,
 choose landscape (640×360) or portrait (360×640), use a 3/6/10/12-second
 **total-duration preset** or opt into **independent per-scene durations**
-(1/2/3/4/6/8/12 seconds per scene, at most 24 seconds total). The optional
+(1/2/3/4/6/8/12 seconds per scene, at most 24 seconds total). In independent-timing
+mode, **Split scene** can divide a scene lasting at least 2 seconds into two
+independently editable still-image segments without changing its total duration.
+Splitting requires room below the four-scene / 16-megapixel memory caps.
+This is storyboard segmentation, **not cutting an uploaded video file**.
+The optional
 crossfade between scenes can be 0.15/0.35/0.65 seconds, clamped to half
 of either neighboring scene's duration. Optional fade-in/out remains available.
-Optionally select a short audio track, choose 0–100% output gain and
-an optional audio fade-in/out, preview any timeline position with the
+Optionally select a short audio track, choose 0–100% output gain, a nominal
+playback start delay (0, 0.25, 0.5 or 1 second), source-audio offset (skip
+0, 0.5, 1 or 2 seconds of the beginning) and optional fade-in/out. An
+unplayable audio segment is rejected; no source file is overwritten. The
+nominal delay is not a frame-accurate audio/video synchronization guarantee.
+Preview any timeline position with the
 scrubber, then press **Record locally**.
 
 The composer uses the browser Canvas captureStream, MediaRecorder and,
@@ -43,7 +52,9 @@ independent scene timings change the total duration when enabled.
   decoded pixels may not exceed 16 million. Decoding happens locally.
 - Audio: optional user-selected WAV, MP3, OGG or M4A (subject to browser
   codec support), up to 8 MB, decoded duration at most 30 seconds. Only the
-  selected video duration is captured; remaining audio is discarded.
+  selected audio segment inside the video is captured; skipped portions and
+  audio outside the clip are discarded. Browser audio and video clocks can
+  drift on real phones; no universal sync/latency guarantee is made.
 - Video: 640×360 or 360×640; 20 FPS target; chosen total 3–12 seconds
   with equal timing, or up to 24 seconds using independent scene durations;
   MediaRecorder tries WebM/VP8+Opus, WebM/VP9+Opus, WebM, then MP4 if
@@ -63,8 +74,9 @@ independent scene timings change the total duration when enabled.
 
 The real Chromium static acceptance test exercises a synthetic local photo,
 portrait layout, a two-image synthetic color preview with reorder,
-per-scene durations, timeline scrubbing, contained virtual-camera push/pan
-pixel tests, variable crossfade pixels and
+per-scene durations, storyboard splitting and four-scene capacity checks,
+audio delay/skip controls, timeline scrubbing, contained virtual-camera
+push/pan pixel tests, variable crossfade pixels and
 volume/fade control state, plus an actual MediaRecorder clip when supported, resulting
 file header and size, exclusion from project storage, and clear. Unsupported
 MediaRecorder configurations fail closed. This does not prove real Android
