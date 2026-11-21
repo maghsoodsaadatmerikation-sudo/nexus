@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; form-action 'none'; object-src 'none'; base-uri 'none'; worker-src 'none'; manifest-src 'none'">
+<title>NEXUS — Device readiness</title>
+<style>
+:root{color-scheme:light;font:16px/1.55 system-ui,Arial,sans-serif;background:#f4f7f6;color:#173034}
+*{box-sizing:border-box}body{margin:0;padding:1.1rem}main{max-width:690px;margin:auto}
+header,section{background:#fff;border:1px solid #d7e3e2;border-radius:18px;padding:1.1rem;margin-bottom:1rem}
+h1{margin:.1rem 0 .45rem;font-size:1.75rem}h2{font-size:1.13rem;margin:0 0 .65rem}
+p{margin:.45rem 0}.muted,small{color:#435c60}.toolbar{display:flex;gap:.6rem;flex-wrap:wrap;margin:.8rem 0}
+button{background:#155e64;color:white;font:inherit;font-weight:600;padding:.75rem 1rem;border:0;border-radius:12px;cursor:pointer}
+button:disabled{background:#7d9395;cursor:not-allowed}button.secondary{background:#e7f2f1;color:#114c52}
+a{color:#0d555e}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #d18d28;outline-offset:3px}
+fieldset{border:0;padding:0;margin:0}.check{display:flex;gap:.8rem;align-items:flex-start;border-top:1px solid #e4eae9;padding:.7rem 0}
+.check input{width:1.22rem;height:1.22rem;flex-shrink:0;margin-top:.2rem;accent-color:#155e64}
+code{overflow-wrap:anywhere;background:#f0f4f4;border-radius:4px;padding:.08rem .18rem}
+#results>div{padding:.68rem 0;border-bottom:1px solid #e8eded;display:flex;gap:.5rem;justify-content:space-between;align-items:start}
+#results strong{white-space:nowrap}.good{color:#176649}.bad{color:#9a392d}
+[dir=rtl] .check{direction:rtl}#privacy{border-left:4px solid #155e64;padding-left:.7rem}
+[dir=rtl] #privacy{border-left:0;border-right:4px solid #155e64;padding-left:0;padding-right:.7rem}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="toolbar"><label for="language">Language / زبان</label>
+<select id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option></select></div>
+<h1 data-en="NEXUS — on-device readiness" data-fa="نکسوس — بررسی آمادگی گوشی">NEXUS — on-device readiness</h1>
+<p class="muted" data-en="Public preview diagnostic. Checks this browser only; no account, telemetry, permission request or production gateway." data-fa="آزمون نسخهٔ عمومی. فقط این مرورگر را بررسی می‌کند؛ بدون حساب، ردیابی، درخواست مجوز یا اتصال به درگاه تولید.">Public preview diagnostic. Checks this browser only; no account, telemetry, permission request or production gateway.</p>
+<p id="privacy"><strong data-en="Private by design:" data-fa="حریم خصوصی:">Private by design:</strong>
+<span data-en="No requests, identifiers, passwords, workspaces, exact device data or user-agent details enter the report. Export is initiated only by you." data-fa="گزارش هیچ درخواست شبکه، شناسه، رمز، اطلاعات کارگاه، اطلاعات دقیق گوشی یا مشخصات مرورگر ندارد. دریافت گزارش فقط با انتخاب شما انجام می‌شود.">No requests, identifiers, passwords, workspaces, exact device data or user-agent details enter the report. Export is initiated only by you.</span></p>
+</header>
+<section>
+<h2 data-en="1. Automatic checks (read-only)" data-fa="۱. بررسی‌های خودکار (فقط خواندنی)">1. Automatic checks (read-only)</h2>
+<p data-en="Open the NEXUS app and choose Prepare offline mode before running. This test never installs or deletes anything." data-fa="ابتدا برنامه نکسوس را باز کنید و «آماده‌سازی حالت آفلاین» را بزنید. این آزمون چیزی نصب یا حذف نمی‌کند.">Open the NEXUS app and choose Prepare offline mode before running. This test never installs or deletes anything.</p>
+<div class="toolbar"><button id="run" type="button" data-en="Run browser checks" data-fa="اجرای بررسی‌ها">Run browser checks</button><a href="./" id="app-link" data-en="Open the NEXUS app" data-fa="باز کردن برنامهٔ نکسوس">Open the NEXUS app</a></div>
+<div id="state" role="status" aria-live="polite"></div>
+<div id="results" aria-live="polite"></div>
+</section>
+<section>
+<h2 data-en="2. Confirm on your own device" data-fa="۲. تأیید در گوشی خودتان">2. Confirm on your own device</h2>
+<p data-en="These are your statements, not automatic verification. First try them yourself." data-fa="این موارد اعلام شخص شما هستند، نه تأیید خودکار. ابتدا واقعاً آزمایششان کنید.">These are your statements, not automatic verification. First try them yourself.</p>
+<fieldset>
+<label class="check"><input id="installed" type="checkbox"><span data-en="I opened NEXUS from a home-screen icon (not just a browser tab)." data-fa="نکسوس را از آیکون صفحهٔ اصلی باز کردم (نه فقط تب مرورگر).">I opened NEXUS from a home-screen icon (not just a browser tab).</span></label>
+<label class="check"><input id="airplane" type="checkbox"><span data-en="After airplane mode was enabled, the installed NEXUS app reopened and showed the synthetic demo." data-fa="بعد از فعال‌کردن حالت هواپیما، نکسوس دوباره باز شد و نمونهٔ ساختگی را نمایش داد.">After airplane mode was enabled, the installed NEXUS app reopened and showed the synthetic demo.</span></label>
+<label class="check"><input id="backup" type="checkbox"><span data-en="I downloaded an encrypted backup and independently verified opening that downloaded file." data-fa="نسخهٔ پشتیبان رمزگذاری‌شده گرفتم و بازکردن همان فایل دانلودشده را جداگانه آزمایش کردم.">I downloaded an encrypted backup and independently verified opening that downloaded file.</span></label>
+<label class="check"><input id="android" type="checkbox"><span data-en="I personally performed these steps on a physical Android phone." data-fa="این مراحل را شخصاً روی گوشی فیزیکی اندروید اجرا کردم.">I personally performed these steps on a physical Android phone.</span></label>
+</fieldset>
+</section>
+<section>
+<h2 data-en="3. Save a redacted report" data-fa="۳. ذخیرهٔ گزارش بدون اطلاعات شخصی">3. Save a redacted report</h2>
+<p data-en="Only fixed yes/no test results and the four statements you selected are saved. Reports are never sent automatically. A self-report does not certify Android hardware." data-fa="فقط نتایج بله/خیر بررسی‌ها و چهار موردی که خودتان انتخاب کرده‌اید ذخیره می‌شود. هیچ گزارشی خودکار ارسال نمی‌شود. گزارش شخصی گواه قطعی سخت‌افزار نیست.">Only fixed yes/no test results and the four statements you selected are saved. Reports are never sent automatically. A self-report does not certify Android hardware.</p>
+<button id="export" type="button" disabled data-en="Download privacy-safe JSON" data-fa="دریافت گزارش JSON بدون اطلاعات شخصی">Download privacy-safe JSON</button>
+</section>
+</main>
+<script>
+'use strict';
+(()=>{
+const EXPECTED_SHELL_SHA256='__NEXUS_SHELL_SHA256__';
+const SCHEMA='nexus.device-readiness.self-report.v1';
+const appBase=new URL('./',location.href);
+const cachePrefix='nexus-portable-'+encodeURIComponent(appBase.pathname)+'-';
+const labels={
+secure:['Secure browser context','بستر امن مرورگر'],
+worker_api:['Service Worker available','امکان سرویس‌ورکر'],
+cache_api:['Offline CacheStorage available','امکان کش آفلاین'],
+crypto_api:['Local WebCrypto available','رمزنگاری محلی WebCrypto'],
+files_api:['Local file download available','امکان دریافت فایل محلی'],
+worker_active:['NEXUS offline worker active','سرویس‌ورکر نکسوس فعال'],
+cached_shell_valid:['Verified NEXUS shell cached','فایل تأییدشدهٔ نکسوس در کش'],
+standalone_display:['Running in standalone display mode','اجرا در حالت برنامهٔ مستقل']
+};
+const byId=id=>document.getElementById(id);
+let latest=null;
+const lang=()=>byId('language').value;
+function translate(){
+ document.documentElement.lang=lang();
+ document.documentElement.dir=lang()==='fa'?'rtl':'ltr';
+ for(const e of document.querySelectorAll('[data-en][data-fa]'))
+   e.textContent=e.getAttribute('data-'+lang());
+ if(latest)show(latest.checks);
+}
+byId('language').addEventListener('change',translate);
+function binary(value){return value===true;}
+function report(checks){
+ const result={};
+ for(const key of Object.keys(labels))result[key]=binary(checks[key]);
+ return {
+  schema:SCHEMA,public_shell_sha256:EXPECTED_SHELL_SHA256,
+  automatic:result,
+  owner_self_attestation:{
+   home_screen:byId('installed').checked===true,
+   airplane_mode:byId('airplane').checked===true,
+   encrypted_backup_restore:byId('backup').checked===true,
+   physical_android:byId('android').checked===true
+  },
+  independent_android_hardware_verification:false,
+  private_information_collected:false,
+  sent_to_server:false,
+  production_recovery_verified:false,release_authorized:false,authority:'none'
+ };
+}
+async function checks(){
+ const flags={
+ secure:window.isSecureContext===true &&
+  (location.protocol==='https:' ||
+   (location.protocol==='http:' &&
+    ['localhost','127.0.0.1'].includes(location.hostname))),
+ worker_api:'serviceWorker' in navigator,
+ cache_api:'caches' in window,
+ crypto_api:!!(window.crypto&&window.crypto.subtle),
+ files_api:typeof Blob==='function' && !!(URL&&URL.createObjectURL),
+ worker_active:false,cached_shell_valid:false,
+ standalone_display:!!(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)
+ };
+ if(flags.worker_api){
+  try{
+   const reg=await navigator.serviceWorker.getRegistration(appBase.href);
+   flags.worker_active=!!(reg&&reg.scope===appBase.href&&reg.active&&
+    reg.active.scriptURL===new URL('service-worker.js',appBase).href);
+  }catch{}
+ }
+ if(flags.cache_api && flags.crypto_api){
+  try{
+   const names=await caches.keys();
+   const candidate=names.filter(n=>n.startsWith(cachePrefix));
+   for(const name of candidate){
+    const cache=await caches.open(name);
+    const response=await cache.match(appBase.href);
+    if(!response||response.status!==200||
+      !/^text\/html(?:\s*;|$)/i.test(response.headers.get('Content-Type')||''))continue;
+    const bytes=await response.arrayBuffer();
+    if(bytes.byteLength<5000||bytes.byteLength>300000)continue;
+    const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),
+     b=>b.toString(16).padStart(2,'0')).join('');
+    if(hash===EXPECTED_SHELL_SHA256){flags.cached_shell_valid=true;break;}
+   }
+  }catch{}
+ }
+ return flags;
+}
+function show(flags){
+ const el=byId('results');el.replaceChildren();
+ for(const [key,pair] of Object.entries(labels)){
+  const div=document.createElement('div');
+  const name=document.createElement('span');
+  name.textContent=pair[lang()==='fa'?1:0];
+  const status=document.createElement('strong');
+  status.textContent=flags[key]?(lang()==='fa'?'بله':'PASS'):(lang()==='fa'?'خیر':'NOT READY');
+  status.className=flags[key]?'good':'bad';
+  div.append(name,status);el.append(div);
+ }
+}
+byId('run').addEventListener('click',async()=>{
+ const run=byId('run');run.disabled=true;
+ byId('state').textContent=lang()==='fa'?'در حال بررسی…':'Checking locally…';
+ try{
+  const values=await checks();
+  latest={checks:values};show(values);
+  byId('state').textContent=lang()==='fa'?'بررسی محلی انجام شد.':'Local checks complete.';
+  byId('export').disabled=false;
+ }catch{
+  latest=null;byId('export').disabled=true;
+  byId('state').textContent=lang()==='fa'?'امکان تکمیل بررسی نیست.':'Check could not finish.';
+ }finally{run.disabled=false;}
+});
+byId('export').addEventListener('click',()=>{
+ if(!latest)return;
+ const data=JSON.stringify(report(latest.checks),null,2)+'\n';
+ const blob=new Blob([data],{type:'application/json'});
+ const href=URL.createObjectURL(blob);
+ const link=document.createElement('a');
+ link.href=href;link.download='nexus-device-readiness.json';link.hidden=true;
+ document.body.append(link);link.click();link.remove();
+ setTimeout(()=>URL.revokeObjectURL(href),2000);
+});
+window.__nexusDeviceReadiness={schema:SCHEMA,checks,report};
+translate();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+name: NEXUS Portable Offline Mobile Kit
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mobile-offline-kit.yml'
+      - 'scripts/build-mobile-offline-kit.py'
+      - 'scripts/test-mobile-offline-kit.py'
+      - 'web/offline-pilot.html'
+      - 'scripts/test-offline-pilot-browser.py'
+      - 'scripts/workspace-browser-runner.mjs'
+      - 'docs/MOBILE-OFFLINE-KIT.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portable-kit:
+    name: portable-offline-kit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact unprivileged candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Reject operator credentials
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+      - name: Verify mobile kit supply-chain and no-private-data contract
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/build-mobile-offline-kit.py scripts/test-mobile-offline-kit.py
+          python3 scripts/test-mobile-offline-kit.py
+      - name: Build immutable source-bound ZIP outside repository
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/nexus-mobile-output"
+          python3 scripts/build-mobile-offline-kit.py build \
+            "$RUNNER_TEMP/nexus-mobile-output/nexus-offline-mobile.zip" > "$RUNNER_TEMP/nexus-mobile-build.json"
+          python3 scripts/build-mobile-offline-kit.py verify \
+            "$RUNNER_TEMP/nexus-mobile-output/nexus-offline-mobile.zip" > "$RUNNER_TEMP/nexus-mobile-verify.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          b=json.loads((Path(os.environ['RUNNER_TEMP'])/'nexus-mobile-build.json').read_text())
+          v=json.loads((Path(os.environ['RUNNER_TEMP'])/'nexus-mobile-verify.json').read_text())
+          assert b == v and b['status'] == 'VERIFIED_PUBLIC_SINGLE_FILE_KIT'
+          assert b['source_revision'] == os.environ['GITHUB_SHA']
+          assert b['file_count'] == 3 and b['production_verified'] is False
+          assert b['release_authorized'] is False and b['authority'] == 'none'
+          print('NEXUS MOBILE KIT: VERIFIED SOURCE-BOUND PACKAGE')
+          PY
+      - name: Real Chromium file-URL offline acceptance with synthetic data only
+        run: |
+          set -euo pipefail
+          python3 scripts/test-offline-pilot-browser.py > "$RUNNER_TEMP/nexus-mobile-browser.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          report=json.loads((Path(os.environ['RUNNER_TEMP'])/'nexus-mobile-browser.json').read_text())
+          assert report['status']=='PASS' and len(report['reports'])==2
+          assert all(len(item['checks'])==46 and item['network_requests']==0
+                     for item in report['reports'])
+          assert report['production_verified'] is False and report['authority']=='none'
+          print('NEXUS MOBILE KIT: REAL FILE-URL CHROMIUM CHECKS PASS')
+          PY
+      - name: Upload user-downloadable public-only mobile ZIP
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-offline-mobile-${{ github.run_id }}
+          path: ${{ runner.temp }}/nexus-mobile-output/nexus-offline-mobile.zip
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error

@@ -1,0 +1,129 @@
+name: NEXUS Isolated PWA Static Preview
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/portable-pwa-preview.yml'
+      - 'scripts/prepare-portable-pwa-preview.py'
+      - 'scripts/test-portable-pwa-preview.py'
+      - 'scripts/build-portable-pwa-kit.py'
+      - 'scripts/test-portable-pwa-browser.mjs'
+      - 'web/offline-pilot.html'
+      - 'public/service-worker.js'
+      - 'public/manifest.json'
+      - 'public/icons/**'
+      - 'docs/PORTABLE-PWA-PREVIEW.md'
+      - 'web/mobile-readiness.html'
+      - 'scripts/test-mobile-readiness-browser.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-preview-acceptance:
+    name: static-preview-acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout tested candidate without persisted credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Refuse provider/production secrets
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RAILWAY_API_TOKEN:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+      - name: Test static public bundle security
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/prepare-portable-pwa-preview.py scripts/test-portable-pwa-preview.py
+          python3 scripts/test-portable-pwa-preview.py
+      - name: Build and independently read back static site
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-portable-pwa-preview.py build "$RUNNER_TEMP/nexus-static-preview" > "$RUNNER_TEMP/nexus-preview-build.json"
+          python3 scripts/prepare-portable-pwa-preview.py verify "$RUNNER_TEMP/nexus-static-preview" > "$RUNNER_TEMP/nexus-preview-verify.json"
+          cmp "$RUNNER_TEMP/nexus-preview-build.json" "$RUNNER_TEMP/nexus-preview-verify.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])
+          report=json.loads((root/'nexus-preview-verify.json').read_text())
+          assert report['status']=='PUBLIC_STATIC_PREVIEW_VERIFIED'
+          assert report['files']==9 and report['candidate_sha']==os.environ['GITHUB_SHA']
+          assert report['private_data_included'] is False
+          assert report['production_deployed'] is False
+          assert report['release_authorized'] is False
+          assert report['authority']=='none'
+          print('PREVIEW BUILD: EXACTLY NINE PUBLIC FILES VERIFIED')
+          PY
+      - name: Test opt-in install, true offline reload, and uninstall on scoped path
+        env:
+          NEXUS_PORTABLE_DIR: ${{ runner.temp }}/nexus-static-preview/nexus
+        run: |
+          set -euo pipefail
+          export NEXUS_PWA_CHROME="$(command -v google-chrome || command -v chromium)"
+          test -n "$NEXUS_PWA_CHROME"
+          python3 -m http.server 8765 --bind 127.0.0.1 \
+            --directory "$RUNNER_TEMP/nexus-static-preview" > "$RUNNER_TEMP/preview-http.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          python3 - <<'PY'
+          import time,urllib.request
+          for attempt in range(50):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:8765/nexus/', timeout=2) as response:
+                      assert response.status==200
+                  break
+              except Exception:
+                  if attempt==49:raise
+                  time.sleep(.1)
+          PY
+          node scripts/test-portable-pwa-browser.mjs > "$RUNNER_TEMP/preview-chrome.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          report=json.loads((Path(os.environ['RUNNER_TEMP'])/'preview-chrome.json').read_text())
+          assert report['schema']=='nexus.portable.installable-browser.v1'
+          assert report['status']=='PASS' and len(report['checks'])==8
+          assert report['actual_offline_navigation'] is True
+          assert report['real_android_hardware'] is False
+          assert report['production_mutation'] is False
+          assert report['private_data_submitted'] is False
+          assert report['authority']=='none'
+          print('PREVIEW INSTALL/OFFLINE/ISOLATION: PASS')
+          PY
+      - name: Test privacy-only mobile diagnostics in real Chromium
+        run: |
+          set -euo pipefail
+          python3 scripts/test-mobile-readiness-browser.py > "$RUNNER_TEMP/device-readiness-browser.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          report=json.loads((Path(os.environ['RUNNER_TEMP'])/'device-readiness-browser.json').read_text())
+          assert report['schema']=='nexus.mobile-device-readiness-browser.v1'
+          assert report['status']=='PASS' and report['checks']==11
+          assert report['zero_network_requests'] is True
+          assert report['personal_identifiers_exported'] is False
+          assert report['private_workspace_read'] is False
+          assert report['real_android_hardware_tested'] is False
+          assert report['production_verified'] is False and report['authority']=='none'
+          print('NEXUS MOBILE READINESS: PRIVACY-SAFE REAL CHROMIUM TEST PASS')
+          PY
+      - name: Publish only sanitized CI witnesses (not an external deployment)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-isolated-preview-validation
+          path: |
+            ${{ runner.temp }}/nexus-preview-verify.json
+            ${{ runner.temp }}/preview-chrome.json
+            ${{ runner.temp }}/device-readiness-browser.json
+          retention-days: 7
+          if-no-files-found: error
