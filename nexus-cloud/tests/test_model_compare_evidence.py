@@ -267,7 +267,8 @@ def test_workflow_requires_receipt_integrity_check_and_holds_release():
     yml = (Path(__file__).resolve().parents[2] /
            ".github/workflows/manual-model-comparison.yml").read_text()
     assert "model_compare_evidence" in yml
-    assert "--verify --artifact" in yml
+    assert "model_compare_evidence --verify" in yml
+    assert '--artifact "$receipt"' in yml
     assert "retention-days: 14" in yml
     assert "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f" in yml
     assert "manual-model-comparison" in yml
