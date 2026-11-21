@@ -36,6 +36,7 @@ def body():
 @contextmanager
 def configured(monkeypatch, handler=None):
     monkeypatch.setenv('NEXUS_IMAGE_ENABLED', '1')
+    monkeypatch.setenv('NEXUS_IMAGE_WIRE_FORMAT', 'gpt')
     monkeypatch.setenv('NEXUS_IMAGE_URL', 'https://provider.example/v1/images/generations')
     monkeypatch.setenv('NEXUS_IMAGE_MODEL', 'synthetic-image-model')
     monkeypatch.setenv('NEXUS_IMAGE_API_KEY', KEY)
@@ -74,7 +75,7 @@ def test_one_reviewed_image_only_and_no_secret_leak(monkeypatch):
         assert request.headers['authorization'] == 'Bearer ' + KEY
         assert payload == {'model': 'synthetic-image-model',
                            'prompt': 'An original purple-green geometric landscape',
-                           'size': '1024x1024', 'n': 1, 'response_format': 'b64_json'}
+                           'size': '1024x1024', 'n': 1, 'output_format': 'png'}
         assert TOKEN not in request.content.decode('utf-8')
         return httpx.Response(200, json={'data': [{'b64_json': PNG64}]})
     with configured(monkeypatch, provider) as c:
@@ -183,3 +184,18 @@ def test_quota_atomic_across_threads():
         results = list(pool.map(lambda _: quota.reserve(6), range(120)))
     assert sum(results) == 6
     assert quota.remaining(6) == 0
+
+
+def test_legacy_provider_mode_and_review_rotation(monkeypatch):
+    captured = []
+    def handler(request):
+        captured.append(json.loads(request.content))
+        return httpx.Response(200, json={'data': [{'b64_json': PNG64}]})
+    with configured(monkeypatch, handler) as c:
+        modern_review = body()
+        monkeypatch.setenv('NEXUS_IMAGE_WIRE_FORMAT', 'legacy')
+        auth = {'authorization': 'Bearer ' + TOKEN}
+        assert c.post('/studio-api/generate-image', json=modern_review, headers=auth).status_code == 409
+        assert c.post('/studio-api/generate-image', json=body(), headers=auth).status_code == 200
+    assert captured[0]['response_format'] == 'b64_json'
+    assert 'output_format' not in captured[0]
