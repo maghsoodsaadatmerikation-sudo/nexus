@@ -196,11 +196,14 @@ function parseWorkflow(message){
 function clearWorkflow(){
  workflowState=null;workflow.hidden=true;workflow.replaceChildren();
 }
+function retainedWorkflow(){
+ const state=window.NexusStudioUI.uiStatus();
+ return Boolean(workflowState&&state&&!state.archived&&
+  $('message').value===workflowState.draft&&workflowScope()===workflowState.scope);
+}
 function validWorkflow(){
  const state=window.NexusStudioUI.uiStatus();
- return Boolean(workflowState&&state&&!state.busy&&!state.attachmentLoading&&
-  !state.archived&&$('message').value===workflowState.draft&&
-  workflowScope()===workflowState.scope);
+ return Boolean(retainedWorkflow()&&state&&!state.busy&&!state.attachmentLoading);
 }
 function workflowError(reason){
  clearWorkflow();workflow.hidden=false;
@@ -248,7 +251,8 @@ function showWorkflow(){
    const open=document.createElement('button');open.type='button';open.className='secondary';
    open.textContent=words('Open tool for review','بازکردن ابزار برای بازبینی');
    open.onclick=()=>{
-    if(!validWorkflow()){clearWorkflow();return}
+    if(!retainedWorkflow()){clearWorkflow();return}
+    if(!validWorkflow())return;
     if(openReviewedSurface(step.result,step.line)){
      workflowState.opened=true;showWorkflow();
     }
@@ -257,7 +261,8 @@ function showWorkflow(){
    done.textContent=words('I completed this step','این گام را انجام دادم');
    done.disabled=!workflowState.opened;
    done.onclick=()=>{
-    if(!validWorkflow()||!workflowState.opened){clearWorkflow();return}
+    if(!retainedWorkflow()){clearWorkflow();return}
+    if(!validWorkflow()||!workflowState.opened)return;
     workflowState.index++;workflowState.opened=false;showWorkflow();
    };
    item.append(open,done);
@@ -346,7 +351,7 @@ function refresh(){
  if(!state)return;
  if(temporaryModel&&!state.hasChatAttachments){select.value='guide';temporaryModel=false}
  if(offeredDraft!==null&&($('message').value!==offeredDraft||state.archived))clearOffer();
- if(workflowState&&!validWorkflow())clearWorkflow();
+ if(workflowState&&!retainedWorkflow())clearWorkflow();
  const model=select.value==='model',ready=!state.busy&&!state.attachmentLoading&&(!state.threadReady||!state.archived);
  $('message').placeholder=words('Ask NEXUS anything…','هرچه می‌خواهی از نکسوس بپرس…');
  heading.textContent=model?words('AI model options','گزینه‌های مدل هوش مصنوعی'):words('Local guide · change mode','راهنمای محلی · تغییر حالت');
