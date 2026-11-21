@@ -203,3 +203,55 @@ def test_anthropic_api_version_is_part_of_reviewed_configuration(monkeypatch):
         assert client.get("/studio-api/status").json()["configuration_id"] != before["configuration_id"]
         assert client.post("/studio-api/respond", json=before, headers=AUTH).status_code == 409
         assert client.app.state.model_budget.snapshot()["attempted"] == 0
+
+
+def test_anthropic_quality_smoke_uses_same_native_protocol_and_does_not_leak_secrets(monkeypatch):
+    import model_quality_eval as quality
+
+    with configured(monkeypatch, lambda _: pytest.fail("unexpected gateway provider call")):
+        settings = model.read_model_settings()
+        assert settings is not None
+        probe = quality.PROBES[0]
+        seen = []
+
+        def handler(request):
+            seen.append(request)
+            payload = json.loads(request.content)
+            assert request.headers["x-api-key"] == SECRET
+            assert request.headers["anthropic-version"] == model.ANTHROPIC_API_VERSION
+            assert "authorization" not in request.headers
+            assert payload == {
+                "model": settings.model_id, "system": model.POLICY,
+                "messages": [{"role": "user", "content": probe.prompt}],
+                "stream": False, "max_tokens": 256,
+            }
+            return httpx.Response(200, json=provider_reply(probe.good_reply))
+
+        with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as http:
+            report = quality.smoke_live(http, settings)
+        assert report["status"] == "PASS" and report["result"] == "PASS"
+        assert report["quality_gate"] == "NOT_RUN"
+        assert report["live_model_evaluated"] is False
+        assert len(seen) == 1
+        assert SECRET not in json.dumps(report) and TOKEN not in json.dumps(report)
+
+
+@pytest.mark.parametrize("answer", [
+    provider_reply(blocks=[{"type": "text", "text": "safe"},
+                           {"type": "tool_use", "id": "untrusted"}]),
+    provider_reply(stop="max_tokens"),
+    provider_reply(stop="pause_turn"),
+])
+def test_anthropic_quality_probe_rejects_tools_and_partial_responses(monkeypatch, answer):
+    import model_quality_eval as quality
+
+    with configured(monkeypatch):
+        settings = model.read_model_settings()
+        with httpx.Client(transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, json=answer)
+        ), trust_env=False) as http:
+            report = quality.smoke_live(http, settings)
+        assert report["status"] == "FAIL"
+        assert report["result"] == "ERROR"
+        assert report["error_reason"] == "invalid_response"
+        assert report["provider_requests_planned"] == 1
