@@ -1,6 +1,6 @@
 'use strict';
 const S=NexusStudio,$=id=>document.getElementById(id),vault=new S.Vault(),undoSlot=new S.UndoSlot(),localePacks=new NexusLocales.Registry();
-let data=S.empty(),projectId=null,threadId=null,documentId=null,dirty=false,profileDirty=false,editorDirty=false,revision=0,branchBase=undefined,pending=null,controller=null,busy=false,language='en',modelInfo=null,languageImport=0,sourceViewStamp='';
+let data=S.empty(),projectId=null,threadId=null,documentId=null,dirty=false,profileDirty=false,editorDirty=false,revision=0,branchBase=undefined,pending=null,controller=null,busy=false,language='en',modelInfo=null,modelChoices=[],selectedModelSlot='primary',languageImport=0,sourceViewStamp='';
 let chatAttachments=[],attachmentEpoch=0,attachmentLoading=false,trainingReview=null;
 const EN={subtitle:'An AI assistant built to support human judgment.',projects:'Projects',projectName:'New project name',createProject:'Create project',deleteProject:'Delete project',history:'Conversation history',search:'Search all conversations',showArchived:'Include archived',newChat:'New conversation',archive:'Private archive',archiveHelp:'Saving is explicit and encrypted in this browser. Keep an encrypted backup and its passphrase separately.',pass:'Passphrase: at least 12 characters',repeat:'Repeat for a new archive or backup',createVault:'Create archive',unlock:'Unlock',lock:'Lock & clear',save:'Save session',backup:'Encrypted backup',restore:'Open encrypted file',erase:'Erase archive',conversation:'Conversation',rename:'Rename',archiveChat:'Archive / reopen',deleteChat:'Delete chat',exportChat:'Export transcript',temporary:'Until you explicitly save, this session exists only in this tab. Closing it can lose your work.',message:'Your message',useMemory:"Include this project's reviewed memory",useSources:'Include relevant project source excerpts',guide:'Use local reflection guide',prepare:'Prepare model request',regenerate:'Prepare another answer',stop:'Stop',modelSettings:'Optional generative model connection',modelHelp:'An operator must configure a model gateway. A ChatGPT subscription is not an API credential. Provider keys stay on the gateway; only its access token is entered here, for this tab.',checkModel:'Check configured model',requestReview:'Exact context to send',consent:'Send this exact context to the configured provider once.',send:'Send approved request',profile:'Project assistant & memory',instructions:'Custom instructions (preferences, not authority)',memories:'Reviewed memory — one item per line, up to 30',applyProfile:'Apply project preferences',memoryHelp:'Nothing is learned automatically. Memory is isolated to this project and sent only when selected. Removing memory does not remove earlier transcript text.',sources:'Local source search',sourceHelp:'Select UTF-8 TXT, Markdown, CSV, TSV or JSON files together, up to 256 KiB each and 12 per project. A batch is added only if every file is valid. Excerpts are local lexical search results, not verified facts. Files are never executed.',sourceQuery:'Words to find in project sources',searchSources:'Search sources',canvas:'Versioned writing canvas',documentTitle:'Document title',newDocument:'New document',saveVersion:'Save new version',exportDocument:'Export Markdown',deleteDocument:'Delete document',loadVersion:'Load version into editor',canvasHelp:'Every saved version remains available, up to 30 per document. Text and code are edited as inert text and never executed.',boundary:'NEXUS assists judgment. It cannot make a human decision or take external actions from a conversation.',unsaved:'Temporary session / unsaved changes',saved:'Applied session saved as encrypted data. Unapplied form text is excluded.',failed:'Operation failed. Check input, capacity, passphrase or archive conflicts. Work has not been silently overwritten.',discard:'Replace or delete this work? Unsaved work and form text can be lost.',plain:'Export unencrypted text? It may include private information.',needApply:'Apply preferences / astrology profiles and save document versions before saving/exporting the session.',branching:'Your next message creates a new branch; the original remains available.',local:'Guide — not a generative model',human:'You',model:'Model draft',edit:'Edit into a new branch',toCanvas:'Copy to canvas',speak:'Read aloud (device voice)',empty:'Create a project, then choose New conversation.',noModel:'No model configured. Local guide remains available.',configured:'Configured model',apply:'Applied locally. Save explicitly to retain this change.'};
 Object.assign(EN,{languagePacks:'Interface language packs',languageHelp:'Up to eight complete translation packs can be kept in this tab. They contain labels only, not your projects.',languageTemplate:'Download English label template',gatewayOrigin:'Model gateway origin',gatewayAccess:'Gateway access token (not the provider API key)'});
@@ -462,7 +462,7 @@ function installThread(next){
 $('auto-speak').onchange=()=>{if(!$('auto-speak').checked)window.NexusSpeechPlayback?.stop()};
 function selectedModelEngine(){return document.getElementById('model-engine')?.value==='device'?'device':'gateway'}
 function prepare(regenerate=false){if(!chat()?.isolated&&(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,relatedChats:$('use-related-chats').checked,historyDays:data.history_days,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked,onDevice:destination==='device'});if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');const stream=destination==='gateway'&&modelInfo.streaming===true;
- pending={destination,stream,thread:c,body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);$('request-review').hidden=false;controls()}catch(error){status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
+ pending={destination,stream,thread:c,body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(destination==='gateway'&&selectedModelSlot!=='primary'?{model_slot:selectedModelSlot}:{}),...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,...(destination==='gateway'?{model_slot:selectedModelSlot}:{}),provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);$('request-review').hidden=false;controls()}catch(error){status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
 function gateway(){const value=$('gateway').value.trim();const u=new URL(value||location.origin);if((u.protocol!=='https:'&&!(u.protocol==='http:'&&['127.0.0.1','[::1]'].includes(u.hostname)))||u.username||u.password||u.search||u.hash||!['','/'].includes(u.pathname))throw Error('gateway-url');return u.origin}
 async function boundedJson(response,max=128000){if(!response.ok)throw Error('gateway-status-'+response.status);if(!response.body)throw Error('empty-response');const reader=response.body.getReader(),chunks=[];let size=0;try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>max)throw Error('response-capacity');chunks.push(value)}const bytes=new Uint8Array(size);let offset=0;for(const c of chunks){bytes.set(c,offset);offset+=c.length}return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes))}finally{await reader.cancel().catch(()=>{})}}
 async function streamedAnswer(response,onDelta){
@@ -624,7 +624,55 @@ $('send-model').onclick=async()=>{
  }catch{if(rev===revision)status(request.stream?'streamFailed':'failed')}
  finally{clearTimeout(timer);if(rev===revision){busy=false;clearModelReview();controller=null;controls()}}
 };
-$('check-model').onclick=()=>operation(async(rev,abort)=>{if(selectedModelEngine()==='device'){const info=window.NexusDevice?.info();modelInfo=info?{...info,configured:true,gateway:'device',provider_host:'this device'}:null;$('model-status').textContent=info?info.model+' · on-device · max 64 output tokens':t('noModel');return}const timer=setTimeout(()=>abort.abort(),10000);try{const out=await boundedJson(await fetch(gateway()+'/studio-api/status',{credentials:'omit',cache:'no-store',redirect:'error',signal:abort.signal}),8000);if(rev===revision){if(out.configured&&(typeof out.model!=='string'||typeof out.provider_host!=='string'||! /^[a-f0-9]{64}$/.test(out.configuration_id)))throw Error('configuration');modelInfo={...out,gateway:gateway()};$('model-status').textContent=out.configured?t('configured')+': '+out.model+' · '+out.provider_host:t('noModel')} }finally{clearTimeout(timer)}});
+function validatedModelChoices(out){
+ if(out.configured!==true)return [];
+ const raw=out.models===undefined?[{slot:'primary',model:out.model,provider_host:out.provider_host,
+  configuration_id:out.configuration_id,streaming:out.streaming,modes:out.modes}]:out.models;
+ if(!Array.isArray(raw)||raw.length<1||raw.length>3||raw[0]?.slot!=='primary')throw Error('invalid-model-catalog');
+ const slots=new Set(),allowed=['primary','secondary','tertiary'];
+ const items=raw.map((item,index)=>{
+  if(!item||typeof item!=='object'||!allowed.includes(item.slot)||slots.has(item.slot)||
+     item.slot!==allowed[index]&&!(raw.length===2&&index===1&&item.slot==='tertiary')||
+     typeof item.model!=='string'||!item.model||item.model.length>150||
+     typeof item.provider_host!=='string'||!item.provider_host||item.provider_host.length>255||
+     typeof item.configuration_id!=='string'||!/^[a-f0-9]{64}$/.test(item.configuration_id)||
+     item.streaming!==undefined&&item.streaming!==true||
+     item.modes!==undefined&&(!Array.isArray(item.modes)||
+        item.modes.some(mode=>!['standard','thinking','non-thinking'].includes(mode))))
+    throw Error('invalid-model-catalog');
+  slots.add(item.slot);
+  return {slot:item.slot,model:item.model,provider_host:item.provider_host,
+   configuration_id:item.configuration_id,...(item.streaming?{streaming:true}:{}),
+   ...(item.modes?{modes:item.modes}:{}),...(item.max_output_tokens?{max_output_tokens:item.max_output_tokens}:{})};
+ });
+ if(items[0].model!==out.model||items[0].provider_host!==out.provider_host||
+    items[0].configuration_id!==out.configuration_id)throw Error('primary-mismatch');
+ return items;
+}
+$('check-model').onclick=()=>operation(async(rev,abort)=>{
+ if(selectedModelEngine()==='device'){
+  const info=window.NexusDevice?.info();
+  modelChoices=[];selectedModelSlot='primary';
+  modelInfo=info?{...info,configured:true,gateway:'device',provider_host:'this device'}:null;
+  $('model-status').textContent=info?info.model+' · on-device · max 64 output tokens':t('noModel');return;
+ }
+ const timer=setTimeout(()=>abort.abort(),10000);
+ try{
+  const origin=gateway();
+  const out=await boundedJson(await fetch(origin+'/studio-api/status',{
+   credentials:'omit',cache:'no-store',redirect:'error',signal:abort.signal}),8000);
+  if(rev===revision){
+   if(out.configured!==true&&out.configured!==false)throw Error('configuration');
+   const choices=validatedModelChoices(out);
+   modelChoices=choices;
+   if(!choices.some(option=>option.slot===selectedModelSlot))selectedModelSlot='primary';
+   const chosen=choices.find(option=>option.slot===selectedModelSlot);
+   modelInfo={...(chosen||out),configured:out.configured,gateway:origin};
+   $('model-status').textContent=out.configured?t('configured')+': '+modelInfo.model+' · '+modelInfo.provider_host:t('noModel');
+   controls();
+  }
+ }finally{clearTimeout(timer)}
+});
 $('apply-profile').onclick=()=>{if(!p())return;const instructions=$('instructions').value,memories=$('memories').value.split('\n').map(x=>x.trim()).filter(Boolean);mutate(v=>Object.assign(projectIn(v),{instructions,memories}),{afterCommit:()=>{profileDirty=false}})};
 for(const id of ['instructions','memories'])$(id).addEventListener('input',()=>{profileDirty=true;stop()});$('editor').addEventListener('input',()=>{editorDirty=true;stop()});
 $('source-file').onchange=event=>{
@@ -766,8 +814,7 @@ function appendVisionResult({prompt,answer,selection}){
   }catch{return false}
 }
 function modelAvailability(){
- // The public model-status endpoint verifies local gateway configuration only.
- // Never claim that a provider is reachable, billable or ready to answer.
+ // Configuration is not a provider liveness or billing attestation.
  if($('model-engine')?.value==='device'){
   const info=window.NexusDevice?.info();
   return {kind:'device',checked:Boolean(info),configured:Boolean(info?.ready),
@@ -777,9 +824,26 @@ function modelAvailability(){
  try{origin=gateway()}catch{return {kind:'gateway',checked:false,configured:false}}
  if(!modelInfo||modelInfo.gateway!==origin)return {kind:'gateway',checked:false,configured:false};
  return {kind:'gateway',checked:true,configured:modelInfo.configured===true,
-         model:modelInfo.configured?String(modelInfo.model).slice(0,150):null,
+         slot:selectedModelSlot,model:modelInfo.configured?String(modelInfo.model).slice(0,150):null,
          providerHost:modelInfo.configured?String(modelInfo.provider_host).slice(0,255):null};
 }
-window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,openConversation,selection:()=>({projectId,threadId,head:chat()?.head||null,revision,branchBase}),appendVisionResult,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),attachmentLoading,archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),modelAvailability,revokeModelReview:()=>stop(),resetModel:()=>{stop();modelInfo=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
+function availableModelOptions(){
+ if($('model-engine')?.value==='device')return [];
+ try{if(modelInfo?.gateway!==gateway())return []}catch{return []}
+ return modelChoices.map(item=>({slot:item.slot,model:item.model,providerHost:item.provider_host}));
+}
+function selectModelSlot(slot){
+ if(busy||!['primary','secondary','tertiary'].includes(slot)||
+    $('model-engine')?.value==='device')return false;
+ const choice=modelChoices.find(item=>item.slot===slot);
+ if(!choice||!availableModelOptions().length)return false;
+ if(slot===selectedModelSlot)return true;
+ stop();  // Cancels stale approvals, previous provider responses and streaming.
+ selectedModelSlot=slot;
+ modelInfo={...choice,configured:true,gateway:gateway()};
+ $('model-status').textContent=t('configured')+': '+choice.model+' · '+choice.provider_host;
+ controls();return true;
+}
+window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,openConversation,selection:()=>({projectId,threadId,head:chat()?.head||null,revision,branchBase}),appendVisionResult,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),attachmentLoading,archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),modelAvailability,availableModelOptions,selectModelSlot,revokeModelReview:()=>stop(),resetModel:()=>{stop();modelChoices=[];selectedModelSlot='primary';modelInfo=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);

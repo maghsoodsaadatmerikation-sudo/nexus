@@ -351,3 +351,21 @@ html.studio-focus-mode{
 @media (max-width: 480px) {
   #studio-compose-model-check { flex: 1 1 100%; }
 }
+
+/* Human-selectable model slots are shown only after a real gateway status check.
+   The selector uses inert text from the server's bounded public catalog. */
+#studio-compose-choice-label:not([hidden]) {
+  display: grid;
+  gap: 5px;
+  flex: 1 1 100%;
+  min-width: 0;
+  font-size: .9rem;
+  font-weight: 600;
+}
+#studio-compose-choice {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-height: 44px;
+  font-weight: 500;
+}

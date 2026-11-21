@@ -23,6 +23,7 @@ from studio_model import (
     accepted_anthropic_answer,
     ModelSettings,
     read_model_settings,
+    read_model_catalog,
     config,
     adapter,
     provider_payload,
@@ -391,9 +392,9 @@ def smoke_live(client: httpx.Client, provider: ModelSettings) -> dict:
     }
 
 
-def configuration_preflight() -> dict:
+def configuration_preflight(model_slot: str = "primary") -> dict:
     """Never contact a provider or reveal endpoint, model or credentials."""
-    configured = read_model_settings() is not None
+    configured = model_slot in read_model_catalog()
     return {
         "status": "READY_TO_TEST" if configured else "NOT_READY",
         "scope": "configuration_only",
@@ -413,12 +414,14 @@ def main() -> int:
     mode.add_argument("--check-config", action="store_true", help="Validate operator configuration offline, with no secrets printed")
     mode.add_argument("--smoke-live", action="store_true", help="Explicitly contact a configured provider once, using a fictional prompt")
     mode.add_argument("--live", action="store_true", help="Contact configured provider with all 15 fictional quality probes")
+    parser.add_argument("--model-slot", choices=["primary", "secondary", "tertiary"],
+                        default="primary", help="Operator-configured model route to evaluate")
     parser.add_argument("--minimum-pass-rate", type=float, default=0.85)
     args = parser.parse_args()
     if not 0 <= args.minimum_pass_rate <= 1:
         parser.error("minimum pass rate must be between 0 and 1")
     if args.check_config:
-        report = configuration_preflight()
+        report = configuration_preflight(args.model_slot)
         print(json.dumps(report, sort_keys=True))
         return 0 if report["valid_configuration"] else 2
     if args.self_test:
@@ -428,7 +431,7 @@ def main() -> int:
         if os.getenv("NEXUS_QUALITY_EVAL_CONSENT", "") != "YES":
             print(json.dumps({"status": "NOT_RUN", "reason": "explicit_operator_consent_required"}))
             return 2
-        provider = read_model_settings()
+        provider = read_model_catalog().get(args.model_slot)
         if provider is None:
             print(json.dumps({"status": "NOT_RUN", "reason": "model_provider_not_configured"}))
             return 2

@@ -7,7 +7,7 @@ import json
 import os
 import re
 from threading import Lock
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from urllib.parse import urlsplit
 from pathlib import Path
 
@@ -129,6 +129,7 @@ class Completion(BaseModel):
     messages: list[Message] = Field(min_length=1, max_length=42)
     mode: Literal["standard", "thinking", "non-thinking"] = "standard"
     max_output_tokens: int = Field(default=2048, ge=1, le=8192)
+    model_slot: Literal["primary", "secondary", "tertiary"] = "primary"
 
     @field_validator("consent", mode="before")
     @classmethod
@@ -150,12 +151,13 @@ class ModelSettings:
     streaming: bool
     policy: str = field(repr=False)
     anthropic_workspace_id: str = field(default="", repr=False)
+    slot: str = "primary"
 
 
-def read_model_settings() -> ModelSettings | None:
+def read_model_settings(snapshot: dict[str, str] | None = None) -> ModelSettings | None:
     # Copy the process environment once. The request must not combine an old
     # reviewed endpoint with a newly rotated key, adapter or streaming flag.
-    env = os.environ.copy()
+    env = os.environ.copy() if snapshot is None else snapshot
     endpoint = env.get("NEXUS_MODEL_URL", "").strip()
     model = env.get("NEXUS_MODEL_ID", "").strip()
     token = env.get("NEXUS_STUDIO_TOKEN", "").strip()
@@ -190,6 +192,46 @@ def read_model_settings() -> ModelSettings | None:
                          provider_host=p.hostname, adapter=kind, provider_api_key=key,
                          streaming=env.get("NEXUS_MODEL_STREAMING", "") == "1",
                          policy=POLICY, anthropic_workspace_id=workspace_id)
+
+
+# Optional strictly operator-configured alternative slots. The primary model
+# retains the legacy environment variables and auth token. Other slots never
+# inherit its URL, key, mode, streaming switch or workspace selection.
+MODEL_SLOTS = ("primary", "secondary", "tertiary")
+_SLOT_FIELDS = ("URL", "ID", "ADAPTER", "API_KEY", "WORKSPACE_ID", "STREAMING")
+
+
+def read_model_catalog() -> dict[str, ModelSettings]:
+    """Validate up to three separately credentialed model routes in one snapshot."""
+    snapshot = os.environ.copy()
+    primary = read_model_settings(snapshot)
+    if primary is None:
+        return {}  # No secondary-only public gateway with missing primary auth.
+    catalog = {"primary": primary}
+    for slot in MODEL_SLOTS[1:]:
+        prefix = "NEXUS_MODEL_" + slot.upper() + "_"
+        if not any(prefix + field in snapshot for field in _SLOT_FIELDS):
+            continue
+        translated = snapshot.copy()
+        for name in _SLOT_FIELDS:
+            translated["NEXUS_MODEL_" + name] = snapshot.get(prefix + name, "")
+        translated["NEXUS_MODEL_ADAPTER"] = snapshot.get(prefix + "ADAPTER", "generic")
+        candidate = read_model_settings(translated)
+        if candidate is not None:
+            catalog[slot] = replace(candidate, slot=slot)
+    return catalog
+
+
+def public_model_choice(c: ModelSettings) -> dict:
+    """Expose only configuration identity, not credentials or live readiness."""
+    info = {"slot": c.slot, "model": c.model_id,
+            "provider_host": c.provider_host, "configuration_id": configuration_id(c)}
+    if c.streaming:
+        info["streaming"] = True
+    if c.adapter == "deepseek":
+        info["modes"] = ["standard", "thinking", "non-thinking"]
+        info["max_output_tokens"] = 8192
+    return info
 
 
 def config():
@@ -248,6 +290,13 @@ def configuration_id(c):
             c[0], c[1], adapter(), streaming_enabled(), POLICY)
         workspace_id = os.getenv("NEXUS_MODEL_WORKSPACE_ID", "") if kind == "anthropic" else ""
     suffix = "" if kind == "generic" else "\nadapter:" + kind
+    if isinstance(c, ModelSettings) and c.slot != "primary":
+        suffix += "\nmodel-slot:" + c.slot
+        # A private HMAC tag invalidates reviewed routing when the selected
+        # alternative credential changes, without revealing its raw API key.
+        suffix += "\ncredential-tag:" + hmac.new(
+            c.studio_token.encode("utf-8"), c.provider_api_key.encode("utf-8"),
+            hashlib.sha256).hexdigest()
     if streaming:
         suffix += "\nstreaming:v1"
     if kind == "anthropic":
@@ -470,12 +519,17 @@ def register(app):
 
     @app.get("/studio-api/status")
     async def model_status():
-        c = read_model_settings()
-        return JSONResponse({"configured": c is not None, "configuration_id": configuration_id(c) if c else None, "model": c.model_id if c else None,
-                             "provider_host": c.provider_host if c else None, "authority": "none",
-                             **({"streaming": True} if c and c.streaming else {}),
-                             **({"modes": ["standard", "thinking", "non-thinking"], "max_output_tokens": 8192} if c and c.adapter == "deepseek" else {})},
-                            headers={"Cache-Control": "no-store"})
+        catalog = read_model_catalog()
+        c = catalog.get("primary")
+        summary = {"configured": c is not None,
+                   "configuration_id": configuration_id(c) if c else None,
+                   "model": c.model_id if c else None,
+                   "provider_host": c.provider_host if c else None, "authority": "none",
+                   **({"streaming": True} if c and c.streaming else {}),
+                   **({"modes": ["standard", "thinking", "non-thinking"], "max_output_tokens": 8192} if c and c.adapter == "deepseek" else {})}
+        if len(catalog) > 1:
+            summary["models"] = [public_model_choice(catalog[name]) for name in MODEL_SLOTS if name in catalog]
+        return JSONResponse(summary, headers={"Cache-Control": "no-store"})
 
     @app.get("/studio-api/operator-readiness")
     async def operator_readiness(request: Request):
@@ -521,15 +575,14 @@ def register(app):
         }, headers={"Cache-Control": "no-store"})
 
     async def handle_response(request: Request, stream: bool):
-        c = read_model_settings()
+        catalog = read_model_catalog()
+        c = catalog.get("primary")
         if c is None:
             raise HTTPException(503, "No model provider is configured")
         authorization_values = request.headers.getlist("authorization")
         authorization = authorization_values[0] if len(authorization_values) == 1 else ""
         if not hmac.compare_digest(authorization.encode(), ("Bearer " + c.studio_token).encode()):
             raise HTTPException(401, "Studio authentication required", headers={"WWW-Authenticate": "Bearer"})
-        if stream and not c.streaming:
-            raise HTTPException(503, "Model streaming is disabled")
         media_values = request.headers.getlist("content-type")
         if len(media_values) != 1 or media_values[0].split(";", 1)[0].strip().lower() != "application/json":
             raise HTTPException(415, "JSON required")
@@ -550,8 +603,12 @@ def register(app):
                 data = Completion.model_validate_json(body)
             except ValidationError:
                 raise HTTPException(422, "Invalid consent or message context") from None
-            if data.configuration_id != configuration_id(c):
+            selected = catalog.get(data.model_slot)
+            if selected is None or data.configuration_id != configuration_id(selected):
                 raise HTTPException(409, "Model configuration changed; review again")
+            c = selected  # Frozen credential + destination + policy snapshot.
+            if stream and not c.streaming:
+                raise HTTPException(503, "Model streaming is disabled")
             if data.messages[-1].role != "user":
                 raise HTTPException(422, "Final message must be from the user")
             if data.mode != "standard" and c.adapter != "deepseek":

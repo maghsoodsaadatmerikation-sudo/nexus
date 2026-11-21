@@ -125,6 +125,64 @@ NEXUS_MODEL_STREAMING=1 disables Anthropic configuration until corrected.
 Local configured status is not proof of real model access. See
 [Anthropic adapter boundaries and offline tests](../docs/STUDIO-ANTHROPIC-ADAPTER.md).
 
+### Multiple reviewed model routes (opt-in; up to three)
+
+One Studio gateway can expose three **explicitly operator-configured** models
+without any browser-side provider credentials. The existing `NEXUS_MODEL_*`
+values remain the **primary** route, and all routes use the same independent
+`NEXUS_STUDIO_TOKEN`, common policy and global request-attempt budget.
+Additional optional route variables use fixed prefixes:
+
+```sh
+NEXUS_MODEL_SECONDARY_URL=https://api.anthropic.com/v1/messages
+NEXUS_MODEL_SECONDARY_ID=<supported-claude-model-id>
+NEXUS_MODEL_SECONDARY_ADAPTER=anthropic
+NEXUS_MODEL_SECONDARY_API_KEY=<private-secondary-provider-key>
+# Optional for unscoped Anthropic keys:
+# NEXUS_MODEL_SECONDARY_WORKSPACE_ID=wrkspc_<private-identifier>
+# Optional third model (illustrative only):
+NEXUS_MODEL_TERTIARY_URL=https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
+NEXUS_MODEL_TERTIARY_ID=<supported-gemini-model-id>
+NEXUS_MODEL_TERTIARY_ADAPTER=gemini
+NEXUS_MODEL_TERTIARY_API_KEY=<private-tertiary-provider-key>
+```
+
+Each route validates its own URL, adapter, provider credential, workspace,
+streaming flag and model ID. A partially configured or invalid optional route
+is omitted rather than sent to an arbitrary host. If the primary route or
+operator token is invalid, the entire model catalog is unavailable. Anthropic
+requires the exact Messages endpoint and disables unsupported native streaming;
+Gemini requires its exact OpenAI-compatible endpoint. Generic-compatible local
+providers may use an explicit loopback URL. `SECONDARY_STREAMING` and
+`TERTIARY_STREAMING` are optional and **never** inherited from the primary.
+For extra routes use only the corresponding prefixed variable names, for
+example `NEXUS_MODEL_SECONDARY_STREAMING=1`.
+
+A successful unauthenticated `GET /studio-api/status` reports the primary
+legacy fields, and adds a **bounded, secret-free** `models` array only when
+multiple model routes are valid. A route entry includes `slot`,
+`configuration_id`, `model`, `provider_host` and truthful local features;
+it never contains the full URL, API key, workspace ID or operator token.
+The browser's focused chat displays only these reviewed options, never a
+fabricated model marketplace. A choice does not issue a provider request.
+
+For an approved model request, the browser supplies `model_slot` (primary,
+secondary or tertiary) and that route's current `configuration_id`, subject
+to the existing explicit one-shot consent and exact-context preview. Missing
+`model_slot` defaults to primary for backwards compatibility. The server
+binds the provider destination, credential and policy to a **single immutable
+environment snapshot** before reading the request body. If a route has been
+removed, changed or not reviewed, it returns HTTP 409 instead of falling back
+to another provider. Distinct slots have distinct review fingerprints;
+alternative-key rotations invalidate prior reviews without exposing keys.
+All routes share the same bounded provider-attempt quota. Provider-side billing
+limits and data-processing policies remain the operator's responsibility.
+
+The catalog is **configuration-only**. It does not claim that paid access,
+provider models, cost ceilings, answer quality or production deployment have
+been validated. Synthetic local tests never contact Anthropic, Gemini or
+other paid providers.
+
 ## Local model request attempt budget
 
 The real-model gateway now has a **conservative per-process provider attempt
