@@ -36,6 +36,7 @@ open.dataset.en='Connections';open.dataset.fa='اتصال‌ها';
 document.body.append(dialog);composer.append(open);
 let targets=[],origin='',controller=null,selectedResult=null,branchPlan=null,fileBase=null,filePlan=null,originalText='';
 let requestedProvider=null,requestedOperation=null,dialogSelection=null,receiptCopy=null,receiptSelection=null;
+let reviewedReadListener=null; // Single-use, ephemeral callback; not a provider attestation.
 function matchesSelection(selection){
  const current=window.NexusStudioUI.selection();
  return current.projectId===selection?.projectId&&current.threadId===selection?.threadId;
@@ -69,6 +70,14 @@ function showReceipt({kind,operation='',target='',message='',body='',copy=null})
  receiptAttach.hidden=!receiptCopy;
  receipt.hidden=false;view.hidden=!dialog.open;
  if(success)statusLine.textContent=words('Result is also available in Chat.','نتیجه در بخش گفتگو نیز نمایش داده شد.');
+ // A workflow sees only a genuinely completed, consent-reviewed read. This
+ // is a browser/gateway completion receipt, not independently signed evidence.
+ if(kind==='read'&&reviewedReadListener?.operation===operation&&
+    requestedOperation===operation&&matchesSelection(dialogSelection)){
+  const listener=reviewedReadListener;reviewedReadListener=null;
+  try{listener.callback(Object.freeze({operation,kind:'read',source:'studio-connection-response'}))}
+  catch{/* An observer cannot invalidate the reviewed provider result. */}
+ }
 }
 receiptDismiss.onclick=clearReceipt;
 receiptAttach.onclick=()=>{
@@ -189,10 +198,15 @@ async function request(suffix,body,apply){
 /* Provider and operation hints only choose the review surface. They never
  * load credentials, call a provider, approve a read, or perform a write.
  */
-function openFor({provider=null,operation=null}={}){
+function openFor({provider=null,operation=null,onReadReceipt=null}={}){
  if(dialog.open||!([null,'github','render'].includes(provider))||
-   (operation!==null&&!choices.some(row=>row[0]===operation&&(!provider||row[1]===provider))))return false;
- clearReceipt();reset();requestedProvider=provider;requestedOperation=operation;labels();
+   (operation!==null&&!choices.some(row=>row[0]===operation&&(!provider||row[1]===provider)))||
+   (onReadReceipt!==null&&
+    (typeof onReadReceipt!=='function'||!['github.pulls','render.deploys'].includes(operation))))
+   return false;
+ clearReceipt();reset();requestedProvider=provider;requestedOperation=operation;
+ reviewedReadListener=onReadReceipt?{operation,callback:onReadReceipt}:null;
+ labels();
  if(provider){
   const name=provider==='github'?'GitHub':'Render';
   statusLine.textContent=words(name+' selected. Load connections to review available actions.',
@@ -206,7 +220,10 @@ close.onclick=()=>{if(discardFile())dialog.close()};
 dialog.addEventListener('cancel',event=>{if(!discardFile())event.preventDefault()});
 // A close event may be delivered after another review has already opened.
 // Never let the previous dialog lifecycle erase the newly opened operation.
-dialog.addEventListener('close',()=>{if(dialog.open)return;requestedProvider=requestedOperation=dialogSelection=null;reset()});
+dialog.addEventListener('close',()=>{
+ if(dialog.open)return;
+ reviewedReadListener=null;requestedProvider=requestedOperation=dialogSelection=null;reset()
+});
 settings.onclick=()=>{
  if(!discardFile())return;
  dialog.close();document.dispatchEvent(new Event('nexus-studio-show-chat-options'));
@@ -244,7 +261,7 @@ operations.onchange=topic.onchange=path.onchange=()=>{
  if(controller)return;
  if(!discardFile()){operations.value='github.edit';topic.value=fileBase.slug;path.value=fileBase.path;preview.disabled=false;return}
  // The user may replace a preselected proposal, never approve it implicitly.
- if(document.activeElement===operations)requestedOperation=null;
+ if(document.activeElement===operations){requestedOperation=null;reviewedReadListener=null}
  clearReceipt();updateReview();
 };
 topic.oninput=path.oninput=()=>{
@@ -356,8 +373,12 @@ use.onclick=()=>{
 window.addEventListener('beforeunload',event=>{
  if(fileBase&&editor.value!==originalText){event.preventDefault();event.returnValue=''}
 });
-document.addEventListener('nexus-studio-private-clear',()=>{clearReceipt();if(dialog.open)dialog.close();reset()});
-for(const id of ['gateway','gateway-token'])$(id).addEventListener('input',()=>{clearReceipt();reset()});
+document.addEventListener('nexus-studio-private-clear',()=>{
+ reviewedReadListener=null;clearReceipt();if(dialog.open)dialog.close();reset()
+});
+for(const id of ['gateway','gateway-token'])$(id).addEventListener('input',()=>{
+ reviewedReadListener=null;clearReceipt();reset()
+});
 $('language').addEventListener('change',labels);
 window.NexusStudioConnections=Object.freeze({openFor});
 labels();
