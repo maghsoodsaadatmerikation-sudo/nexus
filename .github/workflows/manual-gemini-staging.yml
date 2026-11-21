@@ -1,0 +1,80 @@
+name: NEXUS Manual Gemini Staging Check
+
+# Deliberately no push, pull_request, schedule, or workflow_run trigger.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Select offline preflight, ONE fictional live question, or FIFTEEN fictional quality questions"
+        required: true
+        type: choice
+        default: check_config
+        options:
+          - check_config
+          - single_smoke
+          - full_quality
+      model_id:
+        description: "Operator-reviewed Gemini model ID (e.g. gemini-2.5-flash; verify current availability)"
+        required: true
+        type: string
+      billing_ack:
+        description: "Live only: type I_APPROVE_1_PROVIDER_REQUEST or I_APPROVE_15_PROVIDER_REQUESTS"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexus-manual-gemini-staging
+  cancel-in-progress: false
+
+jobs:
+  source-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Reject non-main dispatches before any secret-enabled job
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "NOT_RUN: main branch required" >&2
+            exit 2
+          fi
+
+  model-staging:
+    needs: source-guard
+    # Operators must create and protect this environment, and place their
+    # Gemini credential in its secrets, not in workflow input or the repository.
+    environment: nexus-model-staging
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout the exact reviewed commit without persisting a token
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install pinned uv without caching provider data
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        with:
+          version: "0.12.4"
+          enable-cache: "false"
+          working-directory: nexus-cloud
+
+      - name: Install project Python
+        working-directory: nexus-cloud
+        run: uv python install 3.13
+
+      - name: Run explicit staging mode with redacted JSON result
+        working-directory: nexus-cloud
+        env:
+          NEXUS_STAGE_GEMINI_API_KEY: ${{ secrets.NEXUS_STAGE_GEMINI_API_KEY }}
+          NEXUS_STAGE_MODEL_ID: ${{ inputs.model_id }}
+          NEXUS_STAGE_MODE: ${{ inputs.mode }}
+          NEXUS_STAGE_BILLING_ACK: ${{ inputs.billing_ack }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: uv run --frozen python -m model_staging_action
