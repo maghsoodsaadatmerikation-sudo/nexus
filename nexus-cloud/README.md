@@ -110,6 +110,49 @@ A gateway-only deployment may use an explicitly configured `NEXUS_STUDIO_ORIGIN`
 with Studio hosted separately. There is no provisioned model or live provider
 quality test in this repository's synthetic acceptance suite.
 
+## Optional Gemini model adapter (operator configured, text only)
+
+NEXUS supports an explicitly selected `NEXUS_MODEL_ADAPTER=gemini` using
+Google's [OpenAI-compatible Chat Completions API](https://ai.google.dev/gemini-api/docs/openai).
+This is **not** automatic Gemini account integration, Google Search grounding,
+Gemini tool calling, native multimodal file exchange, or evidence that any
+particular model is available or produces high-quality answers.
+
+Set the following in the **server's secret environment**, not in the website,
+repository, issue, commit, or chat history:
+
+```sh
+NEXUS_MODEL_ADAPTER=gemini
+NEXUS_MODEL_URL=https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
+NEXUS_MODEL_ID=<operator-selected-supported-gemini-model>
+NEXUS_MODEL_API_KEY=<server-side-gemini-api-key>
+NEXUS_STUDIO_TOKEN=<independent-random-secret-at-least-32-characters>
+```
+
+The Gemini adapter enforces this **exact HTTPS destination**, requires a
+nonempty Gemini API key, does not forward Studio's access token, and does not
+accept a custom host or alternate path while selected. Its requests use a
+bounded `max_tokens` budget, the existing user-approved system policy and
+text-only messages; it omits `store` rather than assuming the compatibility
+API honors an OpenAI-specific retention control. Google's provider-specific
+retention, billing, quotas and usage policies still apply. The separate
+`generic` and `deepseek` adapters are unchanged.
+
+The Studio UI exposes only `standard` mode for Gemini because reasoning
+settings differ across Gemini model generations; `thinking` and
+`non-thinking` requests are rejected rather than silently mapped to
+unsupported controls. Optional streaming still requires
+`NEXUS_MODEL_STREAMING=1` and is validated by the same bounded text-only
+SSE parser. Tool calls, provider reasoning fields, and non-text results
+are not executed or returned. A change of adapter or model invalidates
+previously reviewed Studio model requests.
+
+Check the operator-selected provider's current model support before configuring
+it. For an explicitly consented **live** acceptance sample, use the fifteen
+synthetic probes documented below; these do contact Google and may incur
+charges. GitHub CI uses HTTPX mocks and does **not** access Google credentials
+or perform a live Gemini model test.
+
 ## Optional synthetic model-answer quality evaluation
 
 The operator can test a real configured provider against fifteen short **fictional** prompts spanning source grounding,

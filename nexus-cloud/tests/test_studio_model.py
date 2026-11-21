@@ -219,6 +219,95 @@ def test_deepseek_modes_bind_review_and_forward_real_flag(monkeypatch,mode,expec
         assert 'private reasoning' not in r.text
 
 
+
+def test_gemini_config_is_disabled_without_exact_host_path_and_provider_key(monkeypatch):
+    monkeypatch.setenv("NEXUS_MODEL_ADAPTER", "gemini")
+    with configured(monkeypatch):
+        monkeypatch.setenv("NEXUS_MODEL_URL", model.GEMINI_CHAT_COMPLETIONS)
+        assert model.config() is not None
+        monkeypatch.setenv("NEXUS_MODEL_API_KEY", "")
+        assert model.config() is None
+        monkeypatch.setenv("NEXUS_MODEL_API_KEY", "gemini-test-secret")
+        for url in [
+            "https://provider.example/v1beta/openai/chat/completions",
+            "http://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+            "https://generativelanguage.googleapis.com:444/v1beta/openai/chat/completions",
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions/",
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions?key=secret",
+            "https://generativelanguage.googleapis.com/v1beta/openai/other",
+            "https://generativelanguage.googleapis.com.evil.invalid/v1beta/openai/chat/completions",
+        ]:
+            monkeypatch.setenv("NEXUS_MODEL_URL", url)
+            assert model.config() is None, url
+        monkeypatch.setenv("NEXUS_MODEL_URL", model.GEMINI_CHAT_COMPLETIONS)
+        assert model.config() is not None
+
+
+def test_gemini_buffered_completion_requires_consent_and_uses_compatible_wire(monkeypatch):
+    monkeypatch.setenv("NEXUS_MODEL_ADAPTER", "gemini")
+    requests = []
+    def handler(request):
+        payload = json.loads(request.content)
+        requests.append(payload)
+        assert str(request.url) == model.GEMINI_CHAT_COMPLETIONS
+        assert request.headers["authorization"] == "Bearer provider-secret-not-for-browser"
+        assert payload["model"] == "configured-test-model"
+        assert payload["messages"][0] == {"role": "system", "content": model.POLICY}
+        assert payload["messages"][1:] == BODY["messages"]
+        assert payload["max_tokens"] == 2048
+        assert payload["stream"] is False
+        assert not any(key in payload for key in ("max_completion_tokens", "store",
+                                                 "tools", "thinking", "reasoning_effort"))
+        return httpx.Response(200, json={
+            "choices": [{"message": {"role": "assistant", "content": "Gemini-compatible draft"},
+                         "finish_reason": "stop"}],
+        })
+    with configured(monkeypatch, handler) as c:
+        monkeypatch.setenv("NEXUS_MODEL_URL", model.GEMINI_CHAT_COMPLETIONS)
+        status = c.get("/studio-api/status").json()
+        assert status["configured"] is True
+        assert status["provider_host"] == "generativelanguage.googleapis.com"
+        assert status["authority"] == "none"
+        assert "modes" not in status
+        assert status["configuration_id"] != BODY["configuration_id"]
+        assert "provider-secret-not-for-browser" not in json.dumps(status)
+        assert c.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 409
+        reviewed = {**BODY, "configuration_id": status["configuration_id"]}
+        assert c.post("/studio-api/respond", json=reviewed, headers=AUTH).json()["text"] == "Gemini-compatible draft"
+        assert c.post("/studio-api/respond", json={**reviewed, "mode": "thinking"}, headers=AUTH).status_code == 422
+        assert c.post("/studio-api/respond", json={**reviewed, "mode": "non-thinking"}, headers=AUTH).status_code == 422
+        assert c.post("/studio-api/respond", json={**reviewed, "consent": False}, headers=AUTH).status_code == 422
+        assert c.post("/studio-api/respond", json=reviewed, headers={}).status_code == 401
+        monkeypatch.setenv("NEXUS_MODEL_ADAPTER", "generic")
+        assert c.post("/studio-api/respond", json=reviewed, headers=AUTH).status_code == 409
+    assert len(requests) == 1
+
+
+def test_gemini_streaming_preserves_text_only_approval_and_no_tools(monkeypatch):
+    monkeypatch.setenv("NEXUS_MODEL_ADAPTER", "gemini")
+    monkeypatch.setenv("NEXUS_MODEL_STREAMING", "1")
+    wire = sse({"role": "assistant", "reasoning_content": "private thoughts"}) + \
+        sse({"content": "Reviewed streaming reply"}) + sse({}, "stop") + DONE
+    def handler(request):
+        payload = json.loads(request.content)
+        assert str(request.url) == model.GEMINI_CHAT_COMPLETIONS
+        assert payload["stream"] is True and payload["max_tokens"] == 2048
+        assert "store" not in payload and "tools" not in payload
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=wire)
+    with configured(monkeypatch, handler) as client:
+        monkeypatch.setenv("NEXUS_MODEL_URL", model.GEMINI_CHAT_COMPLETIONS)
+        status = client.get("/studio-api/status").json()
+        assert status["streaming"] is True
+        reviewed = {**BODY, "configuration_id": status["configuration_id"]}
+        response = client.post("/studio-api/respond-stream", json=reviewed, headers=AUTH)
+        assert response.status_code == 200
+        frames = [json.loads(line) for line in response.text.splitlines()]
+        assert [f["type"] for f in frames] == ["delta", "done"]
+        assert frames[0]["text"] == "Reviewed streaming reply"
+        assert frames[-1]["authority"] == "none" and frames[-1]["origin"] == "model"
+        assert "private thoughts" not in response.text
+
+
 @pytest.mark.parametrize('fields',[{'mode':'thinking'},{'mode':'non-thinking'},{'max_output_tokens':True},{'max_output_tokens':8193},{'max_output_tokens':0},{'max_output_tokens':1.2},{'mode':'made-up'}])
 def test_modes_and_budgets_fail_before_upstream(monkeypatch,fields):
     with configured(monkeypatch,lambda _:pytest.fail('unsupported input reached provider')) as c:

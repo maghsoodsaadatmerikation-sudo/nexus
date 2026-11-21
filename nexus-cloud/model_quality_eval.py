@@ -20,8 +20,8 @@ from studio_model import (
     MODEL_TIMEOUT,
     POLICY,
     accepted_buffered_answer,
-    adapter,
     config,
+    provider_payload,
 )
 
 
@@ -259,16 +259,12 @@ def query_provider(client: httpx.Client, provider: tuple[str, str, str, str],
     api_key = os.getenv("NEXUS_MODEL_API_KEY", "").strip()
     if api_key:
         headers["authorization"] = "Bearer " + api_key
-    payload = {
-        "model": model_id,
-        "store": False,
-        "stream": False,
-        "messages": [
-            {"role": "system", "content": POLICY},
-            {"role": "user", "content": probe.prompt},
-        ],
-        "max_tokens" if adapter() == "deepseek" else "max_completion_tokens": 256,
-    }
+    payload = provider_payload(
+        model_id,
+        [{"role": "system", "content": POLICY},
+         {"role": "user", "content": probe.prompt}],
+        stream=False, max_output_tokens=256,
+    )
     body = bytearray()
     with client.stream(
         "POST", endpoint, json=payload, headers=headers,
