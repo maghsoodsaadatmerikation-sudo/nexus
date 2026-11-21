@@ -1,0 +1,220 @@
+name: NEXUS Operational Merge Rehearsal (no publication)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/integration-merge-rehearsal.py'
+      - 'scripts/test-integration-merge-rehearsal.py'
+      - '.github/workflows/integration-merge-rehearsal.yml'
+      - 'docs/INTEGRATION-REHEARSAL-2026-11-13.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-candidate-rehearsal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout disposable candidate at immutable commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Confirm no deployment or data credentials are exposed
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${RAILWAY_TOKEN:-}"
+          test -z "${RENDER_API_KEY:-}"
+          test -z "${NEXUS_API_TOKEN:-}"
+          git diff --exit-code
+
+      - name: Validate parser failure-contract tests
+        run: python3 scripts/test-integration-merge-rehearsal.py
+
+      - name: Fetch immutable candidate refs without merging remote branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/pull/129/head:refs/remotes/origin/rehearsal-129 \
+            +refs/pull/134/head:refs/remotes/origin/rehearsal-134 \
+            +refs/pull/153/head:refs/remotes/origin/rehearsal-153 \
+            +refs/pull/155/head:refs/remotes/origin/rehearsal-155 \
+            +refs/pull/157/head:refs/remotes/origin/rehearsal-157
+
+      - name: Read-only exact-head merge-tree analysis
+        run: python3 scripts/integration-merge-rehearsal.py --output integration-rehearsal.json
+
+      - name: Verify report never authorizes deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          o=json.loads(Path("integration-rehearsal.json").read_text())
+          assert o["status"] == "REHEARSAL_COMPLETE_PRODUCTION_BLOCKED"
+          assert o["merge_executed"] is False
+          assert o["production_deployed"] is False
+          assert o["durable_restore_proven"] is False
+          assert o["render_autodeploy_safe"] is False
+          assert o["release_authorized"] is False
+          assert len(o["candidates"]) == 5
+          print("MERGE REHEARSAL EVIDENCE BOUNDARY: PASS")
+          PY
+
+      - name: Upload path-only rehearsal observation
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nexus-operational-merge-rehearsal
+          path: integration-rehearsal.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  isolated-stack-build:
+    name: isolated-stack-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout proposed observer at exact SHA
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Assemble temporary integration candidate without remote writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/pull/129/head:refs/remotes/origin/rehearsal-129 \
+            +refs/pull/130/head:refs/remotes/origin/rehearsal-130 \
+            +refs/pull/131/head:refs/remotes/origin/rehearsal-131 \
+            +refs/pull/132/head:refs/remotes/origin/rehearsal-132 \
+            +refs/pull/133/head:refs/remotes/origin/rehearsal-133 \
+            +refs/pull/134/head:refs/remotes/origin/rehearsal-134
+          for pair in '129 130' '130 131' '131 132' '132 133' '133 134'; do
+            set -- $pair
+            git merge-base --is-ancestor "refs/remotes/origin/rehearsal-$1" "refs/remotes/origin/rehearsal-$2"
+          done
+          main_sha="$(git rev-parse refs/remotes/origin/main)"
+          git config user.name "NEXUS Temporary Integration Lab"
+          git config user.email "nexus-lab@users.noreply.github.com"
+          git checkout --detach "$main_sha"
+          for n in 129 130 131 132 133 134; do
+            # Ours is used only for a disposable *hypothesis* about ambiguous
+            # regions. A green build is not proof that every feature survived.
+            git merge --no-ff --no-edit -s ort -X ours "refs/remotes/origin/rehearsal-$n"
+          done
+          # The generic -X ours heuristic masks three feature-route
+          # registrations in the gateway's heavily changed router. Keep the
+          # cumulative reviewed gateway implementation for this scratch test.
+          # This override is NOT a production merge resolution.
+          git show refs/remotes/origin/rehearsal-134:artifact-05/src/lib.rs > artifact-05/src/lib.rs
+          # Bring forward the two post-stack Studio public routes from main,
+          # rather than losing them when selecting PR #134's feature router.
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          target = Path("artifact-05/src/lib.rs")
+          feature = target.read_text()
+          main = subprocess.run(
+              ["git", "show", "refs/remotes/origin/main:artifact-05/src/lib.rs"],
+              check=True, capture_output=True, text=True,
+          ).stdout
+          start = main.index("async fn studio_model_status()")
+          end = main.index("async fn web_workspace()", start)
+          handlers = main[start:end]
+          assert 'async fn studio_workspace()' in handlers
+          assert 'async fn studio_model_status()' in handlers
+          anchor = '        .route("/", get(web_workspace))'
+          assert feature.count(anchor) == 1
+          feature = feature.replace(
+              anchor,
+              anchor + '\n        .route("/studio", get(studio_workspace))'
+                     + '\n        .route("/studio-api/status", get(studio_model_status))',
+          )
+          anchor = "async fn web_workspace()"
+          assert feature.count(anchor) == 1
+          feature = feature.replace(anchor, handlers + anchor)
+          target.write_text(feature)
+          PY
+          test -s artifact-05/src/lib.rs
+          test "$(git rev-list --count "$main_sha"..HEAD)" -ge 6
+          echo "DISPOSABLE_STACK_BASE_SHA=$main_sha" >> "$GITHUB_ENV"
+          echo "DISPOSABLE_STACK_HEAD_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo 'NEXUS DISPOSABLE STACK ASSEMBLY: COMPLETE (production blocked)'
+
+      - name: Compile, format and test core with pinned Rust image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e'
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp/home -e CARGO_HOME=/tmp/cargo \
+            -v "$PWD:/app" -w /app "$image" \
+            bash scripts/run_gates.sh
+
+      - name: Reconcile gateway lockfile in disposable candidate only
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='rust@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e'
+          cp artifact-05/Cargo.lock "$RUNNER_TEMP/gateway-lock.before"
+          # Git's temporary merge pulled in reqwest. Declare the repository's
+          # pinned minimum compiler and enforce MSRV-aware dependency selection.
+          # Both changes are disposable; no manifest or lock is published.
+          sed -i '/^edition = "2021"$/a rust-version = "1.85"' artifact-05/Cargo.toml
+          export CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback
+          # Only the scratch checkout is touched. New dependency resolutions
+          # require exact package review before any publication.
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp/home -e CARGO_HOME=/tmp/cargo \
+            -e CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
+            -v "$PWD:/app" -w /app "$image" \
+            cargo generate-lockfile --manifest-path artifact-05/Cargo.toml
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+          before=tomllib.loads(Path(__import__('os').environ['RUNNER_TEMP'], 'gateway-lock.before').read_text())
+          after=tomllib.loads(Path('artifact-05/Cargo.lock').read_text())
+          def packages(lock):
+              return {(p['name'],p['version'],p.get('source','path')) for p in lock['package']}
+          added=packages(after)-packages(before)
+          removed=packages(before)-packages(after)
+          print(f'DISPOSABLE LOCK DIFF: added={len(added)} removed={len(removed)}')
+          assert len(added)<200 and len(removed)<200
+          PY
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp/home -e CARGO_HOME=/tmp/cargo \
+            -v "$PWD:/app" -w /app "$image" \
+            cargo test --manifest-path artifact-05/Cargo.toml --locked
+
+      - name: Upload gateway lock for independent review (not release artifact)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: disposable-gateway-candidate-lock
+          path: artifact-05/Cargo.lock
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Explicitly block remote publishing
+        run: |
+          echo 'Candidate compiled only in disposable CI.'
+          echo 'Ours-resolved conflicts require semantic diff review.'
+          echo 'No push, deploy, restore, authority or release Seal occurred.'
