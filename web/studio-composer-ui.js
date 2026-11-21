@@ -304,8 +304,7 @@ function showWorkflow(){
     }:null;
     const localReceiver=local?(receipt)=>{
      if(workflowState!==plan||!retainedWorkflow()||plan.index!==i||
-        !plan.opened||receipt?.source!=='studio-local-tool'||
-        receipt?.completed!==true||receipt?.kind!==local||
+        !plan.opened||receipt?.completed!==true||receipt?.kind!==local||
         receipt.source!==(local==='data'?'studio-local-analysis':'studio-local-tool')||
         (local==='data'&&(!/^[a-f0-9]{64}$/.test(receipt.sha256||'')||
           !Number.isInteger(receipt.rows)||receipt.rows<0||
