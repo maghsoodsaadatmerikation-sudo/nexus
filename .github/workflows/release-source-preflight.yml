@@ -1,0 +1,76 @@
+name: NEXUS Release Source Preflight — Read Only
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Legacy release gate to inspect (no release or deploy)'
+        type: choice
+        required: true
+        options:
+          - v1.6
+          - v1.7
+          - v1.8
+          - v1.9
+          - v2.0
+          - v2.1
+          - v2.2
+          - v2.3
+          - v2.4
+          - v2.5
+      run_id:
+        description: 'Source verification GitHub Actions run ID'
+        type: string
+        required: true
+      sha:
+        description: 'Exact 40-character lowercase main commit SHA'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify-source:
+    name: read-only GitHub metadata origin verification
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact trusted main verifier without credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Reject malformed inputs before GitHub API calls
+        env:
+          SOURCE_RUN_ID: ${{ inputs.run_id }}
+          CANDIDATE_SHA: ${{ inputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]{0,18}$ ]]
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$CANDIDATE_SHA" = "$GITHUB_SHA"
+      - name: Independently fetch public run and main-branch identity (metadata only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SOURCE_RUN_ID: ${{ inputs.run_id }}
+          CANDIDATE_SHA: ${{ inputs.sha }}
+          RELEASE: ${{ inputs.release }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tempdir="$(mktemp -d)"
+          trap 'rm -rf "$tempdir"' EXIT
+          gh api "repos/${REPO}/actions/runs/${SOURCE_RUN_ID}" > "$tempdir/run.json"
+          gh api "repos/${REPO}" > "$tempdir/repo.json"
+          gh api "repos/${REPO}/branches/main" > "$tempdir/main.json"
+          python3 scripts/release-run-provenance.py \
+            --release "$RELEASE" --repo "$REPO" --run-id "$SOURCE_RUN_ID" \
+            --sha "$CANDIDATE_SHA" --workflow-sha "$GITHUB_SHA" \
+            --run-json "$tempdir/run.json" --repo-json "$tempdir/repo.json" \
+            --main-json "$tempdir/main.json"
+          echo "Metadata-only preflight passed. This does not grant release authority."
