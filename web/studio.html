@@ -3088,12 +3088,30 @@ applyLanguage();
 </script><script>'use strict';
 (function(){
 const T=NexusTable;let epoch=0,file=null,analysis=null,sourceStamp=null,summary='';
+let reviewedTask=null;
+// A workflow can observe only a NEW analysis started after it opened.
+// No source bytes, summary or selected file name are copied into receipts.
+function armReviewedStep(kind,callback){
+ if(kind!=='data'||typeof callback!=='function')return false;
+ reviewedTask={kind,callback};return true;
+}
+function clearReviewedStep(){reviewedTask=null}
+function reportReviewedStep(task,report){
+ if(reviewedTask!==task||!task||typeof report?.source?.sha256!=='string'||
+    !/^[a-f0-9]{64}$/.test(report.source.sha256)||
+    !Number.isInteger(report.rows)||report.rows<0||
+    !Number.isInteger(report.columns)||report.columns<1)return;
+ reviewedTask=null;
+ try{task.callback(Object.freeze({source:'studio-local-analysis',kind:'data',
+   completed:true,sha256:report.source.sha256,rows:report.rows,columns:report.columns}))}
+ catch{/* An observer cannot alter successful analysis or retain its source. */}
+}
 Object.assign(EN,{undoRemoval:'Undo last removal',undoDone:'Last removal restored in this tab. Save explicitly to retain it.',sourceNoMatch:'No whole-token source match was found.',sourceLimited:'Source search stopped at its 12,000-passage limit; some content was not searched.',capabilitiesTitle:'Capability status & shortcuts',shortcutsHelp:'Ctrl/Cmd+Enter in the message box prepares a model request when configured, otherwise opens the local guide. Ctrl/Cmd+Shift+S saves an unlocked archive. Escape stops pending work. Tools never send data merely from a shortcut.',capLocal:'Available locally: project history, encrypted archives, versioned writing, bounded table analysis, charts, code lab and sky calculations.',capRemote:'Public research requires an explicitly approved query and provider availability.',capModelReady:'Model configuration checked; each send still requires review.',capModelMissing:'Generative model is not active/checked. Local guide is non-generative. Images, live voice, background scheduling and authenticated app actions are not supplied by these tools.',dataTitle:'Integrated local data analysis',dataHelp:'Read CSV, TSV or a JSON array of flat objects locally, up to 1 MiB, 5,000 rows and 40 columns. Produces descriptive summaries, missing/invalid counts, pairwise Pearson correlations and group means/counts. These are approximate numerical summaries, not causal conclusions. Files and reports are not sent to a model automatically. Group previews show up to 12 groups; JSON exports include all groups and identify the selected measure. Large integer JSON identifiers retain their digits; nonzero values that underflow to zero are excluded from numerical summaries.',dataFile:'Temporary local dataset',dataSource:'Or choose an applied project source',dataRun:'Analyze selected data',dataGroup:'Group by (optional)',dataMetric:'Numeric column (optional)',dataChart:'Send grouped data to chart',dataCopy:'Copy summary into selected writing document',dataExport:'Export analysis JSON',dataNone:'None',dataFileOption:'Use temporary local file',dataWorking:'Analyzing locally…',dataDuplicateFields:"Analysis unavailable: duplicate JSON field names. Give each field in an object a unique name, then try again.",dataFailed:'Analysis unavailable. Check source selection, scalar CSV/JSON shape, numeric/chart bounds and capacity.',dataReady:'Analysis ready locally. The source hash identifies bytes, not truth.',dataEmpty:'Select a dataset, then analyze. No upload or code execution is performed.'});
 Object.assign(FA,{undoRemoval:'بازگردانی آخرین حذف',undoDone:'آخرین حذف در این برگه بازگردانده شد؛ برای نگهداری، خودت ذخیره کن.',sourceNoMatch:'تطبیق واژگانی در منابع پیدا نشد.',sourceLimited:'جست‌وجو پس از ۱۲٬۰۰۰ بخش متنی متوقف شد؛ بخشی از محتوا جست‌وجو نشده است.',capabilitiesTitle:'وضعیت قابلیت‌ها و میان‌برها',shortcutsHelp:'Ctrl/Cmd+Enter در کادر پیام، با مدل پیکربندی‌شده درخواست را آماده می‌کند و در غیر این صورت راهنمای محلی را اجرا می‌کند. Ctrl/Cmd+Shift+S آرشیو باز را ذخیره می‌کند. Escape کار در انتظار را متوقف می‌کند. میان‌بر به‌تنهایی داده‌ای ارسال نمی‌کند.',capLocal:'قابل استفادهٔ محلی: تاریخچه، آرشیو رمزگذاری‌شده، نوشتهٔ نسخه‌دار، تحلیل محدود داده، نمودار، آزمایشگاه کد و محاسبهٔ آسمان.',capRemote:'پژوهش عمومی به درخواست تأییدشده و در دسترس بودن ارائه‌دهنده نیاز دارد.',capModelReady:'پیکربندی مدل بررسی شده؛ هر ارسال همچنان نیاز به بازبینی دارد.',capModelMissing:'مدل مولد فعال یا بررسی نشده است؛ راهنمای محلی مولد نیست. تولید تصویر، صدای زنده، زمان‌بندی پس‌زمینه و اقدام در برنامه‌های متصل جزو این ابزارها نیستند.',dataTitle:'تحلیل یکپارچهٔ محلی داده',dataHelp:'CSV، TSV یا آرایهٔ JSON از اشیای تخت را محلی بخوان؛ تا ۱ میبی‌بایت، ۵٬۰۰۰ ردیف و ۴۰ ستون. خلاصهٔ توصیفی، شمار دادهٔ خالی و نامعتبر، همبستگی پیرسون زوجی و تعداد یا میانگین گروه‌ها ساخته می‌شود. اعداد تقریبی‌اند و نتیجهٔ علّی نیستند. فایل و گزارش خودکار به مدل فرستاده نمی‌شوند. پیش‌نمایش تا ۱۲ گروه را نشان می‌دهد؛ خروجی JSON همهٔ گروه‌ها و نام ستون عددی انتخاب‌شده را شامل می‌شود. رقم‌های شناسه‌های صحیحِ بزرگ JSON حفظ می‌شوند؛ مقادیر ناصفری که به‌علت کوچکی به صفر تبدیل می‌شوند در خلاصهٔ عددی محاسبه نمی‌شوند.',dataFile:'مجموعه‌دادهٔ محلیِ موقت',dataSource:'یا یک منبع اعمال‌شدهٔ پروژه را انتخاب کن',dataRun:'تحلیل دادهٔ انتخاب‌شده',dataGroup:'گروه‌بندی — اختیاری',dataMetric:'ستون عددی — اختیاری',dataChart:'فرستادن دادهٔ گروه‌بندی‌شده به نمودار',dataCopy:'کپی خلاصه در سند نوشتاریِ انتخاب‌شده',dataExport:'خروجی JSON تحلیل',dataNone:'هیچ‌کدام',dataFileOption:'استفاده از فایل محلی موقت',dataWorking:'در حال تحلیل محلی…',dataDuplicateFields:"تحلیل در دسترس نیست: نام فیلدهای JSON تکراری است. در هر شیء، برای هر فیلد نامی یکتا بگذار و دوباره تلاش کن.",dataFailed:'تحلیل در دسترس نیست؛ انتخاب منبع، ساختار تخت CSV یا JSON، محدودیت عدد و نمودار و ظرفیت را بررسی کن.',dataReady:'تحلیل محلی آماده شد؛ هش منبع فقط هویت بایت‌ها را مشخص می‌کند، نه درستی داده را.',dataEmpty:'داده را انتخاب و تحلیل کن؛ فایل ارسال و کدی اجرا نمی‌شود.'});
 Object.assign(EN,{dataChat:'Use analysis summary in next chat'});Object.assign(FA,{dataChat:'استفاده از خلاصهٔ تحلیل در پیام بعدی'});
 function cancel(){epoch++}
 function resetResult(){analysis=sourceStamp=null;summary='';$('data-summary').textContent='';$('data-group').replaceChildren();$('data-metric').replaceChildren();for(const id of ['data-chart','data-copy','data-export','data-chat'])$(id).disabled=true;renderStorage()}
-function clear(){cancel();file=null;$('data-file').value='';$('data-source').value='';resetResult();$('data-status').textContent=''}
+function clear(){clearReviewedStep();cancel();file=null;$('data-file').value='';$('data-source').value='';resetResult();$('data-status').textContent=''}
 function render(){
  const selected=$('data-source').value,source=p()?.sources.find(s=>s.id===sourceStamp?.id);
  if(sourceStamp?.project===null&&!sourceStamp.id)sourceStamp.project=projectId;
@@ -3118,7 +3136,10 @@ function show(){
 $('data-file').onchange=event=>{cancel();file=event.target.files[0]||null;event.target.value='';$('data-source').value='';resetResult();$('data-status').textContent=t('dataEmpty')};
 $('data-source').onchange=()=>{cancel();resetResult();$('data-status').textContent=t('dataEmpty')};
 $('data-run').onclick=async()=>{
- if(busy)return;stop();resetResult();const scope=epoch,project=projectId,source=p()?.sources.find(s=>s.id===$('data-source').value),selectedFile=file;
+ if(busy)return;stop();resetResult();
+ // Newer approved analyses supersede older in-flight reads/crypto operations.
+ const scope=++epoch,project=projectId,source=p()?.sources.find(s=>s.id===$('data-source').value),selectedFile=file;
+ const reviewed=reviewedTask?.kind==='data'?reviewedTask:null;
  $('data-status').textContent=t('dataWorking');
  try{
   const name=source?.name||selectedFile?.name;if(!name)throw Error('dataset');
@@ -3132,6 +3153,7 @@ $('data-run').onclick=async()=>{
   $('data-group').replaceChildren(option('-1',t('dataNone')),...table.columns.map((name,i)=>option(String(i),name)));
   $('data-metric').replaceChildren(option('-1',t('dataNone')),...table.columns.flatMap((name,i)=>report.column_stats[i].type==='numeric'?[option(String(i),name)]:[]));
   show();$('data-status').textContent=t('dataReady');renderStorage();
+  reportReviewedStep(reviewed,report);
  }catch(error){if(scope===epoch){resetResult();$('data-status').textContent=t(error.message==='json-duplicate-key'?'dataDuplicateFields':'dataFailed')}}
 };
 $('data-group').onchange=show;$('data-metric').onchange=show;
@@ -3140,7 +3162,9 @@ $('data-copy').onclick=()=>{if(!analysis||!doc()||busy||summary.length>100000)re
 $('data-chat').onclick=()=>{if(analysis&&!busy)window.NexusStudioUI?.stageChatContext(('Data analysis · '+analysis.report.source.name).slice(0,160),summary)};
 $('data-export').onclick=()=>{if(!analysis||!confirm(t('plain')))return;const group=Number($('data-group').value),metric=Number($('data-metric').value);download(JSON.stringify({...analysis.report,...T.groupReport(analysis.table,group,metric)},null,2),'nexus-analysis.json','application/json')};
 window.addEventListener('keydown',event=>{if(event.key==='Escape'){stop();return}if(!(event.ctrlKey||event.metaKey)||event.altKey)return;if(event.key==='Enter'&&event.target===$('message')){event.preventDefault();if(busy)return;(modelInfo?.configured?$('prepare'):$('guide')).click()}if(event.shiftKey&&event.key.toLowerCase()==='s'){event.preventDefault();if(!$('save').disabled)$('save').click()}});
-window.NexusQualityUI=Object.freeze({cancel,clear,render,refreshStatus:capabilities,hasTransientWork:()=>Boolean(file||analysis)});applyLanguage();
+document.addEventListener('nexus-studio-private-clear',clearReviewedStep);
+window.NexusQualityUI=Object.freeze({cancel,clear,armReviewedStep,clearReviewedStep,
+ render,refreshStatus:capabilities,hasTransientWork:()=>Boolean(file||analysis)});applyLanguage();
 })();
 </script><script>/* NEXUS Studio: opt-out chat-first mobile navigation; presentation-only. */
 (()=>{'use strict';
@@ -3674,8 +3698,12 @@ function parseWorkflow(message){
  }
  return {steps};
 }
-function clearWorkflow(){
+function clearLocalReviewers(){
  window.NexusLabUI?.clearReviewedStep?.();
+ window.NexusQualityUI?.clearReviewedStep?.();
+}
+function clearWorkflow(){
+ clearLocalReviewers();
  previewController?.abort();previewController=null;previewDraft=null;
  workflowState=null;workflow.hidden=true;workflow.replaceChildren();
 }
@@ -3734,7 +3762,7 @@ function expectedRead(step){
 }
 function expectedLocal(step){
  const kind=step.result.route[0];
- return kind==='research'||kind==='code'?kind:null;
+ return ['research','code','data'].includes(kind)?kind:null;
 }
 function showWorkflow(){
  if(!workflowState)return;
@@ -3744,8 +3772,8 @@ function showWorkflow(){
  title.textContent=words('Your reviewed workflow','گردش‌کار قابل بازبینی');
  const info=document.createElement('p');info.className='help';
  info.textContent=words(
-  'Opening a tool is not execution. Research and local code require a completed reviewed run; GitHub/Render reads need an approved gateway response. Other steps are self-reported. You can skip or discard.',
-  'بازکردن ابزار اجرا نیست. پژوهش و کد محلی به نتیجهٔ اجرای تأییدشده، و خواندن GitHub/Render به پاسخ معتبر درگاه نیاز دارد. سایر گام‌ها با گزارش خودت ثبت می‌شوند. می‌توانی رد کنی یا متوقف شوی.');
+  'Opening a tool is not execution. Research, data analysis and local code need a fresh, observed result; GitHub/Render reads need an approved gateway response. Other steps are self-reported. You may skip or discard.',
+  'بازکردن ابزار اجرا نیست. پژوهش، تحلیل داده و کد محلی نیاز به نتیجهٔ تازه و ثبت‌شده دارند؛ خواندن GitHub/Render نیز پاسخ معتبر درگاه می‌خواهد. گام‌ها قابل رد یا توقف‌اند.');
  const list=document.createElement('ol');
  plan.steps.forEach((step,i)=>{
   const item=document.createElement('li'),span=document.createElement('span');
@@ -3776,16 +3804,22 @@ function showWorkflow(){
     }:null;
     const localReceiver=local?(receipt)=>{
      if(workflowState!==plan||!retainedWorkflow()||plan.index!==i||
-        !plan.opened||receipt?.source!=='studio-local-tool'||
-        receipt?.completed!==true||receipt?.kind!==local||
+        !plan.opened||receipt?.completed!==true||receipt?.kind!==local||
+        receipt.source!==(local==='data'?'studio-local-analysis':'studio-local-tool')||
+        (local==='data'&&(!/^[a-f0-9]{64}$/.test(receipt.sha256||'')||
+          !Number.isInteger(receipt.rows)||receipt.rows<0||
+          !Number.isInteger(receipt.columns)||receipt.columns<1))||
         (local==='research'&&Boolean(step.result.query)&&
           receipt.query!==step.result.query))return;
-     plan.readReceipt={operation:local};showWorkflow();
+     plan.readReceipt={operation:local,...(local==='data'?{sha256:receipt.sha256}: {})};
+     showWorkflow();
     }:null;
     if(openReviewedSurface(step.result,step.line,
        required?{readOperation:required,onReadReceipt:receiver}:{})){
-     window.NexusLabUI?.clearReviewedStep?.();
-     const armed=!local||window.NexusLabUI?.armReviewedStep?.(local,localReceiver);
+     clearLocalReviewers();
+     const armed=!local||(local==='data'?
+       window.NexusQualityUI?.armReviewedStep?.(local,localReceiver):
+       window.NexusLabUI?.armReviewedStep?.(local,localReceiver));
      plan.opened=Boolean(armed);plan.readReceipt=null;showWorkflow();
     }
    };
@@ -3800,7 +3834,7 @@ function showWorkflow(){
     if(!validWorkflow()||!plan.opened||
        (receiptKey&&plan.readReceipt?.operation!==receiptKey))return;
     step.outcome=required?'gateway_read':local?'local_observed':'self_reported';
-    window.NexusLabUI?.clearReviewedStep?.();
+    clearLocalReviewers();
     plan.index++;plan.opened=false;plan.readReceipt=null;showWorkflow();
    };
    item.append(open,done);
@@ -3809,6 +3843,10 @@ function showWorkflow(){
     note.textContent=plan.readReceipt?.operation===receiptKey?
       required?words('Approved read response received; source content remains untrusted.',
         'پاسخ خواندن تأییدشده دریافت شد؛ محتوای منبع همچنان غیرقابل‌اعتماد است.'):
+       local==='data'?words('Local dataset analyzed; SHA256 '+plan.readReceipt.sha256.slice(0,12)+
+         '… identifies source bytes, not correctness. Review before confirming.',
+         'داده محلی تحلیل شد؛ SHA256 '+plan.readReceipt.sha256.slice(0,12)+
+         '… فقط هویت بایت‌هاست، نه صحت نتیجه. پیش از تأیید بررسی کن.'):
        words('A consented local tool run returned a result; review it before confirming.',
         'ابزار محلی با تأیید شما اجرا شد و نتیجه داد؛ پیش از تأیید آن را بررسی کن.'):
       required?words('Waiting for an approved read in the separate connection dialog.',
@@ -3822,7 +3860,7 @@ function showWorkflow(){
    skip.onclick=()=>{
     if(!retainedWorkflow()){clearWorkflow();return}
     if(!validWorkflow())return;
-    step.outcome='skipped';window.NexusLabUI?.clearReviewedStep?.();
+    step.outcome='skipped';clearLocalReviewers();
     plan.index++;plan.opened=false;plan.readReceipt=null;showWorkflow();
    };
    item.append(skip);

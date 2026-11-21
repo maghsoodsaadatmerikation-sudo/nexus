@@ -170,3 +170,40 @@ This does **not** add automatic web searches, remote code execution, provider
 account mutation, recurring jobs, memory creation, or autonomous model calls.
 Research and code still use their existing separate human-approval interfaces,
 and all tool outputs remain untrusted until reviewed.
+
+## Source-hashed, locally observed data-analysis steps (stacked candidate)
+
+The `/data` step now uses the same **separate result confirmation** as
+consented research and local JavaScript execution. Opening the analysis panel,
+having a report left over from a previous run, or selecting a file never
+unlocks completion.
+
+- The user chooses a local CSV/TSV/JSON file or an applied project source,
+  then explicitly clicks the existing **Analyze selected data** button.
+- The data tool runs in the browser under its existing 1 MiB, 5,000-row and
+  40-column capacity bounds. It rejects duplicate JSON keys, unsupported
+  structures, invalid UTF-8 and oversized inputs under its existing rules.
+- Only after table parsing, numerical analysis and SHA-256 hashing have
+  succeeded does the tool emit a **single-use, temporary callback**. The
+  callback carries the result kind, row and column counts, and the 64-digit
+  source-content SHA-256. It contains **no raw file bytes, filenames, table
+  rows, rendered summaries, model prompts or provider credentials**.
+- The chat validates the receipt kind, provenance, hash shape and numeric
+  bounds. It then enables a **separate confirmation** click. The hash
+  identifies input bytes; it does not certify the source or the conclusions.
+- Starting another analysis supersedes an earlier in-flight operation. File
+  replacement, cancellation, project navigation and private clear prevent
+  stale completions from rewriting a newer analysis. A skipped or discarded
+  step cannot reuse a prior receipt. The original local analyzer does not
+  transmit the file to a provider.
+
+Browser regression covers an intentionally malformed duplicate-key JSON file,
+a subsequent successful CSV analysis, and confirmation remaining disabled
+until the fresh result actually arrives. This is an observed local computation,
+**not autonomous model analysis, a verified scientific conclusion, or a
+durable audit record**.
+
+The new quality UI dependency is explicitly declared in Studio's deterministic
+module graph. The packaged standalone and installable public shells have
+their SHA-256 digest, length and service-worker cache identity re-pinned.
+The HTML remains under the reviewed 630,000-byte public asset ceiling.

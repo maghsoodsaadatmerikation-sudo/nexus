@@ -198,8 +198,12 @@ function parseWorkflow(message){
  }
  return {steps};
 }
-function clearWorkflow(){
+function clearLocalReviewers(){
  window.NexusLabUI?.clearReviewedStep?.();
+ window.NexusQualityUI?.clearReviewedStep?.();
+}
+function clearWorkflow(){
+ clearLocalReviewers();
  previewController?.abort();previewController=null;previewDraft=null;
  workflowState=null;workflow.hidden=true;workflow.replaceChildren();
 }
@@ -258,7 +262,7 @@ function expectedRead(step){
 }
 function expectedLocal(step){
  const kind=step.result.route[0];
- return kind==='research'||kind==='code'?kind:null;
+ return ['research','code','data'].includes(kind)?kind:null;
 }
 function showWorkflow(){
  if(!workflowState)return;
@@ -268,8 +272,8 @@ function showWorkflow(){
  title.textContent=words('Your reviewed workflow','گردش‌کار قابل بازبینی');
  const info=document.createElement('p');info.className='help';
  info.textContent=words(
-  'Opening a tool is not execution. Research and local code require a completed reviewed run; GitHub/Render reads need an approved gateway response. Other steps are self-reported. You can skip or discard.',
-  'بازکردن ابزار اجرا نیست. پژوهش و کد محلی به نتیجهٔ اجرای تأییدشده، و خواندن GitHub/Render به پاسخ معتبر درگاه نیاز دارد. سایر گام‌ها با گزارش خودت ثبت می‌شوند. می‌توانی رد کنی یا متوقف شوی.');
+  'Opening a tool is not execution. Research, data analysis and local code need a fresh, observed result; GitHub/Render reads need an approved gateway response. Other steps are self-reported. You may skip or discard.',
+  'بازکردن ابزار اجرا نیست. پژوهش، تحلیل داده و کد محلی نیاز به نتیجهٔ تازه و ثبت‌شده دارند؛ خواندن GitHub/Render نیز پاسخ معتبر درگاه می‌خواهد. گام‌ها قابل رد یا توقف‌اند.');
  const list=document.createElement('ol');
  plan.steps.forEach((step,i)=>{
   const item=document.createElement('li'),span=document.createElement('span');
@@ -300,16 +304,22 @@ function showWorkflow(){
     }:null;
     const localReceiver=local?(receipt)=>{
      if(workflowState!==plan||!retainedWorkflow()||plan.index!==i||
-        !plan.opened||receipt?.source!=='studio-local-tool'||
-        receipt?.completed!==true||receipt?.kind!==local||
+        !plan.opened||receipt?.completed!==true||receipt?.kind!==local||
+        receipt.source!==(local==='data'?'studio-local-analysis':'studio-local-tool')||
+        (local==='data'&&(!/^[a-f0-9]{64}$/.test(receipt.sha256||'')||
+          !Number.isInteger(receipt.rows)||receipt.rows<0||
+          !Number.isInteger(receipt.columns)||receipt.columns<1))||
         (local==='research'&&Boolean(step.result.query)&&
           receipt.query!==step.result.query))return;
-     plan.readReceipt={operation:local};showWorkflow();
+     plan.readReceipt={operation:local,...(local==='data'?{sha256:receipt.sha256}: {})};
+     showWorkflow();
     }:null;
     if(openReviewedSurface(step.result,step.line,
        required?{readOperation:required,onReadReceipt:receiver}:{})){
-     window.NexusLabUI?.clearReviewedStep?.();
-     const armed=!local||window.NexusLabUI?.armReviewedStep?.(local,localReceiver);
+     clearLocalReviewers();
+     const armed=!local||(local==='data'?
+       window.NexusQualityUI?.armReviewedStep?.(local,localReceiver):
+       window.NexusLabUI?.armReviewedStep?.(local,localReceiver));
      plan.opened=Boolean(armed);plan.readReceipt=null;showWorkflow();
     }
    };
@@ -324,7 +334,7 @@ function showWorkflow(){
     if(!validWorkflow()||!plan.opened||
        (receiptKey&&plan.readReceipt?.operation!==receiptKey))return;
     step.outcome=required?'gateway_read':local?'local_observed':'self_reported';
-    window.NexusLabUI?.clearReviewedStep?.();
+    clearLocalReviewers();
     plan.index++;plan.opened=false;plan.readReceipt=null;showWorkflow();
    };
    item.append(open,done);
@@ -333,6 +343,10 @@ function showWorkflow(){
     note.textContent=plan.readReceipt?.operation===receiptKey?
       required?words('Approved read response received; source content remains untrusted.',
         'پاسخ خواندن تأییدشده دریافت شد؛ محتوای منبع همچنان غیرقابل‌اعتماد است.'):
+       local==='data'?words('Local dataset analyzed; SHA256 '+plan.readReceipt.sha256.slice(0,12)+
+         '… identifies source bytes, not correctness. Review before confirming.',
+         'داده محلی تحلیل شد؛ SHA256 '+plan.readReceipt.sha256.slice(0,12)+
+         '… فقط هویت بایت‌هاست، نه صحت نتیجه. پیش از تأیید بررسی کن.'):
        words('A consented local tool run returned a result; review it before confirming.',
         'ابزار محلی با تأیید شما اجرا شد و نتیجه داد؛ پیش از تأیید آن را بررسی کن.'):
       required?words('Waiting for an approved read in the separate connection dialog.',
@@ -346,7 +360,7 @@ function showWorkflow(){
    skip.onclick=()=>{
     if(!retainedWorkflow()){clearWorkflow();return}
     if(!validWorkflow())return;
-    step.outcome='skipped';window.NexusLabUI?.clearReviewedStep?.();
+    step.outcome='skipped';clearLocalReviewers();
     plan.index++;plan.opened=false;plan.readReceipt=null;showWorkflow();
    };
    item.append(skip);
