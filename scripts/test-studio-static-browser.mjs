@@ -288,6 +288,20 @@ try{
  assert(await js("document.getElementById('studio-video-start').disabled===false"),'equal-scene-preset-must-still-work');
  checks.push('per-scene-duration-scrub-variable-crossfade-and-audio-mix-controls');
 
+ stage='non-destructive-scene-split-and-audio-offset-controls';
+ const initialSplit=await js("(()=>{const custom=document.getElementById('studio-video-individual-timing');custom.checked=true;custom.dispatchEvent(new Event('change'));const rows=[...document.querySelectorAll('#studio-video-scenes [role=listitem]')],button=rows[1].querySelector('[data-scene-action=split]'),delay=document.getElementById('studio-video-audio-delay'),skip=document.getElementById('studio-video-audio-skip');delay.value='0.5';delay.dispatchEvent(new Event('change'));skip.value='1';skip.dispatchEvent(new Event('change'));const audioLabel=document.getElementById('studio-video-audio').value;const available=!button.disabled;button.click();return {available,delay:delay.value,skip:skip.value,audioLabel}})()");
+ assert(initialSplit.available&&initialSplit.delay==='0.5'&&initialSplit.skip==='1','split-or-audio-offset-ui-missing-'+JSON.stringify(initialSplit));
+ await poll(()=>retryJs("document.querySelectorAll('#studio-video-scenes [role=listitem]').length===3"),5000,'scene-split-into-three');
+ const splitProof=await js("(()=>{const rows=[...document.querySelectorAll('#studio-video-scenes [role=listitem]')],durations=rows.map(r=>Number(r.querySelector('[data-scene-seconds]').value)),buttons=rows[2].querySelector('[data-scene-action=preview]');buttons.click();const cv=document.getElementById('studio-video-canvas'),px=[...cv.getContext('2d').getImageData(cv.width/2,cv.height/2,1,1).data].slice(0,3);const second=rows[2].querySelector('[data-scene-motion]');second.value='right';second.dispatchEvent(new Event('change'));return {durations,total:document.getElementById('studio-video-total').textContent,px,motions:rows.map(r=>r.querySelector('[data-scene-motion]').value)}})()");
+ assert(splitProof.durations.join(',')==='1,1,2'&&splitProof.total.includes('4.00 s')&&splitProof.px[0]>splitProof.px[2]*2&&splitProof.motions[2]==='right'&&splitProof.motions[1]==='still','split-scene-duration-motion-privacy-'+JSON.stringify(splitProof));
+ await js("document.querySelectorAll('#studio-video-scenes [role=listitem]')[2].querySelector('[data-scene-action=split]').click();true");
+ await poll(()=>retryJs("document.querySelectorAll('#studio-video-scenes [role=listitem]').length===4"),5000,'four-scene-split');
+ assert(await js("[...document.querySelectorAll('#studio-video-scenes [data-scene-action=split]')].every(b=>b.disabled)"),'split-must-obey-four-scene-cap');
+ await js("(()=>{let rows=[...document.querySelectorAll('#studio-video-scenes [role=listitem]')];rows[3].querySelector('[data-scene-action=remove]').click();rows=[...document.querySelectorAll('#studio-video-scenes [role=listitem]')];rows[2].querySelector('[data-scene-action=remove]').click();const custom=document.getElementById('studio-video-individual-timing');custom.checked=false;custom.dispatchEvent(new Event('change'));document.getElementById('studio-video-audio-delay').value='0';document.getElementById('studio-video-audio-skip').value='0';return true})()");
+ assert(await js("document.querySelectorAll('#studio-video-scenes [role=listitem]').length===2&&document.getElementById('studio-video-start').disabled===false&&!JSON.stringify(NexusStudioUI.snapshot()).includes('02-blue.png')"),'split-cleanup-or-archive-leak');
+ checks.push('split-scenes-preserve-total-motion-and-bounds-with-configurable-audio-offset');
+
+
 
  if(videoSupported){
   await js("(()=>{document.getElementById('studio-video-aspect').value='portrait';document.getElementById('studio-video-aspect').dispatchEvent(new Event('change'));document.getElementById('studio-video-duration').value='3';return true})()");
