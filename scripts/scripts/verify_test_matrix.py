@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-import os
-import sys
+"""Compatibility entrypoint: run the real, fail-closed preflight.
 
-def main():
-    print("[PREFLIGHT] Checking test matrix presence...")
-    # Add your specific CT-001 to CT-038 checks here
-    # If you have the real file, copy it over. 
-    print("TEST-MATRIX: PASS")
-    sys.exit(0)
+This historical nested path must never print PASS without doing the checks.
+"""
 
-if __name__ == "__main__":
-    main()
+from pathlib import Path
+import runpy
+
+runpy.run_path(str(Path(__file__).resolve().parents[1] / 'verify_test_matrix.py'),
+               run_name='__main__')
