@@ -4711,7 +4711,7 @@ const insertAfter=$('studio-local-image-panel')||$('studio-imagegen-panel')||$('
 insertAfter.after(box);$('nexus-zen-suggestions').append(shortcut);
 
 const MAX_IMAGE=6_000_000,MAX_AUDIO=8_000_000,MAX_PIXELS=8_000_000,MAX_OUTPUT=32_000_000;
-let image=null,music=null,recording=null,videoURL=null,format=null,epoch=0,loading=false;
+let image=null,music=null,recording=null,videoURL=null,format=null,epoch=0,loading=false,preparing=false;
 let selected=selection();
 function selection(){
  const s=window.NexusStudioUI.selection?.()||{};
@@ -4768,14 +4768,14 @@ function wipe(){
  epoch++;
  stopJob(true);
  if(image?.close)image.close();
- image=music=null;photo.value='';audio.value='';loading=false;
+ image=music=null;photo.value='';audio.value='';loading=false;preparing=false;
  previewClear();canvas.hidden=true;meter.value=0;message('','');refresh();
 }
 function refresh(){
- const running=Boolean(recording),unavailable=!mimeType();
- photo.disabled=audio.disabled=generated.disabled=aspect.disabled=duration.disabled=fade.disabled=running||loading;
- start.disabled=running||loading||!image||unavailable;
- cancel.disabled=!running;
+ const running=Boolean(recording),blocked=running||loading||preparing,unavailable=!mimeType();
+ photo.disabled=audio.disabled=generated.disabled=aspect.disabled=duration.disabled=fade.disabled=blocked;
+ start.disabled=blocked||!image||unavailable;
+ cancel.disabled=!running&&!preparing;
  clear.disabled=loading;
  download.disabled=!videoURL;
  canvas.hidden=!image;
@@ -4844,10 +4844,10 @@ audio.addEventListener('change',()=>{
 for(const control of [aspect,duration,fade])
  control.addEventListener('change',()=>{if(!recording){previewClear();layout();refresh()}});
 async function startRecording(){
- if(recording||loading||!image||!mimeType())return;
+ if(recording||loading||preparing||!image||!mimeType())return;
  const current=++epoch,scope=selection(),seconds=Number(duration.value);
  if(![3,6,10,12].includes(seconds)){message('Choose a supported duration.','مدت مجاز را انتخاب کن.');return}
- previewClear();meter.value=0;layout();
+ preparing=true;previewClear();meter.value=0;layout();refresh();
  let ctx=null,audioBuffer=null,stream=null,recorder=null,audioSource=null;
  try{
   // Construct/resume the audio context directly from the user's click.
@@ -4877,7 +4877,7 @@ async function startRecording(){
    mimeType:selectedMime,videoBitsPerSecond:950000,audioBitsPerSecond:96000});
   const job={recorder,stream,audioContext:ctx,audioSource,frame:0,watchdog:0,
    parts:[],size:0,discard:false,type:recorder.mimeType||selectedMime,finished:false};
-  recording=job;refresh();
+  recording=job;preparing=false;refresh();
   recorder.addEventListener('dataavailable',event=>{
    if(job.discard||!event.data?.size)return;
    job.size+=event.data.size;
@@ -4927,14 +4927,14 @@ async function startRecording(){
    try{audioSource?.stop()}catch{}
    ctx?.close().catch(()=>{});
   }
-  if(current===epoch)message(
+  if(current===epoch){preparing=false;message(
    'Video recording unavailable. Check browser MediaRecorder/audio support and file limits.',
-   'ضبط ویدیو در دسترس نیست؛ پشتیبانی مرورگر و محدودیت فایل‌ها را بررسی کن.');
+   'ضبط ویدیو در دسترس نیست؛ پشتیبانی مرورگر و محدودیت فایل‌ها را بررسی کن.');}
   refresh();
  }
 }
 start.addEventListener('click',startRecording);
-cancel.addEventListener('click',()=>{if(recording)stopJob(true)});
+cancel.addEventListener('click',()=>{if(recording)stopJob(true);else if(preparing){epoch++;preparing=false;message('Preparation cancelled.','آماده‌سازی لغو شد.');refresh()}});
 clear.addEventListener('click',wipe);
 download.addEventListener('click',()=>{
  if(!videoURL)return;
