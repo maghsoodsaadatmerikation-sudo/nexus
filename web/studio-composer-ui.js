@@ -23,7 +23,10 @@ const config=document.createElement('button');config.type='button';config.id='st
 const modelStrip=document.createElement('div');modelStrip.id='studio-compose-model-info';modelStrip.className='studio-compose-model-info';modelStrip.hidden=true;
 const modelState=document.createElement('p');modelState.id='studio-compose-model-state';modelState.className='help';modelState.setAttribute('role','status');modelState.setAttribute('aria-live','polite');
 const modelCheck=document.createElement('button');modelCheck.id='studio-compose-model-check';modelCheck.type='button';modelCheck.className='secondary';
-modelStrip.append(modelState,modelCheck);
+const modelSelectLabel=document.createElement('label');modelSelectLabel.id='studio-compose-choice-label';modelSelectLabel.htmlFor='studio-compose-choice';modelSelectLabel.hidden=true;
+const modelSelect=document.createElement('select');modelSelect.id='studio-compose-choice';
+modelSelectLabel.append(modelSelect);
+modelStrip.append(modelState,modelSelectLabel,modelCheck);
 const privacy=document.createElement('p');privacy.id='studio-compose-privacy';privacy.className='help';
 privacy.setAttribute('role','note');
 const storage=document.createElement('p');storage.id='studio-compose-storage';storage.className='help';storage.setAttribute('role','status');storage.setAttribute('aria-live','polite');
@@ -349,7 +352,7 @@ function offerTool(message,result){
  offer.append(p,open,proceed,dismiss);
 }
 
-let running=false,temporaryModel=false;
+let running=false,temporaryModel=false,lastModelChoices='';
 function refresh(){
  const state=window.NexusStudioUI.uiStatus();
  if(!state)return;
@@ -371,6 +374,22 @@ function refresh(){
  send.setAttribute('aria-label',send.textContent);
  select.disabled=state.busy;
  const availability=window.NexusStudioUI.modelAvailability?.()||{kind:'gateway',checked:false,configured:false};
+ const available=window.NexusStudioUI.availableModelOptions?.()||[];
+ const signature=JSON.stringify(available);
+ if(signature!==lastModelChoices){
+  lastModelChoices=signature;
+  modelSelect.replaceChildren(...available.map(item=>{
+   const opt=document.createElement('option');opt.value=item.slot;
+   opt.textContent=item.model+' · '+item.providerHost;return opt;
+  }));
+ }
+ modelSelectLabel.hidden=!model||available.length<2;
+ modelSelectLabel.firstChild && (modelSelectLabel.firstChild.nodeType===3?
+  modelSelectLabel.firstChild.textContent=words('Model','مدل'):void 0);
+ if(!modelSelectLabel.firstChild||modelSelectLabel.firstChild.nodeType!==3)
+  modelSelectLabel.prepend(document.createTextNode(words('Model','مدل')));
+ modelSelect.value=availability.slot||'primary';
+ modelSelect.disabled=state.busy||state.attachmentLoading;
  modelStrip.hidden=!model;
  modelCheck.disabled=state.busy||state.attachmentLoading;
  modelCheck.textContent=availability.kind==='device'?
@@ -395,8 +414,8 @@ function refresh(){
  config.disabled=state.busy;
  config.textContent=words('Model settings','تنظیمات مدل');
  privacy.textContent=model?
-  words('One server model is configured at a time. Review exact context and approve each send; provider charges may apply.',
-        'در هر لحظه یک مدل سروری تنظیم می‌شود. متن دقیق را بازبینی و هر ارسال را تأیید کن؛ ممکن است هزینه داشته باشد.'):
+  words('Only operator-configured models appear. Review exact context and approve each send; provider charges may apply.',
+        'فقط مدل‌های تنظیم‌شده در سرور نمایش داده می‌شوند. متن دقیق و هر ارسال را تأیید کن؛ ممکن است هزینه داشته باشد.'):
   words('Local guide only — not generative AI. It cannot read attached files or contact a provider.',
         'فقط راهنمای محلی است، نه هوش مصنوعی مولد؛ فایل پیوست نمی‌خواند یا با ارائه‌دهنده تماس نمی‌گیرد.');
  storage.textContent=state.vaultUnlocked?
@@ -456,6 +475,10 @@ config.addEventListener('click',()=>{
  settings.querySelector('summary')?.focus({preventScroll:true});
 });
 modelCheck.addEventListener('click',()=>{if(!modelCheck.disabled)$('check-model').click()});
+modelSelect.addEventListener('change',()=>{
+ if(!window.NexusStudioUI.selectModelSlot?.(modelSelect.value))refresh();
+ else {clearOffer();closeDirectory();refresh()}
+});
 select.addEventListener('change',()=>{
  temporaryModel=false;clearOffer();closeDirectory();
  window.NexusStudioUI.revokeModelReview?.();
