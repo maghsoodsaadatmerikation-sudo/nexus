@@ -276,7 +276,7 @@ try{
   assert(videoProof.length>1000&&videoProof.length<=32000000&&(isWebm||isMp4)&&!videoProof.downloadDisabled,'local-video-file-invalid-'+JSON.stringify(videoProof));
   assert(await js("!JSON.stringify(NexusStudioUI.snapshot()).includes('PRIVATE-VIDEO-FIXTURE')&&performance.getEntriesByType('resource').every(x=>!x.name.includes('/studio-api/generate-video'))"),'video-must-not-upload-or-archive');
   await js("document.getElementById('studio-video-clear').click();true");
-  assert(await js("document.getElementById('studio-video-preview').hidden&&document.getElementById('studio-video-photo').value===''&&document.getElementById('studio-video-download').disabled"),'video-private-clear-failed');
+  assert(await js("document.getElementById('studio-video-preview').hidden&&document.getElementById('studio-video-photo').value===''&&document.getElementById('studio-video-canvas').width===0&&document.getElementById('studio-video-download').disabled"),'video-private-clear-failed');
   checks.push('real-local-image-to-video-output-uncropped-portrait-and-private');
  }else{
   assert(await js("document.getElementById('studio-video-start').disabled"),'unsupported-video-must-fail-closed');
