@@ -5,10 +5,10 @@ import stat
 
 # Bounded Studio asset budget, including local Office text extraction and
 # bilingual decision support in the standalone HTML.
-# The reviewed image-generation controls add about 14 KiB to the embedded
-# Studio shell. Retain a tight hard asset ceiling above the measured
-# 626,371-byte candidate rather than disabling the file-inventory gate.
-MAX_FILE = 640_000
+# Image and local-video controls increase the deterministic Studio page.
+# Keep a bounded file inventory with a narrow ceiling above the measured
+# 653,138-byte standalone output; unreviewed files still fail closed.
+MAX_FILE = 670_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000
