@@ -57,6 +57,10 @@ def main():
             raise ValueError("Studio HTML is missing; use a complete repository checkout")
         provider_names = ("NEXUS_MODEL_URL", "NEXUS_MODEL_ID", "NEXUS_MODEL_API_KEY", "NEXUS_MODEL_ADAPTER")
         provider_env = {name: os.environ[name] for name in provider_names if name in os.environ}
+        # Forward the separate local attempt guard without treating it as a
+        # provider credential or silently discarding the operator's limit.
+        budget_name = "NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS"
+        budget_env = {budget_name: os.environ[budget_name]} if budget_name in os.environ else {}
         connector_names = ("NEXUS_CONNECTOR_GITHUB_REPO", "NEXUS_CONNECTOR_GITHUB_TOKEN",
                            "NEXUS_CONNECTOR_RENDER_SERVICE", "NEXUS_CONNECTOR_RENDER_TOKEN",
                            "NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN", "NEXUS_CONNECTOR_GITHUB_FILE_TOKEN")
@@ -95,7 +99,8 @@ def main():
         # Do not inherit core authority tokens, proxy settings, Python injection,
         # external CORS origins or unrelated service credentials into this child.
         env = {"PATH": os.defpath, "LANG": "C.UTF-8", "PYTHONNOUSERSITE": "1",
-               "PYTHONDONTWRITEBYTECODE": "1", "NEXUS_STUDIO_TOKEN": token, **provider_env, **connector_env}
+               "PYTHONDONTWRITEBYTECODE": "1", "NEXUS_STUDIO_TOKEN": token, **provider_env,
+               **budget_env, **connector_env}
         signal.signal(signal.SIGTERM, stop)
         signal.signal(signal.SIGINT, stop)
         process = subprocess.Popen(

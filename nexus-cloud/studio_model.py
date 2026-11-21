@@ -5,6 +5,7 @@ import hmac
 import hashlib
 import json
 import os
+from threading import Lock
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 from pathlib import Path
@@ -20,6 +21,38 @@ from transport_bounds import read_bounded_body
 MAX_INPUT = 96000
 MAX_OUTPUT = 128000
 MODEL_TIMEOUT = 45
+DEFAULT_MODEL_REQUEST_LIMIT = 32
+MAX_MODEL_REQUEST_LIMIT = 4096
+
+
+class ModelRequestBudget:
+    """Per-process upper bound on provider attempts, not a global billing cap.
+
+    Consume a slot before trying an external request; never refund on failure,
+    timeout, cancellation or disconnect. A process restart or another worker
+    has its own counter, so provider-side spend/quota limits are still required.
+    """
+
+    def __init__(self, raw_limit: str | None = None) -> None:
+        raw = os.getenv("NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS") if raw_limit is None else raw_limit
+        if raw is None:
+            limit = DEFAULT_MODEL_REQUEST_LIMIT
+        elif raw.isascii() and raw.isdecimal() and len(raw) <= 4 and 0 <= int(raw) <= MAX_MODEL_REQUEST_LIMIT:
+            limit = int(raw)
+        else:
+            limit = 0  # Invalid operator configuration fails closed.
+        self.limit = limit
+        self._attempted = 0
+        self._lock = Lock()
+
+    def reserve(self) -> bool:
+        with self._lock:
+            if self._attempted >= self.limit:
+                return False
+            self._attempted += 1
+            return True
+
+
 # Gemini's official OpenAI-compatible Chat Completions endpoint. An exact
 # destination is required when Gemini credentials are used, preventing a
 # misconfigured arbitrary host from receiving the provider key.
@@ -379,6 +412,15 @@ def register(app):
             payload = provider_payload(c.model_id, messages, stream=stream,
                                        max_output_tokens=data.max_output_tokens,
                                        mode=data.mode, adapter_name=c.adapter)
+            # The per-process attempt is charged only after authentication,
+            # request bounds, explicit consent and configuration review pass.
+            # Never refund a charged attempt: an interrupted call can still
+            # reach and be billed by the upstream provider.
+            if not request.app.state.model_budget.reserve():
+                raise HTTPException(
+                    429, "Local model request budget exhausted or disabled",
+                    headers={"Cache-Control": "no-store"},
+                )
             if stream:
                 return CompletionStream(response_frames(request, c.endpoint, headers, payload),
                                         media_type="application/x-ndjson",
