@@ -80,6 +80,54 @@ hosting permissions have not been configured, the action is **not ready for a
 real paid test**. Its existence does not mean providers are connected.
 The workflow emits only redacted JSON; no raw-provider answers are uploaded.
 
+## Auditable result receipt — review only, never deployment authority
+
+Every approved GitHub Actions comparison stores a bounded **allowlisted JSON
+receipt** as the `nexus-model-comparison-evidence` artifact for **14 days**,
+including when the synthetic benchmark fails. The raw in-memory model answers
+never enter either artifact or workflow logs. The private intermediate JSON
+is kept only in the ephemeral GitHub Actions runner and not uploaded.
+
+The receipt records the exact 40-character checkout commit, GitHub run ID
+and run attempt, selected fixed model slots, the aggregate outcome and
+total attempted provider requests. The original comparison JSON is parsed
+with duplicate-field rejection and a 32 KiB size limit. Unknown fields,
+a provider credential, full endpoint, raw answer, an inflated score,
+a forged release approval or inconsistent attempt counts cause the receipt
+builder to fail **closed**. There is no automatic retry or fallback to
+another provider when the upstream comparison errors.
+
+The artifact contains `receipt_sha256`: an unkeyed SHA-256 digest of the
+canonical redacted receipt. This detects accidental tampering **when a trusted
+artifact copy/digest is retained** but is **not an independent signature**,
+remote-provider attestation, invoice validation or proof of the actual service
+deployment. The reported GitHub run identity is runtime-supplied context;
+users must corroborate it against the corresponding real Actions run and commit.
+
+To validate a downloaded artifact locally:
+
+```sh
+cd nexus-cloud
+python -m model_compare_evidence --verify --artifact /path/to/nexus-model-comparison-evidence.json
+```
+
+A successful verification can only report
+`RECEIPT_DIGEST_AND_SCHEMA_PASS`. It **cannot** authorize release; every
+receipt contains `release_state:
+HOLD_INDEPENDENT_PROVIDER_COST_DEPLOY_AND_ROLLBACK_EVIDENCE`, plus explicit
+false values for deployment permission, public origin verification, real
+provider billing verification, independent provider-response attestation
+and Render rollback verification.
+
+Before any public production claim, obtain a separate currently verified
+service/workspace identity, provider access and account quota evidence,
+independent public HTTPS/Chromium acceptance, owner-device/archive testing,
+an **actually restorable** prior deployment and explicit service-specific
+owner authorization. The public static Studio release candidate and
+existing independent read-only Render witness workflows remain separate.
+No comparator artifact initiates an Actions deployment, Render build,
+Railway change, expense or model call by itself.
+
 ## Release gate
 
 - CI runs exclusively with HTTPX mocks: no operator secrets and no paid provider connections.
