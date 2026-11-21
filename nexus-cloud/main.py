@@ -66,6 +66,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.client = client
         app.state.connections_limiter = anyio.CapacityLimiter(4)
         app.state.model_limiter = anyio.CapacityLimiter(4)
+        app.state.model_budget = studio_model.ModelRequestBudget()
         app.state.vision_quota = studio_vision.ProcessVisionQuota()
         app.state.gateway_limiter = anyio.CapacityLimiter(MAX_DELEGATED_REQUESTS)
         yield
