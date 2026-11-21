@@ -256,6 +256,35 @@ try{
  assert(await js("document.getElementById('studio-local-image-canvas').hidden&&document.getElementById('studio-local-image-canvas').width===0&&document.getElementById('studio-local-image-file').value===''"),'offline-image-not-erased');
  checks.push('real-offline-image-editing-full-frame-reset-download-and-clear');
 
+ stage='video-chat-tool-and-local-privacy';
+ assert(await js("Boolean(document.getElementById('studio-video-open'))&&Boolean(document.getElementById('studio-video-panel'))&&document.getElementById('studio-video-start').disabled"),'video-must-be-chat-linked-but-disabled-without-photo');
+ await js("document.getElementById('studio-video-open').click();true");
+ assert(await js("document.getElementById('studio-video-panel').open"),'video-panel-did-not-open');
+ const videoSupported=await js("typeof MediaRecorder!=='undefined'&&typeof HTMLCanvasElement.prototype.captureStream==='function'&&['video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm','video/mp4'].some(x=>MediaRecorder.isTypeSupported(x))");
+ await js("(async()=>{const source=document.createElement('canvas');source.width=8;source.height=6;const c=source.getContext('2d');c.fillStyle='#823456';c.fillRect(0,0,8,6);const b=await new Promise(resolve=>source.toBlob(resolve,'image/png'));const picker=document.getElementById('studio-video-photo'),dt=new DataTransfer();dt.items.add(new File([b],'PRIVATE-VIDEO-FIXTURE.png',{type:'image/png'}));picker.files=dt.files;picker.dispatchEvent(new Event('change'));return true})()");
+ await poll(()=>retryJs("!document.getElementById('studio-video-canvas').hidden&&document.getElementById('studio-video-canvas').width===640"),5000,'video-local-photo-decode');
+ assert(await js("!JSON.stringify(NexusStudioUI.snapshot()).includes('PRIVATE-VIDEO-FIXTURE')"),'video-input-was-persisted');
+ if(videoSupported){
+  await js("(()=>{document.getElementById('studio-video-aspect').value='portrait';document.getElementById('studio-video-aspect').dispatchEvent(new Event('change'));document.getElementById('studio-video-duration').value='3';return true})()");
+  assert(await js("document.getElementById('studio-video-canvas').width===360&&document.getElementById('studio-video-canvas').height===640&&!document.getElementById('studio-video-start').disabled"),'video-portrait-and-duration');
+  await js("document.getElementById('studio-video-start').click();true");
+  assert(await js("document.getElementById('studio-video-download').disabled"),'video-was-downloaded-before-user-action');
+  await poll(()=>retryJs("!document.getElementById('studio-video-preview').hidden&&!!document.getElementById('studio-video-preview').src"),11000,'video-local-render');
+  const videoProof=await js("(async()=>{const player=document.getElementById('studio-video-preview'),r=await fetch(player.src),buffer=await r.arrayBuffer(),bytes=new Uint8Array(buffer.slice(0,12));return {length:buffer.byteLength,mime:r.headers.get('content-type'),prefix:[...bytes],status:document.getElementById('studio-video-status').textContent,downloadDisabled:document.getElementById('studio-video-download').disabled}})()");
+  const isWebm=videoProof.prefix.slice(0,4).join(',')==='26,69,223,163';
+  const isMp4=String.fromCharCode(...videoProof.prefix.slice(4,8))==='ftyp';
+  assert(videoProof.length>1000&&videoProof.length<=32000000&&(isWebm||isMp4)&&!videoProof.downloadDisabled,'local-video-file-invalid-'+JSON.stringify(videoProof));
+  assert(await js("!JSON.stringify(NexusStudioUI.snapshot()).includes('PRIVATE-VIDEO-FIXTURE')&&performance.getEntriesByType('resource').every(x=>!x.name.includes('/studio-api/generate-video'))"),'video-must-not-upload-or-archive');
+  await js("document.getElementById('studio-video-clear').click();true");
+  assert(await js("document.getElementById('studio-video-preview').hidden&&document.getElementById('studio-video-photo').value===''&&document.getElementById('studio-video-download').disabled"),'video-private-clear-failed');
+  checks.push('real-local-image-to-video-output-uncropped-portrait-and-private');
+ }else{
+  assert(await js("document.getElementById('studio-video-start').disabled"),'unsupported-video-must-fail-closed');
+  await js("document.getElementById('studio-video-clear').click();true");
+  checks.push('unsupported-video-recorder-fails-closed');
+ }
+
+
 
 
   assert(await js("Boolean(document.getElementById('nexus-zen-menu'))&&Boolean(document.getElementById('nexus-zen-home'))&&getComputedStyle(document.getElementById('studio-focus-nav')).display==='none'"),'zen-home-has-no-tab-clutter');
