@@ -110,6 +110,41 @@ A gateway-only deployment may use an explicitly configured `NEXUS_STUDIO_ORIGIN`
 with Studio hosted separately. There is no provisioned model or live provider
 quality test in this repository's synthetic acceptance suite.
 
+## Local model request attempt budget
+
+The real-model gateway now has a **conservative per-process provider attempt
+limit** to reduce accidental provider calls during early-stage use. With no
+additional setting, each FastAPI worker admits up to **32** text-model requests
+over its own process lifetime, counting buffered and streamed requests together.
+The optional server-only setting is:
+
+```sh
+NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS=8
+```
+
+Set any integer from `1` to `4096`; `0` intentionally disables model
+provider calls. Missing means `32`. Malformed, negative or out-of-range values
+fail closed (zero permitted calls). This setting is also forwarded by the
+loopback-only `scripts/run-local-studio.py` launcher; it never goes to the
+browser or third-party provider.
+
+The worker checks the limit **only after** validating the separate Studio
+authentication, explicit consent, input bounds, latest configuration review,
+mode and payload. A denied or invalid request cannot drain the limit. A
+permitted attempt is counted **before** its provider connection; failed,
+timed-out, canceled, disconnected, or provider-rejected requests are never
+refunded, because upstream cost may still have occurred. Exhaustion returns
+HTTP `429` with a non-sensitive detail and no upstream provider call. Restart
+the worker to start another local budget.
+
+**Not a hard spending or global request cap:** multiple workers or replicas
+each have a separate in-memory budget; an app restart resets it. An API key
+that is independently used elsewhere is not covered. Provider-side spend
+alerts, account limits, quotas and billing safeguards remain mandatory before
+enabling public users. This code does not automatically provision a model
+provider, turn on a paid service, or deploy any app. The counter deliberately
+does not expose prompts, keys, cost estimates or model replies.
+
 ## Optional Gemini model adapter (operator configured, text only)
 
 NEXUS supports an explicitly selected `NEXUS_MODEL_ADAPTER=gemini` using
