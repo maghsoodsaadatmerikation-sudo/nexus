@@ -49,7 +49,7 @@ def test_operator_can_choose_loopback_self_hosted_model(monkeypatch):
 def test_status_has_no_credentials(monkeypatch):
     with configured(monkeypatch) as c:
         r=c.get('/studio-api/status')
-        assert r.json()=={'configured':True,'configuration_id':BODY['configuration_id'],'model':'configured-test-model','provider_host':'provider.example','authority':'none'}
+        assert r.json()=={'configured':True,'configuration_id':BODY['configuration_id'],'model':'configured-test-model','provider_host':'provider.example','authority':'none','reply_receipt_version':1}
         assert 'secret' not in r.text and TOKEN not in r.text
 
 
