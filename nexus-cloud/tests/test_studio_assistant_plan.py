@@ -112,8 +112,8 @@ def test_export_gateway_response_is_only_review(monkeypatch):
 def test_orchestra_review_only_preview_in_english_and_persian():
     for goal in (
         "Orchestrate a synthetic score then write a report",
-        "/plan\\n/orchestra hypnotic choir piano\\n/write notes",
-        "برنامه:\\n۱. ارکستر بساز با پیانو\\n۲. بنویس گزارش",
+        "/plan\n/orchestra hypnotic choir piano\n/write notes",
+        "برنامه:\n۱. ارکستر بساز با پیانو\n۲. بنویس گزارش",
     ):
         p = preview(goal)
         assert [s["tool"] for s in p["steps"]] == ["orchestra", "write"]
@@ -124,8 +124,8 @@ def test_orchestra_review_only_preview_in_english_and_persian():
 
 @pytest.mark.parametrize("goal", [
     "Orchestrate a score and write a report",
-    "/plan\\n/orchestra piano\\n/upload my voice to a server",
-    "/plan\\n/orchestra piano\\n/email everyone",
+    "/plan\n/orchestra piano\n/upload my voice to a server",
+    "/plan\n/orchestra piano\n/email everyone",
 ])
 def test_orchestra_preview_rejects_compound_or_unauthorized_actions(goal):
     with pytest.raises(ValueError):
