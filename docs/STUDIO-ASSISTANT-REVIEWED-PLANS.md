@@ -359,3 +359,32 @@ ordering, document export, Python rejection, compound-step rejection,
 independent result-review requirement, and draft-edit invalidation. Static
 Studio/PWA assets must be rebuilt and verified from this exact candidate before
 any public publication.
+
+## Observed original-score completion for Music Lab (stacked candidate)
+
+A reviewed `/music` workflow step now needs a **new, successful, local
+Music Lab score composition**, not just opening the panel or self-reporting
+success. The score must be generated **after** the user opens that exact
+workflow step for review. The app emits a one-shot, ephemeral receipt with
+`kind=music`, `source=studio-local-music`, `artifact=score`, integer bar
+count and bounded planned duration. It contains no composition title, notes,
+audio bytes, prompt, filenames or account credentials.
+
+The chat validates the receipt shape and current conversation/draft/step
+scope before unlocking a **separate human confirmation**. Skipping or
+discarding the workflow, changing the draft/conversation, retrying review,
+private-state clear or leaving the page revokes the receipt listener.
+Preexisting compositions, failed builds, WAV rendering cancellation, a
+download click and unrelated tool panels cannot complete a new music step.
+
+**Precision:** this proves only that Studio's deterministic *synthetic* score
+builder returned a score in the browser. It is **not** proof of a rendered
+stereo WAV, MIDI delivery to disk, acoustic instrument samples, professional
+sound quality, human listening, provider-backed AI music generation or
+publication. Music scores and unsaved work remain transient until independently
+saved/exported. No music is sent to a server by this feature.
+
+The real Chromium test covers opening, fresh score generation, unlocked
+confirmation, no fabricated WAV claim, receipt non-replay and private cleanup.
+The pinned standalone and PWA bundles must be rebuilt and verified from the
+exact source head. No production deployment or automatic upload is authorized.

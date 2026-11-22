@@ -152,10 +152,7 @@ function intent(value){
  const query=kind==='research'||kind==='orchestra'?message.slice(prefix?.[0].length||0):'';
  return route?{route,query}:null;
 }
-/* Advisory mapping only; no operation is executed from text classification.
- * The connection dialog verifies actual provider permissions after a separate
- * user-triggered catalog load and requires explicit review before each action.
- */
+/* Connector suggestions never grant execution authority. */
 function connectionRequest(result,message){
  const kind=result.route[0];
  if(kind==='connections')return {};
@@ -169,10 +166,7 @@ function connectionRequest(result,message){
  return {provider:'github',operation};
 }
 
-/* Review-only multi-step chat checklist. This is not autonomous planning:
- * each step is a reviewed slash command supplied by the human. No work runs
- * from parsing, opening, or marking a step; tools enforce their own consent.
- */
+/* Every workflow step requires independent human review. */
 const workflow=document.createElement('section');
 workflow.id='studio-chat-workflow';workflow.className='studio-compose';
 workflow.hidden=true;workflow.setAttribute('aria-label','Reviewed workflow');
@@ -203,6 +197,7 @@ function parseWorkflow(message){
 function clearLocalReviewers(){
  window.NexusLabUI?.clearReviewedStep?.();
  window.NexusQualityUI?.clearReviewedStep?.();
+ window.NexusMusicUI?.clearReviewedStep?.();
  window.NexusStudioUI?.clearDocumentReceipt?.();
  window.NexusStudioUI?.clearExportReceipt?.();
 }
@@ -266,7 +261,7 @@ function expectedRead(step){
 }
 function expectedLocal(step){
  const kind=step.result.route[0];
- return ['research','code','data','write','export'].includes(kind)?kind:null;
+ return ['research','code','data','write','export','music'].includes(kind)?kind:null;
 }
 function showWorkflow(){
  if(!workflowState)return;
@@ -276,8 +271,8 @@ function showWorkflow(){
  title.textContent=words('Your reviewed workflow','گردش‌کار قابل بازبینی');
  const info=document.createElement('p');info.className='help';
  info.textContent=words(
-  'Opening a tool is not execution. Research, data, code and writing steps need a fresh observed result; export only confirms a browser download request, never successful file delivery. Writing remains session-only until you save the encrypted archive. You can retry review or skip; no tool runs automatically.',
-  'بازکردن ابزار اجرا نیست. پژوهش، داده، کد و نوشتن نیاز به نتیجهٔ تازه دارند. خروجی فقط ثبت درخواست دانلود است، نه دریافت قطعی فایل. نسخهٔ سند تا ذخیرهٔ جداگانهٔ آرشیو فقط در نشست است. بازبینی دوباره و ردکردن مرحله اختیاری است.');
+  'Opening a tool is not execution. Research, data, code, writing and Music Lab steps need a fresh observed result. A music receipt proves local score creation, not WAV output or musical quality. Export confirms a browser request, not file delivery. Writing remains session-only until you save separately. Retry or skip never runs tools automatically.',
+  'بازکردن ابزار اجرا نیست. پژوهش، داده، کد، نوشتن و موسیقی به نتیجهٔ تازه نیاز دارند. رسید موسیقی فقط ساخت پارتیتور محلی را نشان می‌دهد، نه تولید WAV یا کیفیت هنری. خروجی فقط درخواست دانلود است. ذخیره و اجرای هر مرحله نیاز به اقدام جداگانه دارد.');
  const list=document.createElement('ol');
  plan.steps.forEach((step,i)=>{
   const item=document.createElement('li'),span=document.createElement('span');
@@ -320,7 +315,12 @@ function showWorkflow(){
         receipt?.kind!==local||
         receipt.source!==(local==='data'?'studio-local-analysis':
            local==='write'?'studio-document-version':
-           local==='export'?'studio-document-export':'studio-local-tool')||
+           local==='export'?'studio-document-export':
+           local==='music'?'studio-local-music':'studio-local-tool')||
+        (local==='music'&&(receipt.artifact!=='score'||
+          !Number.isInteger(receipt.bars)||receipt.bars<8||receipt.bars>256||
+          !Number.isFinite(receipt.durationSeconds)||receipt.durationSeconds<=0||
+          receipt.durationSeconds>3600))||
         (local==='data'&&(!/^[a-f0-9]{64}$/.test(receipt.sha256||'')||
           !Number.isInteger(receipt.rows)||receipt.rows<0||
           !Number.isInteger(receipt.columns)||receipt.columns<1))||
@@ -351,6 +351,7 @@ function showWorkflow(){
        window.NexusQualityUI?.armReviewedStep?.(local,localReceiver):
        local==='write'?window.NexusStudioUI?.armDocumentReceipt?.(local,localReceiver):
        local==='export'?window.NexusStudioUI?.armExportReceipt?.(local,localReceiver):
+       local==='music'?window.NexusMusicUI?.armReviewedStep?.(local,localReceiver):
        window.NexusLabUI?.armReviewedStep?.(local,localReceiver));
      plan.opened=Boolean(armed);plan.readReceipt=null;showWorkflow();
     }
@@ -382,6 +383,8 @@ function showWorkflow(){
          '… identifies source bytes, not correctness. Review before confirming.',
          'داده محلی تحلیل شد؛ SHA256 '+plan.readReceipt.sha256.slice(0,12)+
          '… فقط هویت بایت‌هاست، نه صحت نتیجه. پیش از تأیید بررسی کن.'):
+       local==='music'?words('New original score composed locally. WAV, file download and musical quality remain unverified.',
+        'پارتیتور تازه در دستگاه ساخته شد؛ WAV، دانلود فایل و کیفیت موسیقی تأیید نشده‌اند.'):
        local==='write'?words('A changed document version was applied in this tab. Save your encrypted archive separately to keep it.',
          'نسخهٔ تغییرکردهٔ سند در این برگه اعمال شد. برای نگهداری، آرشیو رمزگذاری‌شده را جداگانه ذخیره کن.'):
        local==='export'?plan.readReceipt.status==='print_requested'?
@@ -493,10 +496,7 @@ function checkedPlan(result,draft){
   return {line:item.instruction,result:{route,query}};
  });
 }
-/* Deterministic, private alternative to the authenticated gateway preview.
- * Parse only explicitly ordered actions. Unknown actions and Python execution
- * fail closed. This provides destinations for human review, NEVER execution.
- */
+/* Local preview is an offline, non-executing allowlist parser. */
 function localNaturalPlan(draft){
  if(typeof draft!=='string'||draft.length>1800||
     /[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/u.test(draft))
