@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Deterministically package Studio for an isolated static origin; no provider secrets."""
 import argparse
+import base64
 import hashlib
 import json
 from pathlib import Path
@@ -11,6 +12,8 @@ from studio_public_assets import PDF_MODULES, check_public_tree
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_ORIGIN = "https://nexus-studio-merikation.onrender.com"
+CHAT_MODULE_PATH = "modules/studio-composer-ui.js"
+CHAT_MODULE_SOURCE = ROOT / "web/studio-composer-ui.js"
 PUBLIC_DESCRIPTION = "Chat, research, analyze files, make music and weigh decisions with NEXUS, an AI assistant built to support human judgment."
 PUBLIC_METADATA = (
     f'<link rel="canonical" href="{PUBLIC_ORIGIN}/">'
@@ -123,6 +126,14 @@ self.addEventListener('fetch',event=>{
 
 def render_public_shell(source: str, device_panel: str) -> bytes:
     """Assemble the public shell; refuse missing or duplicated integration slots."""
+    # Split only the public chat composer. Standalone web/studio.html stays
+    # self-contained. A single exact inline module is required, not a regex.
+    module_bytes = CHAT_MODULE_SOURCE.read_bytes()
+    module_text = module_bytes.decode("utf-8")
+    sri = base64.b64encode(hashlib.sha256(module_bytes).digest()).decode("ascii")
+    source=replace_exact(source, "<script>"+module_text+"</script>",
+                         '<script src="./'+CHAT_MODULE_PATH+
+                         '" integrity="sha256-'+sri+'" crossorigin="anonymous"></script>')
     source=replace_exact(source, "script-src 'unsafe-inline'", "script-src 'self' blob: 'unsafe-inline' 'wasm-unsafe-eval'")
     # Enable the public device worker in the page policy. The lab's srcdoc
     # keeps its independent opaque-origin, blob-only worker policy.
@@ -148,7 +159,9 @@ def artifacts():
         (ROOT/'web/device/device-panel.html').read_text(),
     )
     manifest={"id":"./", "name":"NEXUS Studio", "short_name":"NEXUS", "start_url":"./", "scope":"./", "display":"standalone", "lang":"en", "dir":"ltr", "background_color":"#f1f5f3", "theme_color":"#185e48", "icons":[{"src":f"./icons/nexus-{size}.png","sizes":f"{size}x{size}","type":"image/png","purpose":"any"} for size in (192,512)]}
-    code=[]
+    module_bytes=CHAT_MODULE_SOURCE.read_bytes()
+    code=[{'path':CHAT_MODULE_PATH,'bytes':len(module_bytes),
+           'sha256':hashlib.sha256(module_bytes).hexdigest(),'kind':'javascript'}]
     for name in ['device-engine.js','device-worker.js','device-ui.js','model-manifest.json']:
         content=(ROOT/'public/studio/device'/name).read_bytes();code.append({'path':'device/'+name,'bytes':len(content),'sha256':hashlib.sha256(content).hexdigest(),'kind':'json' if name.endswith('.json') else 'javascript'})
     for name in PDF_MODULES:
@@ -158,7 +171,7 @@ def artifacts():
     worker=replace_exact(worker, '__INDEX_BYTES__', str(len(html)))
     worker=replace_exact(worker, '__CODE_ASSETS__', json.dumps(code,separators=(',',':')))
     worker=replace_exact(worker, '__PACKAGE_ID__', hashlib.sha256(html+json.dumps(code,sort_keys=True).encode()).hexdigest()[:16])
-    return {'index.html':html, 'service-worker.js':worker.encode(), 'manifest.json':(json.dumps(manifest,indent=2)+'\n').encode(), **{f'icons/nexus-{size}.png':(ROOT/f'public/icons/nexus-{size}.png').read_bytes() for size in (192,512)}}
+    return {'index.html':html, CHAT_MODULE_PATH:module_bytes, 'service-worker.js':worker.encode(), 'manifest.json':(json.dumps(manifest,indent=2)+'\n').encode(), **{f'icons/nexus-{size}.png':(ROOT/f'public/icons/nexus-{size}.png').read_bytes() for size in (192,512)}}
 
 
 def main():

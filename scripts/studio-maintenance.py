@@ -14,6 +14,7 @@ BUILDERS = ("build-studio.py", "build-device-model.py", "build-studio-static.py"
 GENERATED = {
     "web/studio.html",
     "public/studio/index.html",
+    "public/studio/modules/studio-composer-ui.js",
     "public/studio/manifest.json",
     "public/studio/service-worker.js",
     "public/studio/icons/nexus-192.png",
