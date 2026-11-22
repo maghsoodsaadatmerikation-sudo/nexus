@@ -445,6 +445,47 @@ window.addEventListener('load',async()=>{
    assert(workflow.hidden,'music-workflow-edit-revokes-score-review');
    NexusMusicUI.clear();
    assert(!NexusMusicUI.hasScore(),'music-fixture-clears-private-score');
+   // Only a NEW local orchestral score can unlock reviewed orchestration.
+   fill('message','Orchestrate a score then write a report');
+   planButton.click();$('studio-assistant-local-preview').click();
+   assert(workflow.querySelectorAll('li').length===2&&
+    workflow.querySelector('li button:nth-of-type(2)').disabled,
+    'orchestra-natural-language-plan-stages-without-execution');
+   workflow.querySelector('li button').click();
+   assert(NexusStudioFocus.active()==='orchestra-card'&&
+    workflow.querySelector('li button:nth-of-type(2)').disabled,
+    'orchestra-panel-opening-is-not-completion');
+   fill('orchestra-prompt','opera rap impossible word');
+   $('orchestra-parse').click();
+   assert($('orchestra-compose').disabled&&
+    workflow.querySelector('li button:nth-of-type(2)').disabled,
+    'unrecognized-orchestra-prompt-cannot-complete-step');
+   fill('orchestra-prompt','hypnotic airy soprano choir harp flute in D minor 120 bpm 4 bars bird chime');
+   $('orchestra-parse').click();
+   assert(!$('orchestra-compose').disabled&&
+    workflow.querySelector('li button:nth-of-type(2)').disabled,
+    'parsed-orchestra-plan-is-not-a-finished-score');
+   $('orchestra-compose').click();
+   assert(NexusOrchestraUI.hasScore()&&!NexusOrchestraUI.hasWav()&&
+    !NexusOrchestraUI.hasMixedWav()&&!NexusOrchestraUI.hasOriginalVocal()&&
+    !workflow.querySelector('li button:nth-of-type(2)').disabled,
+    'new-local-orchestra-score-unlocks-confirmation-without-voice-or-wav');
+   assert(workflow.textContent.includes('Synthetic orchestra score built;')&&
+    !workflow.textContent.includes('WAV ready'),
+    'orchestra-score-receipt-never-claims-vocal-mix-or-rendered-wav');
+   workflow.querySelector('li button:nth-of-type(2)').click();
+   assert(workflow.querySelector('li').textContent.includes('local tool completed')&&
+    workflow.querySelector('li:nth-child(2)').textContent.includes('current'),
+    'orchestra-score-receipt-requires-separate-human-confirmation');
+   fill('message','/plan\n/orchestra a second score\n/write review');
+   chatSend.click();workflow.querySelector('li button').click();
+   assert(workflow.querySelector('li button:nth-of-type(2)').disabled,
+    'stale-orchestra-score-cannot-complete-new-workflow');
+   fill('message','Return to ordinary chat');
+   assert(workflow.hidden,'orchestra-workflow-clears-on-chat-edit');
+   NexusOrchestraUI.clear();
+   assert(!NexusOrchestraUI.hasScore()&&!NexusOrchestraUI.hasOriginalVocal(),
+    'orchestra-private-work-revoked');
    // The local-guide mode retains broad opt-in natural-language discovery.
   // Explicit slash commands still work in both modes.
   chooser.value='guide';chooser.dispatchEvent(new Event('change',{bubbles:true}));
