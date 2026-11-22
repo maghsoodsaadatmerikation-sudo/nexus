@@ -18,13 +18,15 @@ window.addEventListener('load',async()=>{
  const change=(id,value)=>{$(id).value=value;$(id).dispatchEvent(new Event('change',{bubbles:true}))};
  const wait=async fn=>{for(let i=0;i<300;i++){if(fn())return;await new Promise(r=>setTimeout(r,15))}throw Error('wait-timeout')};
  const snapshot=()=>JSON.stringify(NexusStudioUI.snapshot());
- const fingerprint='a'.repeat(64),model='synthetic-gateway-model',privateMarker='SYNTHETIC-PROVIDER-SECRET-MUST-NOT-ECHO';
+ const fingerprint='a'.repeat(64),streamFingerprint='b'.repeat(64),
+       model='synthetic-gateway-model',streamModel='synthetic-stream-gateway-model',privateMarker='SYNTHETIC-PROVIDER-SECRET-MUST-NOT-ECHO';
  let mode='http',code=401,calls=0,streaming=false;
  window.confirm=()=>true;
  window.fetch=async(url,options={})=>{
   const address=String(url);
   if(address.endsWith('/studio-api/status'))return Response.json({
-   configured:true,model,configuration_id:fingerprint,provider_host:'synthetic.invalid',
+   configured:true,model:streaming?streamModel:model,
+   configuration_id:streaming?streamFingerprint:fingerprint,provider_host:'synthetic.invalid',
    authority:'none',reply_receipt_version:1,...(streaming?{streaming:true}:{})
   });
   assert(address.endsWith(streaming?'/studio-api/respond-stream':'/studio-api/respond')&&
@@ -32,7 +34,7 @@ window.addEventListener('load',async()=>{
    options.headers.authorization==='Bearer synthetic-gateway-access',
    'only-explicit-consented-request-hits-synthetic-gateway');
   const body=JSON.parse(options.body);
-  assert(body.consent===true&&body.configuration_id===fingerprint,
+  assert(body.consent===true&&body.configuration_id===(streaming?streamFingerprint:fingerprint),
    'every-request-preserves-reviewed-fingerprint');
   calls++;
   if(mode==='network')throw new TypeError(privateMarker);
@@ -94,7 +96,7 @@ window.addEventListener('load',async()=>{
   // Streaming errors must retain the HTTP code rather than hiding it behind
   // a generic stream-format failure. A partially received stream is not saved.
   streaming=true;$('studio-compose-model-check').click();
-  await wait(()=>NexusStudioUI.modelAvailability().streaming===true);
+  await wait(()=>NexusStudioUI.modelAvailability().model===streamModel);
   mode='http';code=429;await attempt();
   assert($('status').textContent.includes('Gateway busy'),
    'streamed-429-retains-specific-reason');
@@ -104,7 +106,7 @@ window.addEventListener('load',async()=>{
   // Changing UI language affects only the explanation, not consent or data.
   change('language','fa');streaming=false;
   $('studio-compose-model-check').click();
-  await wait(()=>NexusStudioUI.modelAvailability().streaming!==true);
+  await wait(()=>NexusStudioUI.modelAvailability().model===model);
   mode='http';code=401;await attempt();
   assert($('status').textContent.includes('دسترسی به درگاه رد شد'),
    'persian-auth-error-without-credentials');
