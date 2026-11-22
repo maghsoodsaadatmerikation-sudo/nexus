@@ -318,6 +318,45 @@ def preview_diff(previous, replacement):
         raise HTTPException(422, "No change or the diff is too large", headers=NO_STORE)
     return diff
 
+def write_observation_receipt(operation: str, outcome: str, observation: str) -> dict:
+    """A fresh provider response is evidence, not independent signed attestation.
+
+    Returned only after comparing a separate provider read with the exact
+    reviewed write. This contains no account credentials or user text.
+    """
+    return {
+        "schema_version": 1,
+        "scope": "single_reviewed_connection_operation",
+        "operation": operation,
+        "outcome": outcome,
+        "verification": observation,
+        "confirmed_by_followup_provider_read": True,
+        "independent_attestation": False,
+        "deployment_verified": False,
+        "authority": "none",
+    }
+
+
+def unconfirmed_write() -> HTTPException:
+    # A write can succeed upstream and still lose its acknowledgement, or
+    # fail the later observation. Never claim the absence of a mutation.
+    return HTTPException(
+        409,
+        "Write outcome unconfirmed after provider contact; inspect the remote "
+        "branch before attempting another change",
+        headers=NO_STORE,
+    )
+
+
+def verified_ref(raw: dict, expected_ref: str, expected_sha: str) -> bool:
+    try:
+        return (type(raw) is dict and raw["ref"] == expected_ref
+                and raw["object"]["type"] == "commit"
+                and raw["object"]["sha"] == expected_sha)
+    except (TypeError, KeyError):
+        return False
+
+
 def register(app):
     @app.get("/studio-api/connections")
     async def catalog(request: Request):
@@ -392,15 +431,24 @@ def register(app):
                 status = "created"
         finally:
             limiter.release()
+        # POST acknowledgement alone is insufficient. Re-fetch the ref under
+        # the same operator-approved branch credential to confirm remote state.
+        # Even if creation was acknowledged but read-back fails, do not claim
+        # that no write happened; the caller must inspect before retrying.
         try:
-            matches = (result["ref"] == ref and result["object"]["type"] == "commit"
-                       and result["object"]["sha"] == data.base_sha)
-        except (KeyError, TypeError):
-            matches = False
-        if not matches:
-            raise HTTPException(409, "Branch could not be confirmed at the reviewed commit", headers=NO_STORE)
-        return JSONResponse({"target": target, "branch": branch, "base_sha": data.base_sha,
-                             "status": status}, headers=NO_STORE)
+            observed = await provider_json(client, "github", token,
+                                           base + "/git/ref/heads/" + branch)
+        except HTTPException:
+            raise unconfirmed_write() from None
+        if not verified_ref(observed, ref, data.base_sha):
+            raise unconfirmed_write()
+        return JSONResponse({
+            "target": target, "branch": branch, "base_sha": data.base_sha,
+            "status": status,
+            "receipt": write_observation_receipt(
+                "github.branch", status, "provider_ref_read_after_write"
+                if status == "created" else "provider_existing_ref_read"),
+        }, headers=NO_STORE)
 
     @app.post("/studio-api/connections/github/file-base")
     async def file_base(request: Request):
@@ -469,4 +517,25 @@ def register(app):
                 raise ValueError()
         except (KeyError, AttributeError, TypeError, ValueError):
             raise HTTPException(409, "GitHub did not confirm a commit at the reviewed branch head", headers=NO_STORE) from None
-        return JSONResponse({"target": target, "branch": branch, "path": data.path, "commit": commit}, headers=NO_STORE)
+        # A GraphQL commit identifier is an acknowledgement, not independently
+        # observed persistence. Read the working branch and exact regular file
+        # from the returned commit, comparing Git's blob identifier and bytes.
+        # No second write or implicit retry is ever attempted.
+        try:
+            observed_head = await branch_head(request.app.state.client, target, token, branch)
+            if observed_head != commit:
+                raise ValueError("post-write-head-mismatch")
+            observed_text = await editable_file(
+                request.app.state.client, target, token, commit, data.path
+            )
+            if observed_text.encode("utf-8") != raw:
+                raise ValueError("post-write-content-mismatch")
+        except (HTTPException, ValueError, TypeError, AttributeError):
+            raise unconfirmed_write() from None
+        return JSONResponse({
+            "target": target, "branch": branch, "path": data.path, "commit": commit,
+            "blob_sha": git_blob_sha(raw),
+            "receipt": write_observation_receipt(
+                "github.file_commit", "committed", "provider_branch_and_blob_read_after_write"
+            ),
+        }, headers=NO_STORE)
