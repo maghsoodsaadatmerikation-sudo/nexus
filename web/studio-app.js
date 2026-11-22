@@ -10,6 +10,30 @@ Object.assign(EN,{archiveDamaged:'The browser archive is damaged or unsupported.
 Object.assign(FA,{archiveDamaged:'آرشیو مرورگر آسیب‌دیده یا ناسازگار است؛ جایگزین نشد. نشست باز برای تهیهٔ پشتیبان رمزگذاری‌شده در دسترس است.'});
 Object.assign(EN,{routeMismatch:'The gateway reply did not match the model or configuration you approved. Nothing was added to the conversation. Check the gateway and review the request again.'});
 Object.assign(FA,{routeMismatch:'پاسخ درگاه با مدل یا تنظیماتی که تأیید کرده‌اید مطابقت نداشت. چیزی به گفتگو اضافه نشد. اتصال درگاه را بررسی کنید و درخواست را دوباره بازبینی کنید.'});
+Object.assign(EN,{
+ gatewayUnauthorized:'Gateway access denied (401/403). Check its token and permissions. Nothing was saved.',
+ gatewayConfigurationChanged:'Gateway model changed (409). Check settings and review a fresh request. No answer was saved.',
+ gatewayInvalidRequest:'Gateway rejected the request (415/422). Review the model, mode and context. No answer was saved.',
+ gatewayBusy:'Gateway busy or local request budget exhausted (429). Check readiness; no automatic retry.',
+ gatewayUnavailable:'Gateway or provider unavailable (503). Check its status; the attempt may have reached the provider.',
+ gatewayUpstreamFailure:'Gateway/provider error (408/500/502/504). No answer saved; check usage before manually retrying.',
+ gatewayRejected:'Gateway rejected the request. No answer was saved; check its status.',
+ gatewayNetwork:'Gateway connection failed. Check URL, network and CORS. The attempt may have reached the server.',
+ gatewayTimeout:'Model request timed out. No answer saved; check usage before manually retrying.',
+ gatewayMalformedReply:'Incomplete or invalid model reply was not saved. Check gateway health before retrying.'
+});
+Object.assign(FA,{
+ gatewayUnauthorized:'دسترسی به درگاه رد شد (401/403). توکن و مجوز را بررسی کنید. چیزی ذخیره نشد.',
+ gatewayConfigurationChanged:'مدل درگاه تغییر کرد (409). تنظیمات را بررسی و درخواست تازه‌ای را تأیید کنید. پاسخی ذخیره نشد.',
+ gatewayInvalidRequest:'درگاه درخواست را نپذیرفت (415/422). مدل، حالت و زمینه را بررسی کنید. پاسخی ذخیره نشد.',
+ gatewayBusy:'درگاه مشغول یا سهمیهٔ محلی تمام است (429). وضعیت را بررسی کنید؛ تکرار خودکار انجام نشد.',
+ gatewayUnavailable:'درگاه یا ارائه‌دهنده در دسترس نیست (503). وضعیت را بررسی کنید؛ شاید درخواست به ارائه‌دهنده رسیده باشد.',
+ gatewayUpstreamFailure:'خطای درگاه یا مدل (408/500/502/504). پاسخی ذخیره نشد؛ پیش از تکرار دستی، مصرف را بررسی کنید.',
+ gatewayRejected:'درگاه درخواست را نپذیرفت. پاسخی ذخیره نشد؛ وضعیت درگاه را بررسی کنید.',
+ gatewayNetwork:'اتصال درگاه برقرار نشد. نشانی، شبکه و CORS را بررسی کنید؛ شاید درخواست به سرور رسیده باشد.',
+ gatewayTimeout:'مهلت پاسخ مدل تمام شد. پاسخی ذخیره نشد؛ پیش از تلاش مجدد، مصرف را بررسی کنید.',
+ gatewayMalformedReply:'پاسخ مدل ناقص یا نامعتبر بود و ذخیره نشد. پیش از تکرار، وضعیت درگاه را بررسی کنید.'
+});
 Object.assign(EN,{chatAttachments:'Attach files to this message',chatAttachmentsHelp:'Up to four files. Text formats are limited to 128 KiB per file. Word (.docx) and PowerPoint (.pptx) files are limited to 2 MiB. Up to 20 slides are supported. Only text is extracted. Only short, clearly marked excerpts enter the exact reviewed model request. This is not image/PDF understanding. The original files are not stored in chat or archive; filenames are retained with your turn. Nothing is sent until you explicitly approve the model request.',chatAttachedDocument:'Include latest saved writing document as a temporary excerpt',chatClearAttachments:'Clear attachments',chatNoFiles:'No text files attached',chatAttachmentAdded:'Local files added to next reviewed model request.',chatAttachmentInvalid:'Could not read text files; check size, format and capacity.',chatAttachmentRequiresModel:'Attached file excerpts require a configured model request; the local guide cannot read them.',chatAttachedUsed:'One-turn excerpts supplied (not verified):',chatRegenRequiresFiles:'A response grounded in temporary files cannot be regenerated from the filenames alone. Edit the user message to a new branch and attach the files again.',chatFilesNotSaved:'Files are held only in this tab and their bytes are never saved to the chat archive.'});
 Object.assign(FA,{chatAttachments:'پیوست فایل برای همین پیام',chatAttachmentsHelp:'حداکثر چهار فایل. سقف هر فایل متنی ۱۲۸ کیبی‌بایت است. فایل‌های Word و PowerPoint تا ۲ مِبی‌بایت و ارائه‌ها تا ۲۰ اسلاید پذیرفته می‌شوند. فقط متن استخراج می‌شود. فقط گزیده‌های کوتاه و مشخص وارد درخواست مدل پس از بازبینی می‌شوند. تصویر و PDF تحلیل نمی‌شوند. محتوای فایل‌ها در تاریخچه یا آرشیو ذخیره نمی‌شود؛ فقط نامشان کنار پیام می‌ماند. تا تأیید صریح شما چیزی فرستاده نمی‌شود.',chatAttachedDocument:'افزودن گزیده‌ای از آخرین نسخهٔ ذخیره‌شدهٔ سند',chatClearAttachments:'پاک‌کردن پیوست‌ها',chatNoFiles:'فایل متنی پیوست نشده است',chatAttachmentAdded:'فایل‌های محلی به درخواست بعدی اضافه شدند؛ قبل از ارسال بازبینی می‌شوند.',chatAttachmentInvalid:'خواندن فایل‌های متنی انجام نشد؛ اندازه، قالب یا ظرفیت را بررسی کن.',chatAttachmentRequiresModel:'گزیدهٔ فایل‌ها فقط در درخواست مدل پیکربندی‌شده استفاده می‌شود؛ راهنمای محلی فایل را نمی‌خواند.',chatAttachedUsed:'گزیده‌های موقت ارائه‌شده (تأییدنشده):',chatRegenRequiresFiles:'پاسخ مبتنی بر فایل موقت را نمی‌توان فقط از نام فایل بازتولید کرد. پیام را در شاخهٔ تازه ویرایش کن و فایل‌ها را دوباره اضافه کن.',chatFilesNotSaved:'محتوای فایل‌ها فقط در همین برگه است و در آرشیو گفتگو ذخیره نمی‌شود.'});
 Object.assign(EN,{
@@ -502,10 +526,34 @@ function selectedModelEngine(){return document.getElementById('model-engine')?.v
 function prepare(regenerate=false){if(!chat()?.isolated&&(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,relatedChats:$('use-related-chats').checked,historyDays:data.history_days,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked,onDevice:destination==='device'});if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');const privacyAudit=destination==='gateway'?S.inspectSecrets(ctx.messages):{categories:[],possible_secrets:false};const stream=destination==='gateway'&&modelInfo.streaming===true;
  pending={destination,stream,thread:c,body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(destination==='gateway'&&selectedModelSlot!=='primary'?{model_slot:selectedModelSlot}:{}),...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,...(destination==='gateway'?{model_slot:selectedModelSlot}:{}),provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);showPrivacy(privacyAudit);$('request-review').hidden=false;controls()}catch(error){status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
 function gateway(){const value=$('gateway').value.trim();const u=new URL(value||location.origin);if((u.protocol!=='https:'&&!(u.protocol==='http:'&&['127.0.0.1','[::1]'].includes(u.hostname)))||u.username||u.password||u.search||u.hash||!['','/'].includes(u.pathname))throw Error('gateway-url');return u.origin}
+function gatewayFailureLabel(error,request,timedOut=false){
+ if(request.destination!=='gateway')return request.stream?'streamFailed':'failed';
+ if(timedOut)return 'gatewayTimeout';
+ const code=typeof error?.message==='string'&&/^gateway-status-[1-5][0-9]{2}$/.test(error.message)?
+  Number(error.message.slice('gateway-status-'.length)):null;
+ if(code!==null){
+  if(code===401||code===403)return 'gatewayUnauthorized';
+  if(code===409)return 'gatewayConfigurationChanged';
+  if(code===415||code===422)return 'gatewayInvalidRequest';
+  if(code===429)return 'gatewayBusy';
+  if(code===503)return 'gatewayUnavailable';
+  if([408,500,502,504].includes(code))return 'gatewayUpstreamFailure';
+  return 'gatewayRejected';
+ }
+ if(error?.message==='model-route-mismatch')return 'routeMismatch';
+ if(error?.name==='AbortError')return 'gatewayTimeout';
+ if(error instanceof SyntaxError)return 'gatewayMalformedReply';
+ if(error instanceof TypeError)return 'gatewayNetwork';
+ if(['model-stream','incomplete-stream','model-stream-frame','stream-after-end',
+   'stream-capacity','model-response','response-capacity','empty-response'].includes(error?.message))
+  return 'gatewayMalformedReply';
+ return request.stream?'streamFailed':'failed';
+}
 async function boundedJson(response,max=128000){if(!response.ok)throw Error('gateway-status-'+response.status);if(!response.body)throw Error('empty-response');const reader=response.body.getReader(),chunks=[];let size=0;try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>max)throw Error('response-capacity');chunks.push(value)}const bytes=new Uint8Array(size);let offset=0;for(const c of chunks){bytes.set(c,offset);offset+=c.length}return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes))}finally{await reader.cancel().catch(()=>{})}}
 async function streamedAnswer(response,onDelta){
  const media=response.headers.get('content-type')?.split(';',1)[0].trim().toLowerCase();
- if(!response.ok||!response.body||media!=='application/x-ndjson')throw Error('model-stream');
+ if(!response.ok)throw Error('gateway-status-'+response.status);
+ if(!response.body||media!=='application/x-ndjson')throw Error('model-stream');
  const reader=response.body.getReader(),decoder=new TextDecoder('utf-8',{fatal:true});
  let bytes=0,partial='',text='',receipt=null;
  try{
@@ -638,7 +686,8 @@ $('send-model').onclick=async()=>{
  const request=pending,rev=revision,abort=new AbortController();
  const current=()=>rev===revision&&request.projectId===projectId&&request.threadId===threadId&&!abort.signal.aborted;
  controller=abort;
- const timer=setTimeout(()=>abort.abort(),request.destination==='device'?120000:50000);
+ let timedOut=false;
+ const timer=setTimeout(()=>{timedOut=true;abort.abort()},request.destination==='device'?120000:50000);
  busy=true;controls();
  try{
   let out;
@@ -674,8 +723,7 @@ $('send-model').onclick=async()=>{
   const installed=installThread(S.append(request.thread,'assistant',label+out.text,'model',
    undefined,[],receipt));
   if(installed&&out.truncated)$('status').textContent=language==='fa'?'پاسخ به سقف طول رسیده است.':'The response reached its length limit.';
- }catch(error){if(rev===revision)status(error?.message==='model-route-mismatch'?
-   'routeMismatch':request.stream?'streamFailed':'failed')}
+ }catch(error){if(rev===revision)status(gatewayFailureLabel(error,request,timedOut))}
  finally{clearTimeout(timer);if(rev===revision){busy=false;clearModelReview();controller=null;controls()}}
 };
 function validatedModelChoices(out){
@@ -874,7 +922,7 @@ $('language-file').onchange=async event=>{
  if(!f||busy)return;if(f.size>NexusLocales.MAX_BYTES)return status('failed');
  const current=()=>task===languageImport&&rev===revision&&!busy;
  try{
-  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:[...Object.keys(PRIVACY_EN),...Object.keys(CHAT_CONTEXT_EN),'storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchAll','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed','routeMismatch',...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
+  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:[...Object.keys(PRIVACY_EN),...Object.keys(CHAT_CONTEXT_EN),'storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchAll','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed','routeMismatch',...Object.keys(EN).filter(key=>key.startsWith('gateway')),...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
   if(!$('language').querySelector('option[value="'+pack.code+'"]'))$('language').append(option(pack.code,pack.code));
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}
