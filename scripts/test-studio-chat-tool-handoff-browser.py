@@ -219,9 +219,11 @@ window.addEventListener('load',async()=>{
   fill('message','/research synthetic fallback route');
   chatSend.click();
   const reviewedButtons=[...$('nexus-zen-offer').querySelectorAll('button')];
+  const fallbackLabel=NexusStudioCompose.mode()==='model'?
+   'Review as model message':'Continue with local guide';
   assert(reviewedButtons.length===3&&
    reviewedButtons[0].textContent.includes('Open Research')&&
-   reviewedButtons[1].textContent.includes('Continue with local guide')&&
+   reviewedButtons[1].textContent.includes(fallbackLabel)&&
    reviewedButtons[2].textContent.includes('Keep typing')&&
    Boolean($('studio-assistant-capability-status')),
    'single-tool-offer-retains-three-controls-and-global-status');
