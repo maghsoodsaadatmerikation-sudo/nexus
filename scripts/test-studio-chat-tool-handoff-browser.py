@@ -363,6 +363,50 @@ window.addEventListener('load',async()=>{
    assert(workflow.hidden,'assistant-inflight-plan-revoked-by-edit');
    assert(JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions})===
     JSON.stringify(beforePlan),'assistant-plan-never-spends-or-executes');
+   // The natural-language workflow now has a fully offline route; no gateway
+   // token, account, model or network call is required. No tool is auto-run.
+   fill('gateway-token','');
+   fill('message','Research fictional study then analyze CSV data then draft a report');
+   const previousPlanCalls=planCalls,previousNetwork=JSON.stringify(
+    {providerCalls,searchCalls,catalogCalls,connectionActions});
+   planButton.click();
+   const localPlan=$('studio-assistant-local-preview');
+   assert(Boolean(localPlan)&&!localPlan.disabled&&workflow.querySelector('pre').textContent===
+    $('message').value,'assistant-offline-plan-displays-exact-draft');
+   localPlan.click();
+   assert(workflow.querySelectorAll('li').length===3&&
+    workflow.querySelectorAll('li button')[1].disabled,
+    'assistant-offline-plan-requires-manual-result-review');
+   assert(planCalls===previousPlanCalls&&JSON.stringify(
+    {providerCalls,searchCalls,catalogCalls,connectionActions})===previousNetwork,
+    'assistant-offline-plan-makes-zero-network-requests');
+   fill('message','Research fictional study then analyze CSV data then draft a report edited');
+   assert(workflow.hidden,'assistant-offline-plan-revokes-on-draft-edit');
+   // Persian numbered instructions must work without a gateway.
+   fill('message','برنامه:\n۱. پژوهش درباره انرژی\n۲. تحلیل داده‌های CSV\n۳. بنویس گزارش');
+   planButton.click();$('studio-assistant-local-preview').click();
+   assert(workflow.querySelectorAll('li').length===3&&planCalls===previousPlanCalls,
+    'assistant-offline-plan-supports-numbered-persian-steps');
+   fill('message','Write a report and export document');
+   planButton.click();$('studio-assistant-local-preview').click();
+   assert(workflow.querySelectorAll('li').length===0&&workflow.textContent.includes(
+    'Local plan not recognized'),'assistant-offline-plan-rejects-compound-unordered-actions');
+   fill('message','/plan\n/code run python\n/write a report');
+   planButton.click();$('studio-assistant-local-preview').click();
+   assert(workflow.querySelectorAll('li').length===0,
+    'assistant-offline-plan-never-claims-python-execution');
+   fill('message','Draft a report then export document as DOCX');
+   planButton.click();$('studio-assistant-local-preview').click();
+   assert(workflow.querySelectorAll('li').length===2&&
+    workflow.querySelectorAll('li')[1].textContent.includes('export document'),
+    'assistant-offline-plan-covers-reviewed-document-export');
+   assert(planCalls===previousPlanCalls&&JSON.stringify(
+    {providerCalls,searchCalls,catalogCalls,connectionActions})===previousNetwork,
+    'assistant-offline-plan-parity-does-not-contact-providers');
+   fill('message','Continue regular chat after the private plan');
+   assert(workflow.hidden,'assistant-offline-plan-clears-on-context-edit');
+   // Restore the unrelated connector fixture for the pre-existing Render cases.
+   fill('gateway-token','studio-preview-token-01234567890123456789');
    // The local-guide mode retains broad opt-in natural-language discovery.
   // Explicit slash commands still work in both modes.
   chooser.value='guide';chooser.dispatchEvent(new Event('change',{bubbles:true}));

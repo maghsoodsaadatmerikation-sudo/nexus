@@ -316,3 +316,46 @@ Tests cover the route shape, bilingual inputs, rejected compound instructions,
 Python mismatch, consented gateway response and zero tool/model execution.
 This remains an unmerged candidate until branch-specific CI and browser
 acceptance pass; it is not a published service.
+
+## No-network natural-language preview in chat (stacked UI candidate)
+
+The **Plan steps** action now offers **Preview locally (no network)** alongside
+the existing separately approved gateway preview. This runs a bounded,
+deterministic parser entirely in the browser, requires neither a gateway access
+token nor a configured model, and supports 2–6 explicitly ordered English or
+Persian steps (newlines/numbering or `then` / `سپس`). It recognizes the same
+reviewed research, local analysis, writing, document-export, JavaScript Code Lab,
+music, reminders and read-only GitHub/Render destinations.
+
+**Examples**
+
+    Research climate adaptation then analyze CSV data then draft a report
+
+    برنامه:
+    ۱. پژوهش درباره انرژی
+    ۲. تحلیل داده‌های CSV
+    ۳. بنویس گزارش
+
+    Draft a report then export document as DOCX
+
+It does not fabricate substeps for a vague goal, infer actions from an
+unordered `and`/`و`, run Python in the JavaScript Code Lab, execute shell
+commands, upload documents or contact an AI model. Ambiguous/unknown requests
+fail closed with the original chat draft left intact. The locally produced
+result passes the same strict checked-plan validator as the gateway preview.
+Each step still needs a **separate human-triggered tool review** and, where
+available, an observed result receipt followed by manual confirmation.
+Opening the review panel is not an execution receipt.
+
+Preview and receipts stay ephemeral to the active conversation and exact draft.
+Changing the draft or conversation, closing the preview or clearing private
+state revokes them, without saving a plan or transmitting data. The existing
+**Approve gateway-only preview** remains optional for those with operator
+credentials. This is rule-based intent parsing, **not** AI-generated planning,
+autonomous reasoning, cross-tool execution or a live production deployment.
+
+Browser acceptance checks zero provider/network requests, English and Persian
+ordering, document export, Python rejection, compound-step rejection,
+independent result-review requirement, and draft-edit invalidation. Static
+Studio/PWA assets must be rebuilt and verified from this exact candidate before
+any public publication.

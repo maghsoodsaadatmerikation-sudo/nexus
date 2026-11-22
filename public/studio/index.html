@@ -4146,6 +4146,49 @@ function checkedPlan(result,draft){
   return {line:item.instruction,result:{route,query}};
  });
 }
+/* Deterministic, private alternative to the authenticated gateway preview.
+ * Parse only explicitly ordered actions. Unknown actions and Python execution
+ * fail closed. This provides destinations for human review, NEVER execution.
+ */
+function localNaturalPlan(draft){
+ if(typeof draft!=='string'||draft.length>1800||
+    /[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/u.test(draft))
+  throw Error('local-plan-invalid');
+ let lines=draft.replace(/\r\n?/g,'\n').trim().split('\n').map(s=>s.trim());
+ if(['/plan','plan:','برنامه:','برنامه'].includes(lines[0].toLowerCase()))lines.shift();
+ if(lines.some(s=>!s))throw Error('local-plan-empty');
+ const entries=lines.flatMap(s=>s.split(/\s+(?:and\s+then|then|و\s+سپس|سپس|بعد\s+از\s+آن)\s+/iu));
+ if(entries.length<2||entries.length>6)throw Error('local-plan-count');
+ const detectors=[
+  ['research',/^(?:\/research(?:\s|$)|research(?:\s|$)|search\s+(?:the\s+web\s+)?(?:for\s+)?|پژوهش(?:\s|$)|جست[\s‌]*و[\s‌]*جو(?:\s+کن)?(?:\s|$))/iu],
+  ['data',/^(?:\/data(?:\s|$)|analy[sz]e(?:\s|$)|تحلیل\s*(?:داده|فایل|csv)(?:[‌\s]|$))/iu],
+  ['write',/^(?:\/write(?:\s|$)|draft(?:\s|$)|write(?:\s|$)|بنویس(?:\s|$)|نوشتن(?:\s|$)|پیش\s*نویس(?:\s|$))/iu],
+  ['export',/^(?:\/export(?:$|\s+(?:document|draft|report|file|markdown|docx|word|pdf)\b)|(?:export|download)\s+(?:(?:the|this)\s+)?(?:document|draft|report|file|markdown|docx|word|pdf)\b|خروجی\s*(?:سند|فایل|گزارش)(?:\s|$)|(?:دانلود|دریافت)\s*(?:سند|فایل|گزارش)(?:\s|$))/iu],
+  ['code',/^(?:\/code(?:\s|$)|run\s+(?:this\s+)?(?:javascript|js)\b|کدنویسی(?:\s|$)|اجرا\s*ی?\s*کد(?:\s|$))/iu],
+  ['music',/^(?:\/music(?:\s|$)|compose(?:\s|$)|آهنگ\s+بساز(?:\s|$)|موسیقی\s+بساز(?:\s|$))/iu],
+  ['remind',/^(?:\/remind(?:\s|$)|remind\s+me(?:\s|$)|set\s+(?:a\s+)?reminder(?:\s|$)|یادآوری\s+کن(?:\s|$))/iu],
+  ['github',/^(?:\/github(?:\s+(?:pulls|prs))?$|(?:review|list|show|check)\s+github\s+(?:pull\s+requests|prs)\b)/iu],
+  ['render',/^(?:\/render(?:\s+deploys)?$|(?:check|list|show)\s+render\s+deploy(?:ment)?s\b)/iu]
+ ];
+ const steps=entries.map((raw,i)=>{
+  const instruction=raw.replace(/^(?:[0-9۰-۹]{1,2}[.)]|[-*])\s+/u,'').trim();
+  if(!instruction||instruction.length>260||
+     /[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/u.test(instruction)||
+     /\bpython\b|پایتون/iu.test(instruction)||
+     (/\s+(?:and|&)\s+(?:research|search|analy[sz]e|write|draft|export|download|run|compose|remind|list|check)\b/iu.test(instruction))||
+     (/\s+و\s+(?:پژوهش|تحلیل|بنویس|نوشتن|کدنویسی|خروجی|دانلود|دریافت)(?:\s|$)/u.test(instruction)))
+   throw Error('local-plan-compound');
+  const found=detectors.filter(([,pattern])=>pattern.test(instruction));
+  if(found.length!==1)throw Error('local-plan-unknown');
+  const tool=found[0][0];
+  if(instruction.startsWith('/')&&!new RegExp('^/'+tool+'(?:\\s|$)','i').test(instruction))
+   throw Error('local-plan-command');
+  return {number:i+1,tool,command:'/'+tool,instruction,status:'not_started',
+   requires_separate_user_review:true};
+ });
+ return {kind:'review_only',authority:'none',execution:'not_started',
+  provider_requests:0,tools_executed:0,steps};
+}
 function stageAssistantPlan(){
  const state=window.NexusStudioUI.uiStatus(),draft=$('message').value;
  if(!state||state.busy||state.attachmentLoading||state.archived||
@@ -4157,8 +4200,8 @@ function stageAssistantPlan(){
  title.textContent=words('Preview an assistant workflow','پیش‌نمایش برنامهٔ دستیار');
  const description=document.createElement('p');
  description.className='help';description.textContent=words(
-  'Review the exact text below. Approving sends it once to your configured NEXUS gateway, not to a model provider. No tool runs; you will separately review each proposed step.',
-  'متن دقیق زیر را بررسی کن. با تأیید، متن فقط یک‌بار به درگاه پیکربندی‌شدهٔ نکسوس فرستاده می‌شود، نه به ارائه‌دهندهٔ مدل. هیچ ابزاری اجرا نمی‌شود و هر گام بازبینی جداگانه دارد.');
+  'Review the exact text. Preview locally with no network or approve a single request to your configured NEXUS gateway. Neither option runs tools; review each step separately.',
+  'متن دقیق را بررسی کن. پیش‌نمایش محلی بدون اینترنت انجام می‌شود؛ یا یک درخواست به درگاه پیکربندی‌شدهٔ نکسوس را تأیید کن. هیچ‌کدام ابزارها را اجرا نمی‌کنند.');
  const exact=document.createElement('pre');exact.dir='auto';exact.textContent=draft.trim();
  const status=document.createElement('p');status.setAttribute('role','status');
  const approve=document.createElement('button');approve.type='button';
@@ -4204,7 +4247,26 @@ function stageAssistantPlan(){
    if(previewDraft===staged)approve.disabled=false;
   }
  };
- workflow.append(title,description,exact,approve,cancel,status);
+ const local=document.createElement('button');local.type='button';
+ local.className='secondary';local.id='studio-assistant-local-preview';
+ local.textContent=words('Preview locally (no network)','پیش‌نمایش محلی (بدون اینترنت)');
+ local.onclick=()=>{
+  const state=window.NexusStudioUI.uiStatus();
+  if(previewDraft!==staged||!state||state.busy||state.attachmentLoading||
+     state.archived||$('message').value!==draft||workflowScope()!==staged.scope)return;
+  try{
+   const steps=checkedPlan(localNaturalPlan(draft.trim()),draft);
+   workflowState={draft,scope:staged.scope,steps,index:0,opened:false,
+    readReceipt:null,source:'local-natural'};
+   previewDraft=null;previewController?.abort();previewController=null;
+   showWorkflow();
+  }catch{
+   status.textContent=words(
+    'Local plan not recognized. Use 2–6 explicit, separately ordered supported actions. No request was sent.',
+    'برنامهٔ محلی شناسایی نشد. از ۲ تا ۶ دستور مشخص و جداگانه استفاده کن. هیچ درخواستی ارسال نشد.');
+  }
+ };
+ workflow.append(title,description,exact,approve,local,cancel,status);
 }
 let offeredDraft=null;
 function clearOffer(){
