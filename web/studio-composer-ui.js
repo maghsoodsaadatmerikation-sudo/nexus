@@ -1,6 +1,4 @@
-/* NEXUS Studio: honest chat composer and explicit archive shortcut.
- * Presentation only. All executions delegate to the existing reviewed actions.
- */
+/* NEXUS reviewed chat composer; no implicit execution. */
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
 const required=['conversation-card','message','guide','prepare','request-review','consent',
@@ -32,8 +30,6 @@ $('branch-notice').after(box);
 const suggestions=document.createElement('div');suggestions.id='nexus-zen-suggestions';
 box.prepend(suggestions);
 const offer=document.createElement('div');offer.id='nexus-zen-offer';offer.hidden=true;offer.setAttribute('role','status');box.after(offer);
-// One reviewed discovery catalog: command, UI destination, languages, prompt field, aliases.
-// Listing a capability never proves model or provider availability or grants execution.
 const routes=Object.freeze([
  ['orchestra','orchestra-card','Orchestra & vocal','ارکستر و آواز','orchestra-prompt','vocal'],
  ['music','music-card','Music Lab','موسیقی',null,'song'],
@@ -237,7 +233,6 @@ function openReviewedSurface(result,message,{readOperation=null,onReadReceipt=nu
   const request=connectionRequest(result,message);
   if(readOperation){request.operation=readOperation;request.onReadReceipt=onReadReceipt}
   if(!window.NexusStudioConnections?.openFor?.(request)){
-   // Never silently replace a receipt-bound action with an unbound dialog.
    if(readOperation)return false;
    const entry=$('studio-connections-open');
    if(entry&&!entry.disabled)entry.click();
@@ -247,15 +242,10 @@ function openReviewedSurface(result,message,{readOperation=null,onReadReceipt=nu
  window.NexusStudioFocus?.openPanel(panel);
  return true;
 }
-/* Only previously reviewed, read-only connector routes may yield a
- * gateway-observed completion. Other tools are explicitly self-reported.
- * The presence of any external data is NOT proof of its factual correctness.
- */
+/* Receipts distinguish read-only gateway results from self-reports. */
 function expectedRead(step){
  const kind=step.result.route[0];
  if(kind==='render')return 'render.deploys';
- // Never infer a read receipt for a branch/file/write instruction, including
- // in gateway-generated plans. Match the review dialog's actual operation.
  if(kind==='github'&&connectionRequest(step.result,step.line).operation==='github.pulls')
   return 'github.pulls';
  return null;
@@ -460,10 +450,7 @@ function reviewWorkflow(message){
  showWorkflow();
 }
 
-/* Optional gateway-only preview. The draft is exposed to the operator's
- * gateway ONLY after the user reviews the exact text and clicks the second
- * approval button. This does not call a model, run tools or persist a plan.
- */
+/* Gateway preview requires separate user approval; no tool execution. */
 const planTools=new Set(['research','data','write','export','code','music','orchestra','remind','github','render']);
 function planGateway(){
  const raw=$('gateway')?.value.trim()||location.origin;
@@ -630,10 +617,7 @@ let offeredDraft=null;
 function clearOffer(){
  offeredDraft=null;offer.hidden=true;offer.replaceChildren();
 }
-/* Model replies are text-only and cannot operate tools. Honor explicit user
- * requests to open a tool, but never infer permission from a generic question.
- * A suggestion only opens a separate local/connection review surface.
- */
+/* Tool suggestions require separate review; model replies are inert. */
 function explicitToolRequest(message){
  const value=message.trim();
  return value.startsWith('/')||explicitResearch.test(value)||
@@ -667,14 +651,10 @@ function offerTool(message,result){
  proceed.textContent=select.value==='model'?words('Review as model message','بازبینی برای ارسال به مدل'):
   words('Continue with local guide','ادامه با راهنمای محلی');
  proceed.addEventListener('click',()=>{
-  // Bind continuation to this exact reviewed proposal, not a mutable
-  // suggestion slot that may have been invalidated by unrelated UI updates.
   const current=$('message').value===message;
   clearOffer();
   const state=window.NexusStudioUI.uiStatus();
   if(!current||state.busy||state.archived)return;
-  // The local guide is an existing consent-checked action and requires
-  // a thread. Start it explicitly; never infer permission for a model.
   if(!state.threadReady&&!window.NexusStudioUI.startConversation()){
    refresh();return;
   }
@@ -710,7 +690,6 @@ function refresh(){
  send.disabled=!ready||!$('message').value.trim();
  send.setAttribute('aria-label',send.textContent);
  save.textContent=state.vaultUnlocked?words('Save encrypted session','ذخیرهٔ رمزگذاری‌شدهٔ نشست'):words('Set up private archive','تنظیم آرشیو خصوصی');
- // Never bypass the existing noForms() gate, including unread chat drafts.
  const pendingDraft=Boolean($('message').value.trim());
  save.disabled=state.busy||(state.vaultUnlocked&&(state.unsavedForms||pendingDraft));
  config.hidden=!model;
@@ -731,8 +710,6 @@ function refresh(){
         'آرشیو رمزگذاری‌شده‌ای باز نیست. با بسته‌شدن برگه ممکن است کار از بین برود.');
 }
 function run({routeTools=true}={}){
- // The send button can briefly lag a newly created first conversation.
- // Authoritative UI state and the draft, not a stale disabled flag, gate work.
  const state=window.NexusStudioUI.uiStatus();
  if(running||!state||state.busy||state.attachmentLoading||(state.threadReady&&state.archived)||
     !$('message').value.trim())return;
@@ -785,9 +762,6 @@ $('message').addEventListener('keydown',event=>{
  if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&!event.isComposing&&
     document.documentElement.classList.contains('studio-focus-mode')){
   event.preventDefault();
-  // Studio's older window-level shortcut would otherwise also dispatch a
-  // local guide when no model was configured. Stop this duplicate event ONLY
-  // in focused mode; full-view shortcuts retain their previous behavior.
   event.stopPropagation();
   run(); // In model mode only opens the consent review.
  }
