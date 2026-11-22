@@ -54,11 +54,17 @@ window.addEventListener('load',async()=>{
   $('send-model').click();
   ok(send===0,'disabled-action-produces-no-provider-call');
   change('language','fa');
-  ok(panel.textContent.includes('اطلاعات ورود محرمانه')&&
-    !panel.textContent.includes(token),'persian-warning-remains-non-echoing');
+  ok(panel.hidden&&$('request-review').hidden&&!ack.checked,
+   'language-change-revokes-old-warning-and-both-consents');
+  $('prepare').click();
+  ok(!panel.hidden&&panel.textContent.includes('اطلاعات ورود محرمانه')&&
+    !panel.textContent.includes(token),'fresh-persian-warning-remains-non-echoing');
   change('language','en');
+  ok(panel.hidden&&!ack.checked,'return-to-English-needs-fresh-review');
+  $('prepare').click();
+  $('consent').click();
   ack.click();
-  ok(!$('send-model').disabled,'separate-explicit-approval-enables-reviewed-send');
+  ok(!$('send-model').disabled,'two-fresh-consents-enable-reviewed-send');
   fill('message','A clean question');
   ok($('request-review').hidden&&panel.hidden&&!ack.checked,
    'editing-message-revokes-both-model-and-credential-approvals');
