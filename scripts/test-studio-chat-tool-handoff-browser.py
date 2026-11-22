@@ -18,12 +18,33 @@ window.addEventListener('load',async()=>{
  let crossrefCalls=0,rejectCrossref=false;
  let branchEnabled=false,delayRead=false,releaseRead,readSignal;
  let branchPreviews=0,branchWrites=0,planCalls=0,invalidPlan=false,delayPlan=false,releasePlan;
+ let capCalls=0,invalidCap=false,delayCap=false,releaseCap;
  const branchBase='d'.repeat(40);
  const closeConnection=async()=>{const d=$('studio-connections');const closed=new Promise(r=>d.addEventListener('close',r,{once:true}));$('studio-connections-close').click();await closed};
  window.confirm=()=>true;
  window.fetch=async(url,options={})=>{
   if(String(url).endsWith('/studio-api/status'))return new Response(JSON.stringify({configured:true,model:'synthetic',provider_host:'synthetic.invalid',configuration_id:'a'.repeat(64)}));
   if(String(url).endsWith('/studio-api/respond')){providerCalls++;return new Response(JSON.stringify({text:'Fake response',model:'synthetic',origin:'model',authority:'none'}))}
+  if(String(url).endsWith('/studio-api/assistant/capabilities')){
+   capCalls++;
+   assert(options.method==='GET'&&options.credentials==='omit'&&options.cache==='no-store'&&
+    options.headers.authorization==='Bearer '+$('gateway-token').value.trim(),
+    'capability-read-only-uses-explicit-operator-token');
+   if(delayCap)await new Promise(resolve=>{releaseCap=resolve});
+   return Response.json(invalidCap?{schema_version:1,capabilities:[{id:'unsafe<script>',readiness:'executed'}]}:{
+    schema_version:1,kind:'non_authoritative_capability_disclosure',authority:'none',
+    scope:'reviewed_source_and_local_configuration_only',deployment_revision_verified:false,
+    browser_runtime_verified:false,provider_contact_attempted:false,tools_executed:0,
+    model_streaming_configured:false,capabilities:[
+     {id:'tasks',readiness:'source_defined_browser_surface_not_runtime_verified',
+      data_boundary:'local_browser_javascript_only',separate_user_review_required:true,execution_observed:false},
+     {id:'model',readiness:'configured_not_live_verified',
+      data_boundary:'model_provider_after_review',separate_user_review_required:true,execution_observed:false},
+     {id:'remote_shell',readiness:'not_implemented_in_this_gateway',
+      data_boundary:'unavailable',separate_user_review_required:true,execution_observed:false}
+    ]
+   });
+  }
   if(String(url).endsWith('/studio-api/assistant/plan-preview')){
    planCalls++;
    assert(options.method==='POST'&&JSON.parse(options.body).consent===true,
@@ -160,6 +181,36 @@ window.addEventListener('load',async()=>{
    return chatSend.textContent.includes(item.en);
   });
   assert(allRoutable,'every-catalog-command-routes-to-its-reviewed-tool');
+  // The capability check needs an explicit GET and does not rewrite the draft.
+  const capButton=$('studio-assistant-capability-status');
+  assert(Boolean(capButton)&&capCalls===0,'capability-status-is-opt-in');
+  const protectedDraft=$('message').value;
+  capButton.click();
+  assert(!$('studio-assistant-capability-panel').hidden&&capCalls===0,
+   'capability-panel-open-does-not-request-network');
+  fill('gateway-token','capabilities-test-operator-token-123456789');
+  $('studio-assistant-capability-check').click();
+  await wait(()=>capCalls===1&&$('studio-assistant-capability-results').children.length===3);
+  assert($('studio-assistant-capability-panel').textContent.includes('Configured · not live-tested')&&
+   $('studio-assistant-capability-panel').textContent.includes('Not implemented')&&
+   $('message').value===protectedDraft,'capability-disclosure-is-honest-and-preserves-chat');
+  capButton.click();invalidCap=true;capButton.click();
+  $('studio-assistant-capability-check').click();
+  await wait(()=>capCalls===2&&$('studio-assistant-capability-feedback').textContent.includes('invalid'));
+  assert($('studio-assistant-capability-results').children.length===0,
+   'invalid-capability-response-fails-closed');
+  invalidCap=false;capButton.click();capButton.click();delayCap=true;
+  $('studio-assistant-capability-check').click();
+  await wait(()=>capCalls===3&&Boolean(releaseCap));
+  capButton.click();releaseCap();delayCap=false;
+  assert($('studio-assistant-capability-panel').hidden&&
+   $('studio-assistant-capability-panel').children.length===0,
+   'closing-capability-panel-revokes-inflight-response');
+  fill('message','/readiness');
+  chatSend.click();
+  assert(!$('studio-assistant-capability-panel').hidden&&capCalls===3&&providerCalls===2,
+   'chat-readiness-command-opens-review-with-zero-provider-calls');
+  capButton.click();
   fill('message','/github list open pull requests');
   assert(chatSend.textContent.includes('GitHub'),'github-slash-intent-discovered');
   chatSend.click();
