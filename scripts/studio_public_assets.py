@@ -14,6 +14,7 @@ PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000
 LEGACY_FILES = (
     "index.html",
+    "modules/studio-composer-ui.js",
     "service-worker.js",
     "manifest.json",
     "icons/nexus-192.png",
