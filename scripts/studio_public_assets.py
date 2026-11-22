@@ -8,10 +8,11 @@ import stat
 # The reviewed chat workflow checklist adds ~5.8 KiB to the bundled
 # self-contained shell. Keep a hard asset ceiling and fail closed above it.
 # Reviewed chat-model status UI increases the complete static shell by ~4.3 KiB.
-# Keep a strict 620 KiB-class per-file cap (not an unbounded exception).
-# Three reviewable model slots add ~4.7 KiB to the checked static HTML shell.
-# Maintain a strict per-asset ceiling; keep independent PDF worker limit.
-MAX_FILE = 625_000
+# Three reviewable model slots add ~4.7 KiB; manual workflow checkpoints add ~4.7 KiB.
+# The public HTML is 629,008 bytes after this change. Retain a hard 635,000-byte
+# per-file ceiling with a 5,992-byte margin, not an unbounded size exception.
+# The standalone Studio and PDF worker retain their independent checks.
+MAX_FILE = 635_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000
