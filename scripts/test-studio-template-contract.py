@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -53,8 +54,14 @@ class TemplateContractTests(unittest.TestCase):
         expected = b'<script src="./modules/studio-composer-ui.js" integrity="sha256-'
         self.assertEqual(public.count(expected), 1)
         self.assertNotIn(("<script>" + composer + "</script>").encode(), public)
-        self.assertEqual((ROOT / "public/studio/modules/studio-composer-ui.js").read_bytes(),
-                         composer.encode())
+        module = (ROOT / "public/studio/modules/studio-composer-ui.js").read_bytes()
+        self.assertEqual(module, composer.encode())
+        integrity = base64.b64encode(hashlib.sha256(module).digest()).decode()
+        self.assertIn(('integrity="sha256-' + integrity + '"').encode(), public)
+        worker = (ROOT / "public/studio/service-worker.js").read_text()
+        self.assertIn('"path":"modules/studio-composer-ui.js","bytes":' +
+                      str(len(module)) + ',"sha256":"' +
+                      hashlib.sha256(module).hexdigest() + '"', worker)
         # Tampering with the precompiled inline block must fail closed.
         for changed in (source.replace("<script>" + composer + "</script>", "", 1),
                         source + "<script>" + composer + "</script>"):
