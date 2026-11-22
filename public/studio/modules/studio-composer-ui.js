@@ -745,6 +745,50 @@ function explicitToolRequest(message){
   /^(?:please\s+)?(?:export|download)\s+/i.test(value)||
   /^(?:لطفاً\s+)?(?:خروجی\s*بگیر|دریافت\s+فایل)/u.test(value);
 }
+
+/* Deterministic source-only routing; never an autonomous tool planner. */
+const orderedSeparator=/\s+(?:and\s+then|then|و\s+سپس|سپس|بعد\s+از\s+آن)\s+|\n/iu;
+function orderedToolPlan(message){
+ if(typeof message!=='string'||message.length>1800||!orderedSeparator.test(message))return false;
+ try{return localNaturalPlan(message.trim()).steps.length>=2}catch{return false}
+}
+function unsupportedMediaStep(raw){
+ const value=raw.trim().replace(/[يى]/g,'ی').replace(/ك/g,'ک');
+ if(/^\/(?:image|video|animation|animate)(?:\s|$)/i.test(value))return true;
+ if(/^(?:please\s+)?(?:create|generate|render|produce|make|edit|animate)\s+(?:(?:a|an|the|my)\s+)?(?:[a-z0-9-]+\s+){0,4}(?:video|animation|image|photo|picture)\b/i.test(value)&&
+    !/\b(?:video|animation|image|photo|picture)\s+(?:script|prompt|storyboard|caption|description|ideas?)\b/i.test(value))return true;
+ return /^(?:(?:لطفا|لطفاً)\s+)?(?:(?:یک|یه)\s+)?(?:ویدیو|فیلم|کلیپ|تصویر|عکس|انیمیشن)\s+.{0,60}(?:بساز|تولید\s+کن|ویرایش\s+کن|درست\s+کن)(?:\s|$)/u.test(value)||
+  /^(?:بساز|تولید\s+کن|ویرایش\s+کن|درست\s+کن)\s+(?:(?:یک|یه)\s+)?(?:ویدیو|فیلم|کلیپ|تصویر|عکس|انیمیشن)(?:\s|$)/u.test(value);
+}
+function unsupportedMediaRequest(message){
+ if(typeof message!=='string'||message.length>1800)return false;
+ return message.split(orderedSeparator).some(unsupportedMediaStep);
+}
+function offerUnavailableMedia(message){
+ clearOffer();offeredDraft=message;offer.hidden=false;
+ const p=document.createElement('p');
+ p.textContent=words(
+  'NEXUS Studio cannot natively render or edit image/video files in this build. No media was produced. You can separately review a text-only request for a storyboard or prompt.',
+  'نکسوس استودیو در این نسخه فایل تصویر یا ویدیو تولید یا ویرایش نمی‌کند؛ هیچ رسانه‌ای ساخته نشده است. می‌توانی برای سناریو یا پرامپت، درخواست متنی را جداگانه بازبینی کنی.');
+ const status=document.createElement('button');status.type='button';status.className='secondary';
+ status.textContent=words('Inspect tool status','بررسی وضعیت ابزار');
+ status.onclick=showCapabilityPanel;
+ const proceed=document.createElement('button');proceed.type='button';proceed.className='secondary';
+ proceed.textContent=words('Review as text request','بازبینی درخواست متنی');
+ proceed.onclick=()=>{
+  const current=$('message').value===message;clearOffer();
+  const state=window.NexusStudioUI.uiStatus();
+  if(!current||!state||state.busy||state.archived)return;
+  if(!state.threadReady&&!window.NexusStudioUI.startConversation()){refresh();return}
+  if(select.value==='guide'){$('guide').click();refresh();return}
+  refresh();run({routeTools:false});
+ };
+ const dismiss=document.createElement('button');dismiss.type='button';dismiss.className='secondary';
+ dismiss.textContent=words('Keep typing','ادامهٔ نوشتن');
+ dismiss.onclick=()=>{clearOffer();$('message').focus()};
+ offer.append(p,status,proceed,dismiss);
+}
+
 function suggestion(message){
  if(!window.NexusStudioFocus?.isFocused()||
     (select.value==='model'&&!explicitToolRequest(message)))return null;
@@ -754,13 +798,15 @@ function offerTool(message,result){
  const [,panel,en,fa,field]=result.route;
  clearOffer();offeredDraft=message;offer.hidden=false;
  const p=document.createElement('p');
- p.textContent=words('Open '+en+' to review its inputs.','برای بازبینی ورودی‌ها، '+fa+' را باز کن.');
+ p.textContent=words('Suggested reviewed tool: '+en+'. Configuration and successful execution are not verified.','ابزار پیشنهادی برای بازبینی: '+fa+'. پیکربندی و اجرای موفق آن تأیید نشده است.');
  const open=document.createElement('button');open.type='button';open.textContent=words('Open '+en,'بازکردن '+fa);
  open.addEventListener('click',()=>{
   if($('message').value!==offeredDraft||window.NexusStudioUI.uiStatus().busy){clearOffer();return}
   clearOffer();
   openReviewedSurface(result,message);
  });
+ // Tool status already has a persistent button above the composer. Keeping this
+ // proposal to three choices preserves keyboard order and the local-guide fallback.
  const dismiss=document.createElement('button');dismiss.type='button';dismiss.className='secondary';
  dismiss.textContent=words('Keep typing','ادامهٔ نوشتن');dismiss.addEventListener('click',()=>{clearOffer();$('message').focus()});
  const proceed=document.createElement('button');proceed.type='button';proceed.className='secondary';
@@ -804,7 +850,9 @@ function refresh(){
  const tool=suggestion($('message').value);
  const planning=isWorkflowRequest($('message').value);
  const readiness=explicitReadiness($('message').value);
- send.textContent=readiness?words('Show tool status','نمایش وضعیت ابزارها'):planning?words('Review workflow','بازبینی گردش‌کار'):privateChat?words('Start temporary chat','شروع گفتگوی موقت'):tool?words('Review '+tool.route[2],'بازبینی '+tool.route[3]):model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
+ const unsupported=unsupportedMediaRequest($('message').value);
+ const ordered=orderedToolPlan($('message').value);
+ send.textContent=readiness?words('Show tool status','نمایش وضعیت ابزارها'):planning?words('Review workflow','بازبینی گردش‌کار'):unsupported?words('Review capability limit','بازبینی محدودیت قابلیت'):ordered?words('Review multi-step plan','بازبینی برنامهٔ چندمرحله‌ای'):privateChat?words('Start temporary chat','شروع گفتگوی موقت'):tool?words('Review '+tool.route[2],'بازبینی '+tool.route[3]):model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
  send.disabled=!ready||!$('message').value.trim();
  send.setAttribute('aria-label',send.textContent);
  save.textContent=state.vaultUnlocked?words('Save encrypted session','ذخیرهٔ رمزگذاری‌شدهٔ نشست'):words('Set up private archive','تنظیم آرشیو خصوصی');
@@ -834,6 +882,8 @@ function run({routeTools=true}={}){
  const message=$('message').value;
  if(isWorkflowRequest(message)){reviewWorkflow(message);return}
   if(explicitReadiness(message)){showCapabilityPanel();return}
+  if(routeTools&&unsupportedMediaRequest(message)){offerUnavailableMedia(message);return}
+  if(routeTools&&orderedToolPlan(message)){stageAssistantPlan();return}
  if(/^\/temporary$/i.test(message.trim())){
   if(window.NexusStudioUI.startConversation(true,{isolated:true}))$('message').focus();
   return;
