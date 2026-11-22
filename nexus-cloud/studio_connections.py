@@ -318,6 +318,45 @@ def preview_diff(previous, replacement):
         raise HTTPException(422, "No change or the diff is too large", headers=NO_STORE)
     return diff
 
+def followup_receipt(operation, outcome, revision, *, file_bytes_verified=False):
+    """Source-limited proof; a second GitHub read, not an independent attestation."""
+    return {
+        "schema_version": 1,
+        "kind": "github_followup_read",
+        "operation": operation,
+        "outcome": outcome,
+        "revision": revision,
+        "followup_read_verified": True,
+        "reviewed_request_matched": True,
+        "file_bytes_verified": file_bytes_verified,
+        "independent_attestation": False,
+        "deployment_verified": False,
+    }
+
+
+async def confirm_branch_outcome(client, target, token, branch, revision):
+    try:
+        found = await branch_head(client, target, token, branch)
+        if found != revision:
+            raise ValueError("revision mismatch")
+    except (HTTPException, ValueError, KeyError, TypeError):
+        # The POST might already have succeeded; a blind retry could be harmful.
+        raise HTTPException(502, "Write outcome unknown after provider follow-up; inspect the branch before retrying",
+                            headers=NO_STORE) from None
+
+
+async def confirm_file_outcome(client, target, token, branch, revision, path, reviewed_bytes):
+    try:
+        if await branch_head(client, target, token, branch) != revision:
+            raise ValueError("branch head diverged")
+        actual = await editable_file(client, target, token, revision, path)
+        if actual.encode("utf-8") != reviewed_bytes:
+            raise ValueError("reviewed bytes were not observed")
+    except (HTTPException, ValueError, KeyError, TypeError, UnicodeError):
+        raise HTTPException(502, "Write outcome unknown after provider follow-up; inspect the branch and file before retrying",
+                            headers=NO_STORE) from None
+
+
 def register(app):
     @app.get("/studio-api/connections")
     async def catalog(request: Request):
@@ -390,17 +429,22 @@ def register(app):
                 result = await provider_json(client, "github", token, base + "/git/refs",
                                              payload={"ref": ref, "sha": data.base_sha})
                 status = "created"
+            try:
+                matches = (result["ref"] == ref and result["object"]["type"] == "commit"
+                           and result["object"]["sha"] == data.base_sha)
+            except (KeyError, TypeError):
+                matches = False
+            if not matches:
+                raise HTTPException(409, "Branch could not be confirmed at the reviewed commit", headers=NO_STORE)
+            # Hold the same concurrency slot until the second, independently
+            # requested GitHub read is complete; a mutation response is not proof.
+            await confirm_branch_outcome(client, target, token, branch, data.base_sha)
         finally:
             limiter.release()
-        try:
-            matches = (result["ref"] == ref and result["object"]["type"] == "commit"
-                       and result["object"]["sha"] == data.base_sha)
-        except (KeyError, TypeError):
-            matches = False
-        if not matches:
-            raise HTTPException(409, "Branch could not be confirmed at the reviewed commit", headers=NO_STORE)
         return JSONResponse({"target": target, "branch": branch, "base_sha": data.base_sha,
-                             "status": status}, headers=NO_STORE)
+                             "status": status,
+                             "receipt": followup_receipt("github.branch", status, data.base_sha)},
+                            headers=NO_STORE)
 
     @app.post("/studio-api/connections/github/file-base")
     async def file_base(request: Request):
@@ -461,12 +505,19 @@ def register(app):
         try:
             result = await provider_json(request.app.state.client, "github", token, "https://api.github.com/graphql",
                                          payload=payload, post_status=200)
+            try:
+                commit = result["data"]["createCommitOnBranch"]["commit"]["oid"]
+                if result.get("errors") or not re.fullmatch(SHA, commit):
+                    raise ValueError()
+            except (KeyError, AttributeError, TypeError, ValueError):
+                raise HTTPException(409, "GitHub did not confirm a commit at the reviewed branch head", headers=NO_STORE) from None
+            # The same capacity slot protects the mutation and the full
+            # regular-file readback. A timeout or altered source is ambiguous,
+            # never a success receipt and never a reason for a blind retry.
+            await confirm_file_outcome(request.app.state.client, target, token, branch, commit, data.path, raw)
         finally:
             limiter.release()
-        try:
-            commit = result["data"]["createCommitOnBranch"]["commit"]["oid"]
-            if result.get("errors") or not re.fullmatch(SHA, commit):
-                raise ValueError()
-        except (KeyError, AttributeError, TypeError, ValueError):
-            raise HTTPException(409, "GitHub did not confirm a commit at the reviewed branch head", headers=NO_STORE) from None
-        return JSONResponse({"target": target, "branch": branch, "path": data.path, "commit": commit}, headers=NO_STORE)
+        return JSONResponse({"target": target, "branch": branch, "path": data.path, "commit": commit,
+                             "receipt": followup_receipt("github.file_commit", "committed", commit,
+                                                         file_bytes_verified=True)},
+                            headers=NO_STORE)
