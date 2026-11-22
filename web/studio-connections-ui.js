@@ -25,7 +25,6 @@ const choices=[
 ];
 dialog.append(title,connect,settings,close,operations,topic,path,review,read,editor,preview,statusLine,result,use,create,view);
 view.hidden=true;
-// Transient reviewed receipts live beside the active chat, never in session state.
 const receipt=el('section','');receipt.id='studio-connection-receipt';receipt.hidden=true;
 receipt.setAttribute('role','status');receipt.setAttribute('aria-live','polite');
 const receiptTitle=el('strong',''),receiptStatus=el('p',''),receiptPreview=el('pre','');
@@ -75,8 +74,6 @@ function showReceipt({kind,operation='',target='',message='',body='',copy=null,w
  receiptWitness.hidden=!pendingWitnessRequest;
  receipt.hidden=false;view.hidden=!dialog.open;
  if(success)statusLine.textContent=words('Result is also available in Chat.','نتیجه در بخش گفتگو نیز نمایش داده شد.');
- // A workflow sees only a genuinely completed, consent-reviewed read. This
- // is a browser/gateway completion receipt, not independently signed evidence.
  if(kind==='read'&&reviewedReadListener?.operation===operation&&
     requestedOperation===operation&&matchesSelection(dialogSelection)){
   const listener=reviewedReadListener;reviewedReadListener=null;
@@ -128,6 +125,9 @@ function checkedWitnessRequest(response,operation,target,branch,revision,path=nu
  const expected=['authority','branch','external_witness_completed','file_path',
   'file_sha256','operation','provider','repository','review_reference_sha256',
   'revision','schema','source_receipt'];
+ const receiptKeys=['schema_version','kind','operation','outcome','revision',
+  'followup_read_verified','reviewed_request_matched','file_bytes_verified',
+  'independent_attestation','deployment_verified'];
  if(!q||typeof q!=='object'||Array.isArray(q)||
     Object.keys(q).length!==expected.length||expected.some(k=>!Object.hasOwn(q,k))||
     q.schema!=='nexus.studio.github.witness-request.v1'||q.provider!=='github'||
@@ -136,13 +136,12 @@ function checkedWitnessRequest(response,operation,target,branch,revision,path=nu
     q.revision!==revision||!/^[a-f0-9]{64}$/.test(q.review_reference_sha256)||
     q.file_path!==path||
     (path===null?q.file_sha256!==null:!/^[a-f0-9]{64}$/.test(q.file_sha256))||
-    !r||typeof q.source_receipt!=='object'||Object.keys(q.source_receipt).length!==Object.keys(r).length||
-    Object.keys(r).some(k=>q.source_receipt[k]!==r[k]))throw Error('unverified-witness-request');
+    !r||Object.keys(r).length!==receiptKeys.length||
+    receiptKeys.some(k=>!Object.hasOwn(r,k))||
+    typeof q.source_receipt!=='object'||Object.keys(q.source_receipt).length!==receiptKeys.length||
+    receiptKeys.some(k=>q.source_receipt[k]!==r[k]))throw Error('unverified-witness-request');
  return q;
 }
-// A status object or GraphQL mutation response is not an execution receipt.
-// Only the gateway's separately read-back, exact-revision result is accepted.
-// This is same-provider verification, NOT independently signed attestation.
 function verifiedWriteReceipt(response,operation,outcome,revision,fileBytes){
  const r=response?.receipt;
  return Boolean(r&&r.schema_version===1&&r.kind==='github_followup_read'&&
@@ -267,8 +266,6 @@ function openFor({provider=null,operation=null,onReadReceipt=null}={}){
 open.onclick=()=>openFor();
 close.onclick=()=>{if(discardFile())dialog.close()};
 dialog.addEventListener('cancel',event=>{if(!discardFile())event.preventDefault()});
-// A close event may be delivered after another review has already opened.
-// Never let the previous dialog lifecycle erase the newly opened operation.
 dialog.addEventListener('close',()=>{
  if(dialog.open)return;
  reviewedReadListener=null;requestedProvider=requestedOperation=dialogSelection=null;reset()
@@ -309,7 +306,6 @@ connect.onclick=()=>{
 operations.onchange=topic.onchange=path.onchange=()=>{
  if(controller)return;
  if(!discardFile()){operations.value='github.edit';topic.value=fileBase.slug;path.value=fileBase.path;preview.disabled=false;return}
- // The user may replace a preselected proposal, never approve it implicitly.
  if(document.activeElement===operations){requestedOperation=null;reviewedReadListener=null}
  clearReceipt();updateReview();
 };
