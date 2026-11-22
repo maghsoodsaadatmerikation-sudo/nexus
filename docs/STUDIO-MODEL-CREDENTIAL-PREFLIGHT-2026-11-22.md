@@ -23,9 +23,9 @@ non-exhaustive and non-echoing warning** for recognized credential shapes
    both, so an enabled/disabled control alone cannot bypass this protection.
 5. Changes to the prompt, context options, model, thread, gateway, language
    import state or a lock/clear operation revoke the reviewed request and both
-   checkboxes. The warning is retranslated when switching between English and
-   Persian without preserving a stale approval. A normal clean request does
-   not inherit an earlier override.
+   checkboxes. Switching between English and Persian revokes the old
+   request review; preparing the request again shows a newly localized
+   warning. A clean request never inherits an earlier override.
 
 The local on-device model does not contact a remote provider and has no
 extra remote-transfer warning. Every remote gateway still requires its
