@@ -231,11 +231,72 @@ def test_confirmed_branch_write_never_replaces_an_existing_ref(monkeypatch):
             assert client.post(BRANCH_WRITE, headers=AUTH, json={**data, **wrong_data}).status_code == status
         assert methods == ["GET"]
         result = client.post(BRANCH_WRITE, headers=AUTH, json=data)
-        assert result.json() == {"target": REPO, "branch": TOPIC, "base_sha": BASE_SHA, "status": "created"}
-        assert client.post(BRANCH_WRITE, headers=AUTH, json=data).json()["status"] == "already_exists"
+        assert result.json() == {
+            "target": REPO, "branch": TOPIC, "base_sha": BASE_SHA, "status": "created",
+            "receipt": {
+                "schema_version": 1, "scope": "single_reviewed_connection_operation",
+                "operation": "github.branch", "outcome": "created",
+                "verification": "provider_ref_read_after_write",
+                "confirmed_by_followup_provider_read": True,
+                "independent_attestation": False, "deployment_verified": False,
+                "authority": "none",
+            },
+        }
+        existing_response = client.post(BRANCH_WRITE, headers=AUTH, json=data).json()
+        assert existing_response["status"] == "already_exists"
+        assert existing_response["receipt"]["outcome"] == "already_exists"
+        assert existing_response["receipt"]["verification"] == "provider_existing_ref_read"
         existing = {**ref, "object": {"type": "commit", "sha": "b" * 40}}
         assert client.post(BRANCH_WRITE, headers=AUTH, json=data).status_code == 409
         assert methods.count("POST") == 1
+        assert methods[-3:] == ["GET", "GET", "GET"]  # Independent provider ref checks
+
+
+
+def test_branch_create_ack_without_remote_ref_readback_remains_unconfirmed(monkeypatch):
+    """Provider POST can succeed while the next independent GET still fails.
+
+    Returning a success receipt would be a false claim; retrying POST would
+    risk a duplicate write. This is deliberately a synthetic stateful fixture.
+    """
+    monkeypatch.setenv("NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN", "separate-synthetic-write-token")
+    methods = []
+    ref = {"ref": "refs/heads/" + TOPIC,
+           "object": {"sha": BASE_SHA, "type": "commit"}}
+
+    def provider(request):
+        methods.append((request.method, request.url.path))
+        if request.url.path.endswith("/branches/main"):
+            return httpx.Response(200, json={"name": "main", "commit": {"sha": BASE_SHA}})
+        if request.method == "GET" and request.url.path.endswith("/git/ref/heads/" + TOPIC):
+            return httpx.Response(404)
+        if request.method == "POST" and request.url.path.endswith("/git/refs"):
+            return httpx.Response(201, json=ref)
+        pytest.fail("Unexpected provider action")
+
+    with gateway(monkeypatch, provider) as client:
+        data = approval(client)
+        result = client.post(BRANCH_WRITE, headers=AUTH, json=data)
+        assert result.status_code == 409
+        assert "unconfirmed" in result.json()["detail"].lower()
+        assert "receipt" not in result.json()
+        assert sum(method == "POST" for method, _ in methods) == 1
+
+
+def test_ref_response_cannot_prove_a_mismatched_branch_or_commit():
+    from studio_connections import verified_ref
+
+    wanted = "refs/heads/" + TOPIC
+    proper = {"ref": wanted, "object": {"type": "commit", "sha": BASE_SHA}}
+    assert verified_ref(proper, wanted, BASE_SHA)
+    for item in (
+        {"ref": "refs/heads/main", "object": proper["object"]},
+        {"ref": wanted, "object": {"type": "tag", "sha": BASE_SHA}},
+        {"ref": wanted, "object": {"type": "commit", "sha": "b" * 40}},
+        {"ref": wanted, "object": {}},
+        None,
+    ):
+        assert not verified_ref(item, wanted, BASE_SHA)
 
 
 def test_advanced_main_requires_a_new_preview(monkeypatch):
@@ -266,6 +327,10 @@ def test_reviewed_file_edit_is_bound_to_text_and_atomic_head(monkeypatch):
     old = "Hello\n"
     new = "Hello, Studio\n"
     current = BASE_SHA
+    committed_sha = "e" * 40
+    committed_tree = "f" * 40
+    from studio_connections import git_blob_sha
+    committed_blob = git_blob_sha(new.encode())
 
     def provider(request):
         nonlocal current
@@ -277,13 +342,25 @@ def test_reviewed_file_edit_is_bound_to_text_and_atomic_head(monkeypatch):
             return httpx.Response(200, json={"name": TOPIC, "commit": {"sha": current}})
         if path.endswith("/git/commits/" + BASE_SHA):
             return httpx.Response(200, json={"sha": BASE_SHA, "tree": {"sha": "b" * 40}})
+        if path.endswith("/git/commits/" + committed_sha):
+            return httpx.Response(200, json={"sha": committed_sha, "tree": {"sha": committed_tree}})
+        if path.endswith("/git/trees/" + committed_tree):
+            return httpx.Response(200, json={"truncated": False, "tree": [
+                {"path": FILE_PATH, "mode": "100644", "type": "blob", "sha": committed_blob}
+            ]})
         if path.endswith("/git/trees/" + "b" * 40):
             return httpx.Response(200, json={"truncated": False, "tree": [
                 {"path": FILE_PATH, "mode": "100644", "type": "blob", "sha": "e965047ad7c57865823c7d992b1d046ea66edf78"},
                 {"path": "docs/link.md", "mode": "120000", "type": "blob", "sha": "d" * 40},
             ]})
         if path.endswith("/contents/" + FILE_PATH):
-            assert request.url.params["ref"] == BASE_SHA
+            revision = request.url.params["ref"]
+            if revision == committed_sha:
+                return httpx.Response(200, json={
+                    "type": "file", "path": FILE_PATH, "encoding": "base64",
+                    "sha": committed_blob, "content": base64.b64encode(new.encode()).decode()
+                })
+            assert revision == BASE_SHA
             return httpx.Response(200, json={"type": "file", "path": FILE_PATH, "encoding": "base64",
                                              "sha": "e965047ad7c57865823c7d992b1d046ea66edf78", "content": base64.b64encode(old.encode()).decode()})
         assert request.method == "POST" and path == "/graphql"
@@ -294,7 +371,7 @@ def test_reviewed_file_edit_is_bound_to_text_and_atomic_head(monkeypatch):
                                                         "contents": base64.b64encode(new.encode()).decode()}]}
         if current != data["expectedHeadOid"]:
             return httpx.Response(200, json={"errors": [{"message": "Head changed"}], "data": {}})
-        current = "e" * 40
+        current = committed_sha
         return httpx.Response(200, json={"data": {"createCommitOnBranch": {"commit": {"oid": current}}}})
 
     with gateway(monkeypatch, provider) as client:
@@ -310,6 +387,17 @@ def test_reviewed_file_edit_is_bound_to_text_and_atomic_head(monkeypatch):
         assert client.post(FILE_COMMIT, headers=AUTH, json={**approval_body, "text": "Changed after review"}).status_code == 409
         assert client.post(FILE_COMMIT, headers=AUTH, json={**approval_body, "consent": False}).status_code == 422
         assert all(method == "GET" for method, _ in calls)
-        assert client.post(FILE_COMMIT, headers=AUTH, json=approval_body).json()["commit"] == "e" * 40
+        committed = client.post(FILE_COMMIT, headers=AUTH, json=approval_body)
+        assert committed.status_code == 200
+        assert committed.json()["commit"] == committed_sha
+        assert committed.json()["blob_sha"] == committed_blob
+        assert committed.json()["receipt"] == {
+            "schema_version": 1, "scope": "single_reviewed_connection_operation",
+            "operation": "github.file_commit", "outcome": "committed",
+            "verification": "provider_branch_and_blob_read_after_write",
+            "confirmed_by_followup_provider_read": True,
+            "independent_attestation": False, "deployment_verified": False,
+            "authority": "none",
+        }
         assert client.post(FILE_COMMIT, headers=AUTH, json=approval_body).status_code == 409
         assert client.post(FILE_PREVIEW, headers=AUTH, json=draft).status_code == 409

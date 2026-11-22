@@ -4397,6 +4397,23 @@ function clearReceipt(){
  receiptTitle.textContent=receiptStatus.textContent=receiptPreview.textContent='';
  receiptAttach.hidden=true;
 }
+/* Success requires a reviewed, scope-matching gateway write receipt. A fresh
+ * GitHub read is not independently signed third-party attestation.
+ */
+function checkedWriteReceipt(p,operation,outcome){
+ const method=operation==='github.branch'?
+  (outcome==='created'?'provider_ref_read_after_write':
+   outcome==='already_exists'?'provider_existing_ref_read':null):
+  operation==='github.file_commit'&&outcome==='committed'?
+   'provider_branch_and_blob_read_after_write':null;
+ const r=p?.receipt;
+ if(!method||!r||r.schema_version!==1||r.scope!=='single_reviewed_connection_operation'||
+    r.operation!==operation||r.outcome!==outcome||r.verification!==method||
+    r.confirmed_by_followup_provider_read!==true||
+    r.independent_attestation!==false||r.deployment_verified!==false||
+    r.authority!=='none')throw Error('unconfirmed-write-receipt');
+}
+
 function showReceipt({kind,operation='',target='',message='',body='',copy=null}){
  clearReceipt();
  receiptSelection=dialogSelection;
@@ -4517,14 +4534,19 @@ async function request(suffix,body,apply){
   if(controller!==abort||!dialog.open)return;
   if(suffix.includes('/file-')&&response.status===409){
    clearResult();
-   statusLine.textContent=words('Review again. Reload the file if the branch changed.','دوباره بازبینی کن. اگر شاخه تغییر کرده، فایل را دوباره باز کن.');
+   statusLine.textContent=fileWrite?
+    words('Commit outcome unconfirmed. Inspect the remote branch before retrying.',
+          'نتیجهٔ ثبت تغییر تأیید نشده است. پیش از تلاش دوباره، شاخه را بررسی کن.'):
+    words('Review again. Reload the file if the branch changed.',
+          'دوباره بازبینی کن. اگر شاخه تغییر کرده، فایل را دوباره باز کن.');
    showReceipt({kind:'error',operation:operations.value,message:statusLine.textContent});
    return;
   }
   if(branchWrite&&response.status===409){
    clearResult();
-   statusLine.textContent=words('Review again or choose a new name. The branch was not confirmed.',
-    'دوباره بازبینی کن یا نام دیگری انتخاب کن. ایجاد شاخه تأیید نشد.');
+   statusLine.textContent=words(
+    'Branch outcome unconfirmed. Inspect GitHub before retrying.',
+    'نتیجهٔ ایجاد شاخه تأیید نشده است. پیش از تلاش دوباره، گیت‌هاب را بررسی کن.');
    showReceipt({kind:'error',operation:operations.value,message:statusLine.textContent});
    return;
   }
@@ -4536,8 +4558,9 @@ async function request(suffix,body,apply){
   if(controller===abort&&dialog.open){
    statusLine.textContent=words('Connection unavailable. Check the gateway, access token and provider permissions.',
     'اتصال برقرار نشد. درگاه، توکن دسترسی و مجوز سرویس را بررسی کن.');
-   if(branchWrite)statusLine.textContent=words('Branch result unknown. Retry with the same name.',
-    'نتیجهٔ ساخت شاخه مشخص نیست. با همان نام دوباره تلاش کن.');
+   if(branchWrite)statusLine.textContent=words(
+    'Branch outcome unknown. Inspect GitHub before any retry.',
+    'نتیجهٔ ساخت شاخه نامشخص است. پیش از تلاش دوباره، گیت‌هاب را بررسی کن.');
    if(fileWrite)statusLine.textContent=words('Commit status unknown. Check the branch before retrying.','وضعیت ثبت تغییر مشخص نیست. پیش از تلاش دوباره، شاخه را بررسی کن.');
    showReceipt({kind:'error',operation:operations.value,message:statusLine.textContent});
   }
@@ -4687,11 +4710,14 @@ create.onclick=()=>{
  if(filePlan&&!controller){
   const approved=filePlan,entry=choice();
   request('/github/file-commit',{...approved,consent:true},p=>{
-   if(!sameFile(approved,entry,p)||!validSha(p.commit))throw Error('commit identity');
+   if(!sameFile(approved,entry,p)||!validSha(p.commit)||!validSha(p.blob_sha))throw Error('commit identity');
+  checkedWriteReceipt(p,'github.file_commit','committed');
    clearResult();fileBase=null;originalText=editor.value='';editor.hidden=preview.hidden=true;
    result.textContent=words('Commit created','تغییر ثبت شد')+'\n'+p.commit;result.hidden=false;
    showReceipt({kind:'write',operation:'github.edit',target:entry.target,
-     body:'Commit: '+p.commit+'\nWorking branch: '+p.branch});
+     message:words('Commit and file checked by a fresh GitHub read; not independently attested or deployed.',
+      'ثبت تغییر و فایل با خواندن دوباره از گیت‌هاب بررسی شد؛ تأیید مستقل یا استقرار انجام نشده است.'),
+     body:'Commit: '+p.commit+'\nBlob: '+p.blob_sha+'\nWorking branch: '+p.branch});
   });
   return;
  }
@@ -4700,13 +4726,14 @@ create.onclick=()=>{
  request('/github/branch',{...approved,consent:true},p=>{
   if(p.target!==entry.target||p.branch!=='nexus/studio-'+approved.slug||p.base_sha!==approved.base_sha||
      !['created','already_exists'].includes(p.status))throw Error('branch identity');
+  checkedWriteReceipt(p,'github.branch',p.status);
   const label=p.status==='created'?words('Branch created','شاخه ساخته شد'):words('Branch already exists','شاخه از قبل وجود داشت');
   clearResult();result.textContent=label+'\n'+p.target+' / '+p.branch;result.hidden=false;
   showReceipt({kind:'write',operation:'github.branch',target:p.target,
-    message:p.status==='created'?words('Approved working branch was created; not merged or deployed.',
-      'شاخهٔ کاری تأییدشده ساخته شد؛ ادغام یا استقرار انجام نشد.'):
-      words('Working branch already existed; no new branch was created.',
-      'شاخهٔ کاری از قبل وجود داشت؛ شاخهٔ تازه‌ای ساخته نشد.'),
+    message:p.status==='created'?words('Branch creation checked by a fresh GitHub ref read; no signed attestation or deployment.',
+      'ایجاد شاخه با خواندن دوبارهٔ مرجع گیت‌هاب بررسی شد؛ تأیید امضاشده یا استقرار انجام نشده است.'):
+      words('Existing branch ref read again. No new branch was created.',
+      'مرجع شاخهٔ موجود دوباره خوانده شد؛ شاخهٔ جدیدی ساخته نشد.'),
     body:'Branch: '+p.branch+'\nBase: '+p.base_sha});
  });
 };

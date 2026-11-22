@@ -366,13 +366,24 @@ window.addEventListener('load',async()=>{
     const result={target:'example/nexus',branch:'nexus/studio-'+body.slug,path:body.path,base_sha:'a'.repeat(40)};
     if(url.endsWith('/file-base'))result.text='Before\n';
     if(url.endsWith('/file-preview'))Object.assign(result,{diff:'-Before\n+'+body.text,review_id:'c'.repeat(64),expires_at:2000000000});
-    if(url.endsWith('/file-commit'))result.commit='d'.repeat(40);
+    if(url.endsWith('/file-commit'))Object.assign(result,{
+     commit:'d'.repeat(40),blob_sha:'e'.repeat(40),
+     receipt:{schema_version:1,scope:'single_reviewed_connection_operation',
+      operation:'github.file_commit',outcome:'committed',
+      verification:'provider_branch_and_blob_read_after_write',
+      confirmed_by_followup_provider_read:true,independent_attestation:false,
+      deployment_verified:false,authority:'none'}
+    });
     return new Response(JSON.stringify(result));
    }
    if(url.endsWith('/github/branch-preview'))return new Response(JSON.stringify({target:'example/nexus',
     branch:'nexus/studio-'+body.slug,base_sha:'a'.repeat(40),expires_at:2000000000,review_id:'c'.repeat(64)}));
    if(url.endsWith('/github/branch'))return new Response(JSON.stringify({target:'example/nexus',
-    branch:'nexus/studio-'+body.slug,base_sha:body.base_sha,status:'created'}));
+    branch:'nexus/studio-'+body.slug,base_sha:body.base_sha,status:'created',
+    receipt:{schema_version:1,scope:'single_reviewed_connection_operation',
+     operation:'github.branch',outcome:'created',verification:'provider_ref_read_after_write',
+     confirmed_by_followup_provider_read:true,independent_attestation:false,
+     deployment_verified:false,authority:'none'}}));
    return new Response(JSON.stringify({provider:'github',target:'example/nexus',operation:body.operation,
     provenance:'external-untrusted',result:{path:body.path,blob_sha:'a'.repeat(40),text:'Synthetic repository source'}}));
   };
@@ -412,6 +423,9 @@ window.addEventListener('load',async()=>{
   assert(create.hidden,'changing-branch-name-clears-approval');
   $('studio-connections-read').click();await wait(()=>!create.hidden);
   create.click();await wait(()=>$('studio-connections').textContent.includes('Branch created'));
+  assert($('studio-connection-receipt').textContent.includes('fresh GitHub ref read')&&
+   $('studio-connection-receipt').textContent.includes('no signed attestation'),
+   'branch-has-readback-confirmed-not-signed-receipt');
   const writes=requests.filter(x=>x.url.endsWith('/github/branch')).map(x=>JSON.parse(x.options.body));
   assert(writes.length===1&&writes[0].slug==='other-change'&&writes[0].base_sha==='a'.repeat(40)&&
    writes[0].consent===true&&$('message').value===draft,'separate-approval-creates-only-reviewed-branch');
@@ -432,6 +446,9 @@ window.addEventListener('load',async()=>{
   assert(create.hidden,'editing-text-invalidates-the-reviewed-diff');
   $('studio-file-preview').click();await wait(()=>!create.hidden);
   create.click();await wait(()=>$('studio-connections').textContent.includes('Commit created'));
+  assert($('studio-connection-receipt').textContent.includes('fresh GitHub read')&&
+   $('studio-connection-receipt').textContent.includes('Blob: '+'e'.repeat(40)),
+   'file-commit-has-git-blob-readback-receipt');
   const writesToFile=requests.filter(x=>x.url.endsWith('/file-commit')).map(x=>JSON.parse(x.options.body));
   assert(writesToFile.length===1&&writesToFile[0].base_sha==='a'.repeat(40)&&
    writesToFile[0].consent===true&&writesToFile[0].text==='Final edit\n'&&$('message').value===draft,
