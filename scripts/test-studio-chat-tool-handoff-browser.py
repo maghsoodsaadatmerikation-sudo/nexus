@@ -18,7 +18,7 @@ window.addEventListener('load',async()=>{
  let crossrefCalls=0,rejectCrossref=false;
  let branchEnabled=false,delayRead=false,releaseRead,readSignal;
  let branchPreviews=0,branchWrites=0,planCalls=0,invalidPlan=false,delayPlan=false,releasePlan;
- let capCalls=0,invalidCap=false,delayCap=false,releaseCap;
+ let capCalls=0,invalidCap=false,invalidGate=false,delayCap=false,releaseCap;
  const branchBase='d'.repeat(40);
  const closeConnection=async()=>{const d=$('studio-connections');const closed=new Promise(r=>d.addEventListener('close',r,{once:true}));$('studio-connections-close').click();await closed};
  window.confirm=()=>true;
@@ -31,8 +31,23 @@ window.addEventListener('load',async()=>{
     options.headers.authorization==='Bearer '+$('gateway-token').value.trim(),
     'capability-read-only-uses-explicit-operator-token');
    if(delayCap)await new Promise(resolve=>{releaseCap=resolve});
+   const gates=[
+    ['github.pulls','read'],['github.file','read'],['render.deploys','read'],
+    ['github.branch_preview','review'],['github.branch','write'],
+    ['github.file_base','read'],['github.file_preview','review'],
+    ['github.file_commit','write'],['model.response','model']
+   ].map(([id,phase])=>({
+    id,phase,
+    configuration_readiness:id==='github.branch'||id==='github.branch_preview'?
+     'not_configured':'configured_not_live_verified',
+    potential_account_mutation:phase==='write',
+    permission_verified:false,execution_observed:false,receipt_observed:false,
+    separate_user_review_required:true,
+    proof_boundary:'independent_action_receipt_required'
+   }));
+   if(invalidGate)gates[4].permission_verified=true;
    return Response.json(invalidCap?{schema_version:1,capabilities:[{id:'unsafe<script>',readiness:'executed'}]}:{
-    schema_version:1,kind:'non_authoritative_capability_disclosure',authority:'none',
+    schema_version:2,kind:'non_authoritative_capability_disclosure',authority:'none',
     scope:'reviewed_source_and_local_configuration_only',deployment_revision_verified:false,
     browser_runtime_verified:false,provider_contact_attempted:false,tools_executed:0,
     model_streaming_configured:false,capabilities:[
@@ -42,7 +57,7 @@ window.addEventListener('load',async()=>{
       data_boundary:'model_provider_after_review',separate_user_review_required:true,execution_observed:false},
      {id:'remote_shell',readiness:'not_implemented_in_this_gateway',
       data_boundary:'unavailable',separate_user_review_required:true,execution_observed:false}
-    ]
+    ],operation_gates:gates
    });
   }
   if(String(url).endsWith('/studio-api/assistant/plan-preview')){
@@ -193,25 +208,36 @@ window.addEventListener('load',async()=>{
    'credential-edits-revoke-a-pending-status-panel');
   capButton.click();
   $('studio-assistant-capability-check').click();
-  await wait(()=>capCalls===1&&$('studio-assistant-capability-results').children.length===3);
+  await wait(()=>capCalls===1&&$('studio-assistant-capability-results').children.length===3&&
+   $('studio-assistant-operation-gates').children.length===9);
   assert($('studio-assistant-capability-panel').textContent.includes('Configured · not live-tested')&&
    $('studio-assistant-capability-panel').textContent.includes('Not implemented')&&
    $('message').value===protectedDraft,'capability-disclosure-is-honest-and-preserves-chat');
-  capButton.click();invalidCap=true;capButton.click();
+  assert($('studio-assistant-operation-gates').textContent.includes('github.branch · Write')&&
+   $('studio-assistant-operation-gates').textContent.includes('Not configured'),
+   'operation-gates-separate-writes-and-configured-credentials');
+  capButton.click();invalidGate=true;capButton.click();
   $('studio-assistant-capability-check').click();
   await wait(()=>capCalls===2&&$('studio-assistant-capability-feedback').textContent.includes('invalid'));
-  assert($('studio-assistant-capability-results').children.length===0,
+  assert($('studio-assistant-operation-gates').children.length===0&&
+   $('studio-assistant-capability-results').children.length===0,
+   'forged-external-permission-is-never-displayed');
+  invalidGate=false;capButton.click();invalidCap=true;capButton.click();
+  $('studio-assistant-capability-check').click();
+  await wait(()=>capCalls===3&&$('studio-assistant-capability-feedback').textContent.includes('invalid'));
+  assert($('studio-assistant-capability-results').children.length===0&&
+   $('studio-assistant-operation-gates').children.length===0,
    'invalid-capability-response-fails-closed');
   invalidCap=false;capButton.click();capButton.click();delayCap=true;
   $('studio-assistant-capability-check').click();
-  await wait(()=>capCalls===3&&Boolean(releaseCap));
+  await wait(()=>capCalls===4&&Boolean(releaseCap));
   capButton.click();releaseCap();delayCap=false;
   assert($('studio-assistant-capability-panel').hidden&&
    $('studio-assistant-capability-panel').children.length===0,
    'closing-capability-panel-revokes-inflight-response');
   fill('message','/readiness');
   chatSend.click();
-  assert(!$('studio-assistant-capability-panel').hidden&&capCalls===3&&providerCalls===2,
+  assert(!$('studio-assistant-capability-panel').hidden&&capCalls===4&&providerCalls===2,
    'chat-readiness-command-opens-review-with-zero-provider-calls');
   capButton.click();
 

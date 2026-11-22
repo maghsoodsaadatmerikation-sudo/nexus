@@ -136,17 +136,30 @@ const capabilityStates=Object.freeze({
  local_budget_exhausted:['Local budget exhausted','سهمیهٔ محلی تمام شده'],
  not_implemented_in_this_gateway:['Not implemented in this gateway','در این درگاه پیاده‌سازی نشده']
 });
+const operationPhaseNames=Object.freeze({
+ read:['Read','خواندن'],
+ review:['Preview','پیش‌نمایش'],
+ write:['Write · separate approval','نوشتن · تأیید جداگانه'],
+ model:['Model request','درخواست مدل']
+});
+const expectedGatePhases=Object.freeze({
+ 'github.pulls':'read','github.file':'read','render.deploys':'read',
+ 'github.branch_preview':'review','github.branch':'write',
+ 'github.file_base':'read','github.file_preview':'review',
+ 'github.file_commit':'write','model.response':'model'
+});
 function checkedCapabilities(payload){
- if(!payload||payload.schema_version!==1||
+ if(!payload||payload.schema_version!==2||
   payload.kind!=='non_authoritative_capability_disclosure'||
   payload.authority!=='none'||payload.scope!=='reviewed_source_and_local_configuration_only'||
   payload.deployment_revision_verified!==false||payload.browser_runtime_verified!==false||
   payload.provider_contact_attempted!==false||payload.tools_executed!==0||
   typeof payload.model_streaming_configured!=='boolean'||
   !Array.isArray(payload.capabilities)||payload.capabilities.length<1||
-  payload.capabilities.length>40)throw Error('unverified-capabilities');
+  payload.capabilities.length>40||!Array.isArray(payload.operation_gates)||
+  payload.operation_gates.length!==9)throw Error('untrusted-capabilities');
  const seen=new Set();
- return payload.capabilities.map(row=>{
+ const capabilities=payload.capabilities.map(row=>{
   if(!row||typeof row.id!=='string'||!/^[a-z][a-z0-9_]{1,39}$/.test(row.id)||
     seen.has(row.id)||!Object.hasOwn(capabilityStates,row.readiness)||
     typeof row.data_boundary!=='string'||row.data_boundary.length>80||
@@ -154,6 +167,23 @@ function checkedCapabilities(payload){
    throw Error('invalid-capability');
   seen.add(row.id);return {id:row.id,readiness:row.readiness};
  });
+ const seenGates=new Set();
+ const gates=payload.operation_gates.map(row=>{
+  if(!row||typeof row.id!=='string'||!Object.hasOwn(expectedGatePhases,row.id)||
+     seenGates.has(row.id)||row.phase!==expectedGatePhases[row.id]||
+     !['not_configured','configured_not_live_verified',
+       'local_budget_unavailable','local_budget_exhausted'].includes(row.configuration_readiness)||
+     (row.id!=='model.response'&&
+       !['not_configured','configured_not_live_verified'].includes(row.configuration_readiness))||
+     row.potential_account_mutation!==(row.phase==='write')||
+     row.permission_verified!==false||row.execution_observed!==false||
+     row.receipt_observed!==false||row.separate_user_review_required!==true||
+     row.proof_boundary!=='independent_action_receipt_required')
+    throw Error('untrusted-operation-gate');
+  seenGates.add(row.id);
+  return {id:row.id,phase:row.phase,readiness:row.configuration_readiness};
+ });
+ return {capabilities,gates};
 }
 function showCapabilityPanel(){
  if(!statusPanel.hidden){clearCapabilityPanel();return}
@@ -162,6 +192,7 @@ function showCapabilityPanel(){
  statusButton.setAttribute('aria-expanded','true');
  const heading=document.createElement('strong'),note=document.createElement('p'),
   feedback=document.createElement('p'),list=document.createElement('ul'),
+  gatesTitle=document.createElement('strong'),gatesList=document.createElement('ul'),
   check=document.createElement('button'),close=document.createElement('button');
  heading.textContent=words('Tool availability, not tool execution','وضعیت ابزارها، نه اجرای آن‌ها');
  note.className='help';note.textContent=words(
@@ -171,6 +202,8 @@ function showCapabilityPanel(){
  feedback.setAttribute('role','status');feedback.setAttribute('aria-live','polite');
  feedback.textContent=words('Nothing checked yet.','هنوز بررسی نشده است.');
  list.id='studio-assistant-capability-results';
+ gatesTitle.textContent=words('Provider operation gates · configuration only','دروازهٔ عملیات اتصال · فقط پیکربندی');
+ gatesList.id='studio-assistant-operation-gates';
  check.type='button';check.className='secondary';check.id='studio-assistant-capability-check';
  check.textContent=words('Check gateway configuration (read-only)','بررسی فقط‌خواندنی پیکربندی درگاه');
  close.type='button';close.className='secondary';
@@ -187,7 +220,7 @@ function showCapabilityPanel(){
   }
   const controller=new AbortController(),epoch=++statusEpoch,scope=statusScope;
   statusController?.abort();statusController=controller;
-  list.replaceChildren();check.disabled=true;
+  list.replaceChildren();gatesList.replaceChildren();check.disabled=true;
   feedback.textContent=words('Checking configuration only…','در حال بررسی فقط پیکربندی…');
   const timer=setTimeout(()=>controller.abort(),12000);
   try{
@@ -198,18 +231,24 @@ function showCapabilityPanel(){
    const result=checkedCapabilities(await planResponse(response));
    if(statusPanel.hidden||epoch!==statusEpoch||scope!==workflowScope()||
       origin!==planGateway()||token!==($('gateway-token')?.value.trim()||''))return;
-   for(const item of result){
+   for(const item of result.capabilities){
     const li=document.createElement('li'),known=catalog.find(c=>c.command===item.id);
     li.textContent=(known?words(known.en,known.fa):item.id)+' · '+
       words(...capabilityStates[item.readiness]);
     list.append(li);
+   }
+   for(const gate of result.gates){
+    const li=document.createElement('li');
+    li.textContent=gate.id+' · '+words(...operationPhaseNames[gate.phase])+' · '+
+      words(...capabilityStates[gate.readiness]);
+    gatesList.append(li);
    }
    feedback.textContent=words(
     'Configuration inventory only · no actions executed · no live readiness proven.',
     'فقط وضعیت پیکربندی · هیچ عملی اجرا نشده · آمادگی زنده اثبات نشده است.');
   }catch{
    if(epoch===statusEpoch&&!statusPanel.hidden){
-    list.replaceChildren();
+    list.replaceChildren();gatesList.replaceChildren();
     feedback.textContent=words('Status unavailable or invalid. No tools ran.',
      'وضعیت در دسترس نیست یا پاسخ نامعتبر است؛ هیچ ابزاری اجرا نشده است.');
    }
@@ -218,7 +257,7 @@ function showCapabilityPanel(){
    if(epoch===statusEpoch){statusController=null;check.disabled=false}
   }
  };
- statusPanel.append(heading,note,check,close,feedback,list);
+ statusPanel.append(heading,note,check,close,feedback,list,gatesTitle,gatesList);
 }
 statusButton.addEventListener('click',showCapabilityPanel);
 const explicitReadiness=message=>/^(?:\/readiness|check (?:nexus )?(?:tool|capability) (?:status|readiness)|وضعیت ابزارهای نکسوس|وضعیت قابلیت‌های نکسوس)$/iu.test(message.trim());
