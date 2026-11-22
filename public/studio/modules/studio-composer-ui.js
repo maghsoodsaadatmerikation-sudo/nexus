@@ -805,9 +805,8 @@ function offerTool(message,result){
   clearOffer();
   openReviewedSurface(result,message);
  });
- const status=document.createElement('button');status.type='button';status.className='secondary';
- status.textContent=words('Inspect tool status','بررسی وضعیت ابزار');
- status.onclick=showCapabilityPanel;
+ // Tool status already has a persistent button above the composer. Keeping this
+ // proposal to three choices preserves keyboard order and the local-guide fallback.
  const dismiss=document.createElement('button');dismiss.type='button';dismiss.className='secondary';
  dismiss.textContent=words('Keep typing','ادامهٔ نوشتن');dismiss.addEventListener('click',()=>{clearOffer();$('message').focus()});
  const proceed=document.createElement('button');proceed.type='button';proceed.className='secondary';
@@ -824,7 +823,7 @@ function offerTool(message,result){
   if(select.value==='guide'){$('guide').click();refresh();return}
   refresh();run({routeTools:false});
  });
- offer.append(p,open,status,proceed,dismiss);
+ offer.append(p,open,proceed,dismiss);
 }
 
 let running=false,temporaryModel=false;
