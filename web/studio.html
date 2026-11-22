@@ -2734,6 +2734,9 @@ $('clear-chat-files').onclick=()=>{if(busy)return;clearChatAttachments();stop()}
 for(const id of ['message','gateway','gateway-token','use-memory','use-sources','use-related-chats','use-astrology','astro-historical','sky-tone','study-mode'])$(id).addEventListener('input',stop);
 $('send-model').onclick=async()=>{
  if(!pending||!$('consent').checked||busy)return;
+ // A reviewed gateway attempt can consume local budget even on failure;
+ // invalidate the previous snapshot before any possible provider request.
+ if(pending.destination==='gateway')modelReadiness=null;
  languageImport++;
  const request=pending,rev=revision,abort=new AbortController();
  const current=()=>rev===revision&&request.projectId===projectId&&request.threadId===threadId&&!abort.signal.aborted;
