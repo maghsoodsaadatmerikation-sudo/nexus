@@ -20,22 +20,26 @@ window.addEventListener('load',async()=>{
  const snapshot=()=>NexusStudioUI.snapshot();
  const selected=()=>snapshot().projects.find(p=>p.id===NexusStudioUI.selection().projectId)
    ?.threads.find(t=>t.id===NexusStudioUI.selection().threadId);
- const rid='e'.repeat(64),model='reviewed-synthetic-route';
+ const rid='e'.repeat(64),model='reviewed-synthetic-route',
+       legacyId='d'.repeat(64),legacyModel='legacy-synthetic-route';
  let receiptCapable=true,replyCase='wrong-slot',calls=0;
  window.confirm=()=>true;
  window.fetch=async(url,options={})=>{
    const address=String(url);
    if(address.endsWith('/studio-api/status'))return Response.json({
-    configured:true,configuration_id:rid,model,provider_host:'review.invalid',
+    configured:true,configuration_id:receiptCapable?rid:legacyId,
+    model:receiptCapable?model:legacyModel,provider_host:'review.invalid',
     ...(receiptCapable?{reply_receipt_version:1}:{}),authority:'none'
    });
    assert(address.endsWith('/studio-api/respond')&&options.method==='POST',
     'receipt-test-never-contacts-other-endpoints');
    const request=JSON.parse(options.body);
-   assert(request.consent===true&&request.configuration_id===rid,
+   assert(request.consent===true&&
+    request.configuration_id===(receiptCapable?rid:legacyId),
     'approved-request-binds-frozen-configuration');
    calls++;
-   const result={text:'Reviewed model answer',model,origin:'model',authority:'none'};
+   const result={text:'Reviewed model answer',
+     model:receiptCapable?model:legacyModel,origin:'model',authority:'none'};
    if(replyCase==='wrong-slot')Object.assign(result,{model_slot:'secondary',configuration_id:rid});
    if(replyCase==='wrong-id')Object.assign(result,{model_slot:'primary',configuration_id:'f'.repeat(64)});
    if(replyCase==='partial')Object.assign(result,{model_slot:'primary'});
@@ -82,7 +86,7 @@ window.addEventListener('load',async()=>{
       'gateway-credential-is-not-archived');
    receiptCapable=false;replyCase='missing';
    $('studio-compose-model-check').click();
-   await wait(()=>NexusStudioUI.modelAvailability().configured);
+   await wait(()=>NexusStudioUI.modelAvailability().model===legacyModel);
    await submit();
    await wait(()=>NexusStudio.path(selected()).at(-1)?.text==='Reviewed model answer');
    const last=NexusStudio.path(selected()).at(-1);
