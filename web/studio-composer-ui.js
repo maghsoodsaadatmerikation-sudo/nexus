@@ -311,7 +311,7 @@ function showWorkflow(){
  exportButton.className='secondary';
  exportButton.textContent=words('Download checkpoint (plain JSON)','دریافت پیشرفت (JSON بدون رمزگذاری)');
  exportButton.onclick=downloadWorkflow;
- workflow.append(exportButton,cancel);
+ workflow.append(cancel,exportButton);
 }
 
 function parseCheckpoint(raw){
