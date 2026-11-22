@@ -63,11 +63,17 @@ node scripts/test-studio-core.mjs
 python3 scripts/build-studio.py --check
 python3 scripts/build-studio-static.py --check
 python3 scripts/test-studio-browser.py
+python3 scripts/test-studio-model-receipt-browser.py
 ```
 
+A separate real-browser witness covers the receipt scenarios on fresh
+narrow and wide Studio sessions so its acceptance checks remain inside the
+strict 60-second per-browser deadline. The general Studio witness remains
+bounded and independently runs its existing broader workflow.
+
 Tests cover a matching model response, wrong slot, wrong configuration,
-missing v1 receipt, streamed wrong-slot completion, validated archive
-round-trips, and inert, readable provenance labels.
+missing or partial v1 receipts, streamed wrong-slot completion, validated
+archive round-trips, and inert, readable provenance labels.
 
 No live model calls, provider credentials, public deployment, billing
 changes or user archive migrations are performed by this change.
