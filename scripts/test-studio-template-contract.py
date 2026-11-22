@@ -44,6 +44,24 @@ class TemplateContractTests(unittest.TestCase):
         )
         self.assertEqual(compiled, (ROOT / "public/studio/index.html").read_bytes())
 
+
+    def test_public_chat_module_is_single_pinned_external_script(self):
+        source = (ROOT / "web/studio.html").read_text()
+        composer = (ROOT / "web/studio-composer-ui.js").read_text()
+        public = static_builder.render_public_shell(
+            source, (ROOT / "web/device/device-panel.html").read_text())
+        expected = b'<script src="./modules/studio-composer-ui.js" integrity="sha256-'
+        self.assertEqual(public.count(expected), 1)
+        self.assertNotIn(("<script>" + composer + "</script>").encode(), public)
+        self.assertEqual((ROOT / "public/studio/modules/studio-composer-ui.js").read_bytes(),
+                         composer.encode())
+        # Tampering with the precompiled inline block must fail closed.
+        for changed in (source.replace("<script>" + composer + "</script>", "", 1),
+                        source + "<script>" + composer + "</script>"):
+            with self.assertRaises(ValueError):
+                static_builder.render_public_shell(
+                    changed, (ROOT / "web/device/device-panel.html").read_text())
+
     def test_public_shell_fails_closed_if_integration_anchor_is_missing_or_duplicated(self):
         source = (ROOT / "web/studio.html").read_text()
         panel = (ROOT / "web/device/device-panel.html").read_text()
