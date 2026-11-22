@@ -68,3 +68,41 @@ def test_strict_consent_and_transport_validation(monkeypatch):
         assert client.post(URL, headers={**AUTH, "content-type": "application/json"},
                            content=b"not-json").status_code == 422
         assert client.post(URL, headers=AUTH, json={**body, "goal": "Research X\nWrite Y\n/unknown"}).status_code == 422
+
+
+def test_export_preview_parity_with_reviewed_browser_workflow():
+    # An export route is a review surface, never a file-delivery assertion.
+    en = preview("Draft a report then export document as DOCX")
+    assert [s["command"] for s in en["steps"]] == ["/write", "/export"]
+    fa = preview("برنامه:\n۱. بنویس گزارش\n۲. خروجی سند به PDF")
+    assert [s["tool"] for s in fa["steps"]] == ["write", "export"]
+    assert all(s["status"] == "not_started" for s in fa["steps"])
+    assert fa["provider_requests"] == fa["tools_executed"] == 0
+    direct = preview("/plan\n/write a report\n/export document as markdown")
+    assert [s["tool"] for s in direct["steps"]] == ["write", "export"]
+
+
+@pytest.mark.parametrize("goal", [
+    "Write a report and export document",
+    "بنویس گزارش و خروجی سند",
+    "Research a topic then run python",
+    "/plan\n/write a report\n/run python",
+    "/plan\n/write a report\n/export account secrets",
+])
+def test_export_and_execution_boundaries_fail_closed(goal):
+    with pytest.raises(ValueError):
+        preview(goal)
+
+
+def test_export_gateway_response_is_only_review(monkeypatch):
+    monkeypatch.setenv("NEXUS_STUDIO_TOKEN", TOKEN)
+    with TestClient(main.app) as client:
+        response = client.post(URL, headers=AUTH, json={
+            "consent": True, "goal": "Draft a report then export document as Word"
+        })
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        payload = response.json()
+        assert [s["command"] for s in payload["steps"]] == ["/write", "/export"]
+        assert payload["execution"] == "not_started"
+        assert payload["tools_executed"] == payload["provider_requests"] == 0
