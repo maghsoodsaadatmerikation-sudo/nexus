@@ -508,7 +508,7 @@ function localNaturalPlan(draft){
  if(entries.length<2||entries.length>6)throw Error('local-plan-count');
  const detectors=[
   ['research',/^(?:\/research(?:\s|$)|research(?:\s|$)|search\s+(?:the\s+web\s+)?(?:for\s+)?|پژوهش(?:\s|$)|جست[\s‌]*و[\s‌]*جو(?:\s+کن)?(?:\s|$))/iu],
-  ['data',/^(?:\/data(?:\s|$)|analy[sz]e(?:\s|$)|تحلیل\s*(?:داده|فایل|csv)(?:\s|$))/iu],
+  ['data',/^(?:\/data(?:\s|$)|analy[sz]e(?:\s|$)|تحلیل\s*(?:داده|فایل|csv)(?:[‌\s]|$))/iu],
   ['write',/^(?:\/write(?:\s|$)|draft(?:\s|$)|write(?:\s|$)|بنویس(?:\s|$)|نوشتن(?:\s|$)|پیش\s*نویس(?:\s|$))/iu],
   ['export',/^(?:\/export(?:$|\s+(?:document|draft|report|file|markdown|docx|word|pdf)\b)|(?:export|download)\s+(?:(?:the|this)\s+)?(?:document|draft|report|file|markdown|docx|word|pdf)\b|خروجی\s*(?:سند|فایل|گزارش)(?:\s|$)|(?:دانلود|دریافت)\s*(?:سند|فایل|گزارش)(?:\s|$))/iu],
   ['code',/^(?:\/code(?:\s|$)|run\s+(?:this\s+)?(?:javascript|js)\b|کدنویسی(?:\s|$)|اجرا\s*ی?\s*کد(?:\s|$))/iu],
