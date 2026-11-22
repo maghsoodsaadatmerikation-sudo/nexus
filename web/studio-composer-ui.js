@@ -258,8 +258,8 @@ function showWorkflow(){
  title.textContent=words('Your reviewed workflow','گردش‌کار قابل بازبینی');
  const info=document.createElement('p');info.className='help';
  info.textContent=words(
-  'Opening is not execution. Tools need fresh results; scores do not prove WAV quality. Tasks require every job to succeed. Exports request downloads, not delivery. Save work separately; nothing runs automatically.',
-  'بازکردن ابزار اجرا نیست. هر ابزار نتیجهٔ تازه می‌خواهد؛ در وظایف همهٔ کارها باید موفق شوند. پارتیتور تضمین WAV نیست؛ خروجی سند فقط درخواست دانلود است. ذخیره و اجرا نیاز به اقدام جداگانه دارند.');
+  'Opening does not run tools. Steps need fresh results; all tasks must succeed. Score is not WAV, download is not delivery. Confirm and save separately.',
+  'بازکردن ابزار اجرا نیست. نتیجهٔ تازه و موفقیت همهٔ کارها لازم است. پارتیتور WAV نیست؛ درخواست دانلود تحویل فایل نیست. تأیید و ذخیره جداگانه‌اند.');
  const list=document.createElement('ol');
  plan.steps.forEach((step,i)=>{
   const item=document.createElement('li'),span=document.createElement('span');
