@@ -81,6 +81,9 @@ def preview(goal: str) -> dict:
         if len(matches) != 1:
             raise ValueError("unrecognized or ambiguous workflow step")
         tool = matches[0]
+        # The current local Code Lab executes JavaScript, never Python.
+        if tool == "code" and re.search(r"\bpython\b|پایتون", instruction, re.I):
+            raise ValueError("Python execution is not a reviewed Studio tool")
         # Slash commands beyond the reviewed exact routes are never inferred.
         if instruction.startswith("/") and not re.fullmatch(rf"/{tool}\b.*", instruction, re.I):
             raise ValueError("unsupported command")
