@@ -405,6 +405,8 @@ window.addEventListener('load',async()=>{
     'assistant-offline-plan-parity-does-not-contact-providers');
    fill('message','Continue regular chat after the private plan');
    assert(workflow.hidden,'assistant-offline-plan-clears-on-context-edit');
+   // Restore the unrelated connector fixture for the pre-existing Render cases.
+   fill('gateway-token','studio-preview-token-01234567890123456789');
    // The local-guide mode retains broad opt-in natural-language discovery.
   // Explicit slash commands still work in both modes.
   chooser.value='guide';chooser.dispatchEvent(new Event('change',{bubbles:true}));
