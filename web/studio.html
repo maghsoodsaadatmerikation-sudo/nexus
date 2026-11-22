@@ -4012,6 +4012,15 @@ function refresh(){
     'مدل درگاه هنوز بررسی نشده است. پیش از درخواست پاسخ، تنظیمات را بررسی کن.'):
   !availability.configured?words('No model configured at this gateway. Local guide is still available.',
     'در این درگاه مدلی پیکربندی نشده است؛ راهنمای محلی همچنان در دسترس است.'):
+  availability.localReadiness==='LOCAL_BUDGET_UNAVAILABLE'?
+  words('Local request budget storage unavailable. Model requests are blocked; provider access unverified.',
+    'ذخیرهٔ سهمیهٔ محلی در دسترس نیست. درخواست مدل مسدود است؛ اتصال ارائه‌دهنده تأیید نشده است.'):
+  availability.localReadiness==='LOCAL_BUDGET_EXHAUSTED'?
+  words('Local request budget exhausted. Model requests are blocked; provider access unverified.',
+    'سهمیهٔ محلی تمام شده است. درخواست مدل مسدود است؛ اتصال ارائه‌دهنده تأیید نشده است.'):
+  availability.localReadiness==='READY_TO_TEST'?
+  words(availability.model+' · '+availability.providerHost+' · '+availability.remainingRequests+' local attempt(s) remain. Ready to test configuration only; provider access, billing and quality unverified.',
+    availability.model+' · '+availability.providerHost+' · '+availability.remainingRequests+' درخواست محلی باقی مانده است. فقط پیکربندی برای آزمایش آماده است؛ اتصال، هزینه و کیفیت تأیید نشده‌اند.'):
   words(availability.model+' · '+availability.providerHost+' · configured only; real access and quality are not verified.',
     availability.model+' · '+availability.providerHost+' · فقط پیکربندی تأیید شده؛ دسترسی و کیفیت واقعی هنوز بررسی نشده‌اند.');
  save.textContent=state.vaultUnlocked?words('Save encrypted session','ذخیرهٔ رمزگذاری‌شدهٔ نشست'):words('Set up private archive','تنظیم آرشیو خصوصی');
