@@ -10,10 +10,11 @@ import stat
 # Reviewed chat-model status UI increases the complete static shell by ~4.3 KiB.
 # Keep a strict 620 KiB-class per-file cap (not an unbounded exception).
 # Reviewed per-answer model routing receipts add ~2.4 KiB to the public
-# Studio HTML. Increase ONLY its bounded size ceiling by 5 KiB; retain the
+# Studio HTML. Credential preflight adds a small additional prompt-review panel;
+# increase only the HTML ceiling by another 5 KiB. Retain the
 # original cap on every other static asset and the independent PDF worker cap.
 MAX_FILE = 625_000
-STUDIO_INDEX_LIMIT = 630_000
+STUDIO_INDEX_LIMIT = 635_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000
