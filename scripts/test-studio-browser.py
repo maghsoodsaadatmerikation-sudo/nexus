@@ -500,7 +500,7 @@ window.addEventListener('load',async()=>{
   frame({type:'delta',text:'Only one fragment'});stream.close();
   await wait(()=>$('request-review').hidden);
   assert($('message').value==='Retryable draft'&&$('model-stream-preview').hidden&&JSON.stringify(snapshot())===committedStream&&
-   $('status').textContent===EN.streamFailed,'interrupted-stream-preserves-draft-and-discards-fragments');
+   $('status').textContent===EN.gatewayMalformedReply,'interrupted-stream-preserves-draft-and-discards-fragments');
   $('prepare').click();sendStream();await wait(()=>streamCalls===3);
   frame({type:'delta',text:'Stop this preview'});await wait(()=>!$('model-stream-preview').hidden);
   $('stop').click();
