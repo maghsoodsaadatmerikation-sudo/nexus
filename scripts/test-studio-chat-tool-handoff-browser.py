@@ -418,6 +418,11 @@ window.addEventListener('load',async()=>{
    assert(NexusStudioFocus.active()==='music-card'&&
     workflow.querySelector('li button:nth-of-type(2)').disabled,
     'music-panel-open-is-not-a-score-receipt');
+   $('music-bars').value='0';
+   $('music-bars').dispatchEvent(new Event('change',{bubbles:true}));
+   $('music-build').click();
+   assert(workflow.querySelector('li button:nth-of-type(2)').disabled,
+    'failed-music-composition-does-not-produce-a-receipt');
    $('music-bars').value='32';
    $('music-bars').dispatchEvent(new Event('change',{bubbles:true}));
    $('music-build').click();
