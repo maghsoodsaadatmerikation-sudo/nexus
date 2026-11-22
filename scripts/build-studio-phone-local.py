@@ -16,7 +16,7 @@ import subprocess
 import sys
 import zipfile
 
-from studio_public_assets import FILES, MAX_FILE, WORKER_LIMIT, asset_limit
+from studio_public_assets import FILES, MAX_FILE, STUDIO_INDEX_LIMIT, WORKER_LIMIT, asset_limit
 
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC = ROOT / "public/studio"
@@ -112,6 +112,7 @@ from urllib.parse import urlsplit
 
 BASE = Path(__file__).resolve().parent
 LIMIT = __STUDIO_MAX_FILE__
+INDEX_LIMIT = __STUDIO_INDEX_LIMIT__
 PDF_WORKER_LIMIT = __STUDIO_WORKER_LIMIT__
 ASSET_COUNT = __STUDIO_ASSET_COUNT__
 MIME = {
@@ -141,7 +142,8 @@ def load_public():
             raise ValueError("unsafe public asset name")
         st = path.lstat()
         if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or path.is_symlink() or \
-           not (0 < st.st_size <= (PDF_WORKER_LIMIT if name == "pdf/pdf.worker.min.mjs" else LIMIT)):
+           not (0 < st.st_size <= (PDF_WORKER_LIMIT if name == "pdf/pdf.worker.min.mjs" else
+                                   INDEX_LIMIT if name == "index.html" else LIMIT)):
             raise ValueError("unsafe public asset type or length")
         payload = path.read_bytes()
         if len(payload) != expected["bytes"] or \
@@ -283,7 +285,7 @@ def contents(commit):
     }
     return {
         **assets,
-        "run-local.py": LAUNCHER.replace("__STUDIO_MAX_FILE__", str(MAX_FILE)).replace("__STUDIO_WORKER_LIMIT__", str(WORKER_LIMIT)).replace("__STUDIO_ASSET_COUNT__", str(len(SOURCE_NAMES) + 1)).encode(),
+        "run-local.py": LAUNCHER.replace("__STUDIO_MAX_FILE__", str(MAX_FILE)).replace("__STUDIO_INDEX_LIMIT__", str(STUDIO_INDEX_LIMIT)).replace("__STUDIO_WORKER_LIMIT__", str(WORKER_LIMIT)).replace("__STUDIO_ASSET_COUNT__", str(len(SOURCE_NAMES) + 1)).encode(),
         "README.txt": README.encode(),
         "source-manifest.json": (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(),
     }
