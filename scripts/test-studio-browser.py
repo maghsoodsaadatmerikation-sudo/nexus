@@ -463,10 +463,12 @@ window.addEventListener('load',async()=>{
   let stream,streamSignal,streamCalls=0;
   const encoder=new TextEncoder();
   const frame=(value)=>stream.enqueue(encoder.encode(JSON.stringify(value)+'\n'));
-  const complete={type:'done',origin:'model',model:'synthetic-stream',authority:'none',truncated:false};
+  const complete={type:'done',origin:'model',model:'synthetic-stream',authority:'none',
+   truncated:false,model_slot:'primary',configuration_id:'d'.repeat(64)};
   window.fetch=async(url,options={})=>{
    if(String(url).endsWith('/studio-api/status'))return Response.json({
-    configured:true,configuration_id:'d'.repeat(64),model:'synthetic-stream',provider_host:'synthetic.invalid',streaming:true
+    configured:true,configuration_id:'d'.repeat(64),model:'synthetic-stream',provider_host:'synthetic.invalid',
+    streaming:true,reply_receipt_version:1
    });
    assert(String(url).endsWith('/studio-api/respond-stream'),'streaming-does-not-resend-to-buffered-route');
    assert(JSON.parse(options.body).configuration_id==='d'.repeat(64),'stream-send-is-bound-to-reviewed-configuration');
@@ -505,6 +507,15 @@ window.addEventListener('load',async()=>{
   frame({type:'delta',text:'Late content'});frame(complete);stream.close();await sleep(40);
   assert(streamSignal.aborted&&$('model-stream-preview').hidden&&$('message').value==='Retryable draft'&&
    JSON.stringify(snapshot())===committedStream,'stop-aborts-preview-without-saving-late-content');
+  // A syntactically completed stream with a wrong route must still be
+  // rejected after the last delta and before committing a chat message.
+  $('prepare').click();sendStream();await wait(()=>streamCalls===4);
+  frame({type:'delta',text:'Spoofed completed answer'});
+  frame({...complete,model_slot:'secondary'});stream.close();
+  await wait(()=>$('request-review').hidden);
+  assert(JSON.stringify(snapshot())===committedStream&&
+   $('message').value==='Retryable draft'&&$('model-stream-preview').hidden,
+   'completed-stream-wrong-route-is-rejected-before-persisting');
 
   fill('message','');
   const playbackOrigin=NexusStudioUI.selection();
