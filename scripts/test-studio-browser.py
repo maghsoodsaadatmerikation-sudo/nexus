@@ -694,6 +694,61 @@ window.addEventListener('load',async()=>{
   assert(!NexusStudioUI.modelAvailability().localReadiness,
    'changing-gateway-token-invalidates-readiness');
 
+  // A receipt-capable gateway must bind every accepted answer to the route
+  // and exact configuration the user reviewed. This uses only synthetic data.
+  const routeId='e'.repeat(64),routeModel='reviewed-synthetic-route';
+  let replyCase='wrong-slot',replyCalls=0;
+  window.fetch=async(url,options={})=>{
+   const address=String(url);
+   if(address.endsWith('/studio-api/status'))return Response.json({
+    configured:true,model:routeModel,provider_host:'review.invalid',
+    configuration_id:routeId,reply_receipt_version:1,authority:'none'
+   });
+   if(!address.endsWith('/studio-api/respond'))throw Error('unexpected-test-endpoint');
+   replyCalls++;
+   const payload=JSON.parse(options.body);
+   assert(payload.configuration_id===routeId,'reviewed-configuration-is-sent-verbatim');
+   const result={text:'Reviewed model answer',model:routeModel,origin:'model',authority:'none'};
+   if(replyCase==='wrong-slot')Object.assign(result,{model_slot:'secondary',configuration_id:routeId});
+   if(replyCase==='wrong-id')Object.assign(result,{model_slot:'primary',configuration_id:'f'.repeat(64)});
+   if(replyCase==='valid')Object.assign(result,{model_slot:'primary',configuration_id:routeId});
+   return Response.json(result);
+  };
+  $('new-thread').click();
+  fill('gateway','https://reviewed-route.invalid');fill('gateway-token','route-token');
+  change('studio-compose-mode','model');
+  $('studio-compose-model-check').click();
+  await wait(()=>NexusStudioUI.modelAvailability().model===routeModel);
+  const sendReviewed=async()=>{
+   fill('message','Confirm the selected route');
+   $('prepare').click();
+   assert(!$('request-review').hidden,'route-test-requires-exact-context-review');
+   $('consent').checked=true;$('consent').dispatchEvent(new Event('change'));
+   $('send-model').click();
+   await wait(()=>$('request-review').hidden);
+  };
+  const unchanged=JSON.stringify(snapshot());
+  await sendReviewed();
+  assert(JSON.stringify(snapshot())===unchanged&&
+   $('message').value==='Confirm the selected route'&&replyCalls===1,
+   'wrong-model-slot-is-rejected-without-committing-or-dropping-draft');
+  replyCase='wrong-id';await sendReviewed();
+  assert(JSON.stringify(snapshot())===unchanged&&replyCalls===2,
+   'wrong-configuration-id-is-rejected-without-committing');
+  replyCase='missing';await sendReviewed();
+  assert(JSON.stringify(snapshot())===unchanged&&replyCalls===3,
+   'receipt-capable-gateway-rejects-missing-identity-fields');
+  replyCase='valid';await sendReviewed();
+  await wait(()=>$('messages').textContent.includes('Reviewed model answer'));
+  const accepted=NexusStudio.path(current().threads.find(t=>t.id===NexusStudioUI.selection().threadId)).at(-1);
+  assert(accepted.model_receipt?.model_slot==='primary'&&
+   accepted.model_receipt?.configuration_id===routeId&&
+   accepted.model_receipt?.model===routeModel&&replyCalls===4,
+   'valid-reply-persists-exact-reviewed-model-receipt');
+  assert($('messages').textContent.includes(routeModel+' (primary)')&&
+   !$('messages').textContent.includes('route-token'),
+   'reviewed-model-name-is-visible-in-chat-without-rendering-gateway-token');
+
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
 });
