@@ -46,6 +46,7 @@ ROUTES = (
     ("export", re.compile(r"^(?:/export(?:$|\s+(?:document|draft|report|file|markdown|docx|word|pdf)\b)|(?:export|download)\s+(?:(?:the|this)\s+)?(?:document|draft|report|file|markdown|docx|word|pdf)\b|خروجی\s*(?:سند|فایل|گزارش)\b|(?:دانلود|دریافت)\s*(?:سند|فایل|گزارش)\b)", re.I)),
     ("code", re.compile(r"^(?:/code\b|run\s+(?:this\s+)?(?:javascript|js)\b|کدنویسی\b|اجرا\s*ی?\s*کد\b)", re.I)),
     ("orchestra", re.compile(r"^(?:/orchestra\b|orchestra\b|orchestrate\b|arrange\s+(?:an?\s+)?orchestra\b|ارکستر\s+بساز\b)", re.I)),
+    ("tasks", re.compile(r"^(?:/tasks\b|run\s+(?:reviewed\s+)?(?:local\s+)?javascript\s+tasks\b|وظایف\s+محلی\b)", re.I)),
     ("music", re.compile(r"^(?:/music\b|compose\b|آهنگ\s+بساز\b|موسیقی\s+بساز\b)", re.I)),
     ("remind", re.compile(r"^(?:/remind\b|remind\s+me\b|set\s+(?:a\s+)?reminder\b|یادآوری\s+کن\b)", re.I)),
     ("github", re.compile(r"^(?:/github(?:\s+(?:pulls|prs))?$|(?:review|list|show|check)\s+github\s+(?:pull\s+requests|prs)\b)", re.I)),
