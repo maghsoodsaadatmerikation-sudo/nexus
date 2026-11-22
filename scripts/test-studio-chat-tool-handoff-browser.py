@@ -189,6 +189,9 @@ window.addEventListener('load',async()=>{
   assert(!$('studio-assistant-capability-panel').hidden&&capCalls===0,
    'capability-panel-open-does-not-request-network');
   fill('gateway-token','capabilities-test-operator-token-123456789');
+  assert($('studio-assistant-capability-panel').hidden,
+   'credential-edits-revoke-a-pending-status-panel');
+  capButton.click();
   $('studio-assistant-capability-check').click();
   await wait(()=>capCalls===1&&$('studio-assistant-capability-results').children.length===3);
   assert($('studio-assistant-capability-panel').textContent.includes('Configured · not live-tested')&&
