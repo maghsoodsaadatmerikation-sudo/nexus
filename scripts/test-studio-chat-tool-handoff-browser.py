@@ -215,6 +215,18 @@ window.addEventListener('load',async()=>{
    'chat-readiness-command-opens-review-with-zero-provider-calls');
   capButton.click();
 
+  // The ordinary tool suggestion must retain its stable three-choice action order.
+  fill('message','/research synthetic fallback route');
+  chatSend.click();
+  const reviewedButtons=[...$('nexus-zen-offer').querySelectorAll('button')];
+  assert(reviewedButtons.length===3&&
+   reviewedButtons[0].textContent.includes('Open Research')&&
+   reviewedButtons[1].textContent.includes('Continue with local guide')&&
+   reviewedButtons[2].textContent.includes('Keep typing')&&
+   Boolean($('studio-assistant-capability-status')),
+   'single-tool-offer-retains-three-controls-and-global-status');
+  reviewedButtons[2].click();
+  assert($('nexus-zen-offer').hidden,'single-tool-offer-dismiss-keeps-draft');
   const routerBefore={providerCalls,searchCalls,catalogCalls,connectionActions};
   fill('message','Research fictional study then analyze CSV data then draft a report');
   assert(chatSend.textContent.includes('Review multi-step plan'),
