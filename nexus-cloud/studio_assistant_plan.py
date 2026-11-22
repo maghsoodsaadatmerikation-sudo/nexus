@@ -43,7 +43,7 @@ ROUTES = (
     ("data", re.compile(r"^(?:/data\b|analy[sz]e\b|تحلیل\s*(?:داده|فایل|csv)\b)", re.I)),
     ("write", re.compile(r"^(?:/write\b|draft\b|write\b|بنویس\b|نوشتن\b|پیش\s*نویس\b)", re.I)),
     # Route to the existing writing canvas. This never generates or exports a file.
-    ("export", re.compile(r"^(?:/export\b|(?:export|download)\s+(?:(?:the|this)\s+)?(?:document|draft|report|file|markdown|docx|word|pdf)\b|خروجی\s*(?:سند|فایل|گزارش)\b|(?:دانلود|دریافت)\s*(?:سند|فایل|گزارش)\b)", re.I)),
+    ("export", re.compile(r"^(?:/export(?:$|\s+(?:document|draft|report|file|markdown|docx|word|pdf)\b)|(?:export|download)\s+(?:(?:the|this)\s+)?(?:document|draft|report|file|markdown|docx|word|pdf)\b|خروجی\s*(?:سند|فایل|گزارش)\b|(?:دانلود|دریافت)\s*(?:سند|فایل|گزارش)\b)", re.I)),
     ("code", re.compile(r"^(?:/code\b|run\s+(?:this\s+)?(?:javascript|js)\b|کدنویسی\b|اجرا\s*ی?\s*کد\b)", re.I)),
     ("music", re.compile(r"^(?:/music\b|compose\b|آهنگ\s+بساز\b|موسیقی\s+بساز\b)", re.I)),
     ("remind", re.compile(r"^(?:/remind\b|remind\s+me\b|set\s+(?:a\s+)?reminder\b|یادآوری\s+کن\b)", re.I)),
