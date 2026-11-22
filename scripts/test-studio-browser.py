@@ -436,8 +436,8 @@ window.addEventListener('load',async()=>{
   $('studio-connections-read').click();await wait(()=>!create.hidden);
   create.click();await wait(()=>$('studio-connection-receipt').textContent.includes('Branch result unknown'));
   assert(!$('studio-connection-receipt').textContent.includes('re-read at the matching SHA')&&
-   $('studio-connections').open&&$('message').value===draft,
-   'fabricated-followup-read-is-not-accepted-as-success');
+   $('studio-connections').open&&create.hidden&&$('message').value===draft,
+   'fabricated-followup-read-revokes-approval-and-is-not-success');
   forgedWriteProof=false;
   actions.value='github.edit';actions.dispatchEvent(new Event('change',{bubbles:true}));
   fill('studio-file-topic','other-change');fill('studio-connection-path','docs/intro.md');
