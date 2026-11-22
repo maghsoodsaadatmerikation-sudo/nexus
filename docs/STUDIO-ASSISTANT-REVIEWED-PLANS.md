@@ -292,3 +292,27 @@ download versus print requests.
 The reviewed source and standalone/PWA shells remain within a strict
 645,000-byte HTML limit, with SHA-256 and service-worker cache re-pinning.
 This is a **draft development candidate**, not a live production release.
+
+## Export workflow preview parity (stacked API candidate)
+
+The authenticated `plan-preview` endpoint now recognizes the existing Studio
+`/export` destination in short explicit English and Persian instructions,
+such as `Draft a report then export document as DOCX` or
+`بنویس گزارش سپس خروجی سند به PDF`. This fixes a mismatch with the
+chat-first review UI's already-supported document-export workflow.
+
+The response is **only a plan preview**: each export step starts at
+`not_started`, opens the existing writing canvas only after separate human
+review, and neither generates a file nor establishes that a download reached a
+device. Markdown/DOCX require a further user-approved browser download request.
+PDF still uses a user-initiated browser print dialog and unverified Save as PDF.
+No server-side export endpoint, provider call or automatic document transmission
+is added. Because the local Code Lab only runs reviewed JavaScript, natural
+language requests to *run Python* are now rejected instead of being mislabeled
+as a runnable JavaScript step. English/Persian compound export instructions
+without an explicit ordered separator are rejected.
+
+Tests cover the route shape, bilingual inputs, rejected compound instructions,
+Python mismatch, consented gateway response and zero tool/model execution.
+This remains an unmerged candidate until branch-specific CI and browser
+acceptance pass; it is not a published service.
