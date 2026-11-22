@@ -107,3 +107,26 @@ def test_export_gateway_response_is_only_review(monkeypatch):
         assert [s["command"] for s in payload["steps"]] == ["/write", "/export"]
         assert payload["execution"] == "not_started"
         assert payload["tools_executed"] == payload["provider_requests"] == 0
+
+
+def test_orchestra_review_only_preview_in_english_and_persian():
+    for goal in (
+        "Orchestrate a synthetic score then write a report",
+        "/plan\n/orchestra hypnotic choir piano\n/write notes",
+        "برنامه:\n۱. ارکستر بساز با پیانو\n۲. بنویس گزارش",
+    ):
+        p = preview(goal)
+        assert [s["tool"] for s in p["steps"]] == ["orchestra", "write"]
+        assert p["tools_executed"] == p["provider_requests"] == 0
+        assert all(s["status"] == "not_started" for s in p["steps"])
+        assert all(s["requires_separate_user_review"] for s in p["steps"])
+
+
+@pytest.mark.parametrize("goal", [
+    "Orchestrate a score and write a report",
+    "/plan\n/orchestra piano\n/upload my voice to a server",
+    "/plan\n/orchestra piano\n/email everyone",
+])
+def test_orchestra_preview_rejects_compound_or_unauthorized_actions(goal):
+    with pytest.raises(ValueError):
+        preview(goal)

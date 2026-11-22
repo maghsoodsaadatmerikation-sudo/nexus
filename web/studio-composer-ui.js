@@ -1,6 +1,4 @@
-/* NEXUS Studio: honest chat composer and explicit archive shortcut.
- * Presentation only. All executions delegate to the existing reviewed actions.
- */
+/* NEXUS reviewed chat composer; no implicit execution. */
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
 const required=['conversation-card','message','guide','prepare','request-review','consent',
@@ -32,8 +30,6 @@ $('branch-notice').after(box);
 const suggestions=document.createElement('div');suggestions.id='nexus-zen-suggestions';
 box.prepend(suggestions);
 const offer=document.createElement('div');offer.id='nexus-zen-offer';offer.hidden=true;offer.setAttribute('role','status');box.after(offer);
-// One reviewed discovery catalog: command, UI destination, languages, prompt field, aliases.
-// Listing a capability never proves model or provider availability or grants execution.
 const routes=Object.freeze([
  ['orchestra','orchestra-card','Orchestra & vocal','ارکستر و آواز','orchestra-prompt','vocal'],
  ['music','music-card','Music Lab','موسیقی',null,'song'],
@@ -198,6 +194,7 @@ function clearLocalReviewers(){
  window.NexusLabUI?.clearReviewedStep?.();
  window.NexusQualityUI?.clearReviewedStep?.();
  window.NexusMusicUI?.clearReviewedStep?.();
+ window.NexusOrchestraUI?.clearReviewedStep?.();
  window.NexusStudioUI?.clearDocumentReceipt?.();
  window.NexusStudioUI?.clearExportReceipt?.();
 }
@@ -236,7 +233,6 @@ function openReviewedSurface(result,message,{readOperation=null,onReadReceipt=nu
   const request=connectionRequest(result,message);
   if(readOperation){request.operation=readOperation;request.onReadReceipt=onReadReceipt}
   if(!window.NexusStudioConnections?.openFor?.(request)){
-   // Never silently replace a receipt-bound action with an unbound dialog.
    if(readOperation)return false;
    const entry=$('studio-connections-open');
    if(entry&&!entry.disabled)entry.click();
@@ -246,22 +242,17 @@ function openReviewedSurface(result,message,{readOperation=null,onReadReceipt=nu
  window.NexusStudioFocus?.openPanel(panel);
  return true;
 }
-/* Only previously reviewed, read-only connector routes may yield a
- * gateway-observed completion. Other tools are explicitly self-reported.
- * The presence of any external data is NOT proof of its factual correctness.
- */
+/* Receipts distinguish read-only gateway results from self-reports. */
 function expectedRead(step){
  const kind=step.result.route[0];
  if(kind==='render')return 'render.deploys';
- // Never infer a read receipt for a branch/file/write instruction, including
- // in gateway-generated plans. Match the review dialog's actual operation.
  if(kind==='github'&&connectionRequest(step.result,step.line).operation==='github.pulls')
   return 'github.pulls';
  return null;
 }
 function expectedLocal(step){
  const kind=step.result.route[0];
- return ['research','code','data','write','export','music'].includes(kind)?kind:null;
+ return ['research','code','data','write','export','music','orchestra'].includes(kind)?kind:null;
 }
 function showWorkflow(){
  if(!workflowState)return;
@@ -316,7 +307,13 @@ function showWorkflow(){
         receipt.source!==(local==='data'?'studio-local-analysis':
            local==='write'?'studio-document-version':
            local==='export'?'studio-document-export':
-           local==='music'?'studio-local-music':'studio-local-tool')||
+           local==='music'?'studio-local-music':
+           local==='orchestra'?'studio-local-orchestra':'studio-local-tool')||
+        (local==='orchestra'&&(receipt.artifact!=='score'||
+          !Number.isInteger(receipt.parts)||receipt.parts<1||receipt.parts>12||
+          !Number.isInteger(receipt.notes)||receipt.notes<1||receipt.notes>200000||
+          !Number.isFinite(receipt.durationSeconds)||
+          receipt.durationSeconds<=0||receipt.durationSeconds>3600))||
         (local==='music'&&(receipt.artifact!=='score'||
           !Number.isInteger(receipt.bars)||receipt.bars<8||receipt.bars>256||
           !Number.isFinite(receipt.durationSeconds)||receipt.durationSeconds<=0||
@@ -352,6 +349,7 @@ function showWorkflow(){
        local==='write'?window.NexusStudioUI?.armDocumentReceipt?.(local,localReceiver):
        local==='export'?window.NexusStudioUI?.armExportReceipt?.(local,localReceiver):
        local==='music'?window.NexusMusicUI?.armReviewedStep?.(local,localReceiver):
+       local==='orchestra'?window.NexusOrchestraUI?.armReviewedStep?.(local,localReceiver):
        window.NexusLabUI?.armReviewedStep?.(local,localReceiver));
      plan.opened=Boolean(armed);plan.readReceipt=null;showWorkflow();
     }
@@ -383,6 +381,8 @@ function showWorkflow(){
          '… identifies source bytes, not correctness. Review before confirming.',
          'داده محلی تحلیل شد؛ SHA256 '+plan.readReceipt.sha256.slice(0,12)+
          '… فقط هویت بایت‌هاست، نه صحت نتیجه. پیش از تأیید بررسی کن.'):
+       local==='orchestra'?words('Synthetic orchestra score built; no WAV, vocal mix or file delivery verified.',
+         'پارتیتور ارکستر سنتتیک ساخته شد؛ WAV، میکس و دریافت فایل تأیید نشده‌اند.'):
        local==='music'?words('New original score composed locally. WAV, file download and musical quality remain unverified.',
         'پارتیتور تازه در دستگاه ساخته شد؛ WAV، دانلود فایل و کیفیت موسیقی تأیید نشده‌اند.'):
        local==='write'?words('A changed document version was applied in this tab. Save your encrypted archive separately to keep it.',
@@ -450,11 +450,8 @@ function reviewWorkflow(message){
  showWorkflow();
 }
 
-/* Optional gateway-only preview. The draft is exposed to the operator's
- * gateway ONLY after the user reviews the exact text and clicks the second
- * approval button. This does not call a model, run tools or persist a plan.
- */
-const planTools=new Set(['research','data','write','export','code','music','remind','github','render']);
+/* Gateway preview requires separate user approval; no tool execution. */
+const planTools=new Set(['research','data','write','export','code','music','orchestra','remind','github','render']);
 function planGateway(){
  const raw=$('gateway')?.value.trim()||location.origin;
  const url=new URL(raw);
@@ -513,6 +510,7 @@ function localNaturalPlan(draft){
   ['export',/^(?:\/export(?:$|\s+(?:document|draft|report|file|markdown|docx|word|pdf)\b)|(?:export|download)\s+(?:(?:the|this)\s+)?(?:document|draft|report|file|markdown|docx|word|pdf)\b|خروجی\s*(?:سند|فایل|گزارش)(?:\s|$)|(?:دانلود|دریافت)\s*(?:سند|فایل|گزارش)(?:\s|$))/iu],
   ['code',/^(?:\/code(?:\s|$)|run\s+(?:this\s+)?(?:javascript|js)\b|کدنویسی(?:\s|$)|اجرا\s*ی?\s*کد(?:\s|$))/iu],
   ['music',/^(?:\/music(?:\s|$)|compose(?:\s|$)|آهنگ\s+بساز(?:\s|$)|موسیقی\s+بساز(?:\s|$))/iu],
+  ['orchestra',/^(?:\/orchestra(?:\s|$)|orchestra(?:\s|$)|orchestrate(?:\s|$)|arrange\s+(?:an?\s+)?orchestra\b|ارکستر\s+بساز(?:\s|$))/iu],
   ['remind',/^(?:\/remind(?:\s|$)|remind\s+me(?:\s|$)|set\s+(?:a\s+)?reminder(?:\s|$)|یادآوری\s+کن(?:\s|$))/iu],
   ['github',/^(?:\/github(?:\s+(?:pulls|prs))?$|(?:review|list|show|check)\s+github\s+(?:pull\s+requests|prs)\b)/iu],
   ['render',/^(?:\/render(?:\s+deploys)?$|(?:check|list|show)\s+render\s+deploy(?:ment)?s\b)/iu]
@@ -522,7 +520,7 @@ function localNaturalPlan(draft){
   if(!instruction||instruction.length>260||
      /[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/u.test(instruction)||
      /\bpython\b|پایتون/iu.test(instruction)||
-     (/\s+(?:and|&)\s+(?:research|search|analy[sz]e|write|draft|export|download|run|compose|remind|list|check)\b/iu.test(instruction))||
+     (/\s+(?:and|&)\s+(?:research|search|analy[sz]e|write|draft|export|download|run|compose|orchestrate|arrange|remind|list|check)\b/iu.test(instruction))||
      (/\s+و\s+(?:پژوهش|تحلیل|بنویس|نوشتن|کدنویسی|خروجی|دانلود|دریافت)(?:\s|$)/u.test(instruction)))
    throw Error('local-plan-compound');
   const found=detectors.filter(([,pattern])=>pattern.test(instruction));
@@ -619,10 +617,7 @@ let offeredDraft=null;
 function clearOffer(){
  offeredDraft=null;offer.hidden=true;offer.replaceChildren();
 }
-/* Model replies are text-only and cannot operate tools. Honor explicit user
- * requests to open a tool, but never infer permission from a generic question.
- * A suggestion only opens a separate local/connection review surface.
- */
+/* Tool suggestions require separate review; model replies are inert. */
 function explicitToolRequest(message){
  const value=message.trim();
  return value.startsWith('/')||explicitResearch.test(value)||
@@ -656,14 +651,10 @@ function offerTool(message,result){
  proceed.textContent=select.value==='model'?words('Review as model message','بازبینی برای ارسال به مدل'):
   words('Continue with local guide','ادامه با راهنمای محلی');
  proceed.addEventListener('click',()=>{
-  // Bind continuation to this exact reviewed proposal, not a mutable
-  // suggestion slot that may have been invalidated by unrelated UI updates.
   const current=$('message').value===message;
   clearOffer();
   const state=window.NexusStudioUI.uiStatus();
   if(!current||state.busy||state.archived)return;
-  // The local guide is an existing consent-checked action and requires
-  // a thread. Start it explicitly; never infer permission for a model.
   if(!state.threadReady&&!window.NexusStudioUI.startConversation()){
    refresh();return;
   }
@@ -699,7 +690,6 @@ function refresh(){
  send.disabled=!ready||!$('message').value.trim();
  send.setAttribute('aria-label',send.textContent);
  save.textContent=state.vaultUnlocked?words('Save encrypted session','ذخیرهٔ رمزگذاری‌شدهٔ نشست'):words('Set up private archive','تنظیم آرشیو خصوصی');
- // Never bypass the existing noForms() gate, including unread chat drafts.
  const pendingDraft=Boolean($('message').value.trim());
  save.disabled=state.busy||(state.vaultUnlocked&&(state.unsavedForms||pendingDraft));
  config.hidden=!model;
@@ -720,8 +710,6 @@ function refresh(){
         'آرشیو رمزگذاری‌شده‌ای باز نیست. با بسته‌شدن برگه ممکن است کار از بین برود.');
 }
 function run({routeTools=true}={}){
- // The send button can briefly lag a newly created first conversation.
- // Authoritative UI state and the draft, not a stale disabled flag, gate work.
  const state=window.NexusStudioUI.uiStatus();
  if(running||!state||state.busy||state.attachmentLoading||(state.threadReady&&state.archived)||
     !$('message').value.trim())return;
@@ -774,9 +762,6 @@ $('message').addEventListener('keydown',event=>{
  if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&!event.isComposing&&
     document.documentElement.classList.contains('studio-focus-mode')){
   event.preventDefault();
-  // Studio's older window-level shortcut would otherwise also dispatch a
-  // local guide when no model was configured. Stop this duplicate event ONLY
-  // in focused mode; full-view shortcuts retain their previous behavior.
   event.stopPropagation();
   run(); // In model mode only opens the consent review.
  }

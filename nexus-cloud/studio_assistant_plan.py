@@ -45,6 +45,7 @@ ROUTES = (
     # Route to the existing writing canvas. This never generates or exports a file.
     ("export", re.compile(r"^(?:/export(?:$|\s+(?:document|draft|report|file|markdown|docx|word|pdf)\b)|(?:export|download)\s+(?:(?:the|this)\s+)?(?:document|draft|report|file|markdown|docx|word|pdf)\b|خروجی\s*(?:سند|فایل|گزارش)\b|(?:دانلود|دریافت)\s*(?:سند|فایل|گزارش)\b)", re.I)),
     ("code", re.compile(r"^(?:/code\b|run\s+(?:this\s+)?(?:javascript|js)\b|کدنویسی\b|اجرا\s*ی?\s*کد\b)", re.I)),
+    ("orchestra", re.compile(r"^(?:/orchestra\b|orchestra\b|orchestrate\b|arrange\s+(?:an?\s+)?orchestra\b|ارکستر\s+بساز\b)", re.I)),
     ("music", re.compile(r"^(?:/music\b|compose\b|آهنگ\s+بساز\b|موسیقی\s+بساز\b)", re.I)),
     ("remind", re.compile(r"^(?:/remind\b|remind\s+me\b|set\s+(?:a\s+)?reminder\b|یادآوری\s+کن\b)", re.I)),
     ("github", re.compile(r"^(?:/github(?:\s+(?:pulls|prs))?$|(?:review|list|show|check)\s+github\s+(?:pull\s+requests|prs)\b)", re.I)),
@@ -53,7 +54,7 @@ ROUTES = (
 SPLIT = re.compile(r"\s+(?:and\s+then|then|و\s+سپس|سپس|بعد\s+از\s+آن)\s+", re.I)
 NUMBERING = re.compile(r"^(?:\d{1,2}[.)]|[-*])\s+")
 # More than one distinct action in a step must be separated explicitly.
-HIDDEN_ACTION = re.compile(r"(?:\s+(?:and|&)\s+(?:research|search|analy[sz]e|write|draft|export|download|run|compose|remind|list|check)\b|\s+و\s+(?:پژوهش|تحلیل|بنویس|نوشتن|کدنویسی|خروجی|دانلود|دریافت)\b)", re.I)
+HIDDEN_ACTION = re.compile(r"(?:\s+(?:and|&)\s+(?:research|search|analy[sz]e|write|draft|export|download|run|compose|orchestrate|arrange|remind|list|check)\b|\s+و\s+(?:پژوهش|تحلیل|بنویس|نوشتن|کدنویسی|خروجی|دانلود|دریافت)\b)", re.I)
 INVALID_CHAR = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]")
 
 
