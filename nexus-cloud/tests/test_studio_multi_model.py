@@ -87,6 +87,8 @@ def test_primary_only_preserves_legacy_wire_and_public_status(monkeypatch):
         payload.pop("model_slot")
         response = client.post("/studio-api/respond", json=payload, headers=AUTH)
         assert response.status_code == 200 and response.json()["model"] == "primary-text"
+        assert response.json()["model_slot"] == "primary"
+        assert response.json()["configuration_id"] == state["configuration_id"]
         assert len(seen) == 1 and seen[0].headers["authorization"] == "Bearer " + SECRET_PRIMARY
 
 
@@ -140,6 +142,9 @@ def test_selected_credentials_and_provider_protocols_never_mix(monkeypatch):
             resp = client.post("/studio-api/respond", json=review(state, slot), headers=AUTH)
             assert resp.status_code == 200, resp.text
             assert resp.json()["text"] == expected
+            assert resp.json()["model_slot"] == slot
+            assert resp.json()["configuration_id"] == review(state, slot)["configuration_id"]
+            assert resp.json()["origin"] == "model" and resp.json()["authority"] == "none"
         assert len(observed) == 3
         assert client.app.state.model_budget.snapshot()["attempted"] == 3
 

@@ -448,7 +448,7 @@ async def sse_data(chunks, deadline):
         buffer.extend(tail)
 
 
-async def response_frames(request, endpoint, headers, payload):
+async def response_frames(request, endpoint, headers, payload, *, receipt=None):
     limiter = request.app.state.model_limiter
     try:
         limiter.acquire_nowait()
@@ -475,7 +475,8 @@ async def response_frames(request, endpoint, headers, payload):
                 if not visible_text or finish is None:
                     break
                 yield stream_frame("done", origin="model", model=payload["model"],
-                                   truncated=finish == "length", authority="none")
+                                   truncated=finish == "length", authority="none",
+                                   **(receipt or {}))
                 return
             choices = json.loads(raw.decode("utf-8"))["choices"]
             if choices == []:
@@ -617,9 +618,13 @@ def register(app):
             except ValidationError:
                 raise HTTPException(422, "Invalid consent or message context") from None
             selected = catalog.get(data.model_slot)
-            if selected is None or data.configuration_id != configuration_id(selected):
+            selected_id = configuration_id(selected) if selected is not None else None
+            if selected is None or data.configuration_id != selected_id:
                 raise HTTPException(409, "Model configuration changed; review again")
             c = selected  # Frozen credential + destination + policy snapshot.
+            # Immutable server-owned identity: never trust model-generated identity
+            # claims or the browser's declaration after the reviewed selection.
+            receipt = {"model_slot": c.slot, "configuration_id": selected_id}
             if stream and not c.streaming:
                 raise HTTPException(503, "Model streaming is disabled")
             if data.messages[-1].role != "user":
@@ -643,7 +648,8 @@ def register(app):
                     headers={"Cache-Control": "no-store"},
                 )
             if stream:
-                return CompletionStream(response_frames(request, c.endpoint, headers, payload),
+                return CompletionStream(response_frames(request, c.endpoint, headers, payload,
+                                                        receipt=receipt),
                                         media_type="application/x-ndjson",
                                         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
             raw = bytearray()
@@ -670,7 +676,7 @@ def register(app):
                 raise HTTPException(502, "Invalid text-only model response") from None
             return JSONResponse({"text": content, "origin": "model", "model": c.model_id,
                                  "mode": data.mode, "max_output_tokens": data.max_output_tokens,
-                                 "truncated": truncated, "authority": "none"},
+                                 "truncated": truncated, "authority": "none", **receipt},
                                 headers={"Cache-Control": "no-store"})
         except TimeoutError:
             raise HTTPException(504, "Model request timed out") from None

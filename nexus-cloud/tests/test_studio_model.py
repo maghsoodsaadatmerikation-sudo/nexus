@@ -751,7 +751,8 @@ def test_streamed_transport_binds_review_and_only_emits_answer_text(monkeypatch,
         assert list(map(json.loads, response.text.splitlines())) == [
             {"type": "delta", "text": visible},
             {"type": "done", "origin": "model", "model": "configured-test-model",
-             "truncated": finish == "length", "authority": "none"},
+             "truncated": finish == "length", "authority": "none",
+             "model_slot": "primary", "configuration_id": status["configuration_id"]},
         ]
 
 
