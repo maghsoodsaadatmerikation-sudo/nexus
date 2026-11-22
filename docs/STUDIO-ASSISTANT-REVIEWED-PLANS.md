@@ -388,3 +388,37 @@ The real Chromium test covers opening, fresh score generation, unlocked
 confirmation, no fabricated WAV claim, receipt non-replay and private cleanup.
 The pinned standalone and PWA bundles must be rebuilt and verified from the
 exact source head. No production deployment or automatic upload is authorized.
+
+## Observed Orchestra Lab score completion (stacked candidate)
+
+The reviewed Studio `/orchestra` destination is now available in both the
+browser-only English/Persian 2–6-step plan preview and the separately consented
+authenticated gateway's **review-only** plan preview. Example plans:
+
+    Orchestrate a synthetic score then write a report
+    برنامه:
+    ۱. ارکستر بساز با پیانو
+    ۲. بنویس گزارش
+
+Reviewing the orchestra step opens the existing Orchestra & Vocal Lab and arms
+a one-shot, session-only result listener. **Nothing is synthesized or uploaded
+automatically.** The user must enter and parse a supported prompt and click
+Compose. Only a successful NEW `nexus.music.orchestra-score.v1` returned by
+the local deterministic scorer yields an observable receipt with an artifact
+type, bounded note/part counts and planned duration. Chat requires a separate
+human confirmation to advance the workflow.
+
+The receipt contains **no prompt, vocal bytes, voice identity, audio, title,
+filename or external account data**, and cannot demonstrate acoustic fidelity,
+MusicXML/MIDI download, WAV rendering, real-vocal recording, speech generation
+or an aligned vocal mix. An existing score cannot satisfy a new review. Failed
+parses, just opening the panel, skips, draft/context changes, private clearing,
+page exit and canceled review never prove completion. The original dry vocal
+remains local and untouched; its import, mixing and download have independent
+user-operated controls.
+
+Real Chromium regression covers invalid/valid orchestra prompts, fresh score
+creation, non-replay and no-WAV/no-vocal claims. GitHub Actions must verify the
+standalone and static PWA generated outputs against the exact source revision,
+including the SHA-256-pinned cache and existing 645,000-byte HTML cap. All
+concurrent tests and stacked PRs require review before a merge or live release.
