@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from typing import Literal
 
 from transport_bounds import read_bounded_body
+from studio_audit_request import make_request
 
 MAX_SOURCE = 24 * 1024
 MAX_RESPONSE = 128 * 1024
@@ -441,9 +442,11 @@ def register(app):
             await confirm_branch_outcome(client, target, token, branch, data.base_sha)
         finally:
             limiter.release()
+        receipt = followup_receipt("github.branch", status, data.base_sha)
         return JSONResponse({"target": target, "branch": branch, "base_sha": data.base_sha,
-                             "status": status,
-                             "receipt": followup_receipt("github.branch", status, data.base_sha)},
+                             "status": status, "receipt": receipt,
+                             "witness_request": make_request("github.branch", target, branch,
+                                 data.base_sha, data.review_id, receipt)},
                             headers=NO_STORE)
 
     @app.post("/studio-api/connections/github/file-base")
@@ -517,7 +520,9 @@ def register(app):
             await confirm_file_outcome(request.app.state.client, target, token, branch, commit, data.path, raw)
         finally:
             limiter.release()
+        receipt = followup_receipt("github.file_commit", "committed", commit, file_bytes_verified=True)
         return JSONResponse({"target": target, "branch": branch, "path": data.path, "commit": commit,
-                             "receipt": followup_receipt("github.file_commit", "committed", commit,
-                                                         file_bytes_verified=True)},
+                             "receipt": receipt,
+                             "witness_request": make_request("github.file_commit", target, branch,
+                                 commit, data.review_id, receipt, file_path=data.path, file_bytes=raw)},
                             headers=NO_STORE)
