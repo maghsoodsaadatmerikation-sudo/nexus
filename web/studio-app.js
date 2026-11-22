@@ -275,10 +275,20 @@ function fillProfile(){$('instructions').value=p()?.instructions||'';$('memories
 function fillDoc(){$('editor').value=doc()?.versions.at(-1)?.text||'';renderVersions()}
 function renderVersions(){const d=doc();$('versions').replaceChildren(...(d?.versions||[]).map((v,i)=>option(v.id,(i+1)+' · '+v.at)));$('versions').value=d?.versions.at(-1)?.id||'';$('version-diff').textContent=''}
 let lastChatView;
+function messageOriginLabel(n){
+ const ordinary=t(n.origin==='human'?'human':n.origin==='model'?'model':'local');
+ // Only receipts accepted from the reviewed gateway route are attributed.
+ return n.origin==='model'&&n.model_receipt?
+  ordinary+' · '+n.model_receipt.model+' ('+n.model_receipt.model_slot+')':ordinary;
+}
 function renderMessage(n){
  const item=el('article','');
  item.className='message '+n.role;
- item.append(el('strong',t(n.origin==='human'?'human':n.origin==='model'?'model':'local')));
+ const heading=el('strong',messageOriginLabel(n));
+ if(n.model_receipt)heading.title=language==='fa'?
+  'مسیر ثبت‌شدهٔ درگاه؛ هویت ارائه‌دهندهٔ بیرونی مستقل تأیید نشده است.':
+  'Gateway-selected route; external provider identity is not independently verified.';
+ item.append(heading);
  const body=el('div',n.origin==='model'?'':n.text);
  body.className='body';body.dir='auto';
  if(n.origin==='model')NexusReplyFormat.render(body,n.text);
@@ -620,9 +630,21 @@ $('send-model').onclick=async()=>{
   }
   if(!current())return;
   if(out.origin!=='model'||out.authority!=='none'||typeof out.text!=='string'||out.model!==modelInfo?.model)throw Error('model-response');
+  const gatewayReply=request.destination==='gateway';
+  const expectedSlot=request.body.model_slot||'primary';
+  const reported=Object.hasOwn(out,'model_slot')||Object.hasOwn(out,'configuration_id');
+  // Older gateways may omit receipt support; any explicit receipt must still
+  // match. Upgraded gateways advertise v1 and MUST supply both exact values.
+  if(gatewayReply&&(modelInfo?.replyReceiptVersion===1||reported)&&
+     (out.model_slot!==expectedSlot||
+      out.configuration_id!==request.body.configuration_id))
+   throw Error('model-route-mismatch');
+  const receipt=gatewayReply&&reported?
+   {model_slot:expectedSlot,model:out.model,configuration_id:request.body.configuration_id}:undefined;
   busy=false;
   const label=request.destination==='device'?'[On-device draft · SmolLM2-135M · English / limited]\n\n':'';
-  const installed=installThread(S.append(request.thread,'assistant',label+out.text,'model'));
+  const installed=installThread(S.append(request.thread,'assistant',label+out.text,'model',
+   undefined,[],receipt));
   if(installed&&out.truncated)$('status').textContent=language==='fa'?'پاسخ به سقف طول رسیده است.':'The response reached its length limit.';
  }catch{if(rev===revision)status(request.stream?'streamFailed':'failed')}
  finally{clearTimeout(timer);if(rev===revision){busy=false;clearModelReview();controller=null;controls()}}
@@ -666,6 +688,8 @@ $('check-model').onclick=()=>operation(async(rev,abort)=>{
    credentials:'omit',cache:'no-store',redirect:'error',signal:abort.signal}),8000);
   if(rev===revision){
    if(out.configured!==true&&out.configured!==false)throw Error('configuration');
+   if(out.reply_receipt_version!==undefined&&out.reply_receipt_version!==1)
+    throw Error('reply-receipt-version');
    const choices=validatedModelChoices(out);
    const slot=choices.some(option=>option.slot===selectedModelSlot)?selectedModelSlot:'primary';
    const chosen=choices.find(option=>option.slot===slot);
@@ -697,7 +721,8 @@ $('check-model').onclick=()=>operation(async(rev,abort)=>{
    }
    if(rev===revision){
     modelChoices=choices;selectedModelSlot=slot;
-    modelInfo={...(chosen||out),configured:out.configured,gateway:origin};
+    modelInfo={...(chosen||out),configured:out.configured,gateway:origin,
+     replyReceiptVersion:out.reply_receipt_version===1?1:0};
     modelReadiness=readiness;
     $('model-status').textContent=out.configured?t('configured')+': '+modelInfo.model+' · '+modelInfo.provider_host:t('noModel');
     controls();
@@ -755,12 +780,12 @@ $('canvas-chat').onclick=()=>{
  const label=doc()?t('canvasDraft')+' · '+doc().title:t('canvasDraft');
  stageChatContext(label.slice(0,160),$('editor').value);
 };
-$('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+chat().title+'\n\n'+S.path(chat()).map(n=>'## '+t(n.origin==='human'?'human':n.origin==='model'?'model':'local')+'\n\n'+n.text+(n.attached_files?.length?'\n\n'+t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' — '+t('chatFilesNotSaved'):'')).join('\n\n'),'nexus-conversation.md','text/markdown')};
+$('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+chat().title+'\n\n'+S.path(chat()).map(n=>'## '+messageOriginLabel(n)+'\n\n'+n.text+(n.attached_files?.length?'\n\n'+t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' — '+t('chatFilesNotSaved'):'')).join('\n\n'),'nexus-conversation.md','text/markdown')};
 $('export-thread-html').onclick=()=>{
  const thread=chat();
  if(busy||!thread?.head||!confirm(t('plain')))return;
  const sections=S.path(thread).map(n=>({
-  label:t(n.origin==='human'?'human':n.origin==='model'?'model':'local'),
+  label:messageOriginLabel(n),
   text:n.text,format:n.origin==='model'
  }));
  download(NexusReplyFormat.exportConversation(document,sections,thread.title),'nexus-conversation.html','text/html;charset=utf-8');
@@ -876,7 +901,8 @@ function selectModelSlot(slot){
  if(slot===selectedModelSlot)return true;
  stop();  // Cancels stale approvals, previous provider responses and streaming.
  selectedModelSlot=slot;modelReadiness=null;
- modelInfo={...choice,configured:true,gateway:gateway()};
+ modelInfo={...choice,configured:true,gateway:gateway(),
+  replyReceiptVersion:modelInfo?.replyReceiptVersion===1?1:0};
  $('model-status').textContent=t('configured')+': '+choice.model+' · '+choice.provider_host;
  controls();return true;
 }

@@ -9,9 +9,11 @@ import stat
 # self-contained shell. Keep a hard asset ceiling and fail closed above it.
 # Reviewed chat-model status UI increases the complete static shell by ~4.3 KiB.
 # Keep a strict 620 KiB-class per-file cap (not an unbounded exception).
-# Three reviewable model slots add ~4.7 KiB to the checked static HTML shell.
-# Maintain a strict per-asset ceiling; keep independent PDF worker limit.
+# Reviewed per-answer model routing receipts add ~2.4 KiB to the public
+# Studio HTML. Increase ONLY its bounded size ceiling by 5 KiB; retain the
+# original cap on every other static asset and the independent PDF worker cap.
 MAX_FILE = 625_000
+STUDIO_INDEX_LIMIT = 630_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000
@@ -33,7 +35,11 @@ LEGACY_FILES = (
 FILES = LEGACY_FILES + PDF_FILES
 
 def asset_limit(name):
-    return WORKER_LIMIT if name == 'pdf/pdf.worker.min.mjs' else MAX_FILE
+    if name == 'pdf/pdf.worker.min.mjs':
+        return WORKER_LIMIT
+    if name == 'index.html':
+        return STUDIO_INDEX_LIMIT
+    return MAX_FILE
 
 
 def check_public_tree(root):

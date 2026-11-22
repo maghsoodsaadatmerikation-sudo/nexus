@@ -5,6 +5,23 @@ const S=globalThis.NexusStudio;let checks=0;
 const ok=(f)=>{f();checks++},reject=async(f)=>{await assert.rejects(f);checks++};
 const p=S.project('Project'),initial=S.thread('Thread');p.threads=[initial];let c=S.append(initial,'user','original question','human');c=S.append(c,'assistant','original draft','model');const original=S.copy(c);const edited=S.append(c,'user','edited question','human',null);const branch=S.append(edited,'assistant','alternative answer','model');
 ok(()=>assert.deepEqual(c,original));ok(()=>assert.equal(S.path(branch).length,2));ok(()=>assert.equal(branch.nodes.length,4));ok(()=>assert.equal(S.path(branch,original.head)[1].text,'original draft'));
+// Model route identity is optional for legacy data, but strict and preserved
+// when it comes from a complete, reviewed gateway receipt.
+const receipt={model_slot:'secondary',model:'synthetic-model',configuration_id:'b'.repeat(64)};
+const receiptQuestion=S.append(S.thread('Receipt test'),'user','Question','human');
+const receiptThread=S.append(receiptQuestion,'assistant','Answer','model',undefined,[],receipt);
+const receiptProject=S.project('Receipt archive');receiptProject.threads=[receiptThread];
+const receiptArchive={schema:S.SCHEMA,projects:[receiptProject]};
+ok(()=>assert.deepEqual(S.path(receiptThread).at(-1).model_receipt,receipt));
+ok(()=>assert.deepEqual(S.state(receiptArchive).projects[0].threads[0].nodes.at(-1).model_receipt,receipt));
+ok(()=>assert.deepEqual(S.state(S.copy(receiptArchive)).projects[0].threads[0].nodes.at(-1).model_receipt,receipt));
+for(const forged of [
+ {model_slot:'wrong',model:'synthetic-model',configuration_id:'b'.repeat(64)},
+ {model_slot:'primary',model:'synthetic-model',configuration_id:'not-a-hash'},
+ {model_slot:'primary',model:'',configuration_id:'b'.repeat(64)},
+ {...receipt,unreviewed_key:'injected'}
+])ok(()=>assert.throws(()=>S.append(receiptQuestion,'assistant','Spoofed','model',undefined,[],forged)));
+ok(()=>assert.throws(()=>S.append(initial,'user','Not a model','human',undefined,[],receipt)));
 ok(()=>assert.throws(()=>S.append(initial,'assistant','forged','human')));ok(()=>assert.throws(()=>S.append(initial,'assistant','orphan','model')));ok(()=>assert.throws(()=>S.append(c,'user','bad','human','missing')));
 p.threads=[branch];let v={schema:S.SCHEMA,projects:[p]};ok(()=>assert.deepEqual(S.state(v),v));
 for(const change of [x=>x.schema='future',x=>x.projects[0].threads[0].nodes[0].parent=x.projects[0].threads[0].nodes[0].id,x=>x.projects[0].threads.push(x.projects[0].threads[0]),x=>x.projects[0].threads[0].nodes[1].origin='human']){const b=S.copy(v);change(b);ok(()=>assert.throws(()=>S.state(b)))}
