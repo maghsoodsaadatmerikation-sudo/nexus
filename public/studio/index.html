@@ -3729,6 +3729,24 @@ for(const id of ['music','research','data']){
  b.addEventListener('click',()=>window.NexusStudioFocus?.openPanel(panel));
  suggestions.append(b);
 }
+
+/* Explicit local checkpoint UI. The file is NOT an encrypted vault backup. */
+const restoreButton=document.createElement('button');
+restoreButton.id='studio-workflow-restore';restoreButton.type='button';
+restoreButton.className='secondary';restoreButton.dataset.en='Restore workflow';
+restoreButton.dataset.fa='بازیابی گردش‌کار';suggestions.append(restoreButton);
+const restoreFile=document.createElement('input');
+restoreFile.type='file';restoreFile.accept='.json,application/json';restoreFile.hidden=true;
+restoreFile.id='studio-workflow-restore-file';
+restoreFile.setAttribute('aria-label','Choose a NEXUS workflow checkpoint');
+const restoreStatus=document.createElement('p');
+restoreStatus.id='studio-workflow-restore-status';restoreStatus.className='help';
+restoreStatus.setAttribute('role','status');
+box.append(restoreFile,restoreStatus);
+restoreButton.onclick=()=>{
+ const state=window.NexusStudioUI.uiStatus();
+ if(state&&!state.busy&&!state.attachmentLoading&&!state.archived)restoreFile.click();
+};
 const catalog=Object.freeze(routes.filter(row=>row[0]!=='tools').map(
  row=>Object.freeze({command:row[0],en:row[2],fa:row[3],
   kind:row[1]==='studio-connections'?'connection-review':'local-review'})));
@@ -3840,7 +3858,8 @@ const workflow=document.createElement('section');
 workflow.id='studio-chat-workflow';workflow.className='studio-compose';
 workflow.hidden=true;workflow.setAttribute('aria-label','Reviewed workflow');
 directory.after(workflow);
-let workflowState=null;
+let workflowState=null,workflowImportEpoch=0;
+const WORKFLOW_SCHEMA='nexus.studio.workflow-checkpoint.v1';
 function workflowScope(){
  const selection=window.NexusStudioUI.selection?.()||{};
  return JSON.stringify([selection.projectId||null,selection.threadId||null]);
@@ -3864,7 +3883,7 @@ function parseWorkflow(message){
  return {steps};
 }
 function clearWorkflow(){
- workflowState=null;workflow.hidden=true;workflow.replaceChildren();
+ workflowImportEpoch++;workflowState=null;workflow.hidden=true;workflow.replaceChildren();
 }
 function retainedWorkflow(){
  const state=window.NexusStudioUI.uiStatus();
@@ -3949,8 +3968,66 @@ function showWorkflow(){
    'همهٔ گام‌ها به تأیید شما رسیدند؛ نکسوس نتیجهٔ خارجی را راستی‌آزمایی نکرده است.');
   workflow.append(note);
  }
- workflow.append(cancel);
+ const exportButton=document.createElement('button');
+ exportButton.id='studio-workflow-export';exportButton.type='button';
+ exportButton.className='secondary';
+ exportButton.textContent=words('Download checkpoint (plain JSON)','دریافت پیشرفت (JSON بدون رمزگذاری)');
+ exportButton.onclick=downloadWorkflow;
+ workflow.append(exportButton,cancel);
 }
+
+function parseCheckpoint(raw){
+ if(!raw||typeof raw!=='object'||Array.isArray(raw)||
+    Object.keys(raw).sort().join('|')!=='authority|completed|plan|schema|verified'||
+    raw.schema!==WORKFLOW_SCHEMA||raw.authority!=='none'||raw.verified!==false||
+    typeof raw.plan!=='string'||!Number.isInteger(raw.completed)||raw.completed<0)
+  throw Error('invalid-checkpoint');
+ const validated=parseWorkflow(raw.plan);
+ if(validated.error||raw.completed>validated.steps.length)throw Error('invalid-checkpoint');
+ return {plan:raw.plan,completed:raw.completed,steps:validated.steps};
+}
+function downloadWorkflow(){
+ if(!validWorkflow())return;
+ if(!confirm(words(
+  'Download PLAIN-TEXT JSON with your full tool commands and self-reported progress? This file is unencrypted and does not verify external results.',
+  'فایل JSON بدون رمزگذاری شامل فرمان‌های کامل و پیشرفت اعلام‌شدهٔ شماست. نتیجهٔ خارجی راستی‌آزمایی نمی‌شود. دریافت می‌کنی؟')))return;
+ const payload={schema:WORKFLOW_SCHEMA,authority:'none',verified:false,
+  plan:workflowState.draft,completed:workflowState.index};
+ const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+ const url=URL.createObjectURL(blob),link=document.createElement('a');
+ link.href=url;link.download='nexus-workflow-checkpoint.json';
+ link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+restoreFile.addEventListener('change',async()=>{
+ const file=restoreFile.files?.[0];restoreFile.value='';
+ if(!file)return;
+ const epoch=++workflowImportEpoch,scope=workflowScope(),draft=$('message').value;
+ const current=()=>{
+  const state=window.NexusStudioUI.uiStatus();
+  return epoch===workflowImportEpoch&&scope===workflowScope()&&
+   $('message').value===draft&&state&&!state.busy&&!state.attachmentLoading&&!state.archived;
+ };
+ if(!current())return;
+ try{
+  if(!/\.json$/i.test(file.name)||file.size<1||file.size>4096)throw Error('bad-file');
+  const raw=await file.text();if(!current())return;
+  if(new TextEncoder().encode(raw).length>4096)throw Error('bad-size');
+  const data=parseCheckpoint(JSON.parse(raw));
+  if(!confirm(words(
+   'Restore this UNTRUSTED review-only workflow and replace your unsent message? Completed steps are user reports, not verified, and no tool will execute.',
+   'این گردش‌کار غیرقابل‌اعتماد فقط برای بازبینی بازیابی شود و جای پیام ارسال‌نشده را بگیرد؟ گام‌های انجام‌شده راستی‌آزمایی نشده‌اند و هیچ ابزاری اجرا نخواهد شد.')))return;
+  if(!current())return;
+  restoreStatus.textContent='';
+  $('message').value=data.plan;
+  $('message').dispatchEvent(new Event('input',{bubbles:true}));
+  workflowState={draft:data.plan,scope:workflowScope(),steps:data.steps,index:data.completed,opened:false};
+  showWorkflow();refresh();
+ }catch{
+  if(current())restoreStatus.textContent=words(
+   'Invalid checkpoint. Nothing was changed.','فایل نامعتبر است؛ تغییری انجام نشد.');
+ }
+});
+
 function reviewWorkflow(message){
  closeDirectory();clearOffer();
  const parsed=parseWorkflow(message);
@@ -4034,6 +4111,7 @@ function refresh(){
  const planning=isWorkflowRequest($('message').value);
  send.textContent=planning?words('Review workflow','بازبینی گردش‌کار'):privateChat?words('Start temporary chat','شروع گفتگوی موقت'):tool?words('Review '+tool.route[2],'بازبینی '+tool.route[3]):model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
  send.disabled=!ready||!$('message').value.trim();
+ restoreButton.disabled=state.busy||state.attachmentLoading||state.archived;
  send.setAttribute('aria-label',send.textContent);
  select.disabled=state.busy;
  const availability=window.NexusStudioUI.modelAvailability?.()||{kind:'gateway',checked:false,configured:false};
@@ -4144,7 +4222,7 @@ select.addEventListener('change',()=>{
  window.NexusStudioUI.revokeModelReview?.();
  refresh();
 });
-document.addEventListener('nexus-studio-private-clear',()=>{clearOffer();closeDirectory();clearWorkflow()});
+document.addEventListener('nexus-studio-private-clear',()=>{clearOffer();closeDirectory();clearWorkflow();restoreStatus.textContent=''});
 $('message').addEventListener('input',refresh);
 $('message').addEventListener('keydown',event=>{
  if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&!event.isComposing&&
