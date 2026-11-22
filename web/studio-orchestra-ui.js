@@ -9,7 +9,19 @@ const fa=()=>document.documentElement.lang==='fa';
 const say=(en,faText)=>fa()?faText:en;
 let plan=null,score=null,wav=null,rendering=false,mixing=false,ticket=0;
 let wavUrl=null,dryUrl=null,dryBytes=null,dryInfo=null,dryEpoch=0,dryPending=false;
-let mixWav=null,mixUrl=null,mixReport=null;
+let mixWav=null,mixUrl=null,mixReport=null,reviewedStep=null;
+function clearReviewedStep(){reviewedStep=null}
+function armReviewedStep(kind,callback){
+ if(kind!=='orchestra'||typeof callback!=='function'||rendering)return false;
+ reviewedStep=callback;return true;
+}
+function observeScore(){
+ const callback=reviewedStep;reviewedStep=null;
+ if(!callback||score?.schema!=='nexus.music.orchestra-score.v1')return;
+ try{callback(Object.freeze({kind:'orchestra',source:'studio-local-orchestra',
+  completed:true,artifact:'score',notes:score.notes.length,
+  parts:score.parts.length,durationSeconds:score.durationSeconds}))}catch{}
+}
 function aligned(){return !!(wav&&dryInfo&&wav.byteLength>28&&
  new DataView(wav.buffer,wav.byteOffset,wav.byteLength).getUint32(24,true)===dryInfo.sampleRate)}
 function clearMixed(){
@@ -92,6 +104,7 @@ $('orchestra-compose').addEventListener('click',()=>{
     ': '+score.notes.length+' notes; '+score.parts.length+' parts; '+score.durationSeconds+' sec';
   status('Score ready. MusicXML, MIDI and local WAV are available.',
          'پارتیتور آماده است؛ خروجی نت MusicXML، MIDI و WAV در دسترس است.');
+  observeScore();
  }catch{score=null;clearWav();fail()}
  buttons();
 });
@@ -265,6 +278,7 @@ const baseline=[...$('orchestra-card').querySelectorAll('input,select,textarea')
 function isFormChanged(){return baseline.some(({node,value,checked})=>
  (node.type==='checkbox'||node.type==='radio')?node.checked!==checked:node.value!==value)}
 function resetPrivateDraft(){
+ clearReviewedStep();
  // Invalidate all outstanding rendering, file-read and playback completions.
  invalidate();clearDry();
  for(const {node,value,checked} of baseline){
@@ -276,6 +290,7 @@ function resetPrivateDraft(){
  buttons();
 }
 window.addEventListener('pagehide',()=>{
+ clearReviewedStep();
  const hadRender=rendering||wav;
  ticket++;rendering=false;mixing=false;
  clearWav();clearDry();
@@ -283,7 +298,7 @@ window.addEventListener('pagehide',()=>{
   'پارتیتور آماده است. برای پیش‌شنیدن دوباره صدا بساز.');
 });
 window.NexusOrchestraUI=Object.freeze({
- hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
+ armReviewedStep,clearReviewedStep,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
  hasOriginalVocal:()=>Boolean(dryBytes),hasMixedWav:()=>Boolean(mixWav),
  getMixReport:()=>mixReport,
  hasTransientWork:()=>Boolean(plan||score||wav||dryBytes||mixWav||dryPending||rendering||mixing||isFormChanged()),
