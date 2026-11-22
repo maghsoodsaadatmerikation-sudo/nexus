@@ -639,6 +639,61 @@ window.addEventListener('load',async()=>{
   assert(document.documentElement.scrollWidth<=innerWidth+2,
    'multi-model-selector-stays-in-viewport');
 
+  // Opt-in operator diagnostics are read-only. They disclose only the local
+  // attempt budget, never claim live provider readiness or spend model tokens.
+  const localToken='synthetic-studio-operator-token-0123456789';
+  let diagnosticRequests=0,forbiddenProviderRequests=0;
+  window.fetch=async(url,options={})=>{
+   const address=String(url);
+   if(address.endsWith('/studio-api/status'))return Response.json({
+    configured:true,configuration_id:'a'.repeat(64),model:'synthetic-model',
+    provider_host:'primary.example',authority:'none',models:[
+     {slot:'primary',configuration_id:'a'.repeat(64),model:'synthetic-model',provider_host:'primary.example'},
+     {slot:'secondary',configuration_id:slotId,model:'secondary-model',provider_host:'secondary.example'}
+    ]
+   });
+   if(address.includes('/studio-api/operator-readiness?model_slot=')){
+    diagnosticRequests++;
+    assert(options.headers?.authorization==='Bearer '+localToken&&
+     options.credentials==='omit'&&options.redirect==='error'&&
+     options.cache==='no-store','operator-readiness-uses-explicit-token-without-cookies');
+    const slot=address.split('model_slot=')[1];
+    const secondary=slot==='secondary';
+    return Response.json({
+     model_slot:slot,model:secondary?'secondary-model':'synthetic-model',
+     provider_host:secondary?'secondary.example':'primary.example',
+     provider_contact_attempted:false,provider_live_verification:'NOT_RECORDED',
+     readiness:secondary?'READY_TO_TEST':'LOCAL_BUDGET_EXHAUSTED',
+     local_request_budget:{limit:2,attempted:secondary?0:2,remaining:secondary?2:0}
+    });
+   }
+   forbiddenProviderRequests++;throw Error('unexpected paid provider request');
+  };
+  fill('gateway-token',localToken);
+  change('studio-compose-choice','secondary');
+  assert(!NexusStudioUI.modelAvailability().localReadiness,
+   'changing-model-clears-previous-diagnostic');
+  $('studio-compose-model-check').click();
+  await wait(()=>NexusStudioUI.modelAvailability().localReadiness==='READY_TO_TEST');
+  assert(NexusStudioUI.modelAvailability().remainingRequests===2&&
+   $('studio-compose-model-state').textContent.includes('2 local attempt(s) remain')&&
+   $('studio-compose-model-state').textContent.includes('provider access, billing and quality unverified'),
+   'secondary-readiness-shows-local-budget-without-provider-attestation');
+  assert(diagnosticRequests===1&&forbiddenProviderRequests===0&&
+   !$('studio-compose-model-state').textContent.includes(localToken),
+   'readiness-does-not-call-provider-or-render-secret');
+  change('studio-compose-choice','primary');
+  assert(!NexusStudioUI.modelAvailability().localReadiness,
+   'model-switch-invalidates-diagnostic-and-existing-review');
+  $('studio-compose-model-check').click();
+  await wait(()=>NexusStudioUI.modelAvailability().localReadiness==='LOCAL_BUDGET_EXHAUSTED');
+  assert($('studio-compose-model-state').textContent.includes('Local request budget exhausted')&&
+   diagnosticRequests===2&&forbiddenProviderRequests===0,
+   'exhausted-operator-budget-is-clear-and-fail-closed');
+  fill('gateway-token','rotated-token');
+  assert(!NexusStudioUI.modelAvailability().localReadiness,
+   'changing-gateway-token-invalidates-readiness');
+
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
 });
