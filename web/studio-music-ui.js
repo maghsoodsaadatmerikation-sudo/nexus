@@ -22,7 +22,19 @@ fa:{ready:'ابتدا قطعه را آهنگ‌سازی کن.',built:'پارتی
  resource:'این ترکیب طول قطعه و کیفیت صدا از بودجهٔ حافظهٔ گوشی فراتر می‌رود. کیفیت ۲۲ کیلوهرتز یا میزان کمتر را انتخاب کن.'}
 };
 const fa=()=>document.documentElement.lang==='fa',txt=k=>labels[fa()?'fa':'en'][k];
-let score=null,wav=null,revision=0,working=false,objectUrl=null;
+let score=null,wav=null,revision=0,working=false,objectUrl=null,reviewedStep=null;
+function clearReviewedStep(){reviewedStep=null}
+function armReviewedStep(kind,callback){
+ if(kind!=='music'||typeof callback!=='function'||working)return false;
+ reviewedStep=callback;return true;
+}
+function observeScore(){
+ const callback=reviewedStep;reviewedStep=null;
+ if(!callback||score?.schema!=='nexus.music.score.v1')return;
+ try{callback(Object.freeze({kind:'music',source:'studio-local-music',
+  completed:true,artifact:'score',bars:score.options.bars,
+  durationSeconds:score.durationSeconds}))}catch{}
+}
 function out(status){$('music-status').textContent=status}
 function field(name){const node=$('music-'+name);return node.type==='checkbox'?node.checked:node.type==='number'?Number(node.value):node.value}
 function inputs(){return {
@@ -85,7 +97,7 @@ $('music-build').addEventListener('click',()=>{
  if(working)return;
  try{
   score=Music.compose(inputs());resetAudio();
-  $('music-progress').value=0;out(txt('built'));buttons();
+  $('music-progress').value=0;out(txt('built'));buttons();observeScore();
  }catch{score=null;resetAudio();out(txt('error'))}
 });
 $('music-variation').addEventListener('click',()=>{
@@ -168,6 +180,7 @@ const baseline=[...$('music-card').querySelectorAll('input,select,textarea')].ma
 function isFormChanged(){return baseline.some(({node,value,checked})=>
  (node.type==='checkbox'||node.type==='radio')?node.checked!==checked:node.value!==value)}
 function resetPrivateDraft(){
+ clearReviewedStep();
  // Clear locally typed titles, seeds and selections as well as WAV and score.
  for(const {node,value,checked} of baseline){
   if(node.type==='checkbox'||node.type==='radio')node.checked=checked;
@@ -175,13 +188,14 @@ function resetPrivateDraft(){
  }
  invalidate();
 }
-document.addEventListener('nexus-music-clear',()=>{invalidate();$('music-title').value='Untitled journey'});
+document.addEventListener('nexus-music-clear',()=>{clearReviewedStep();invalidate();$('music-title').value='Untitled journey'});
 window.addEventListener('pagehide',()=>{
+ clearReviewedStep();
  const wasRendering=working;
  revision++;working=false;resetAudio();
  out(txt(wasRendering?'cancelled':score?'built':'ready'));
 });
 out(txt('ready'));buttons();
-window.NexusMusicUI=Object.freeze({clear:resetPrivateDraft,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
+window.NexusMusicUI=Object.freeze({clear:resetPrivateDraft,armReviewedStep,clearReviewedStep,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
  hasTransientWork:()=>Boolean(score||wav||working||isFormChanged())});
 })();
