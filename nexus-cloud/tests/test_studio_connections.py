@@ -252,6 +252,53 @@ def test_confirmed_branch_write_never_replaces_an_existing_ref(monkeypatch):
         assert methods[-3:] == ["GET", "GET", "GET"]  # Independent provider ref checks
 
 
+
+def test_branch_create_ack_without_remote_ref_readback_remains_unconfirmed(monkeypatch):
+    """Provider POST can succeed while the next independent GET still fails.
+
+    Returning a success receipt would be a false claim; retrying POST would
+    risk a duplicate write. This is deliberately a synthetic stateful fixture.
+    """
+    monkeypatch.setenv("NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN", "separate-synthetic-write-token")
+    methods = []
+    ref = {"ref": "refs/heads/" + TOPIC,
+           "object": {"sha": BASE_SHA, "type": "commit"}}
+
+    def provider(request):
+        methods.append((request.method, request.url.path))
+        if request.url.path.endswith("/branches/main"):
+            return httpx.Response(200, json={"name": "main", "commit": {"sha": BASE_SHA}})
+        if request.method == "GET" and request.url.path.endswith("/git/ref/heads/" + TOPIC):
+            return httpx.Response(404)
+        if request.method == "POST" and request.url.path.endswith("/git/refs"):
+            return httpx.Response(201, json=ref)
+        pytest.fail("Unexpected provider action")
+
+    with gateway(monkeypatch, provider) as client:
+        data = approval(client)
+        result = client.post(BRANCH_WRITE, headers=AUTH, json=data)
+        assert result.status_code == 409
+        assert "unconfirmed" in result.json()["detail"].lower()
+        assert "receipt" not in result.json()
+        assert sum(method == "POST" for method, _ in methods) == 1
+
+
+def test_ref_response_cannot_prove_a_mismatched_branch_or_commit():
+    from studio_connections import verified_ref
+
+    wanted = "refs/heads/" + TOPIC
+    proper = {"ref": wanted, "object": {"type": "commit", "sha": BASE_SHA}}
+    assert verified_ref(proper, wanted, BASE_SHA)
+    for item in (
+        {"ref": "refs/heads/main", "object": proper["object"]},
+        {"ref": wanted, "object": {"type": "tag", "sha": BASE_SHA}},
+        {"ref": wanted, "object": {"type": "commit", "sha": "b" * 40}},
+        {"ref": wanted, "object": {}},
+        None,
+    ):
+        assert not verified_ref(item, wanted, BASE_SHA)
+
+
 def test_advanced_main_requires_a_new_preview(monkeypatch):
     monkeypatch.setenv("NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN", "separate-synthetic-write-token")
     current = BASE_SHA
