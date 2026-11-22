@@ -526,6 +526,10 @@ def register(app):
                    "configuration_id": configuration_id(c) if c else None,
                    "model": c.model_id if c else None,
                    "provider_host": c.provider_host if c else None, "authority": "none",
+                   # Capabilities are routing claims, not provider liveness.
+                   # Updated Studio clients require this server-owned receipt
+                   # on every successfully completed gateway answer.
+                   **({"reply_receipt_version": 1} if c else {}),
                    **({"streaming": True} if c and c.streaming else {}),
                    **({"modes": ["standard", "thinking", "non-thinking"], "max_output_tokens": 8192} if c and c.adapter == "deepseek" else {})}
         if len(catalog) > 1:
