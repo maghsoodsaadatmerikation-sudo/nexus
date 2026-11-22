@@ -407,6 +407,39 @@ window.addEventListener('load',async()=>{
    assert(workflow.hidden,'assistant-offline-plan-clears-on-context-edit');
    // Restore the unrelated connector fixture for the pre-existing Render cases.
    fill('gateway-token','studio-preview-token-01234567890123456789');
+   // Music must produce a NEW local score after the reviewed tool opens.
+   // A preexisting score, panel visit or an export action never counts.
+   fill('message','/plan\n/music original instrumental score\n/write summary');
+   chatSend.click();
+   assert(workflow.querySelectorAll('li').length===2,'music-workflow-staged');
+   assert(workflow.querySelector('li button:nth-of-type(2)').disabled,
+    'music-step-not-complete-by-staging');
+   workflow.querySelector('li button').click();
+   assert(NexusStudioFocus.active()==='music-card'&&
+    workflow.querySelector('li button:nth-of-type(2)').disabled,
+    'music-panel-open-is-not-a-score-receipt');
+   $('music-bars').value='32';
+   $('music-bars').dispatchEvent(new Event('change',{bubbles:true}));
+   $('music-build').click();
+   assert(NexusMusicUI.hasScore()&&!NexusMusicUI.hasWav()&&
+    !workflow.querySelector('li button:nth-of-type(2)').disabled,
+    'fresh-local-score-only-enables-separate-confirmation');
+   assert(workflow.textContent.includes('New original score composed locally.')&&
+    !workflow.textContent.includes('WAV ready'),
+    'music-score-receipt-does-not-claim-wav-or-download');
+   workflow.querySelector('li button:nth-of-type(2)').click();
+   assert(workflow.querySelector('li').textContent.includes('local tool completed')&&
+    workflow.querySelector('li:nth-child(2)').textContent.includes('current'),
+    'music-confirmation-advances-only-one-exact-step');
+   // A new workflow must not reuse a previous score's temporary receipt.
+   fill('message','/plan\n/music new instrumental score\n/write summary');
+   chatSend.click();workflow.querySelector('li button').click();
+   assert(workflow.querySelector('li button:nth-of-type(2)').disabled,
+    'earlier-score-cannot-complete-new-workflow');
+   fill('message','No longer reviewing this score');
+   assert(workflow.hidden,'music-workflow-edit-revokes-score-review');
+   NexusMusicUI.clear();
+   assert(!NexusMusicUI.hasScore(),'music-fixture-clears-private-score');
    // The local-guide mode retains broad opt-in natural-language discovery.
   // Explicit slash commands still work in both modes.
   chooser.value='guide';chooser.dispatchEvent(new Event('change',{bubbles:true}));
