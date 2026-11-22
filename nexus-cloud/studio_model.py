@@ -538,8 +538,11 @@ def register(app):
         The separate Studio operator credential works even if a provider is
         incomplete, allowing safe diagnosis without treating it as configured.
         """
-        c = read_model_settings()
-        token = c.studio_token if c else os.getenv("NEXUS_STUDIO_TOKEN", "").strip()
+        # Authenticate with the independent Studio operator credential before
+        # looking up a requested model slot. Never expose slot configuration
+        # details to an unauthenticated caller.
+        primary = read_model_settings()
+        token = primary.studio_token if primary else os.getenv("NEXUS_STUDIO_TOKEN", "").strip()
         if len(token) < 32:
             raise HTTPException(503, "Studio operator diagnostics unavailable")
         authorization_values = request.headers.getlist("authorization")
@@ -548,6 +551,15 @@ def register(app):
             raise HTTPException(401, "Studio authentication required",
                                 headers={"WWW-Authenticate": "Bearer",
                                          "Cache-Control": "no-store"})
+
+        # Retain exact backward-compatible primary output when no model_slot
+        # parameter is passed. Duplicate, blank and unsupported slots fail
+        # closed rather than being silently interpreted as the primary model.
+        requested = request.query_params.getlist("model_slot")
+        if len(requested) > 1 or (requested and requested[0] not in MODEL_SLOTS):
+            raise HTTPException(422, "Invalid model slot")
+        slot = requested[0] if requested else "primary"
+        c = read_model_catalog().get(slot)
         budget = request.app.state.model_budget.snapshot()
         readiness = ("NOT_CONFIGURED" if c is None
                      else "LOCAL_BUDGET_UNAVAILABLE" if budget["attempted"] is None
@@ -572,6 +584,7 @@ def register(app):
                                    if budget["remaining"] == 0
                                    else "explicit_single_probe_smoke"),
             "authority": "none",
+            **({"model_slot": slot} if requested else {}),
         }, headers={"Cache-Control": "no-store"})
 
     async def handle_response(request: Request, stream: bool):
