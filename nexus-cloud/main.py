@@ -13,6 +13,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 import studio_assistant_plan
+import studio_capabilities
 import studio_connections
 import studio_model
 import studio_vision
@@ -91,6 +92,7 @@ studio_model.register(app)
 studio_vision.register(app)
 studio_connections.register(app)
 studio_assistant_plan.register(app)
+studio_capabilities.register(app)
 if studio_origin := os.getenv("NEXUS_STUDIO_ORIGIN", "").strip():
     app.add_middleware(CORSMiddleware, allow_origins=[studio_origin],
                        allow_methods=["GET", "POST"],
