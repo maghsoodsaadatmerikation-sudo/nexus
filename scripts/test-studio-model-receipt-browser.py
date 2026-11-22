@@ -67,10 +67,17 @@ window.addEventListener('load',async()=>{
    await submit();
    assert(JSON.stringify(snapshot())===before&&$('message').value==='Confirm the selected route'&&calls===1,
     'wrong-slot-rejected-with-draft-preserved');
+   assert($('status').textContent.includes('did not match the model or configuration')&&
+    $('status').textContent.includes('Nothing was added'),
+    'wrong-route-error-is-actionable-in-English');
    replyCase='wrong-id';await submit();
    assert(JSON.stringify(snapshot())===before&&calls===2,'stale-config-rejected-without-committing');
+   change('language','fa');
    replyCase='partial';await submit();
    assert(JSON.stringify(snapshot())===before&&calls===3,'partial-v1-receipt-rejected');
+   assert($('status').textContent.includes('مطابقت نداشت')&&$('status').textContent.includes('چیزی به گفتگو اضافه نشد'),
+    'wrong-route-error-is-actionable-in-Persian');
+   change('language','en');
    replyCase='missing';await submit();
    assert(JSON.stringify(snapshot())===before&&calls===4,'missing-v1-receipt-rejected');
    replyCase='valid';await submit();
