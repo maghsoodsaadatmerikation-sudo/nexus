@@ -195,6 +195,7 @@ function clearLocalReviewers(){
  window.NexusQualityUI?.clearReviewedStep?.();
  window.NexusMusicUI?.clearReviewedStep?.();
  window.NexusOrchestraUI?.clearReviewedStep?.();
+ window.NexusTasksUI?.clearReviewedStep?.();
  window.NexusStudioUI?.clearDocumentReceipt?.();
  window.NexusStudioUI?.clearExportReceipt?.();
 }
@@ -252,7 +253,7 @@ function expectedRead(step){
 }
 function expectedLocal(step){
  const kind=step.result.route[0];
- return ['research','code','data','write','export','music','orchestra'].includes(kind)?kind:null;
+ return ['research','code','data','write','export','music','orchestra','tasks'].includes(kind)?kind:null;
 }
 function showWorkflow(){
  if(!workflowState)return;
@@ -262,8 +263,8 @@ function showWorkflow(){
  title.textContent=words('Your reviewed workflow','گردش‌کار قابل بازبینی');
  const info=document.createElement('p');info.className='help';
  info.textContent=words(
-  'Opening a tool is not execution. Research, data, code, writing and Music Lab steps need a fresh observed result. A music receipt proves local score creation, not WAV output or musical quality. Export confirms a browser request, not file delivery. Writing remains session-only until you save separately. Retry or skip never runs tools automatically.',
-  'بازکردن ابزار اجرا نیست. پژوهش، داده، کد، نوشتن و موسیقی به نتیجهٔ تازه نیاز دارند. رسید موسیقی فقط ساخت پارتیتور محلی را نشان می‌دهد، نه تولید WAV یا کیفیت هنری. خروجی فقط درخواست دانلود است. ذخیره و اجرای هر مرحله نیاز به اقدام جداگانه دارد.');
+  'Opening is not execution. Tools need fresh results; scores do not prove WAV quality. Tasks require every job to succeed. Exports request downloads, not delivery. Save work separately; nothing runs automatically.',
+  'بازکردن ابزار اجرا نیست. هر ابزار نتیجهٔ تازه می‌خواهد؛ در وظایف همهٔ کارها باید موفق شوند. پارتیتور تضمین WAV نیست؛ خروجی سند فقط درخواست دانلود است. ذخیره و اجرا نیاز به اقدام جداگانه دارند.');
  const list=document.createElement('ol');
  plan.steps.forEach((step,i)=>{
   const item=document.createElement('li'),span=document.createElement('span');
@@ -308,7 +309,11 @@ function showWorkflow(){
            local==='write'?'studio-document-version':
            local==='export'?'studio-document-export':
            local==='music'?'studio-local-music':
-           local==='orchestra'?'studio-local-orchestra':'studio-local-tool')||
+           local==='orchestra'?'studio-local-orchestra':
+           local==='tasks'?'studio-local-tasks':'studio-local-tool')||
+        (local==='tasks'&&(receipt.artifact!=='task-report'||
+          !Number.isInteger(receipt.succeeded)||receipt.succeeded<1||
+          receipt.succeeded>12||receipt.failed!==0||receipt.cancelled!==0))||
         (local==='orchestra'&&(receipt.artifact!=='score'||
           !Number.isInteger(receipt.parts)||receipt.parts<1||receipt.parts>12||
           !Number.isInteger(receipt.notes)||receipt.notes<1||receipt.notes>200000||
@@ -350,6 +355,7 @@ function showWorkflow(){
        local==='export'?window.NexusStudioUI?.armExportReceipt?.(local,localReceiver):
        local==='music'?window.NexusMusicUI?.armReviewedStep?.(local,localReceiver):
        local==='orchestra'?window.NexusOrchestraUI?.armReviewedStep?.(local,localReceiver):
+       local==='tasks'?window.NexusTasksUI?.armReviewedStep?.(local,localReceiver):
        window.NexusLabUI?.armReviewedStep?.(local,localReceiver));
      plan.opened=Boolean(armed);plan.readReceipt=null;showWorkflow();
     }
@@ -381,6 +387,8 @@ function showWorkflow(){
          '… identifies source bytes, not correctness. Review before confirming.',
          'داده محلی تحلیل شد؛ SHA256 '+plan.readReceipt.sha256.slice(0,12)+
          '… فقط هویت بایت‌هاست، نه صحت نتیجه. پیش از تأیید بررسی کن.'):
+       local==='tasks'?words('All reviewed local JavaScript jobs finished successfully; outputs remain untrusted.',
+        'همهٔ کارهای JavaScript محلی موفق شدند؛ خروجی‌ها هنوز باید بررسی شوند.'):
        local==='orchestra'?words('Synthetic orchestra score built; no WAV, vocal mix or file delivery verified.',
          'پارتیتور ارکستر سنتتیک ساخته شد؛ WAV، میکس و دریافت فایل تأیید نشده‌اند.'):
        local==='music'?words('New original score composed locally. WAV, file download and musical quality remain unverified.',
@@ -451,7 +459,7 @@ function reviewWorkflow(message){
 }
 
 /* Gateway preview requires separate user approval; no tool execution. */
-const planTools=new Set(['research','data','write','export','code','music','orchestra','remind','github','render']);
+const planTools=new Set(['research','data','write','export','code','music','orchestra','tasks','remind','github','render']);
 function planGateway(){
  const raw=$('gateway')?.value.trim()||location.origin;
  const url=new URL(raw);
@@ -511,6 +519,7 @@ function localNaturalPlan(draft){
   ['code',/^(?:\/code(?:\s|$)|run\s+(?:this\s+)?(?:javascript|js)\b|کدنویسی(?:\s|$)|اجرا\s*ی?\s*کد(?:\s|$))/iu],
   ['music',/^(?:\/music(?:\s|$)|compose(?:\s|$)|آهنگ\s+بساز(?:\s|$)|موسیقی\s+بساز(?:\s|$))/iu],
   ['orchestra',/^(?:\/orchestra(?:\s|$)|orchestra(?:\s|$)|orchestrate(?:\s|$)|arrange\s+(?:an?\s+)?orchestra\b|ارکستر\s+بساز(?:\s|$))/iu],
+  ['tasks',/^(?:\/tasks(?:\s|$)|run\s+(?:reviewed\s+)?(?:local\s+)?javascript\s+tasks\b|وظایف\s+محلی(?:\s|$))/iu],
   ['remind',/^(?:\/remind(?:\s|$)|remind\s+me(?:\s|$)|set\s+(?:a\s+)?reminder(?:\s|$)|یادآوری\s+کن(?:\s|$))/iu],
   ['github',/^(?:\/github(?:\s+(?:pulls|prs))?$|(?:review|list|show|check)\s+github\s+(?:pull\s+requests|prs)\b)/iu],
   ['render',/^(?:\/render(?:\s+deploys)?$|(?:check|list|show)\s+render\s+deploy(?:ment)?s\b)/iu]
