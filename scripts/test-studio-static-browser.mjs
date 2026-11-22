@@ -18,7 +18,7 @@ const sha=buf=>createHash('sha256').update(buf).digest('hex');
 const sourceHtml=await readFile(new URL('index.html',root)),sourceDigest=sha(sourceHtml);
 const assert=(v,label)=>{if(!v)throw Error(label)};
 const pdfModules=['pdf/studio-pdf.mjs','pdf/pdf.min.mjs','pdf/pdf.worker.min.mjs'];
-const allowed={...Object.fromEntries(pdfModules.map(name=>['/'+name,name])),'/':'index.html','/index.html':'index.html','/service-worker.js':'service-worker.js','/manifest.json':'manifest.json','/icons/nexus-192.png':'icons/nexus-192.png','/icons/nexus-512.png':'icons/nexus-512.png',...(packageRoot?{'/device-check.html':'device-check.html'}:{})};
+const allowed={...Object.fromEntries(pdfModules.map(name=>['/'+name,name])),'/':'index.html','/index.html':'index.html','/modules/studio-composer-ui.js':'modules/studio-composer-ui.js','/service-worker.js':'service-worker.js','/manifest.json':'manifest.json','/icons/nexus-192.png':'icons/nexus-192.png','/icons/nexus-512.png':'icons/nexus-512.png',...(packageRoot?{'/device-check.html':'device-check.html'}:{})};
 let server;
 if(!PUBLIC_MODE){server=createServer(async(req,res)=>{const file=allowed[req.url]||(['device-engine.js','device-worker.js','device-ui.js','model-manifest.json'].some(n=>req.url==='/device/'+n)?req.url.slice(1):null);if(req.method!=='GET'||!file){res.writeHead(404);res.end();return}res.setHeader('content-type',file.endsWith('.html')?'text/html; charset=utf-8':/\.m?js$/.test(file)?'text/javascript':file.endsWith('.json')?'application/manifest+json':'image/png');res.end(await readFile(new URL(file,root)))});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))}
 // Small ASCII fixture with exact xref offsets and one selectable text line.
@@ -38,7 +38,7 @@ function samplePdf(){
  return pdf+'xref\n0 6\n0000000000 65535 f \n'+rows+'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n';
 }
 const ORIGIN=PUBLIC_MODE?'https://nexus-studio-merikation.onrender.com/':`http://127.0.0.1:${server.address().port}/`;
-for(const name of ['index.html','service-worker.js','manifest.json',...pdfModules]){const response=await fetch(ORIGIN+(name==='index.html'?'':name),{redirect:'error',signal:AbortSignal.timeout(15000)});assert(response.status===200&&sha(Buffer.from(await response.arrayBuffer()))===sha(await readFile(new URL(name,root))),'public-source-identity-'+name)}
+for(const name of ['index.html','modules/studio-composer-ui.js','service-worker.js','manifest.json',...pdfModules]){const response=await fetch(ORIGIN+(name==='index.html'?'':name),{redirect:'error',signal:AbortSignal.timeout(15000)});assert(response.status===200&&sha(Buffer.from(await response.arrayBuffer()))===sha(await readFile(new URL(name,root))),'public-source-identity-'+name)}
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const profile=await mkdtemp(path.join(tmpdir(),'nexus-pwa-private-'));
 const child=spawn(browser,[
