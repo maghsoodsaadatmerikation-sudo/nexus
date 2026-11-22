@@ -542,6 +542,7 @@ function gatewayFailureLabel(error,request,timedOut=false){
  }
  if(error?.message==='model-route-mismatch')return 'routeMismatch';
  if(error?.name==='AbortError')return 'gatewayTimeout';
+ if(error instanceof SyntaxError)return 'gatewayMalformedReply';
  if(error instanceof TypeError)return 'gatewayNetwork';
  if(['model-stream','incomplete-stream','model-stream-frame','stream-after-end',
    'stream-capacity','model-response','response-capacity','empty-response'].includes(error?.message))
