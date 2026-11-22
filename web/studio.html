@@ -5404,6 +5404,17 @@ document.addEventListener('nexus-studio-state',()=>{
 });
 const branching=()=>operations.value==='github.branch',editing=()=>operations.value==='github.edit';
 const validSha=s=>/^[a-f0-9]{40}$/.test(s);
+// A status object or GraphQL mutation response is not an execution receipt.
+// Only the gateway's separately read-back, exact-revision result is accepted.
+// This is same-provider verification, NOT independently signed attestation.
+function verifiedWriteReceipt(response,operation,outcome,revision,fileBytes){
+ const r=response?.receipt;
+ return Boolean(r&&r.schema_version===1&&r.kind==='github_followup_read'&&
+  r.operation===operation&&r.outcome===outcome&&r.revision===revision&&
+  r.followup_read_verified===true&&r.reviewed_request_matched===true&&
+  r.file_bytes_verified===fileBytes&&r.independent_attestation===false&&
+  r.deployment_verified===false);
+}
 const discardFile=()=>!fileBase||editor.value===originalText||confirm(words('Discard the unsaved file edit?','ویرایش ذخیره‌نشدهٔ فایل پاک شود؟'));
 function labels(){
  for(const [node,en,fa] of [
@@ -5634,10 +5645,14 @@ create.onclick=()=>{
  if(filePlan&&!controller){
   const approved=filePlan,entry=choice();
   request('/github/file-commit',{...approved,consent:true},p=>{
-   if(!sameFile(approved,entry,p)||!validSha(p.commit))throw Error('commit identity');
+   if(!sameFile(approved,entry,p)||!validSha(p.commit)||
+      !verifiedWriteReceipt(p,'github.file_commit','committed',p.commit,true))
+    throw Error('commit follow-up proof missing');
    clearResult();fileBase=null;originalText=editor.value='';editor.hidden=preview.hidden=true;
    result.textContent=words('Commit created','تغییر ثبت شد')+'\n'+p.commit;result.hidden=false;
    showReceipt({kind:'write',operation:'github.edit',target:entry.target,
+     message:words('The reviewed file bytes and commit were re-read from GitHub. Not independently attested or deployed.',
+       'بایت‌های فایل بازبینی‌شده و کامیت از گیت‌هاب دوباره خوانده شدند؛ گواهی مستقل یا استقرار تأیید نشده است.'),
      body:'Commit: '+p.commit+'\nWorking branch: '+p.branch});
   });
   return;
@@ -5646,14 +5661,16 @@ create.onclick=()=>{
  const approved=branchPlan,entry=choice();
  request('/github/branch',{...approved,consent:true},p=>{
   if(p.target!==entry.target||p.branch!=='nexus/studio-'+approved.slug||p.base_sha!==approved.base_sha||
-     !['created','already_exists'].includes(p.status))throw Error('branch identity');
+     !['created','already_exists'].includes(p.status)||
+     !verifiedWriteReceipt(p,'github.branch',p.status,approved.base_sha,false))
+    throw Error('branch follow-up proof missing');
   const label=p.status==='created'?words('Branch created','شاخه ساخته شد'):words('Branch already exists','شاخه از قبل وجود داشت');
   clearResult();result.textContent=label+'\n'+p.target+' / '+p.branch;result.hidden=false;
   showReceipt({kind:'write',operation:'github.branch',target:p.target,
-    message:p.status==='created'?words('Approved working branch was created; not merged or deployed.',
-      'شاخهٔ کاری تأییدشده ساخته شد؛ ادغام یا استقرار انجام نشد.'):
-      words('Working branch already existed; no new branch was created.',
-      'شاخهٔ کاری از قبل وجود داشت؛ شاخهٔ تازه‌ای ساخته نشد.'),
+    message:p.status==='created'?words('Reviewed branch was created and re-read at the matching SHA. Not independently attested or deployed.',
+      'شاخه ساخته و با شناسهٔ بازبینی‌شده دوباره خوانده شد؛ گواهی مستقل یا استقرار تأیید نشده است.'):
+      words('Existing branch was re-read at the matching SHA. No new branch was created.',
+      'شاخهٔ موجود با شناسهٔ بازبینی‌شده دوباره خوانده شد؛ شاخهٔ تازه‌ای ساخته نشد.'),
     body:'Branch: '+p.branch+'\nBase: '+p.base_sha});
  });
 };

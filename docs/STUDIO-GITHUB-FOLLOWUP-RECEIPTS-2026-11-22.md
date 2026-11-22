@@ -1,0 +1,9 @@
+# NEXUS Studio — verified provider follow-up receipts
+
+The reviewed GitHub write path now distinguishes **provider mutation response** from **follow-up observation**. After an explicitly approved branch creation, the gateway reads the branch through a separate GitHub endpoint and compares the exact reviewed base SHA. After an explicitly approved file commit, the gateway re-reads the branch head, the resulting commit tree, its regular non-executable file blob and the exact UTF-8 bytes of the reviewed replacement.
+
+A success response includes an ephemeral, source-limited `receipt` with `kind=github_followup_read`, `schema_version=1`, operation, outcome, revision and `followup_read_verified=true`. `file_bytes_verified` is true only for the file commit. **This is corroboration by the same GitHub account/API, not an independent auditor, signed proof, production release or deployment attestation.** The receipt therefore explicitly says `independent_attestation=false` and `deployment_verified=false`.
+
+The browser must verify the complete structured receipt, revision and operation, not merely the HTTP success status or an arbitrary message. It fails closed if proof is absent, fabricated or mismatched. Since provider writes can succeed even if later reads time out or drift, the outcome is reported as **unknown; inspect before retrying**, rather than incorrectly saying failure or success. Readback occurs inside the same concurrency limit as the approved write; it is not an autonomous action triggered by chat/tool discovery.
+
+Contract and actual Chromium tests cover matching follow-up branch and file evidence, forged follow-up claims, mismatched content and no false success on ambiguous outcomes. No real GitHub writes, provider secrets, merge, deployment or unattended agent actions are part of these tests. The PR is stacked and draft, with `[skip render]` commits; public release requires independent human and production checks.
