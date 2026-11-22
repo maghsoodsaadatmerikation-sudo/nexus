@@ -721,7 +721,7 @@ window.addEventListener('load',async()=>{
   // The local credential preflight must apply to portable plaintext workflows,
   // both before download and before importing a user-selected checkpoint.
   const syntheticKey='ghp_'+('A'.repeat(32));
-  const sensitivePlan='/plan\\n/github file '+syntheticKey+'\\n/write Make summary';
+  const sensitivePlan='/plan\n/github file '+syntheticKey+'\n/write Make summary';
   fill('message',sensitivePlan);
   $('studio-compose-send').click();
   assert(!checklist.hidden&&checklist.querySelectorAll('ol li').length===2,
