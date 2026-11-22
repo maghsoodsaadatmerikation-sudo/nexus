@@ -47,17 +47,21 @@ class StudioLocalTests(unittest.TestCase):
         self.assertTrue(kit.verify(self.zip, exact_commit=COMMIT))
         with zipfile.ZipFile(self.zip) as archive:
             names = archive.namelist()
-            self.assertEqual(len(names), 21)
+            self.assertEqual(len(names), len(kit.SOURCE_NAMES) + 4)
             self.assertEqual(
                 set(names),
                 {kit.BUNDLE + "/" + n for n in kit.SOURCE_NAMES + (kit.CHECK_NAME,
                     "run-local.py", "README.txt", "source-manifest.json")})
             receipt = json.loads(archive.read(kit.BUNDLE + "/source-manifest.json"))
             self.assertEqual(receipt["source_commit"], COMMIT)
-            self.assertEqual(len(receipt["assets"]), 18)
+            self.assertEqual(len(receipt["assets"]), len(kit.SOURCE_NAMES))
             check = archive.read(kit.BUNDLE + "/" + kit.CHECK_NAME)
             self.assertIn(receipt["assets"]["index.html"]["sha256"].encode(), check)
             self.assertIn(receipt["assets"]["service-worker.js"]["sha256"].encode(), check)
+            self.assertIn("modules/studio-composer-ui.js", receipt["assets"])
+            self.assertEqual(receipt["assets"]["modules/studio-composer-ui.js"]["sha256"],
+                             hashlib.sha256(archive.read(
+                                 kit.BUNDLE + "/modules/studio-composer-ui.js")).hexdigest())
             self.assertNotIn(b"__APP_SHA256__", check)
             self.assertIn(b"personal_data_collected:false", check)
             self.assertTrue(receipt["loopback_only"])
@@ -143,7 +147,7 @@ class StudioLocalTests(unittest.TestCase):
         folder = self.extract()
         port, proc = self.run_server(folder)
         for name in ("/", "/index.html", "/manifest.json", "/service-worker.js",
-                     "/device/device-ui.js", "/device/model-manifest.json",
+                     "/modules/studio-composer-ui.js", "/device/device-ui.js", "/device/model-manifest.json",
                      "/icons/nexus-192.png", "/device-check.html"):
             with self.subTest(name=name):
                 url = f"http://127.0.0.1:{port}{name}"
