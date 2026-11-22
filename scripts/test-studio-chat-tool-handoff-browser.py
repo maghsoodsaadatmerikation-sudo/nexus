@@ -486,6 +486,46 @@ window.addEventListener('load',async()=>{
    NexusOrchestraUI.clear();
    assert(!NexusOrchestraUI.hasScore()&&!NexusOrchestraUI.hasOriginalVocal(),
     'orchestra-private-work-revoked');
+   // Reviewed local Tasks: only an actual, fully successful bounded DAG counts.
+   fill('message','Run local javascript tasks then write a report');
+   planButton.click();$('studio-assistant-local-preview').click();
+   assert(workflow.querySelectorAll('li').length===2&&
+    workflow.querySelector('li button:nth-of-type(2)').disabled,
+    'tasks-plan-staged-without-running-workers');
+   workflow.querySelector('li button').click();
+   assert(NexusStudioFocus.active()==='tasks-card'&&
+    workflow.querySelector('li button:nth-of-type(2)').disabled,
+    'tasks-panel-open-does-not-prove-completion');
+   fill('task-plan',JSON.stringify({version:1,concurrency:1,jobs:[
+    {id:'fails',code:'throw Error("intentional-job-failure");'}]}));
+   $('task-consent').checked=true;$('task-run').click();
+   await wait(()=>!$('task-stop').disabled===false&&
+    $('task-report').textContent.includes('"failed"'));
+   assert(workflow.querySelector('li button:nth-of-type(2)').disabled,
+    'failed-local-task-run-cannot-complete-workflow');
+   fill('task-plan',JSON.stringify({version:1,concurrency:2,jobs:[
+    {id:'first',code:'return 6;'},
+    {id:'second',needs:['first'],
+     code:'return JSON.parse(input).dependencies.first;'}]}));
+   $('task-consent').checked=true;$('task-run').click();
+   await wait(()=>!workflow.querySelector('li button:nth-of-type(2)').disabled);
+   const doneTask=JSON.parse($('task-report').textContent);
+   assert(doneTask.jobs.length===2&&doneTask.jobs.every(j=>j.status==='succeeded'),
+    'reviewed-task-run-actually-executed-dependent-jobs');
+   assert(workflow.textContent.includes('All reviewed local JavaScript jobs finished successfully;')&&
+    !workflow.textContent.includes('independently audited'),
+    'task-receipt-is-bounded-and-not-a-security-certification');
+   workflow.querySelector('li button:nth-of-type(2)').click();
+   assert(workflow.querySelector('li').textContent.includes('local tool completed'),
+    'tasks-advance-only-after-separate-human-confirmation');
+   fill('message','/plan\n/tasks\n/write a second report');
+   chatSend.click();workflow.querySelector('li button').click();
+   assert(workflow.querySelector('li button:nth-of-type(2)').disabled,
+    'previous-local-task-report-cannot-replay-as-fresh-execution');
+   fill('message','Unsent personal draft');
+   assert(workflow.hidden,'tasks-review-is-revoked-on-chat-draft-edit');
+   NexusTasksUI.clear();
+   assert(!$('task-plan').value,'tasks-test-clears-private-code');
    // The local-guide mode retains broad opt-in natural-language discovery.
   // Explicit slash commands still work in both modes.
   chooser.value='guide';chooser.dispatchEvent(new Event('change',{bubbles:true}));

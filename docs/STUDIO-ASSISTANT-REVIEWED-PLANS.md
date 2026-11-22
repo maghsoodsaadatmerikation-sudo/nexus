@@ -422,3 +422,34 @@ creation, non-replay and no-WAV/no-vocal claims. GitHub Actions must verify the
 standalone and static PWA generated outputs against the exact source revision,
 including the SHA-256-pinned cache and existing 645,000-byte HTML cap. All
 concurrent tests and stacked PRs require review before a merge or live release.
+
+## Observed local Tasks DAG completion (stacked candidate)
+
+Explicit `/tasks` or `Run local javascript tasks then write a report`
+is recognized in review-only English/Persian workflow previews. The existing
+Tasks Lab accepts a **user-reviewed JSON plan** with up to 12 bounded
+JavaScript jobs (concurrency at most two). The user must explicitly check
+consent and select **Run plan**. The local browser's isolated Workers execute
+the DAG with per-job and whole-plan watchdogs; no provider, shell, repository,
+file upload or background server agent is involved.
+
+An ephemeral, **one-shot** callback can unlock chat confirmation only if a
+fresh Runner return contains 1–12 jobs and **all jobs succeeded**, with
+zero failed/cancelled jobs. The receipt contains only `artifact: task-report`,
+the count of successful jobs, and zero failure/cancellation counters. It
+contains no JavaScript source, input, results, private data or untrusted
+tool output. A partial, failed, blocked or cancelled job is not success.
+A successful execution report remains **untrusted data**, not proof that
+executed code was safe, correct or useful. Human confirmation of that result
+is a separate action.
+
+Old reports do not count: arming is per reviewed step; editing the chat,
+switching context, closing/retrying the workflow, explicit Task Stop and
+clearing the private Studio workspace revoke eligibility. The same Tasks
+Lab still functions outside assistant workflows. The remote gateway only
+previews a possible destination; it cannot execute Jobs.
+
+Browser acceptance exercises both failed and successful dependent workers,
+an explicit user confirmation, non-replay, no implicit model/provider call
+and cleanup. Public HTML and service-worker hashes must be regenerated and
+checked against the strict source graph and 645,000-byte file budget.
