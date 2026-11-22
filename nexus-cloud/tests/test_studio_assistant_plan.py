@@ -87,6 +87,7 @@ def test_export_preview_parity_with_reviewed_browser_workflow():
     "بنویس گزارش و خروجی سند",
     "Research a topic then run python",
     "/plan\n/write a report\n/run python",
+    "/plan\n/code run python\n/write a report",
     "/plan\n/write a report\n/export account secrets",
 ])
 def test_export_and_execution_boundaries_fail_closed(goal):
