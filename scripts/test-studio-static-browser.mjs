@@ -306,7 +306,7 @@ try{
  stage='opt-in-offline';await js("document.getElementById('studio-offline').click();true");
  await poll(()=>retryJs("document.getElementById('studio-offline-state').textContent.includes('code is ready')"),25000,'offline-prepare');
  const cached=await js("(async()=>{const names=await caches.keys(),cache=await caches.open(names[0]),keys=await cache.keys();const response=await cache.match(location.origin+'/');const bytes=await response.arrayBuffer();return {names,entries:keys.map(k=>k.url),sha:Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join(''),private:new TextDecoder().decode(bytes).includes('SYNTHETIC PRIVATE QUESTION')}})()");
- assert(cached.names.length===1&&cached.names[0].startsWith('nexus-studio-shell-v1-')&&cached.entries.length===5+pdfModules.length&&pdfModules.every(name=>cached.entries.includes(ORIGIN+name))&&cached.entries.includes(ORIGIN)&&cached.sha===sourceDigest&&!cached.private,'cache-not-public-code-only');checks.push('opt-in-cache-exact-public-code-only');
+ assert(cached.names.length===1&&cached.names[0].startsWith('nexus-studio-shell-v1-')&&cached.entries.length===6+pdfModules.length&&cached.entries.includes(ORIGIN+'modules/studio-composer-ui.js')&&pdfModules.every(name=>cached.entries.includes(ORIGIN+name))&&cached.entries.includes(ORIGIN)&&cached.sha===sourceDigest&&!cached.private,'cache-not-public-code-only');checks.push('opt-in-cache-exact-public-code-only');
  await poll(()=>retryJs("Boolean(navigator.serviceWorker.controller)"),10000,'worker-control');
  await js("window.__beforeOfflineReload=true;true");
  stage='true-offline';await setOffline(true);await rpc('Page.reload',{ignoreCache:true});
