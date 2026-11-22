@@ -29,24 +29,27 @@ view.hidden=true;
 const receipt=el('section','');receipt.id='studio-connection-receipt';receipt.hidden=true;
 receipt.setAttribute('role','status');receipt.setAttribute('aria-live','polite');
 const receiptTitle=el('strong',''),receiptStatus=el('p',''),receiptPreview=el('pre','');
-const receiptAttach=action('studio-connection-attach'),receiptDismiss=action('studio-connection-dismiss');
-receipt.append(receiptTitle,receiptStatus,receiptPreview,receiptAttach,receiptDismiss);
+const receiptAttach=action('studio-connection-attach'),receiptDismiss=action('studio-connection-dismiss'),
+ receiptWitness=action('studio-connection-witness-export');
+receipt.append(receiptTitle,receiptStatus,receiptPreview,receiptAttach,receiptWitness,receiptDismiss);
 $('messages').after(receipt);
 open.dataset.en='Connections';open.dataset.fa='اتصال‌ها';
 document.body.append(dialog);composer.append(open);
 let targets=[],origin='',controller=null,selectedResult=null,branchPlan=null,fileBase=null,filePlan=null,originalText='';
 let requestedProvider=null,requestedOperation=null,dialogSelection=null,receiptCopy=null,receiptSelection=null;
 let reviewedReadListener=null; // Single-use, ephemeral callback; not a provider attestation.
+let pendingWitnessRequest=null; // In-memory, explicit user download only; never auto-uploaded.
 function matchesSelection(selection){
  const current=window.NexusStudioUI.selection();
  return current.projectId===selection?.projectId&&current.threadId===selection?.threadId;
 }
 function clearReceipt(){
  receipt.hidden=view.hidden=true;receiptCopy=receiptSelection=null;
+ pendingWitnessRequest=null;receiptWitness.hidden=true;
  receiptTitle.textContent=receiptStatus.textContent=receiptPreview.textContent='';
  receiptAttach.hidden=true;
 }
-function showReceipt({kind,operation='',target='',message='',body='',copy=null}){
+function showReceipt({kind,operation='',target='',message='',body='',copy=null,witnessRequest=null}){
  clearReceipt();
  receiptSelection=dialogSelection;
  receiptTitle.textContent=([operation||'Connections',target].filter(Boolean).join(' · ')).slice(0,240);
@@ -68,6 +71,8 @@ function showReceipt({kind,operation='',target='',message='',body='',copy=null})
  receiptPreview.hidden=!text;
  receiptCopy=kind==='read'?copy:null;
  receiptAttach.hidden=!receiptCopy;
+ pendingWitnessRequest=kind==='write'?witnessRequest:null;
+ receiptWitness.hidden=!pendingWitnessRequest;
  receipt.hidden=false;view.hidden=!dialog.open;
  if(success)statusLine.textContent=words('Result is also available in Chat.','نتیجه در بخش گفتگو نیز نمایش داده شد.');
  // A workflow sees only a genuinely completed, consent-reviewed read. This
@@ -80,6 +85,18 @@ function showReceipt({kind,operation='',target='',message='',body='',copy=null})
  }
 }
 receiptDismiss.onclick=clearReceipt;
+receiptWitness.onclick=()=>{
+ if(!pendingWitnessRequest)return;
+ if(!matchesSelection(receiptSelection)){clearReceipt();return}
+ // Privacy boundary: no network, no clipboard, no background transfer.
+ // The audit request holds source-only identifiers and SHA commitments.
+ const blob=new Blob([JSON.stringify(pendingWitnessRequest,null,2)+'\n'],
+  {type:'application/json'});
+ const href=URL.createObjectURL(blob),anchor=document.createElement('a');
+ anchor.href=href;anchor.download='nexus-github-audit-request.json';
+ document.body.append(anchor);anchor.click();anchor.remove();
+ setTimeout(()=>URL.revokeObjectURL(href),1000);
+};
 receiptAttach.onclick=()=>{
  if(!receiptCopy)return;
  if(!matchesSelection(receiptSelection)){clearReceipt();return}
@@ -106,6 +123,23 @@ document.addEventListener('nexus-studio-state',()=>{
 });
 const branching=()=>operations.value==='github.branch',editing=()=>operations.value==='github.edit';
 const validSha=s=>/^[a-f0-9]{40}$/.test(s);
+function checkedWitnessRequest(response,operation,target,branch,revision,path=null){
+ const q=response?.witness_request,r=response?.receipt;
+ const expected=['authority','branch','external_witness_completed','file_path',
+  'file_sha256','operation','provider','repository','review_reference_sha256',
+  'revision','schema','source_receipt'];
+ if(!q||typeof q!=='object'||Array.isArray(q)||
+    Object.keys(q).length!==expected.length||expected.some(k=>!Object.hasOwn(q,k))||
+    q.schema!=='nexus.studio.github.witness-request.v1'||q.provider!=='github'||
+    q.authority!=='source_claim_only'||q.external_witness_completed!==false||
+    q.operation!==operation||q.repository!==target||q.branch!==branch||
+    q.revision!==revision||!/^[a-f0-9]{64}$/.test(q.review_reference_sha256)||
+    q.file_path!==path||
+    (path===null?q.file_sha256!==null:!/^[a-f0-9]{64}$/.test(q.file_sha256))||
+    !r||typeof q.source_receipt!=='object'||Object.keys(q.source_receipt).length!==Object.keys(r).length||
+    Object.keys(r).some(k=>q.source_receipt[k]!==r[k]))throw Error('unverified-witness-request');
+ return q;
+}
 // A status object or GraphQL mutation response is not an execution receipt.
 // Only the gateway's separately read-back, exact-revision result is accepted.
 // This is same-provider verification, NOT independently signed attestation.
@@ -123,7 +157,8 @@ function labels(){
   [open,open.dataset.en,open.dataset.fa],[title,'Studio connections','اتصال‌های استودیو'],
   [connect,'Load connections','بارگیری اتصال‌ها'],[settings,'Gateway settings','تنظیمات درگاه'],
   [close,'Close','بستن'],[read,'Approve read','تأیید خواندن'],[create,'Confirm branch creation','تأیید ساخت شاخه'],[use,'Attach to next message','پیوست به پیام بعدی'],
-  [view,'View result in chat','نمایش نتیجه در گفتگو'],[receiptAttach,'Attach to next message','پیوست به پیام بعدی'],[receiptDismiss,'Dismiss result','بستن نتیجه']
+  [view,'View result in chat','نمایش نتیجه در گفتگو'],[receiptAttach,'Attach to next message','پیوست به پیام بعدی'],
+  [receiptWitness,'Export audit request','خروجی درخواست ممیزی'],[receiptDismiss,'Dismiss result','بستن نتیجه']
  ])node.textContent=words(en,fa);
  preview.textContent=words('Review changes','بازبینی تغییرات');
  topic.setAttribute('aria-label',words('Working branch suffix','نام کوتاه شاخهٔ کاری'));
@@ -353,12 +388,14 @@ create.onclick=()=>{
    if(!sameFile(approved,entry,p)||!validSha(p.commit)||
       !verifiedWriteReceipt(p,'github.file_commit','committed',p.commit,true))
     throw Error('commit follow-up proof missing');
+   const witness=checkedWitnessRequest(p,'github.file_commit',entry.target,p.branch,p.commit,approved.path);
    clearResult();fileBase=null;originalText=editor.value='';editor.hidden=preview.hidden=true;
    result.textContent=words('Commit created','تغییر ثبت شد')+'\n'+p.commit;result.hidden=false;
    showReceipt({kind:'write',operation:'github.edit',target:entry.target,
      message:words('The reviewed file bytes and commit were re-read from GitHub. Not independently attested or deployed.',
        'بایت‌های فایل بازبینی‌شده و کامیت از گیت‌هاب دوباره خوانده شدند؛ گواهی مستقل یا استقرار تأیید نشده است.'),
-     body:'Commit: '+p.commit+'\nWorking branch: '+p.branch});
+     body:'Commit: '+p.commit+'\nWorking branch: '+p.branch,
+     witnessRequest:witness});
   });
   return;
  }
@@ -369,6 +406,7 @@ create.onclick=()=>{
      !['created','already_exists'].includes(p.status)||
      !verifiedWriteReceipt(p,'github.branch',p.status,approved.base_sha,false))
     throw Error('branch follow-up proof missing');
+  const witness=checkedWitnessRequest(p,'github.branch',p.target,p.branch,p.base_sha);
   const label=p.status==='created'?words('Branch created','شاخه ساخته شد'):words('Branch already exists','شاخه از قبل وجود داشت');
   clearResult();result.textContent=label+'\n'+p.target+' / '+p.branch;result.hidden=false;
   showReceipt({kind:'write',operation:'github.branch',target:p.target,
@@ -376,7 +414,8 @@ create.onclick=()=>{
       'شاخه ساخته و با شناسهٔ بازبینی‌شده دوباره خوانده شد؛ گواهی مستقل یا استقرار تأیید نشده است.'):
       words('Existing branch was re-read at the matching SHA. No new branch was created.',
       'شاخهٔ موجود با شناسهٔ بازبینی‌شده دوباره خوانده شد؛ شاخهٔ تازه‌ای ساخته نشد.'),
-    body:'Branch: '+p.branch+'\nBase: '+p.base_sha});
+    body:'Branch: '+p.branch+'\nBase: '+p.base_sha,
+    witnessRequest:witness});
  });
 };
 use.onclick=()=>{
