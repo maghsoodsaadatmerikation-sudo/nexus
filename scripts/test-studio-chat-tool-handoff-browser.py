@@ -214,6 +214,41 @@ window.addEventListener('load',async()=>{
   assert(!$('studio-assistant-capability-panel').hidden&&capCalls===3&&providerCalls===2,
    'chat-readiness-command-opens-review-with-zero-provider-calls');
   capButton.click();
+
+  const routerBefore={providerCalls,searchCalls,catalogCalls,connectionActions};
+  fill('message','Research fictional study then analyze CSV data then draft a report');
+  assert(chatSend.textContent.includes('Review multi-step plan'),
+   'ordered-request-offers-workflow-rather-than-first-tool');
+  chatSend.click();
+  assert(!$('studio-chat-workflow').hidden&&
+   $('studio-assistant-local-preview')?.textContent.includes('Preview locally'),
+   'ordered-workflow-opens-reviewed-local-preview-without-execution');
+  assert(JSON.stringify(routerBefore)===JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions}),
+   'ordered-workflow-no-incidental-provider-call');
+  $('studio-assistant-local-preview').click();
+  assert($('studio-chat-workflow').querySelectorAll('li').length===3,
+   'ordered-workflow-expands-to-three-reviewed-steps');
+  $('studio-chat-workflow').lastElementChild.click();
+  fill('message','موسیقی بساز سپس تحلیل داده CSV');
+  assert(chatSend.textContent.includes('Review multi-step plan'),
+   'bilingual-deterministic-routing');
+  chatSend.click();$('studio-assistant-local-preview').click();
+  assert($('studio-chat-workflow').querySelectorAll('li').length===2,
+   'persian-ordered-workflow-keeps-steps-independent');
+  $('studio-chat-workflow').lastElementChild.click();
+  fill('message','Create a music video from my song');
+  assert(chatSend.textContent.includes('Review capability limit'),
+   'unsupported-media-not-misrouted-to-music');
+  chatSend.click();
+  assert(!$('nexus-zen-offer').hidden&&
+   $('nexus-zen-offer').textContent.includes('cannot natively render')&&
+   JSON.stringify(routerBefore)===JSON.stringify({providerCalls,searchCalls,catalogCalls,connectionActions}),
+   'unsupported-media-disclosure-no-fake-output');
+  fill('message','Review a different request');
+  assert($('nexus-zen-offer').hidden,'unsupported-media-proposal-revoked-on-edit');
+  fill('message','Write a video script then draft a report');
+  assert(chatSend.textContent.includes('Review multi-step plan'),
+   'text-only-media-script-still-eligible-for-plan');
   fill('message','/github list open pull requests');
   assert(chatSend.textContent.includes('GitHub'),'github-slash-intent-discovered');
   chatSend.click();
