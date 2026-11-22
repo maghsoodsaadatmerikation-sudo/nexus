@@ -6,6 +6,8 @@ No configured targets, credentials, prompts or user data leave this endpoint.
 """
 from __future__ import annotations
 
+import os
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -32,6 +34,20 @@ BROWSER_SURFACES = (
     ("sky", "optional_symbolic_browser_tool"),
     ("memory", "local_browser"),
 )
+# Actual provider permissions cannot be inferred from configured secrets.
+# Each operation below has a distinct source-level action class and credential.
+OPERATION_DEFINITIONS = (
+    ("github.pulls", "read", "github_read"),
+    ("github.file", "read", "github_read"),
+    ("render.deploys", "read", "render_read"),
+    ("github.branch_preview", "review", "github_branch"),
+    ("github.branch", "write", "github_branch"),
+    ("github.file_base", "read", "github_file"),
+    ("github.file_preview", "review", "github_file"),
+    ("github.file_commit", "write", "github_file"),
+    ("model.response", "model", "model"),
+)
+
 UNIMPLEMENTED = (
     "unattended_agent",
     "remote_shell",
@@ -71,6 +87,32 @@ def disclosure(request: Request) -> dict:
     render = connector_config.get("render")
     github_ready = bool(github and github[1])
     render_ready = bool(render and render[1])
+    branch_ready = bool(github and os.getenv("NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN", "").strip())
+    file_ready = bool(github and os.getenv("NEXUS_CONNECTOR_GITHUB_FILE_TOKEN", "").strip())
+    configured_gates = {
+        "github_read": github_ready,
+        "render_read": render_ready,
+        "github_branch": branch_ready,
+        "github_file": file_ready,
+    }
+    operations = []
+    for name, phase, gate in OPERATION_DEFINITIONS:
+        readiness = (
+            model_readiness if gate == "model" else
+            "configured_not_live_verified" if configured_gates[gate] else
+            "not_configured"
+        )
+        operations.append({
+            "id": name,
+            "phase": phase,
+            "configuration_readiness": readiness,
+            "potential_account_mutation": phase == "write",
+            "permission_verified": False,
+            "execution_observed": False,
+            "receipt_observed": False,
+            "separate_user_review_required": True,
+            "proof_boundary": "independent_action_receipt_required",
+        })
 
     capabilities = [
         _record(name, "source_defined_browser_surface_not_runtime_verified", boundary)
@@ -88,7 +130,7 @@ def disclosure(request: Request) -> dict:
         for name in UNIMPLEMENTED
     )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "kind": "non_authoritative_capability_disclosure",
         "authority": "none",
         "scope": "reviewed_source_and_local_configuration_only",
@@ -99,6 +141,7 @@ def disclosure(request: Request) -> dict:
         "model_adapter": model.adapter if model else None,
         "model_streaming_configured": bool(model and model.streaming),
         "capabilities": capabilities,
+        "operation_gates": operations,
     }
 
 
