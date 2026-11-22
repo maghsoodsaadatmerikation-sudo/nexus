@@ -1,4 +1,3 @@
-/* NEXUS reviewed chat composer; no implicit execution. */
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
 const required=['conversation-card','message','guide','prepare','request-review','consent',
@@ -26,7 +25,6 @@ mode.append(heading,selectLabel,config,privacy);
 box.append(row,mode,storage);
 $('branch-notice').after(box);
 
-/* Discover capability from a typed request; proposal only, never execute. */
 const suggestions=document.createElement('div');suggestions.id='nexus-zen-suggestions';
 box.prepend(suggestions);
 const offer=document.createElement('div');offer.id='nexus-zen-offer';offer.hidden=true;offer.setAttribute('role','status');box.after(offer);
@@ -148,7 +146,6 @@ function intent(value){
  const query=kind==='research'||kind==='orchestra'?message.slice(prefix?.[0].length||0):'';
  return route?{route,query}:null;
 }
-/* Connector suggestions never grant execution authority. */
 function connectionRequest(result,message){
  const kind=result.route[0];
  if(kind==='connections')return {};
@@ -162,7 +159,6 @@ function connectionRequest(result,message){
  return {provider:'github',operation};
 }
 
-/* Every workflow step requires independent human review. */
 const workflow=document.createElement('section');
 workflow.id='studio-chat-workflow';workflow.className='studio-compose';
 workflow.hidden=true;workflow.setAttribute('aria-label','Reviewed workflow');
@@ -243,7 +239,6 @@ function openReviewedSurface(result,message,{readOperation=null,onReadReceipt=nu
  window.NexusStudioFocus?.openPanel(panel);
  return true;
 }
-/* Receipts distinguish read-only gateway results from self-reports. */
 function expectedRead(step){
  const kind=step.result.route[0];
  if(kind==='render')return 'render.deploys';
@@ -458,7 +453,6 @@ function reviewWorkflow(message){
  showWorkflow();
 }
 
-/* Gateway preview requires separate user approval; no tool execution. */
 const planTools=new Set(['research','data','write','export','code','music','orchestra','tasks','remind','github','render']);
 function planGateway(){
  const raw=$('gateway')?.value.trim()||location.origin;
@@ -501,7 +495,6 @@ function checkedPlan(result,draft){
   return {line:item.instruction,result:{route,query}};
  });
 }
-/* Local preview is an offline, non-executing allowlist parser. */
 function localNaturalPlan(draft){
  if(typeof draft!=='string'||draft.length>1800||
     /[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/u.test(draft))
@@ -626,7 +619,6 @@ let offeredDraft=null;
 function clearOffer(){
  offeredDraft=null;offer.hidden=true;offer.replaceChildren();
 }
-/* Tool suggestions require separate review; model replies are inert. */
 function explicitToolRequest(message){
  const value=message.trim();
  return value.startsWith('/')||explicitResearch.test(value)||
