@@ -220,6 +220,13 @@ function parseWorkflow(message){
  }
  return {steps};
 }
+/* Reuse the exact-context credential heuristic. This is a limited client
+ * preflight, NOT comprehensive DLP; missing scanners fail closed for export.
+ * No matched token value is returned, logged or inserted in warnings. */
+function workflowHasPotentialCredentials(plan){
+ try{return window.NexusStudio.inspectSecrets([{role:'user',content:plan}]).possible_secrets!==false}
+ catch{return true}
+}
 function clearWorkflow(){
  workflowImportEpoch++;workflowState=null;workflow.hidden=true;workflow.replaceChildren();
 }
@@ -300,6 +307,15 @@ function showWorkflow(){
  cancel.textContent=words('Discard workflow','حذف گردش‌کار');
  cancel.onclick=()=>{clearWorkflow();$('message').focus()};
  workflow.append(title,info,list);
+ const unsafeCheckpoint=workflowHasPotentialCredentials(workflowState.draft);
+ if(unsafeCheckpoint){
+  const warning=document.createElement('p');warning.id='studio-workflow-secret-warning';
+  warning.setAttribute('role','alert');
+  warning.textContent=words(
+   'Possible credentials detected. Unencrypted checkpoint export is blocked. Remove secrets before downloading. Detection is incomplete and can produce false positives.',
+   'احتمال وجود اطلاعات ورود شناسایی شد. ذخیرهٔ بدون رمزگذاری مسدود است. پیش از دریافت فایل، اطلاعات محرمانه را حذف کن. تشخیص کامل نیست و ممکن است خطا داشته باشد.');
+  workflow.append(warning);
+ }
  if(workflowState.index===workflowState.steps.length){
   const note=document.createElement('p');note.setAttribute('role','status');
   note.textContent=words('All steps marked done by you; NEXUS has not verified external results.',
@@ -310,6 +326,7 @@ function showWorkflow(){
  exportButton.id='studio-workflow-export';exportButton.type='button';
  exportButton.className='secondary';
  exportButton.textContent=words('Download checkpoint (plain JSON)','دریافت پیشرفت (JSON بدون رمزگذاری)');
+ exportButton.disabled=unsafeCheckpoint;
  exportButton.onclick=downloadWorkflow;
  workflow.append(cancel,exportButton);
 }
@@ -322,10 +339,11 @@ function parseCheckpoint(raw){
   throw Error('invalid-checkpoint');
  const validated=parseWorkflow(raw.plan);
  if(validated.error||raw.completed>validated.steps.length)throw Error('invalid-checkpoint');
+ if(workflowHasPotentialCredentials(raw.plan))throw Error('credential-checkpoint');
  return {plan:raw.plan,completed:raw.completed,steps:validated.steps};
 }
 function downloadWorkflow(){
- if(!validWorkflow())return;
+ if(!validWorkflow()||workflowHasPotentialCredentials(workflowState.draft))return;
  if(!confirm(words(
   'Download PLAIN-TEXT JSON with your full tool commands and self-reported progress? This file is unencrypted and does not verify external results.',
   'فایل JSON بدون رمزگذاری شامل فرمان‌های کامل و پیشرفت اعلام‌شدهٔ شماست. نتیجهٔ خارجی راستی‌آزمایی نمی‌شود. دریافت می‌کنی؟')))return;
@@ -360,9 +378,11 @@ restoreFile.addEventListener('change',async()=>{
   $('message').dispatchEvent(new Event('input',{bubbles:true}));
   workflowState={draft:data.plan,scope:workflowScope(),steps:data.steps,index:data.completed,opened:false};
   showWorkflow();refresh();
- }catch{
-  if(current())restoreStatus.textContent=words(
-   'Invalid checkpoint. Nothing was changed.','فایل نامعتبر است؛ تغییری انجام نشد.');
+ }catch(error){
+  if(current())restoreStatus.textContent=error?.message==='credential-checkpoint'
+   ?words('Possible credentials in checkpoint. Import blocked without changing your draft. Detection may be incomplete.',
+     'احتمال وجود اطلاعات ورود در فایل؛ بازیابی مسدود شد و پیام فعلی تغییر نکرد. تشخیص ممکن است کامل نباشد.')
+   :words('Invalid checkpoint. Nothing was changed.','فایل نامعتبر است؛ تغییری انجام نشد.');
  }
 });
 
