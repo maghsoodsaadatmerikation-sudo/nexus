@@ -3731,6 +3731,121 @@ function showDirectory(){
  }
  directoryItems.firstElementChild.focus();
 }
+
+const statusButton=document.createElement('button');
+statusButton.type='button';statusButton.className='secondary';
+statusButton.id='studio-assistant-capability-status';
+statusButton.dataset.en='Tool status';statusButton.dataset.fa='وضعیت ابزارها';
+suggestions.append(statusButton);
+const statusPanel=document.createElement('section');
+statusPanel.id='studio-assistant-capability-panel';
+statusPanel.className='studio-compose';statusPanel.hidden=true;
+statusPanel.setAttribute('role','region');
+statusPanel.setAttribute('aria-label','NEXUS capability disclosure');
+directory.after(statusPanel);
+statusButton.setAttribute('aria-controls',statusPanel.id);
+let statusController=null,statusEpoch=0,statusScope=null;
+function clearCapabilityPanel(){
+ statusEpoch++;statusController?.abort();statusController=null;
+ statusScope=null;statusPanel.hidden=true;statusPanel.replaceChildren();
+ statusButton.setAttribute('aria-expanded','false');
+}
+const capabilityStates=Object.freeze({
+ source_defined_browser_surface_not_runtime_verified:[
+  'In source · browser not verified','در کد موجود · اجرای مرورگر تأیید نشده'],
+ configured_not_live_verified:['Configured · not live-tested','پیکربندی‌شده · آزمایش زنده نشده'],
+ not_configured:['Not configured','پیکربندی نشده'],
+ local_budget_unavailable:['Local budget unavailable','بودجهٔ محلی در دسترس نیست'],
+ local_budget_exhausted:['Local budget exhausted','سهمیهٔ محلی تمام شده'],
+ not_implemented_in_this_gateway:['Not implemented in this gateway','در این درگاه پیاده‌سازی نشده']
+});
+function checkedCapabilities(payload){
+ if(!payload||payload.schema_version!==1||
+  payload.kind!=='non_authoritative_capability_disclosure'||
+  payload.authority!=='none'||payload.scope!=='reviewed_source_and_local_configuration_only'||
+  payload.deployment_revision_verified!==false||payload.browser_runtime_verified!==false||
+  payload.provider_contact_attempted!==false||payload.tools_executed!==0||
+  typeof payload.model_streaming_configured!=='boolean'||
+  !Array.isArray(payload.capabilities)||payload.capabilities.length<1||
+  payload.capabilities.length>40)throw Error('unverified-capabilities');
+ const seen=new Set();
+ return payload.capabilities.map(row=>{
+  if(!row||typeof row.id!=='string'||!/^[a-z][a-z0-9_]{1,39}$/.test(row.id)||
+    seen.has(row.id)||!Object.hasOwn(capabilityStates,row.readiness)||
+    typeof row.data_boundary!=='string'||row.data_boundary.length>80||
+    row.separate_user_review_required!==true||row.execution_observed!==false)
+   throw Error('invalid-capability');
+  seen.add(row.id);return {id:row.id,readiness:row.readiness};
+ });
+}
+function showCapabilityPanel(){
+ if(!statusPanel.hidden){clearCapabilityPanel();return}
+ closeDirectory();clearOffer();statusScope=workflowScope();
+ statusPanel.hidden=false;statusPanel.replaceChildren();
+ statusButton.setAttribute('aria-expanded','true');
+ const heading=document.createElement('strong'),note=document.createElement('p'),
+  feedback=document.createElement('p'),list=document.createElement('ul'),
+  check=document.createElement('button'),close=document.createElement('button');
+ heading.textContent=words('Tool availability, not tool execution','وضعیت ابزارها، نه اجرای آن‌ها');
+ note.className='help';note.textContent=words(
+  'Only a configuration/source inventory. No live provider or browser verification. Check requires your Studio operator token; no prompts or tools are sent.',
+  'فقط فهرست قابلیت‌های کد و پیکربندی است؛ آزمایش زندهٔ مرورگر یا ارائه‌دهنده نیست. بررسی به توکن دسترسی استودیو نیاز دارد و هیچ متن گفتگو یا ابزاری ارسال نمی‌شود.');
+ feedback.id='studio-assistant-capability-feedback';
+ feedback.setAttribute('role','status');feedback.setAttribute('aria-live','polite');
+ feedback.textContent=words('Nothing checked yet.','هنوز بررسی نشده است.');
+ list.id='studio-assistant-capability-results';
+ check.type='button';check.className='secondary';check.id='studio-assistant-capability-check';
+ check.textContent=words('Check gateway configuration (read-only)','بررسی فقط‌خواندنی پیکربندی درگاه');
+ close.type='button';close.className='secondary';
+ close.textContent=words('Close','بستن');close.onclick=clearCapabilityPanel;
+ check.onclick=async()=>{
+  let origin,token;
+  try{
+   origin=planGateway();token=$('gateway-token')?.value.trim()||'';
+   if(token.length<32)throw Error('access-token');
+  }catch{
+   feedback.textContent=words('Set a valid gateway and Studio token in model settings first.',
+    'ابتدا درگاه معتبر و توکن استودیو را در تنظیمات مدل وارد کن.');
+   return;
+  }
+  const controller=new AbortController(),epoch=++statusEpoch,scope=statusScope;
+  statusController?.abort();statusController=controller;
+  list.replaceChildren();check.disabled=true;
+  feedback.textContent=words('Checking configuration only…','در حال بررسی فقط پیکربندی…');
+  const timer=setTimeout(()=>controller.abort(),12000);
+  try{
+   const response=await fetch(origin+'/studio-api/assistant/capabilities',{
+    method:'GET',headers:{authorization:'Bearer '+token},credentials:'omit',
+    cache:'no-store',redirect:'error',signal:controller.signal
+   });
+   const result=checkedCapabilities(await planResponse(response));
+   if(statusPanel.hidden||epoch!==statusEpoch||scope!==workflowScope()||
+      origin!==planGateway()||token!==($('gateway-token')?.value.trim()||''))return;
+   for(const item of result){
+    const li=document.createElement('li'),known=catalog.find(c=>c.command===item.id);
+    li.textContent=(known?words(known.en,known.fa):item.id)+' · '+
+      words(...capabilityStates[item.readiness]);
+    list.append(li);
+   }
+   feedback.textContent=words(
+    'Configuration inventory only · no actions executed · no live readiness proven.',
+    'فقط وضعیت پیکربندی · هیچ عملی اجرا نشده · آمادگی زنده اثبات نشده است.');
+  }catch{
+   if(epoch===statusEpoch&&!statusPanel.hidden){
+    list.replaceChildren();
+    feedback.textContent=words('Status unavailable or invalid. No tools ran.',
+     'وضعیت در دسترس نیست یا پاسخ نامعتبر است؛ هیچ ابزاری اجرا نشده است.');
+   }
+  }finally{
+   clearTimeout(timer);
+   if(epoch===statusEpoch){statusController=null;check.disabled=false}
+  }
+ };
+ statusPanel.append(heading,note,check,close,feedback,list);
+}
+statusButton.addEventListener('click',showCapabilityPanel);
+const explicitReadiness=message=>/^(?:\/readiness|check (?:nexus )?(?:tool|capability) (?:status|readiness)|وضعیت ابزارهای نکسوس|وضعیت قابلیت‌های نکسوس)$/iu.test(message.trim());
+
 const explicitResearch=/^(?:search\s+(?:the\s+web\s+)?for|جست[\s\u200c]*و[\s\u200c]*جو\s+کن)\s+(.+)$/is;
 function intent(value){
  const message=value.trim();
@@ -4297,6 +4412,7 @@ function refresh(){
  if(workflowState&&!retainedWorkflow())clearWorkflow();
  if(previewDraft&&($('message').value!==previewDraft.draft||workflowScope()!==previewDraft.scope||
     state.archived||state.busy))clearWorkflow();
+ if(!statusPanel.hidden&&(statusScope!==workflowScope()||state.archived))clearCapabilityPanel();
  planPreview.textContent=words('Plan steps','برنامه‌ریزی مراحل');
  planPreview.disabled=state.busy||state.attachmentLoading||state.archived||
   $('message').value.trim().length<8||$('message').value.length>1800;
@@ -4310,7 +4426,8 @@ function refresh(){
  const privateChat=/^\/temporary$/i.test($('message').value.trim());
  const tool=suggestion($('message').value);
  const planning=isWorkflowRequest($('message').value);
- send.textContent=planning?words('Review workflow','بازبینی گردش‌کار'):privateChat?words('Start temporary chat','شروع گفتگوی موقت'):tool?words('Review '+tool.route[2],'بازبینی '+tool.route[3]):model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
+ const readiness=explicitReadiness($('message').value);
+ send.textContent=readiness?words('Show tool status','نمایش وضعیت ابزارها'):planning?words('Review workflow','بازبینی گردش‌کار'):privateChat?words('Start temporary chat','شروع گفتگوی موقت'):tool?words('Review '+tool.route[2],'بازبینی '+tool.route[3]):model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
  send.disabled=!ready||!$('message').value.trim();
  send.setAttribute('aria-label',send.textContent);
  save.textContent=state.vaultUnlocked?words('Save encrypted session','ذخیرهٔ رمزگذاری‌شدهٔ نشست'):words('Set up private archive','تنظیم آرشیو خصوصی');
@@ -4339,6 +4456,7 @@ function run({routeTools=true}={}){
     !$('message').value.trim())return;
  const message=$('message').value;
  if(isWorkflowRequest(message)){reviewWorkflow(message);return}
+  if(explicitReadiness(message)){showCapabilityPanel();return}
  if(/^\/temporary$/i.test(message.trim())){
   if(window.NexusStudioUI.startConversation(true,{isolated:true}))$('message').focus();
   return;
@@ -4380,7 +4498,9 @@ config.addEventListener('click',()=>{
  settings.querySelector('summary')?.focus({preventScroll:true});
 });
 select.addEventListener('change',()=>{temporaryModel=false;clearOffer();closeDirectory();refresh()});
-document.addEventListener('nexus-studio-private-clear',()=>{clearOffer();closeDirectory();clearWorkflow()});
+document.addEventListener('nexus-studio-private-clear',()=>{clearOffer();closeDirectory();clearWorkflow();clearCapabilityPanel()});
+$('gateway-token')?.addEventListener('input',clearCapabilityPanel);
+$('gateway')?.addEventListener('input',clearCapabilityPanel);
 $('message').addEventListener('input',refresh);
 $('message').addEventListener('keydown',event=>{
  if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&!event.isComposing&&
