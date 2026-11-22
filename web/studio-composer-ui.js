@@ -152,10 +152,7 @@ function intent(value){
  const query=kind==='research'||kind==='orchestra'?message.slice(prefix?.[0].length||0):'';
  return route?{route,query}:null;
 }
-/* Advisory mapping only; no operation is executed from text classification.
- * The connection dialog verifies actual provider permissions after a separate
- * user-triggered catalog load and requires explicit review before each action.
- */
+/* Connector suggestions never grant execution authority. */
 function connectionRequest(result,message){
  const kind=result.route[0];
  if(kind==='connections')return {};
@@ -169,10 +166,7 @@ function connectionRequest(result,message){
  return {provider:'github',operation};
 }
 
-/* Review-only multi-step chat checklist. This is not autonomous planning:
- * each step is a reviewed slash command supplied by the human. No work runs
- * from parsing, opening, or marking a step; tools enforce their own consent.
- */
+/* Every workflow step requires independent human review. */
 const workflow=document.createElement('section');
 workflow.id='studio-chat-workflow';workflow.className='studio-compose';
 workflow.hidden=true;workflow.setAttribute('aria-label','Reviewed workflow');
@@ -502,10 +496,7 @@ function checkedPlan(result,draft){
   return {line:item.instruction,result:{route,query}};
  });
 }
-/* Deterministic, private alternative to the authenticated gateway preview.
- * Parse only explicitly ordered actions. Unknown actions and Python execution
- * fail closed. This provides destinations for human review, NEVER execution.
- */
+/* Local preview is an offline, non-executing allowlist parser. */
 function localNaturalPlan(draft){
  if(typeof draft!=='string'||draft.length>1800||
     /[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/u.test(draft))
