@@ -11,28 +11,28 @@ Object.assign(FA,{archiveDamaged:'آرشیو مرورگر آسیب‌دیده ی
 Object.assign(EN,{routeMismatch:'The gateway reply did not match the model or configuration you approved. Nothing was added to the conversation. Check the gateway and review the request again.'});
 Object.assign(FA,{routeMismatch:'پاسخ درگاه با مدل یا تنظیماتی که تأیید کرده‌اید مطابقت نداشت. چیزی به گفتگو اضافه نشد. اتصال درگاه را بررسی کنید و درخواست را دوباره بازبینی کنید.'});
 Object.assign(EN,{
- gatewayUnauthorized:'Gateway access was denied (HTTP 401/403). Check your gateway access token and permissions, then review the request again. Nothing was added to chat.',
- gatewayConfigurationChanged:'The gateway model configuration changed (HTTP 409). Check gateway settings and approve a fresh request. Nothing was added to chat.',
- gatewayInvalidRequest:'The gateway rejected the request format (HTTP 415/422). Check selected model, mode and context, then review again. Nothing was added to chat.',
- gatewayBusy:'The gateway is busy or its local request budget is exhausted (HTTP 429). Check local readiness before choosing to retry; no automatic retry was made.',
- gatewayUnavailable:'The gateway or provider is unavailable (HTTP 503). Check gateway settings and availability. The attempt may have reached the provider; no automatic retry was made.',
- gatewayUpstreamFailure:'The gateway or upstream model failed (HTTP 408/500/502/504). No answer was saved. The attempt may have reached the provider; check usage before choosing to retry.',
- gatewayRejected:'The gateway rejected the request. No answer was saved. Review settings and try again only after checking the cause.',
- gatewayNetwork:'Could not connect to the gateway. Check its URL, network and browser CORS permissions. No answer was saved; the attempt may have reached the server.',
- gatewayTimeout:'The model request timed out. No answer was saved; the provider may have received the request. Check usage before manually retrying.',
- gatewayMalformedReply:'The model reply was incomplete or failed validation and was not saved. Check gateway health; an attempt may have reached the provider.'
+ gatewayUnauthorized:'Gateway access denied (401/403). Check its token and permissions. Nothing was saved.',
+ gatewayConfigurationChanged:'Gateway model changed (409). Check settings and review a fresh request. No answer was saved.',
+ gatewayInvalidRequest:'Gateway rejected the request (415/422). Review the model, mode and context. No answer was saved.',
+ gatewayBusy:'Gateway busy or local request budget exhausted (429). Check readiness; no automatic retry.',
+ gatewayUnavailable:'Gateway or provider unavailable (503). Check its status; the attempt may have reached the provider.',
+ gatewayUpstreamFailure:'Gateway/provider error (408/500/502/504). No answer saved; check usage before manually retrying.',
+ gatewayRejected:'Gateway rejected the request. No answer was saved; check its status.',
+ gatewayNetwork:'Gateway connection failed. Check URL, network and CORS. The attempt may have reached the server.',
+ gatewayTimeout:'Model request timed out. No answer saved; check usage before manually retrying.',
+ gatewayMalformedReply:'Incomplete or invalid model reply was not saved. Check gateway health before retrying.'
 });
 Object.assign(FA,{
- gatewayUnauthorized:'درگاه دسترسی را نپذیرفت (HTTP 401/403). توکن دسترسی درگاه و مجوزها را بررسی کنید و درخواست را دوباره بازبینی کنید. چیزی به گفتگو افزوده نشد.',
- gatewayConfigurationChanged:'تنظیمات مدل درگاه تغییر کرده است (HTTP 409). تنظیمات درگاه را بررسی و درخواست تازه‌ای را تأیید کنید. چیزی به گفتگو افزوده نشد.',
- gatewayInvalidRequest:'درگاه قالب درخواست را نپذیرفت (HTTP 415/422). مدل، حالت اجرا و زمینهٔ گفتگو را بررسی و دوباره بازبینی کنید. چیزی به گفتگو افزوده نشد.',
- gatewayBusy:'درگاه مشغول است یا سهمیهٔ محلی درخواست‌ها تمام شده است (HTTP 429). پیش از تلاش مجدد وضعیت محلی را بررسی کنید؛ تکرار خودکار انجام نشد.',
- gatewayUnavailable:'درگاه یا ارائه‌دهنده در دسترس نیست (HTTP 503). تنظیمات و دسترسی را بررسی کنید. شاید درخواست به ارائه‌دهنده رسیده باشد؛ تکرار خودکار انجام نشد.',
- gatewayUpstreamFailure:'درگاه یا مدل بیرونی با خطا مواجه شد (HTTP 408/500/502/504). پاسخی ذخیره نشد. شاید درخواست به ارائه‌دهنده رسیده باشد؛ پیش از تلاش مجدد مصرف را بررسی کنید.',
- gatewayRejected:'درگاه درخواست را نپذیرفت. پاسخی ذخیره نشد. پس از بررسی علت و تنظیمات، در صورت تمایل دوباره تلاش کنید.',
- gatewayNetwork:'اتصال به درگاه برقرار نشد. نشانی، شبکه و مجوز CORS مرورگر را بررسی کنید. پاسخی ذخیره نشد؛ شاید درخواست به سرور رسیده باشد.',
- gatewayTimeout:'مهلت پاسخ مدل تمام شد. پاسخی ذخیره نشد؛ ممکن است درخواست به ارائه‌دهنده رسیده باشد. پیش از تلاش مجدد مصرف را بررسی کنید.',
- gatewayMalformedReply:'پاسخ مدل ناقص یا نامعتبر بود و ذخیره نشد. وضعیت درگاه را بررسی کنید؛ ممکن است درخواست به ارائه‌دهنده رسیده باشد.'
+ gatewayUnauthorized:'دسترسی به درگاه رد شد (401/403). توکن و مجوز را بررسی کنید. چیزی ذخیره نشد.',
+ gatewayConfigurationChanged:'مدل درگاه تغییر کرد (409). تنظیمات را بررسی و درخواست تازه‌ای را تأیید کنید. پاسخی ذخیره نشد.',
+ gatewayInvalidRequest:'درگاه درخواست را نپذیرفت (415/422). مدل، حالت و زمینه را بررسی کنید. پاسخی ذخیره نشد.',
+ gatewayBusy:'درگاه مشغول یا سهمیهٔ محلی تمام است (429). وضعیت را بررسی کنید؛ تکرار خودکار انجام نشد.',
+ gatewayUnavailable:'درگاه یا ارائه‌دهنده در دسترس نیست (503). وضعیت را بررسی کنید؛ شاید درخواست به ارائه‌دهنده رسیده باشد.',
+ gatewayUpstreamFailure:'خطای درگاه یا مدل (408/500/502/504). پاسخی ذخیره نشد؛ پیش از تکرار دستی، مصرف را بررسی کنید.',
+ gatewayRejected:'درگاه درخواست را نپذیرفت. پاسخی ذخیره نشد؛ وضعیت درگاه را بررسی کنید.',
+ gatewayNetwork:'اتصال درگاه برقرار نشد. نشانی، شبکه و CORS را بررسی کنید؛ شاید درخواست به سرور رسیده باشد.',
+ gatewayTimeout:'مهلت پاسخ مدل تمام شد. پاسخی ذخیره نشد؛ پیش از تلاش مجدد، مصرف را بررسی کنید.',
+ gatewayMalformedReply:'پاسخ مدل ناقص یا نامعتبر بود و ذخیره نشد. پیش از تکرار، وضعیت درگاه را بررسی کنید.'
 });
 Object.assign(EN,{chatAttachments:'Attach files to this message',chatAttachmentsHelp:'Up to four files. Text formats are limited to 128 KiB per file. Word (.docx) and PowerPoint (.pptx) files are limited to 2 MiB. Up to 20 slides are supported. Only text is extracted. Only short, clearly marked excerpts enter the exact reviewed model request. This is not image/PDF understanding. The original files are not stored in chat or archive; filenames are retained with your turn. Nothing is sent until you explicitly approve the model request.',chatAttachedDocument:'Include latest saved writing document as a temporary excerpt',chatClearAttachments:'Clear attachments',chatNoFiles:'No text files attached',chatAttachmentAdded:'Local files added to next reviewed model request.',chatAttachmentInvalid:'Could not read text files; check size, format and capacity.',chatAttachmentRequiresModel:'Attached file excerpts require a configured model request; the local guide cannot read them.',chatAttachedUsed:'One-turn excerpts supplied (not verified):',chatRegenRequiresFiles:'A response grounded in temporary files cannot be regenerated from the filenames alone. Edit the user message to a new branch and attach the files again.',chatFilesNotSaved:'Files are held only in this tab and their bytes are never saved to the chat archive.'});
 Object.assign(FA,{chatAttachments:'پیوست فایل برای همین پیام',chatAttachmentsHelp:'حداکثر چهار فایل. سقف هر فایل متنی ۱۲۸ کیبی‌بایت است. فایل‌های Word و PowerPoint تا ۲ مِبی‌بایت و ارائه‌ها تا ۲۰ اسلاید پذیرفته می‌شوند. فقط متن استخراج می‌شود. فقط گزیده‌های کوتاه و مشخص وارد درخواست مدل پس از بازبینی می‌شوند. تصویر و PDF تحلیل نمی‌شوند. محتوای فایل‌ها در تاریخچه یا آرشیو ذخیره نمی‌شود؛ فقط نامشان کنار پیام می‌ماند. تا تأیید صریح شما چیزی فرستاده نمی‌شود.',chatAttachedDocument:'افزودن گزیده‌ای از آخرین نسخهٔ ذخیره‌شدهٔ سند',chatClearAttachments:'پاک‌کردن پیوست‌ها',chatNoFiles:'فایل متنی پیوست نشده است',chatAttachmentAdded:'فایل‌های محلی به درخواست بعدی اضافه شدند؛ قبل از ارسال بازبینی می‌شوند.',chatAttachmentInvalid:'خواندن فایل‌های متنی انجام نشد؛ اندازه، قالب یا ظرفیت را بررسی کن.',chatAttachmentRequiresModel:'گزیدهٔ فایل‌ها فقط در درخواست مدل پیکربندی‌شده استفاده می‌شود؛ راهنمای محلی فایل را نمی‌خواند.',chatAttachedUsed:'گزیده‌های موقت ارائه‌شده (تأییدنشده):',chatRegenRequiresFiles:'پاسخ مبتنی بر فایل موقت را نمی‌توان فقط از نام فایل بازتولید کرد. پیام را در شاخهٔ تازه ویرایش کن و فایل‌ها را دوباره اضافه کن.',chatFilesNotSaved:'محتوای فایل‌ها فقط در همین برگه است و در آرشیو گفتگو ذخیره نمی‌شود.'});
