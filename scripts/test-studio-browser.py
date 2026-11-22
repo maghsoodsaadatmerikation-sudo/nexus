@@ -718,6 +718,31 @@ window.addEventListener('load',async()=>{
   fill('message','After restore');
   assert(checklist.hidden,'restored-workflow-revokes-on-new-draft');
 
+  // The local credential preflight must apply to portable plaintext workflows,
+  // both before download and before importing a user-selected checkpoint.
+  const syntheticKey='ghp_'+('A'.repeat(32));
+  const sensitivePlan='/plan\n/github file '+syntheticKey+'\n/write Make summary';
+  fill('message',sensitivePlan);
+  $('studio-compose-send').click();
+  assert(!checklist.hidden&&checklist.querySelectorAll('ol li').length===2,
+    'secret-bearing-plan-remains-reviewable-in-chat');
+  const sensitiveWarning=checklist.querySelector('#studio-workflow-secret-warning');
+  const secretExport=checklist.querySelector('#studio-workflow-export');
+  assert(sensitiveWarning&&secretExport.disabled&&
+    sensitiveWarning.textContent.includes('Possible credentials')&&
+    !sensitiveWarning.textContent.includes(syntheticKey),
+    'plaintext-credential-checkpoint-export-is-blocked-without-echo');
+  const oldCreate=URL.createObjectURL;let unwantedDownload=false;
+  URL.createObjectURL=()=>{unwantedDownload=true;throw Error('secret-leak-download')};
+  try{secretExport.click()}finally{URL.createObjectURL=oldCreate}
+  assert(!unwantedDownload,'blocked-export-does-not-create-secret-file');
+  fill('message','Keep this safe unsent text');
+  $('studio-workflow-restore-status').textContent='';
+  supply({...checkpointJson,plan:sensitivePlan,completed:0});
+  await wait(()=>$('studio-workflow-restore-status').textContent.includes('Possible credentials'));
+  assert($('message').value==='Keep this safe unsent text'&&checklist.hidden&&
+    network===beforeCheckpointNetwork,'secret-checkpoint-import-does-not-alter-chat-or-call-network');
+
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
 });
