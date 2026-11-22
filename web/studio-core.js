@@ -250,6 +250,22 @@ function context(p,t,{memory=false,sources=false,relatedChats=false,historyDays,
  const shownAttachments=packed?.included.has('attachments')?extracts:[];
  return {messages,recalled_chats:packed?.included.has('related-chats')?recalled.map(({title,thread,turn})=>({title,thread,turn})):[],study:packed?.included.has('study')===true,omitted_messages,optional_context_truncated:packed?.omitted===true,presentation: presentation?{mode:presentation.mode,at:presentation.at,engine:presentation.engine}:null,retrieval_truncated:hits.truncated===true&&shownHits.length>0,citations:shownHits.map(({source_id,name,line,offset})=>({source_id,name,line,offset})),attachments_supplied:shownAttachments.map(({source_id,name,line,offset,partial,kind})=>({source_id,name,line,offset,partial,kind})),attachments_truncated:shownAttachments.some(e=>e.partial)};
 }
+function inspectSecrets(messages){
+ if(!Array.isArray(messages)||messages.length>64)throw Error('privacy-input');
+ const rules=[
+  ['private-key block',/(?:^|\n)-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----/],
+  ['GitHub token',/(?:^|[^A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{30,})(?![A-Za-z0-9_])/],
+  ['model API key',/(?:^|[^A-Za-z0-9_-])sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{24,}(?![A-Za-z0-9_-])/],
+  ['AWS access key',/(?:^|[^A-Z0-9])(?:AKIA|ASIA)[A-Z0-9]{16}(?![A-Z0-9])/],
+  ['bearer credential',/\bauthorization\s*:\s*bearer\s+[A-Za-z0-9._~-]{24,}/i]
+ ];
+ const found=new Set();
+ for(const message of messages){
+  if(!message||!['user','assistant'].includes(message.role)||typeof message.content!=='string'||message.content.length>80000)throw Error('privacy-input');
+  for(const [label,pattern] of rules)if(pattern.test(message.content))found.add(label);
+ }
+ return Object.freeze({possible_secrets:found.size>0,categories:Object.freeze([...found])});
+}
 function search(v,query,includeArchived=false){const q=normalized(text(query,200)).trim();return v.projects.flatMap(p=>p.threads.filter(t=>!t.isolated&&(includeArchived||!t.archived)&&(!q||[p.title,t.title,...t.nodes.map(n=>n.text)].some(s=>normalized(s).includes(q)))).map(t=>({project:p.id,thread:t.id,title:t.title,project_title:p.title,archived:t.archived})))}
 function asksForChoice(input){
  const text=normalized(input).trim().replace(/\s+/g,' ');
@@ -359,5 +375,5 @@ class Vault{
   check();if(signal?.aborted)Object.assign(this,{key:null,salt:null,raw:null,data:null});else this.lock();
  },{signal})}
 }
-root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,retainHistory,empty,project,thread,readSources,path,append,context,search,retrieve,guide,asksForChoice,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
+root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,retainHistory,empty,project,thread,readSources,path,append,context,search,retrieve,inspectSecrets,guide,asksForChoice,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
 })(globalThis);
