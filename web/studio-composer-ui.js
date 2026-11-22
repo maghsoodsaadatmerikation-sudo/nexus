@@ -198,6 +198,7 @@ function clearLocalReviewers(){
  window.NexusLabUI?.clearReviewedStep?.();
  window.NexusQualityUI?.clearReviewedStep?.();
  window.NexusMusicUI?.clearReviewedStep?.();
+ window.NexusOrchestraUI?.clearReviewedStep?.();
  window.NexusStudioUI?.clearDocumentReceipt?.();
  window.NexusStudioUI?.clearExportReceipt?.();
 }
@@ -261,7 +262,7 @@ function expectedRead(step){
 }
 function expectedLocal(step){
  const kind=step.result.route[0];
- return ['research','code','data','write','export','music'].includes(kind)?kind:null;
+ return ['research','code','data','write','export','music','orchestra'].includes(kind)?kind:null;
 }
 function showWorkflow(){
  if(!workflowState)return;
@@ -316,7 +317,13 @@ function showWorkflow(){
         receipt.source!==(local==='data'?'studio-local-analysis':
            local==='write'?'studio-document-version':
            local==='export'?'studio-document-export':
-           local==='music'?'studio-local-music':'studio-local-tool')||
+           local==='music'?'studio-local-music':
+           local==='orchestra'?'studio-local-orchestra':'studio-local-tool')||
+        (local==='orchestra'&&(receipt.artifact!=='score'||
+          !Number.isInteger(receipt.parts)||receipt.parts<1||receipt.parts>12||
+          !Number.isInteger(receipt.notes)||receipt.notes<1||receipt.notes>200000||
+          !Number.isFinite(receipt.durationSeconds)||
+          receipt.durationSeconds<=0||receipt.durationSeconds>3600))||
         (local==='music'&&(receipt.artifact!=='score'||
           !Number.isInteger(receipt.bars)||receipt.bars<8||receipt.bars>256||
           !Number.isFinite(receipt.durationSeconds)||receipt.durationSeconds<=0||
@@ -352,6 +359,7 @@ function showWorkflow(){
        local==='write'?window.NexusStudioUI?.armDocumentReceipt?.(local,localReceiver):
        local==='export'?window.NexusStudioUI?.armExportReceipt?.(local,localReceiver):
        local==='music'?window.NexusMusicUI?.armReviewedStep?.(local,localReceiver):
+       local==='orchestra'?window.NexusOrchestraUI?.armReviewedStep?.(local,localReceiver):
        window.NexusLabUI?.armReviewedStep?.(local,localReceiver));
      plan.opened=Boolean(armed);plan.readReceipt=null;showWorkflow();
     }
@@ -383,6 +391,8 @@ function showWorkflow(){
          '… identifies source bytes, not correctness. Review before confirming.',
          'داده محلی تحلیل شد؛ SHA256 '+plan.readReceipt.sha256.slice(0,12)+
          '… فقط هویت بایت‌هاست، نه صحت نتیجه. پیش از تأیید بررسی کن.'):
+       local==='orchestra'?words('Synthetic orchestra score built; no WAV, vocal mix or file delivery verified.',
+         'پارتیتور ارکستر سنتتیک ساخته شد؛ WAV، میکس و دریافت فایل تأیید نشده‌اند.'):
        local==='music'?words('New original score composed locally. WAV, file download and musical quality remain unverified.',
         'پارتیتور تازه در دستگاه ساخته شد؛ WAV، دانلود فایل و کیفیت موسیقی تأیید نشده‌اند.'):
        local==='write'?words('A changed document version was applied in this tab. Save your encrypted archive separately to keep it.',
@@ -454,7 +464,7 @@ function reviewWorkflow(message){
  * gateway ONLY after the user reviews the exact text and clicks the second
  * approval button. This does not call a model, run tools or persist a plan.
  */
-const planTools=new Set(['research','data','write','export','code','music','remind','github','render']);
+const planTools=new Set(['research','data','write','export','code','music','orchestra','remind','github','render']);
 function planGateway(){
  const raw=$('gateway')?.value.trim()||location.origin;
  const url=new URL(raw);
@@ -513,6 +523,7 @@ function localNaturalPlan(draft){
   ['export',/^(?:\/export(?:$|\s+(?:document|draft|report|file|markdown|docx|word|pdf)\b)|(?:export|download)\s+(?:(?:the|this)\s+)?(?:document|draft|report|file|markdown|docx|word|pdf)\b|خروجی\s*(?:سند|فایل|گزارش)(?:\s|$)|(?:دانلود|دریافت)\s*(?:سند|فایل|گزارش)(?:\s|$))/iu],
   ['code',/^(?:\/code(?:\s|$)|run\s+(?:this\s+)?(?:javascript|js)\b|کدنویسی(?:\s|$)|اجرا\s*ی?\s*کد(?:\s|$))/iu],
   ['music',/^(?:\/music(?:\s|$)|compose(?:\s|$)|آهنگ\s+بساز(?:\s|$)|موسیقی\s+بساز(?:\s|$))/iu],
+  ['orchestra',/^(?:\/orchestra(?:\s|$)|orchestra(?:\s|$)|orchestrate(?:\s|$)|arrange\s+(?:an?\s+)?orchestra\b|ارکستر\s+بساز(?:\s|$))/iu],
   ['remind',/^(?:\/remind(?:\s|$)|remind\s+me(?:\s|$)|set\s+(?:a\s+)?reminder(?:\s|$)|یادآوری\s+کن(?:\s|$))/iu],
   ['github',/^(?:\/github(?:\s+(?:pulls|prs))?$|(?:review|list|show|check)\s+github\s+(?:pull\s+requests|prs)\b)/iu],
   ['render',/^(?:\/render(?:\s+deploys)?$|(?:check|list|show)\s+render\s+deploy(?:ment)?s\b)/iu]
@@ -522,7 +533,7 @@ function localNaturalPlan(draft){
   if(!instruction||instruction.length>260||
      /[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/u.test(instruction)||
      /\bpython\b|پایتون/iu.test(instruction)||
-     (/\s+(?:and|&)\s+(?:research|search|analy[sz]e|write|draft|export|download|run|compose|remind|list|check)\b/iu.test(instruction))||
+     (/\s+(?:and|&)\s+(?:research|search|analy[sz]e|write|draft|export|download|run|compose|orchestrate|arrange|remind|list|check)\b/iu.test(instruction))||
      (/\s+و\s+(?:پژوهش|تحلیل|بنویس|نوشتن|کدنویسی|خروجی|دانلود|دریافت)(?:\s|$)/u.test(instruction)))
    throw Error('local-plan-compound');
   const found=detectors.filter(([,pattern])=>pattern.test(instruction));
