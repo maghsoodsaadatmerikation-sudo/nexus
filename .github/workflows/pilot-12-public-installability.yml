@@ -12,6 +12,7 @@ on:
       - 'web/offline-pilot.html'
       - 'scripts/prepare-public-pilot-witness.sh'
       - 'scripts/pilot12-public-egress-proxy.mjs'
+      - 'scripts/test-pilot12-public-egress-proxy.mjs'
       - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
   push:
     branches: [main]
@@ -25,6 +26,7 @@ on:
       - 'web/offline-pilot.html'
       - 'scripts/prepare-public-pilot-witness.sh'
       - 'scripts/pilot12-public-egress-proxy.mjs'
+      - 'scripts/test-pilot12-public-egress-proxy.mjs'
       - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
   workflow_dispatch:
   schedule:
@@ -49,6 +51,8 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      - name: Prove proxy listener cut is final in disposable localhost fixture
+        run: node scripts/test-pilot12-public-egress-proxy.mjs
       - name: Prepare pinned published assets; never substitute an unpublished candidate
         shell: bash
         run: |

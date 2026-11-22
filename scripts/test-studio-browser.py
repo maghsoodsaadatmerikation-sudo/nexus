@@ -659,6 +659,65 @@ window.addEventListener('load',async()=>{
   assert(document.documentElement.scrollWidth<=innerWidth+2,
    'multi-model-selector-stays-in-viewport');
 
+
+  // Explicit local workflow checkpoint export and fail-closed restore.
+  const draftPlan='/plan\n/research Check public sources\n/write Outline findings';
+  fill('message',draftPlan);$('studio-compose-send').click();
+  const checklist=$('studio-chat-workflow');
+  assert(!checklist.hidden&&checklist.querySelectorAll('ol li').length===2,
+    'chat-plan-reviews-two-explicit-steps');
+  checklist.querySelector('ol li button').click();
+  checklist.querySelectorAll('ol li button')[1].click();
+  assert(checklist.textContent.includes('confirmed by you')&&
+    checklist.textContent.includes('current'),'workflow-progress-is-user-reported');
+  const beforeCheckpointNetwork=network;
+  let checkpointBlob=null,checkpointName='';
+  URL.createObjectURL=blob=>{checkpointBlob=blob;return previousCreate.call(URL,blob)};
+  HTMLAnchorElement.prototype.click=function(){checkpointName=this.download};
+  try{
+   window.confirm=()=>false;
+   checklist.querySelector('#studio-workflow-export').click();
+   assert(!checkpointBlob,'declined-plaintext-checkpoint-does-not-download');
+   window.confirm=()=>true;
+   checklist.querySelector('#studio-workflow-export').click();
+  }finally{
+   URL.createObjectURL=previousCreate;
+   HTMLAnchorElement.prototype.click=previousClick;
+   window.confirm=previousConfirm;
+  }
+  assert(checkpointName==='nexus-workflow-checkpoint.json'&&checkpointBlob&&
+    beforeCheckpointNetwork===network,'checkpoint-is-only-explicit-local-download');
+  const checkpointJson=JSON.parse(await checkpointBlob.text());
+  assert(checkpointJson.schema==='nexus.studio.workflow-checkpoint.v1'&&
+    checkpointJson.authority==='none'&&checkpointJson.verified===false&&
+    checkpointJson.completed===1&&checkpointJson.plan===draftPlan,
+    'checkpoint-has-only-unverified-self-reported-progress');
+  fill('message','Unsent original text');
+  assert(checklist.hidden,'editing-invalidates-temporary-workflow');
+  const input=$('studio-workflow-restore-file');
+  const supply=value=>{
+   const dt=new DataTransfer();
+   dt.items.add(new File([JSON.stringify(value)],'workflow.json',{type:'application/json'}));
+   input.files=dt.files;
+   input.dispatchEvent(new Event('change',{bubbles:true}));
+  };
+  try{
+   window.confirm=()=>true;
+   supply({...checkpointJson,authority:'owner'});
+   await wait(()=>$('studio-workflow-restore-status').textContent.length>0);
+   assert($('message').value==='Unsent original text'&&checklist.hidden,
+    'invalid-checkpoint-authority-does-not-change-chat');
+   supply(checkpointJson);
+   await wait(()=>$('message').value===draftPlan&&!checklist.hidden);
+  }finally{window.confirm=previousConfirm}
+  assert(checklist.textContent.includes('confirmed by you')&&
+    checklist.textContent.includes('current')&&
+    checklist.querySelector('ol li button')&&
+    network===beforeCheckpointNetwork,
+    'restored-checkpoint-requires-fresh-tool-review-and-no-execution');
+  fill('message','After restore');
+  assert(checklist.hidden,'restored-workflow-revokes-on-new-draft');
+
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
 });

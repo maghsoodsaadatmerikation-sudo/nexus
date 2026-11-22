@@ -16,11 +16,26 @@ export async function startProbeProxy() {
   let blocked = 0;
   let unexpected = 0;
   const sockets = new Set();
+  // Stop accepting NEW local connections as well as destroying existing
+  // tunnels. Leaving the listener alive lets Chromium enqueue more proxy
+  // probes after the cut, causing a transient active-socket race.
+  let listenerShutdown = null;
+  const stopListener = () => {
+    if (!listenerShutdown) {
+      listenerShutdown = new Promise((resolve, reject) => {
+        server.close(error => error ? reject(error) : resolve());
+      });
+    }
+    return listenerShutdown;
+  };
   const closeSocket = socket => {
     sockets.delete(socket);
     socket.destroy();
   };
   const server = net.createServer(client => {
+    // An already-accepted connection may be dispatched while close() begins.
+    // Never place such a socket into the tracked/allowed set after the cut.
+    if (!live) { client.destroy(); return; }
     sockets.add(client);
     let buf = Buffer.alloc(0);
     let accepted = false;
@@ -87,17 +102,20 @@ export async function startProbeProxy() {
     throw Error('disposable-proxy-no-local-port');
   return {
     port: addr.port,
-    stats: () => ({allowed, blocked, unexpected, active:sockets.size, live}),
+    stats: () => ({allowed, blocked, unexpected, active:sockets.size, live, listening:server.listening}),
     cut: async () => {
       live = false;
-      for(const socket of [...sockets]) closeSocket(socket);
-      await new Promise(resolve => setTimeout(resolve, 150));
-      if(sockets.size !== 0) throw Error('proxy-tunnels-not-closed');
+      const stopped = stopListener();
+      for (const socket of [...sockets]) closeSocket(socket);
+      await stopped;
+      if (server.listening || sockets.size !== 0)
+        throw Error('proxy-not-fully-isolated');
     },
     close: async () => {
       live = false;
-      for(const socket of [...sockets]) closeSocket(socket);
-      await new Promise(resolve => server.close(resolve));
+      const stopped = stopListener();
+      for (const socket of [...sockets]) closeSocket(socket);
+      await stopped;
     }
   };
 }
