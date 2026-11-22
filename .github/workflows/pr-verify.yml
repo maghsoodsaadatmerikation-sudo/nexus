@@ -38,6 +38,12 @@ jobs:
           set -euo pipefail
           python3 scripts/test-workspace-witness-package.py
 
+      - name: Test separate-key Studio GitHub audit witness without network or writes
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/studio-github-external-witness.py scripts/test-studio-github-external-witness.py
+          python3 scripts/test-studio-github-external-witness.py
+
       - name: Verify without publication or attestation authority
         env:
           RUST_IMAGE: ${{ env.RUST_IMAGE }}

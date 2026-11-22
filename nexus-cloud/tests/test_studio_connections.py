@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 import main
 from studio_connections import target_id, git_blob_sha
+from studio_audit_request import SCHEMA as WITNESS_SCHEMA
 
 def followup_fixture(operation, outcome, revision, file_bytes_verified=False):
     return {
@@ -252,6 +253,15 @@ def test_confirmed_branch_write_never_replaces_an_existing_ref(monkeypatch):
         assert result.json()["target"] == REPO
         assert result.json()["status"] == "created"
         assert result.json()["receipt"] == followup_fixture("github.branch", "created", BASE_SHA)
+        source = result.json()["witness_request"]
+        assert source["schema"] == WITNESS_SCHEMA
+        assert source["repository"] == REPO and source["branch"] == TOPIC
+        assert source["revision"] == BASE_SHA and source["operation"] == "github.branch"
+        assert source["file_path"] is None and source["file_sha256"] is None
+        assert source["authority"] == "source_claim_only"
+        assert source["external_witness_completed"] is False
+        assert source["source_receipt"] == result.json()["receipt"]
+        assert source["review_reference_sha256"] != data["review_id"]
         already = client.post(BRANCH_WRITE, headers=AUTH, json=data)
         assert already.status_code == 200 and already.json()["status"] == "already_exists"
         assert already.json()["receipt"] == followup_fixture("github.branch", "already_exists", BASE_SHA)
@@ -348,6 +358,14 @@ def test_reviewed_file_edit_is_bound_to_text_and_atomic_head(monkeypatch):
         assert written.status_code == 200 and written.json()["commit"] == "e" * 40
         assert written.json()["receipt"] == followup_fixture("github.file_commit", "committed", "e" * 40,
                                                               file_bytes_verified=True)
+        witness = written.json()["witness_request"]
+        assert witness["schema"] == WITNESS_SCHEMA
+        assert witness["operation"] == "github.file_commit"
+        assert witness["file_path"] == FILE_PATH
+        assert witness["file_sha256"] == __import__("hashlib").sha256(new.encode()).hexdigest()
+        assert witness["external_witness_completed"] is False
+        assert new not in str(witness)
+        assert "dedicated-file-token" not in str(witness)
         assert any(path.endswith("/git/commits/" + "e" * 40) for _, path in calls)
         assert any(path.endswith("/git/trees/" + "c" * 40) for _, path in calls)
         assert client.post(FILE_COMMIT, headers=AUTH, json=approval_body).status_code == 409

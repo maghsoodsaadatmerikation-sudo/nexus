@@ -364,6 +364,15 @@ window.addEventListener('load',async()=>{
    followup_read_verified:true,reviewed_request_matched:true,
    file_bytes_verified:fileBytes,independent_attestation:false,deployment_verified:false
   });
+  const syntheticWitness=(operation,response,path=null)=>({
+   schema:'nexus.studio.github.witness-request.v1',provider:'github',
+   repository:'example/nexus',operation,branch:response.branch,
+   revision:operation==='github.branch'?response.base_sha:response.commit,
+   file_path:path,file_sha256:path?'f'.repeat(64):null,
+   review_reference_sha256:'e'.repeat(64),
+   source_receipt:response.receipt,authority:'source_claim_only',
+   external_witness_completed:false
+  });
   window.fetch=async(url,options)=>{
    requests.push({url,options});
    const body=options.body?JSON.parse(options.body):null;
@@ -376,15 +385,20 @@ window.addEventListener('load',async()=>{
      result.commit='d'.repeat(40);
      result.receipt=syntheticReceipt('github.file_commit','committed',result.commit,true);
      if(forgedWriteProof)result.receipt.independent_attestation=true;
+     result.witness_request=syntheticWitness('github.file_commit',result,body.path);
     }
     return new Response(JSON.stringify(result));
    }
    if(url.endsWith('/github/branch-preview'))return new Response(JSON.stringify({target:'example/nexus',
     branch:'nexus/studio-'+body.slug,base_sha:'a'.repeat(40),expires_at:2000000000,review_id:'c'.repeat(64)}));
-   if(url.endsWith('/github/branch'))return new Response(JSON.stringify({target:'example/nexus',
-    branch:'nexus/studio-'+body.slug,base_sha:body.base_sha,status:'created',
-    receipt:{...syntheticReceipt('github.branch','created',body.base_sha),
-     ...(forgedWriteProof?{followup_read_verified:false}:{})}}));
+   if(url.endsWith('/github/branch')){
+    const result={target:'example/nexus',branch:'nexus/studio-'+body.slug,
+     base_sha:body.base_sha,status:'created',
+     receipt:{...syntheticReceipt('github.branch','created',body.base_sha),
+      ...(forgedWriteProof?{followup_read_verified:false}:{})}};
+    result.witness_request=syntheticWitness('github.branch',result);
+    return new Response(JSON.stringify(result));
+   }
    return new Response(JSON.stringify({provider:'github',target:'example/nexus',operation:body.operation,
     provenance:'external-untrusted',result:{path:body.path,blob_sha:'a'.repeat(40),text:'Synthetic repository source'}}));
   };
@@ -427,8 +441,9 @@ window.addEventListener('load',async()=>{
   const writes=requests.filter(x=>x.url.endsWith('/github/branch')).map(x=>JSON.parse(x.options.body));
   assert(writes.length===1&&writes[0].slug==='other-change'&&writes[0].base_sha==='a'.repeat(40)&&
    writes[0].consent===true&&$('message').value===draft,'separate-approval-creates-only-reviewed-branch');
-  assert($('studio-connection-receipt').textContent.includes('re-read at the matching SHA'),
-   'branch-success-uses-reviewed-followup-receipt');
+  assert($('studio-connection-receipt').textContent.includes('re-read at the matching SHA')&&
+   !$('studio-connection-witness-export').hidden,
+   'branch-success-uses-reviewed-followup-receipt-and-exposes-manual-audit-export');
   // A syntactically valid response without an authenticated follow-up read
   // must not be displayed as successful. An actual mutation may be ambiguous.
   forgedWriteProof=true;
@@ -436,7 +451,8 @@ window.addEventListener('load',async()=>{
   $('studio-connections-read').click();await wait(()=>!create.hidden);
   create.click();await wait(()=>$('studio-connection-receipt').textContent.includes('Branch result unknown'));
   assert(!$('studio-connection-receipt').textContent.includes('re-read at the matching SHA')&&
-   $('studio-connections').open&&create.hidden&&$('message').value===draft,
+   $('studio-connections').open&&create.hidden&&
+   $('studio-connection-witness-export').hidden&&$('message').value===draft,
    'fabricated-followup-read-revokes-approval-and-is-not-success');
   forgedWriteProof=false;
   actions.value='github.edit';actions.dispatchEvent(new Event('change',{bubbles:true}));
@@ -460,8 +476,9 @@ window.addEventListener('load',async()=>{
   assert(writesToFile.length===1&&writesToFile[0].base_sha==='a'.repeat(40)&&
    writesToFile[0].consent===true&&writesToFile[0].text==='Final edit\n'&&$('message').value===draft,
    'file-commit-only-sends-the-independently-approved-text');
-  assert($('studio-connection-receipt').textContent.includes('reviewed file bytes and commit were re-read'),
-   'commit-success-requires-reviewed-file-readback');
+  assert($('studio-connection-receipt').textContent.includes('reviewed file bytes and commit were re-read')&&
+   !$('studio-connection-witness-export').hidden,
+   'commit-success-requires-reviewed-file-readback-and-allows-opt-in-audit-export');
   $('studio-connections-close').click();
 
   let stream,streamSignal,streamCalls=0;
