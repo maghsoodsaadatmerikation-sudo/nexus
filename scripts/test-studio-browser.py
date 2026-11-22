@@ -661,7 +661,7 @@ window.addEventListener('load',async()=>{
 
 
   // Explicit local workflow checkpoint export and fail-closed restore.
-  const draftPlan='/plan\\n/research Check public sources\\n/write Outline findings';
+  const draftPlan='/plan\n/research Check public sources\n/write Outline findings';
   fill('message',draftPlan);$('studio-compose-send').click();
   const checklist=$('studio-chat-workflow');
   assert(!checklist.hidden&&checklist.querySelectorAll('ol li').length===2,
