@@ -130,3 +130,25 @@ def test_orchestra_review_only_preview_in_english_and_persian():
 def test_orchestra_preview_rejects_compound_or_unauthorized_actions(goal):
     with pytest.raises(ValueError):
         preview(goal)
+
+
+def test_reviewed_local_tasks_are_only_a_destination_not_execution():
+    for goal in (
+        "Run local javascript tasks then write a summary",
+        "/plan\n/tasks\n/write a report",
+        "برنامه:\n۱. وظایف محلی\n۲. بنویس گزارش",
+    ):
+        result = preview(goal)
+        assert [step["tool"] for step in result["steps"]] == ["tasks", "write"]
+        assert result["execution"] == "not_started"
+        assert result["provider_requests"] == result["tools_executed"] == 0
+
+
+@pytest.mark.parametrize("goal", [
+    "Run local javascript tasks and write a summary",
+    "/plan\n/tasks\n/run bash",
+    "/plan\n/tasks\n/upload task output to provider",
+])
+def test_reviewed_tasks_reject_unordered_or_unauthorized_execution(goal):
+    with pytest.raises(ValueError):
+        preview(goal)
