@@ -5492,6 +5492,9 @@ async function request(suffix,body,apply){
   statusLine.textContent='';apply(output,url);
  }catch{
   if(controller===abort&&dialog.open){
+   // A write may have happened before its read-back failed. Revoke the old
+   // approval so clicking Confirm again cannot blindly repeat the mutation.
+   if(branchWrite||fileWrite)clearResult();
    statusLine.textContent=words('Connection unavailable. Check the gateway, access token and provider permissions.',
     'اتصال برقرار نشد. درگاه، توکن دسترسی و مجوز سرویس را بررسی کن.');
    if(branchWrite)statusLine.textContent=words('Branch result unknown. Retry with the same name.',
