@@ -21,7 +21,21 @@ function state(v){
     if(n.parent===null&&n.role!=='user')fail('invalid-parent');
     const attached=n.attached_files===undefined?[]:array(n.attached_files,MAX_CHAT_ATTACHMENTS).map(label=>text(label,160,true));
     if(n.role!=='user'&&attached.length)fail('attached-files-role');
-    const out={id:n.id,parent:n.parent,role:n.role,origin:n.origin,text:text(n.text,24000,true),...(attached.length?{attached_files:attached}:{})};seen.set(n.id,out);return out;
+    let receipt;
+    if(n.model_receipt!==undefined){
+     const value=n.model_receipt;
+     if(n.origin!=='model'||!value||typeof value!=='object'||Array.isArray(value)||
+        Object.keys(value).length!==3||
+        !Object.keys(value).every(key=>['model_slot','model','configuration_id'].includes(key))||
+        !['primary','secondary','tertiary'].includes(value.model_slot)||
+        typeof value.model!=='string'||!value.model.trim()||value.model.length>150||
+        typeof value.configuration_id!=='string'||!/^[a-f0-9]{64}$/.test(value.configuration_id))
+      fail('model-receipt');
+     receipt={model_slot:value.model_slot,model:value.model,configuration_id:value.configuration_id};
+    }
+    const out={id:n.id,parent:n.parent,role:n.role,origin:n.origin,text:text(n.text,24000,true),
+     ...(attached.length?{attached_files:attached}:{}),...(receipt?{model_receipt:receipt}:{})};
+    seen.set(n.id,out);return out;
    });
    if(t.head!==null&&!seen.has(t.head))fail('head');
    const last=t.last_activity;
@@ -69,10 +83,13 @@ async function readSources(files,{signal}={}){
  current();return sources;
 }
 function path(t,head=t.head){const map=new Map(t.nodes.map(n=>[n.id,n])),out=[],seen=new Set();while(head!==null){const n=map.get(head);if(!n||seen.has(head))fail('invalid-parent');seen.add(head);out.unshift(copy(n));head=n.parent}return out}
-function append(t,role,body,origin,parent=t.head,attachedFiles=[]){
+function append(t,role,body,origin,parent=t.head,attachedFiles=[],modelReceipt=undefined){
  const labels=array(attachedFiles,MAX_CHAT_ATTACHMENTS).map(label=>text(label,160,true));
  if(role!=='user'&&labels.length)fail('attached-files-role');
- const n={id:uid(),parent,role,text:text(body,24000,true),origin,...(labels.length?{attached_files:labels}:{})};
+ if(modelReceipt!==undefined&&origin!=='model')fail('model-receipt');
+ const n={id:uid(),parent,role,text:text(body,24000,true),origin,
+  ...(labels.length?{attached_files:labels}:{}),
+  ...(modelReceipt===undefined?{}:{model_receipt:modelReceipt})};
  const updated={...copy(t),head:n.id,nodes:[...copy(t.nodes),n],last_activity:Date.now()};
  // Validate the complete graph before exposing the mutation.
  const p=project('validation');p.threads=[updated];state({schema:SCHEMA,projects:[p]});return updated;
