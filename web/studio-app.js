@@ -221,8 +221,35 @@ function toolLifecycle(phase){
  }
  return complete;
 }
+
+/* Local, non-exhaustive credential warning; matched values are not shown. */
+const privacyPanel=el('div',''),privacyDetails=el('p',''),privacyLabel=el('label',''),
+ privacyAck=el('input',''),privacyLabelText=el('span','');
+let privacyKinds=[];
+privacyPanel.className='notice';privacyPanel.id='studio-credential-preflight';privacyPanel.hidden=true;
+privacyDetails.id='studio-credential-warning';privacyDetails.setAttribute('role','alert');
+privacyAck.id='studio-credential-override';privacyAck.type='checkbox';
+privacyLabel.className='inline';privacyLabel.append(privacyAck,privacyLabelText);
+privacyPanel.append(privacyDetails,privacyLabel);
+$('request-context').before(privacyPanel);
+function refreshPrivacyWarning(){
+ privacyPanel.hidden=!privacyKinds.length;
+ if(privacyPanel.hidden)return;
+ privacyDetails.textContent=(language==='fa'
+  ?'احتمال وجود اطلاعات ورود محرمانه در متن ارسالی: '
+  :'Possible credential patterns in this request: ')+privacyKinds.join(', ')+
+  (language==='fa'?'. این بررسی ناقص است. متن کامل درخواست را بازبینی و در صورت نیاز اطلاعات محرمانه را حذف کن.':
+   '. This scan is incomplete. Review the full request below; remove secrets before sending.');
+ privacyLabelText.textContent=language==='fa'
+  ?'با وجود این هشدار، ارسال همین متن به سرویس خارجی را جداگانه تأیید می‌کنم.'
+  :'I separately approve sending this exact request to the external provider despite the warning.';
+}
+function showPrivacy(audit){
+ privacyKinds=[...audit.categories];privacyAck.checked=false;refreshPrivacyWarning();
+}
+privacyAck.addEventListener('change',controls);
 function clearModelReview(){
- pending=null;$('request-review').hidden=true;$('request-context').textContent='';$('consent').checked=false;
+ pending=null;$('request-review').hidden=true;$('request-context').textContent='';$('consent').checked=false;privacyKinds=[];privacyAck.checked=false;refreshPrivacyWarning();
  $('model-stream-preview').hidden=true;$('model-stream-text').textContent='';
 }
 function stop({refresh=true}={}){
@@ -255,7 +282,7 @@ function controls(){
  const regenerate=$('regenerate');
  regenerate.hidden=thread?.nodes.find(node=>node.id===thread.head)?.role!=='assistant';
  regenerate.disabled=regenerate.hidden||busy||thread.archived||branchBase!==undefined||hasChatDraft();
- $('attach-document').disabled=busy||!chat()||chat().archived||chat().isolated||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare'])$(id).disabled=busy||attachmentLoading||!chat()||chat().archived;for(const id of ['save-version','export-document','export-document-word','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||attachmentLoading||!pending||!$('consent').checked;$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(storageSnapshot().lossRisk?'unsaved':(vault.unlocked?'saved':'temporary'));renderStorage();window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
+ $('attach-document').disabled=busy||!chat()||chat().archived||chat().isolated||!doc()?.versions.at(-1)?.text?.trim()||chatAttachments.length>=S.MAX_CHAT_ATTACHMENTS;for(const id of ['delete-project','new-thread','apply-profile','new-document','source-file'])$(id).disabled=busy||!p();for(const id of ['rename-thread','archive-thread','delete-thread','export-thread'])$(id).disabled=busy||!chat();for(const id of ['guide','prepare'])$(id).disabled=busy||attachmentLoading||!chat()||chat().archived;for(const id of ['save-version','export-document','export-document-word','delete-document','load-version'])$(id).disabled=busy||!doc();$('send-model').disabled=busy||attachmentLoading||!pending||!$('consent').checked||(!privacyPanel.hidden&&!privacyAck.checked);$('undo-removal').disabled=busy||!undoSlot.available;$('stop').disabled=!busy;$('save').disabled=busy||!vault.unlocked;$('erase').disabled=busy||!vault.unlocked;$('retention').textContent=t(storageSnapshot().lossRisk?'unsaved':(vault.unlocked?'saved':'temporary'));renderStorage();window.NexusQualityUI?.refreshStatus();document.dispatchEvent(new Event('nexus-studio-state'))}
 function mutate(fn,{undoable=false,afterCommit}={}){
  if(busy)return false;
  const before=data,next=S.copy(data),selection={projectId,threadId,documentId};
@@ -387,7 +414,7 @@ function openConversation(project,thread){
  openHistoryThread({project,thread});
  return projectId===project&&threadId===thread;
 }
-function applyLanguage(){document.documentElement.lang=language;document.documentElement.dir=localePacks.get(language)?.dir||(language==='fa'?'rtl':'ltr');document.querySelectorAll('[data-t]').forEach(n=>n.textContent=t(n.dataset.t));document.querySelectorAll('[data-placeholder]').forEach(n=>n.placeholder=t(n.dataset.placeholder));render();if(branchBase!==undefined)$('branch-notice').textContent=t('branching')}
+function applyLanguage(){document.documentElement.lang=language;document.documentElement.dir=localePacks.get(language)?.dir||(language==='fa'?'rtl':'ltr');document.querySelectorAll('[data-t]').forEach(n=>n.textContent=t(n.dataset.t));document.querySelectorAll('[data-placeholder]').forEach(n=>n.placeholder=t(n.dataset.placeholder));refreshPrivacyWarning();render();if(branchBase!==undefined)$('branch-notice').textContent=t('branching')}
 function download(text,name,type='text/plain'){const u=URL.createObjectURL(text instanceof Blob?text:new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
 function downloadWord(title,text,filename){
  if(!text.trim())return status('chatExportWordFailed');
@@ -461,8 +488,8 @@ function installThread(next){
 }
 $('auto-speak').onchange=()=>{if(!$('auto-speak').checked)window.NexusSpeechPlayback?.stop()};
 function selectedModelEngine(){return document.getElementById('model-engine')?.value==='device'?'device':'gateway'}
-function prepare(regenerate=false){if(!chat()?.isolated&&(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,relatedChats:$('use-related-chats').checked,historyDays:data.history_days,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked,onDevice:destination==='device'});if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');const stream=destination==='gateway'&&modelInfo.streaming===true;
- pending={destination,stream,thread:c,body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(destination==='gateway'&&selectedModelSlot!=='primary'?{model_slot:selectedModelSlot}:{}),...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,...(destination==='gateway'?{model_slot:selectedModelSlot}:{}),provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);$('request-review').hidden=false;controls()}catch(error){status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
+function prepare(regenerate=false){if(!chat()?.isolated&&(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,relatedChats:$('use-related-chats').checked,historyDays:data.history_days,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked,onDevice:destination==='device'});if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');const privacyAudit=destination==='gateway'?S.inspectSecrets(ctx.messages):{categories:[],possible_secrets:false};const stream=destination==='gateway'&&modelInfo.streaming===true;
+ pending={destination,stream,thread:c,body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(destination==='gateway'&&selectedModelSlot!=='primary'?{model_slot:selectedModelSlot}:{}),...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,...(destination==='gateway'?{model_slot:selectedModelSlot}:{}),provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);showPrivacy(privacyAudit);$('request-review').hidden=false;controls()}catch(error){status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
 function gateway(){const value=$('gateway').value.trim();const u=new URL(value||location.origin);if((u.protocol!=='https:'&&!(u.protocol==='http:'&&['127.0.0.1','[::1]'].includes(u.hostname)))||u.username||u.password||u.search||u.hash||!['','/'].includes(u.pathname))throw Error('gateway-url');return u.origin}
 async function boundedJson(response,max=128000){if(!response.ok)throw Error('gateway-status-'+response.status);if(!response.body)throw Error('empty-response');const reader=response.body.getReader(),chunks=[];let size=0;try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>max)throw Error('response-capacity');chunks.push(value)}const bytes=new Uint8Array(size);let offset=0;for(const c of chunks){bytes.set(c,offset);offset+=c.length}return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes))}finally{await reader.cancel().catch(()=>{})}}
 async function streamedAnswer(response,onDelta){
@@ -592,7 +619,7 @@ $('attach-document').onchange=()=>{stop();renderChatAttachments()};
 $('clear-chat-files').onclick=()=>{if(busy)return;clearChatAttachments();stop()};
 for(const id of ['message','gateway','gateway-token','use-memory','use-sources','use-related-chats','use-astrology','astro-historical','sky-tone','study-mode'])$(id).addEventListener('input',stop);
 $('send-model').onclick=async()=>{
- if(!pending||!$('consent').checked||busy)return;
+ if(!pending||!$('consent').checked||busy||(!privacyPanel.hidden&&!privacyAck.checked))return;
  languageImport++;
  const request=pending,rev=revision,abort=new AbortController();
  const current=()=>rev===revision&&request.projectId===projectId&&request.threadId===threadId&&!abort.signal.aborted;

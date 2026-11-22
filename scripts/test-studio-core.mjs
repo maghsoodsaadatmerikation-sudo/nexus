@@ -108,4 +108,26 @@ const single=globalThis.NexusCalendar.calendarFile({...reminder,title:'Review, a
 ok(()=>assert(!single.includes('RRULE:')&&single.includes('TRIGGER:PT0S')&&!single.includes('\r\nSUMMARY:unexpected')));
 ok(()=>assert.throws(()=>globalThis.NexusCalendar.calendarFile({...reminder,start:'2027-02-29T09:15'})));
 ok(()=>assert.throws(()=>globalThis.NexusCalendar.calendarFile({...reminder,repeat:'yearly'})));
+
+/* Synthetic credential shapes only; no real secrets or provider requests. */
+const privacyClean=S.inspectSecrets([{role:'user',content:'Explain this public tutorial.'}]);
+ok(()=>assert.equal(privacyClean.possible_secrets,false));
+ok(()=>assert.deepEqual(privacyClean.categories,[]));
+for(const [label,fixture] of [
+ ['GitHub token','github_pat_'+'A'.repeat(40)],
+ ['model API key','sk-proj-'+'b'.repeat(40)],
+ ['AWS access key','AKIA'+'C'.repeat(16)],
+ ['private-key block','-----BEGIN OPENSSH PRIVATE KEY-----\nSYNTHETIC'],
+ ['bearer credential','Authorization: Bearer '+'x'.repeat(40)]
+]){
+ const result=S.inspectSecrets([{role:'user',content:fixture}]);
+ ok(()=>assert.equal(result.possible_secrets,true));
+ ok(()=>assert.deepEqual(result.categories,[label]));
+ ok(()=>assert(!JSON.stringify(result).includes(fixture)));
+}
+const privacyTurns=S.inspectSecrets([{role:'user',content:'ghp_'+'Q'.repeat(40)},{role:'assistant',content:'AKIA'+'D'.repeat(16)}]);
+ok(()=>assert.equal(privacyTurns.categories.length,2));
+ok(()=>assert.equal(S.inspectSecrets([{role:'user',content:'-----BEGIN PUBLIC KEY-----, sk-demo and AKIA123 are examples'}]).possible_secrets,false));
+ok(()=>assert.throws(()=>S.inspectSecrets([{role:'system',content:'not a chat turn'}]),/privacy-input/));
+ok(()=>assert.throws(()=>S.inspectSecrets([{role:'user',content:4}]),/privacy-input/));
 console.log(JSON.stringify({status:'PASS',checks,scope:'synthetic-state-and-encryption',live_model_tested:false}));
