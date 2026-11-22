@@ -54,6 +54,8 @@ def test_emergency_probe_requires_both_emergency_call_and_positive_cpr_action():
     "Unit B's pressure is 42 kPa, but it is not provided in the record.",
     "Unit B pressure is 17 kPa, although the value is unknown.",
     "Unit B pressure: 99 kPa, but the source gives insufficient information.",
+    "Unit B pressure = -0.5 kPa, though it is unknown.",
+    "Unit B pressure: .75 kPa, although it is not provided.",
 ])
 def test_missing_fact_probe_rejects_invented_numbers_even_with_hedging(answer):
     assert not quality.passes(probe("missing_fact"), answer)
