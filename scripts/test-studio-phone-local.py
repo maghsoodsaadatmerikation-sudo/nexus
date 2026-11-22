@@ -54,7 +54,7 @@ class StudioLocalTests(unittest.TestCase):
                     "run-local.py", "README.txt", "source-manifest.json")})
             receipt = json.loads(archive.read(kit.BUNDLE + "/source-manifest.json"))
             self.assertEqual(receipt["source_commit"], COMMIT)
-            self.assertEqual(len(receipt["assets"]), len(kit.SOURCE_NAMES))
+            self.assertEqual(len(receipt["assets"]), len(kit.SOURCE_NAMES) + 1)
             check = archive.read(kit.BUNDLE + "/" + kit.CHECK_NAME)
             self.assertIn(receipt["assets"]["index.html"]["sha256"].encode(), check)
             self.assertIn(receipt["assets"]["service-worker.js"]["sha256"].encode(), check)
