@@ -47,7 +47,40 @@ window.addEventListener('load',async()=>{
   ok(panel.textContent.includes('not checked or verified')&&panel.textContent.includes('not-checked'),'no-false-fact-check');
   ok(allRequests===before,'review-never-contacts-network');
   ok(!JSON.stringify(NexusStudioUI.snapshot()).includes('claim-review-entry'),'review-not-added-to-archive');
+  const source=panel.querySelector('[data-claim-evidence-url]');
+  const date=panel.querySelector('[data-claim-evidence-date]');
+  const note=panel.querySelector('[data-claim-evidence-note]');
+  const assessment=panel.querySelector('[data-claim-evidence-assessment]');
+  const save=panel.querySelector('[data-claim-evidence-save]');
+  let copied=null,confirmed=0;
+  Object.defineProperty(navigator,'clipboard',{configurable:true,value:{
+   writeText:async text=>{copied=text}
+  }});
+  ok(!!source&&!!date&&!!note&&!!assessment&&!!save,'per-claim-manual-evidence-inputs');
+  source.value='http://unsafe.example.org';date.value='2025-03-04';assessment.value='supports';
+  save.click();
+  ok(panel.textContent.includes('Could not add note'),'unsafe-source-refused');
+  source.value='https://example.org/human-only-source';
+  date.value='2025-03-04';note.value='Human-provided context';
+  save.click();
+  ok(panel.textContent.includes('Your unverified note is kept'),'valid-user-note-shown-as-unverified');
+  ok(!JSON.stringify(NexusStudioUI.snapshot()).includes('human-only-source'),'note-not-stored');
+  const copy=panel.querySelector('[data-claim-evidence-copy]');
+  ok(!!copy&&copied===null,'copy-is-explicit-only');
+  window.confirm=()=>{confirmed++;return false};
+  copy.click();
+  await new Promise(r=>setTimeout(r,20));
+  ok(copied===null&&confirmed===1,'cancel-prevents-plaintext-copy');
+  window.confirm=()=>{confirmed++;return true};
+  copy.click();await wait(()=>copied!==null);
+  ok(copied.includes('example.org/human-only-source')&&copied.includes('2025-03-04')&&
+     copied.includes('not independently verified'),'source-date-and-limited-authority-in-copy');
+  ok(allRequests===before,'manual-annotation-and-copy-never-fetch-external-source');
   button.click();ok(!$('messages').querySelector('.claim-review-panel'),'panel-closes-without-mutation');
+  button.click();
+  ok(!$('messages').querySelector('.claim-review-panel').textContent.includes('human-only-source'),
+   'closing-panel-discards-manual-notes');
+  button.click();
   change('language','fa');
   const fa=$('messages').querySelector('[data-chat-review-claims]');
   ok(fa?.textContent==='بررسی ادعاها','persian-localized-action');
