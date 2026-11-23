@@ -59,7 +59,12 @@ Object.assign(EN,{
  chatQuoteFound:'Literal quotation present in human-pasted text; source authenticity and claim support NOT checked.',
  chatQuoteMissing:'Quotation not found in the human-pasted text; this alone does not disprove the claim.',
  chatQuoteFailure:'A quotation requires at least 30 characters of both source and quote, plus a source HTTPS URL and publication date.',
- chatQuotePrivate:'Possible credential detected in source text. No quotation result was saved.'
+ chatQuotePrivate:'Possible credential detected in source text. No quotation result was saved.',
+ chatSourceOpen:'Open source website',
+ chatSourceOpenConfirm:'Open an external website in a new tab? NEXUS has not checked its trustworthiness or content. The full address will be sent to that website, which may redirect or track you. Host: ',
+ chatSourceOpenRequested:'External browser tab requested; your browser may block it. No source was verified.',
+ chatSourceOpenInvalid:'Only an HTTPS URL with a public-looking domain and standard port can be opened here. Check the address yourself.',
+ chatSourceOpenBlocked:'Possible private credential: external navigation refused.'
 });
 Object.assign(FA,{
  chatEvidenceTitle:'یادداشت منبع توسط کاربر ـ تأییدنشده',
@@ -86,7 +91,12 @@ Object.assign(FA,{
  chatQuoteFound:'عبارت در متن واردشده یافت شد؛ اصالت منبع و ارتباطش با ادعا تأیید نشده است.',
  chatQuoteMissing:'عبارت در متن واردشده پیدا نشد؛ این به‌تنهایی ادعا را رد نمی‌کند.',
  chatQuoteFailure:'نقل‌قول به متن و عبارت حداقل ۳۰ نویسه‌ای و نیز نشانی HTTPS و تاریخ منبع نیاز دارد.',
- chatQuotePrivate:'احتمال وجود کلید محرمانه در متن منبع؛ نتیجه‌ای ذخیره نشد.'
+ chatQuotePrivate:'احتمال وجود کلید محرمانه در متن منبع؛ نتیجه‌ای ذخیره نشد.',
+ chatSourceOpen:'بازکردن وب‌سایت منبع',
+ chatSourceOpenConfirm:'وب‌سایت بیرونی در برگهٔ جدید باز شود؟ نکسوس اعتبار یا محتوای سایت را بررسی نکرده است. نشانی کامل برای سایت ارسال می‌شود و ممکن است بازدید شما را ردیابی یا به صفحهٔ دیگری هدایت کند. میزبان: ',
+ chatSourceOpenRequested:'درخواست بازکردن برگهٔ بیرونی ارسال شد؛ ممکن است مرورگر آن را مسدود کند. هیچ منبعی تأیید نشده است.',
+ chatSourceOpenInvalid:'فقط نشانی HTTPS با دامنهٔ عمومی‌نما و درگاه استاندارد در این قسمت پذیرفته می‌شود. نشانی را شخصاً بررسی کنید.',
+ chatSourceOpenBlocked:'احتمال وجود کلید محرمانه؛ بازکردن وب‌سایت متوقف شد.'
 });
 Object.assign(EN,{chatReviewClaims:'Review claims',chatReviewHide:'Hide claim review',chatReviewBlocked:'Possible credential detected. Claim review is blocked; no private value shown.',chatReviewDisclaimer:'Locally extracted candidates only — not checked or verified. Compare each statement with independent sources and dates.',chatReviewEmpty:'No candidates found. This does not establish accuracy.',chatReviewTruncated:'Only the first 12 candidates are shown.'});
 Object.assign(FA,{chatReviewClaims:'بررسی ادعاها',chatReviewHide:'بستن بررسی ادعاها',chatReviewBlocked:'احتمال وجود کلید محرمانه شناسایی شد؛ بررسی متوقف شد و مقدار محرمانه نمایش داده نمی‌شود.',chatReviewDisclaimer:'گزاره‌ها فقط به‌صورت محلی استخراج شده‌اند و تأیید نشده‌اند. هر مورد را با منبع مستقل و تاریخ بررسی کنید.',chatReviewEmpty:'گزاره‌ای پیدا نشد؛ به معنی درستی متن نیست.',chatReviewTruncated:'فقط ۱۲ مورد نخست نمایش داده شده‌اند.'});
@@ -462,6 +472,21 @@ function renderMessage(n){
       };
       const url=field(t('chatEvidenceURL'),'input','claimEvidenceUrl');
       url.type='url';url.maxLength=1000;url.autocomplete='off';url.dir='ltr';
+      const openSource=el('button',t('chatSourceOpen'));
+      openSource.type='button';openSource.className='secondary';openSource.dataset.claimSourceOpen='';
+      const openStatus=el('p','');openStatus.className='help';openStatus.setAttribute('role','status');
+      openSource.onclick=()=>{
+       try{
+        const plan=NexusClaimReview.planSourceOpen(n.text,claim.id,url.value.trim());
+        if(!confirm(t('chatSourceOpenConfirm')+plan.hostname))return;
+        // Navigation only after this click and a separate affirmative review.
+        window.open(plan.url,'_blank','noopener,noreferrer');
+        openStatus.textContent=t('chatSourceOpenRequested');
+       }catch(error){
+        openStatus.textContent=t(error.message==='claim-evidence-private'?'chatSourceOpenBlocked':'chatSourceOpenInvalid');
+       }
+      };
+      details.append(openSource,openStatus);
       const date=field(t('chatEvidenceDate'),'input','claimEvidenceDate');
       date.type='date';
       const note=field(t('chatEvidenceNote'),'textarea','claimEvidenceNote');
