@@ -29,7 +29,9 @@ window.addEventListener('load',async()=>{
     const body='<?xml version="1.0" encoding="utf-8"?>'+
      '<!DOCTYPE article PUBLIC "-//NLM//DTD JATS Journal Publishing DTD 1.2//EN" '+
      '"https://jats.nlm.nih.gov/publishing/1.2/JATS-journalpublishing1.dtd">'+
-     '<article article-type="research-article"><front><article-meta><article-id pub-id-type="pmc">1234567</article-id>'+
+     '<article article-type="research-article"><front><article-meta><article-id pub-id-type="pmc">1234567</article-id>'+ 
+     '<article-id pub-id-type="doi">10.1234/fictional-study.2025</article-id>'+ 
+     '<related-article related-article-type="corrected-article" />'+
     '<title-group><article-title>Invented <b>Scientific</b> study</article-title></title-group></article-meta></front>'+
     '<body><sec><title>Study methods</title><p>Introduction: The report counted exactly 200 participants in 2025.'+
     '</p><p>Second paragraph only in the remote XML.</p></sec></body></article>';
@@ -142,6 +144,9 @@ window.addEventListener('load',async()=>{
      'article-presence-is-not-scientific-verification');
   ok(articleResult.textContent.includes('Study methods')&&
      articleResult.textContent.includes('research-article')&&
+     articleResult.textContent.includes('10.1234/fictional-study.2025')&&
+     articleResult.textContent.includes('corrected-article')&&
+     articleResult.textContent.includes('retraction_status_verified=false')&&
      articleResult.textContent.includes('simple-external-declaration-stripped')&&
      !articleResult.textContent.includes('jats.nlm.nih.gov'),
      'safe-external-jats-doctype-stripped-before-xml-parse-and-context-labeled');
