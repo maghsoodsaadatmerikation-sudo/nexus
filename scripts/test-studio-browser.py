@@ -65,6 +65,7 @@ window.addEventListener('load',async()=>{
    'opening-fenced-js-only-fills-empty-local-editor-without-execution');
   $('code-card').querySelector('.studio-return-to-message').click();
   fill('code','return "already here";');
+  $('code-consent').checked=true;
   fill('message','/code\n```js\nreturn 2;\n```');
   compose.click();offer.querySelector('button').click();
   assert($('code').value==='return "already here";'&&!$('code-consent').checked&&network===0,
