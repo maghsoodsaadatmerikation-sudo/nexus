@@ -4011,12 +4011,13 @@ function openReviewedSurface(result,message){
  }
  // Open is an editor handoff, never a run. Preserve an already written code draft.
  if(panel==='code-card'){
+  // Opening a chat proposal invalidates any old approval, including when an
+  // existing editor draft is deliberately preserved instead of replaced.
+  if($('code-consent'))$('code-consent').checked=false;
   const snippet=reviewedJavaScript(message),code=$('code');
   if(snippet!==null&&code&&!code.value&&code.maxLength>=snippet.length){
    code.value=snippet;
    code.dispatchEvent(new Event('input',{bubbles:true}));
-   // A stale checkbox must never authorize the newly handed-off code.
-   if($('code-consent'))$('code-consent').checked=false;
   }
  }
  if(panel==='studio-connections'){
