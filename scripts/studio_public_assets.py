@@ -14,8 +14,9 @@ import stat
 # increase only the HTML ceiling by another 5 KiB. Retain the
 # original cap on every other static asset and the independent PDF worker cap.
 # The bilingual chat-to-tool boundary disclosures add ~3 KiB to the bundled shell.
+# A scoped, transient, review-only outcome report adds ~4 KiB; public HTML cap stays at 650 KiB-class.
 MAX_FILE = 625_000
-STUDIO_INDEX_LIMIT = 640_000
+STUDIO_INDEX_LIMIT = 650_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000
