@@ -60,6 +60,8 @@ jobs:
           node scripts/test-studio-sky.mjs
           node scripts/test-studio-astrology.mjs
           node scripts/test-studio-core.mjs
+          node --check web/studio-claim-review.js
+          node scripts/test-studio-claim-review.mjs
           node scripts/test-studio-chat-attachments.mjs
           node scripts/test-studio-source-imports.mjs
           node scripts/test-studio-storage.mjs
@@ -89,6 +91,10 @@ jobs:
         run: python3 scripts/test-studio-model-receipt-browser.py
       - name: Explain synthetic gateway HTTP, network and malformed errors in isolated Chromium
         run: python3 scripts/test-studio-gateway-errors-browser.py
+      - name: Exercise the local claim review preview in disposable Chromium
+        run: python3 scripts/test-studio-claim-review-browser.py
+      - name: Check opt-in claim review inside real chat with synthetic provider
+        run: python3 scripts/test-studio-claim-review-chat-browser.py
       - name: Review probable credentials with separate consent in isolated Chromium
         run: python3 scripts/test-studio-credential-preflight-browser.py
       - name: Verify storage status separates encrypted archive, unsaved drafts and local media in Chromium

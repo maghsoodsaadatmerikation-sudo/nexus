@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import '../web/studio-claim-review.js';
+const R=globalThis.NexusClaimReview;
+const sample='A study in 2025 included 200 patients. The rate increased by 15 percent. Treatment caused improvement.';
+const result=R.review(sample);
+assert.equal(result.schema,'nexus.claim-review.v1');
+assert.equal(result.blocked,false);
+assert.deepEqual(result.claims.map(x=>x.review_reason),['quantity-or-date','quantity-or-date','causal-or-associational']);
+assert(result.claims.every(x=>x.verification==='not-checked'));
+assert.equal(result.verified,false);
+assert.equal(R.review('آمار این پژوهش شامل ۲۵۰ نفر بوده است.').claims[0].review_reason,'quantity-or-date');
+assert.equal(R.review('What is this? Please click here.').claims.length,0);
+assert.equal(R.review('```js\nconst password = 42;\n```\nThe 2025 report included 20 patients.').claims.length,1);
+assert.equal(R.review('The 2025 report included 20 patients. The 2025 report included 20 patients.').claims.length,1);
+const many=Array.from({length:20},(_,i)=>`The 2025 trial ${i} enrolled 20 people.`).join('\n');
+assert.equal(R.review(many).claims.length,12);
+assert.equal(R.review(many).total_candidates,20);
+assert.equal(R.review(many).truncated,true);
+assert.match(R.checklist(sample),/not verified/);
+assert.match(R.checklist(sample,'fa'),/تأییدنشده/);
+assert.throws(()=>R.review('x'.repeat(24001)),/claim-review-input/);
+assert.throws(()=>R.review({answer:'text'}),/claim-review-input/);
+assert.throws(()=>R.checklist(sample,'unknown'),/claim-review-language/);
+for(const secret of ['github_pat_'+'A'.repeat(40),'sk-proj-'+'b'.repeat(40),'AKIA'+'C'.repeat(16),'Authorization: Bearer '+'d'.repeat(40)]){
+ const phrase='This claim was reported in 2025. '+secret;
+ const blocked=R.review(phrase);
+ assert.equal(blocked.blocked,true);
+ assert.equal(blocked.claims.length,0);
+ assert(!JSON.stringify(blocked).includes(secret));
+ assert.throws(()=>R.checklist(phrase),/claim-review-possible-credentials/);
+}
+console.log('NEXUS local claim-review: PASS');
