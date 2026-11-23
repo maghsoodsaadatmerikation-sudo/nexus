@@ -157,6 +157,36 @@ function intent(value){
  * The connection dialog verifies actual provider permissions after a separate
  * user-triggered catalog load and requires explicit review before each action.
  */
+// Only a literal, fenced JavaScript body is eligible for a local editor handoff.
+// Descriptions such as "write code" are never converted into executable code.
+function reviewedJavaScript(message){
+ const source=/^(?:\/code|(?:please\s+)?run javascript)\s*:?\s*\r?\n```(?:javascript|js)\r?\n([\s\S]*?)\r?\n```\s*$/i.exec(message.trim());
+ if(!source||!source[1].trim()||source[1].length>100000)return null;
+ return source[1];
+}
+// A proposal explains permissions before opening any separate tool review.
+function toolBoundary(command){
+ switch(command){
+ case 'code': return words(
+  'Local JavaScript worker: a literal fenced snippet may be copied into an empty editor. Execution requires separate exact-code consent. No network or private archive access is granted.',
+  'اجرای محلی JavaScript: قطعه‌کد صریح و محصور ممکن است فقط در ویرایشگر خالی کپی شود. اجرا به تأیید جداگانهٔ همان کد نیاز دارد؛ دسترسی به شبکه یا آرشیو خصوصی داده نمی‌شود.');
+ case 'research': return words(
+  'Public research: the selected query leaves this device only after a separate provider choice and exact-query approval.',
+  'پژوهش عمومی: عبارت انتخابی فقط پس از تعیین منبع و تأیید جداگانهٔ متن دقیق از دستگاه خارج می‌شود.');
+ case 'github': case 'render': case 'connections': return words(
+  'External account: opening connections may fetch an available-action catalog. Account reads or changes require the connector’s separate operation-specific review and permission.',
+  'حساب خارجی: بازکردن اتصال‌ها ممکن است فهرست عملیات را دریافت کند. خواندن یا تغییر حساب نیازمند بازبینی و مجوز جداگانهٔ همان عملیات است.');
+ case 'remind': return words(
+  'Calendar reminder: the tool creates a file to import; it does not schedule a notification by itself.',
+  'یادآور تقویمی: ابزار فایلی برای واردکردن به تقویم می‌سازد؛ خودش اعلان زمان‌بندی نمی‌کند.');
+ case 'tasks': return words(
+  'Local task workers: only a separately reviewed and approved plan can run. No autonomous execution starts here.',
+  'کارهای محلی: تنها طرحی که جداگانه بازبینی و تأیید شده اجرا می‌شود؛ اینجا اجرای خودکار شروع نمی‌شود.');
+ default: return words(
+  'Tool-specific review required. Opening this screen does not approve execution, sharing, saving or a connected-account change.',
+  'بازبینی مخصوص ابزار الزامی است. بازکردن این صفحه مجوز اجرا، اشتراک‌گذاری، ذخیره یا تغییر حساب متصل نیست.');
+ }
+}
 function connectionRequest(result,message){
  const kind=result.route[0];
  if(kind==='connections')return {};
@@ -230,6 +260,16 @@ function openReviewedSurface(result,message){
   input.value=result.query.slice(0,limit>0?limit:480);
   input.dispatchEvent(new Event('input',{bubbles:true}));
  }
+ // Open is an editor handoff, never a run. Preserve an already written code draft.
+ if(panel==='code-card'){
+  const snippet=reviewedJavaScript(message),code=$('code');
+  if(snippet!==null&&code&&!code.value&&code.maxLength>=snippet.length){
+   code.value=snippet;
+   code.dispatchEvent(new Event('input',{bubbles:true}));
+   // A stale checkbox must never authorize the newly handed-off code.
+   if($('code-consent'))$('code-consent').checked=false;
+  }
+ }
  if(panel==='studio-connections'){
   const request=connectionRequest(result,message);
   if(!window.NexusStudioConnections?.openFor?.(request)){
@@ -255,6 +295,9 @@ function showWorkflow(){
    words('confirmed by you','به تأیید شما'):
    i===workflowState.index?words('current','گام فعلی'):words('not started','شروع‌نشده'));
   item.append(span);
+  const boundary=document.createElement('small');boundary.className='help';
+  boundary.textContent=' · '+toolBoundary(step.result.route[0]);
+  item.append(boundary);
   if(i===workflowState.index){
    const open=document.createElement('button');open.type='button';open.className='secondary';
    open.textContent=words('Open tool for review','بازکردن ابزار برای بازبینی');
@@ -324,6 +367,8 @@ function offerTool(message,result){
  clearOffer();offeredDraft=message;offer.hidden=false;
  const p=document.createElement('p');
  p.textContent=words('Open '+en+' to review its inputs.','برای بازبینی ورودی‌ها، '+fa+' را باز کن.');
+ const boundary=document.createElement('p');boundary.className='help';
+ boundary.textContent=toolBoundary(result.route[0]);
  const open=document.createElement('button');open.type='button';open.textContent=words('Open '+en,'بازکردن '+fa);
  open.addEventListener('click',()=>{
   if($('message').value!==offeredDraft||window.NexusStudioUI.uiStatus().busy){clearOffer();return}
@@ -350,7 +395,7 @@ function offerTool(message,result){
   if(select.value==='guide'){$('guide').click();refresh();return}
   refresh();run({routeTools:false});
  });
- offer.append(p,open,proceed,dismiss);
+ offer.append(p,boundary,open,proceed,dismiss);
 }
 
 let running=false,temporaryModel=false,lastModelChoices='';
