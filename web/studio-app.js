@@ -141,6 +141,9 @@ Object.assign(EN,{
  chatEpmcAbsent:'Exact quotation was not found in retrieved article body; this does NOT disprove the claim.',
  chatEpmcArticle:'Article title (as supplied by API)',
  chatEpmcType:'Article type as deposited (not independently checked)',
+ chatEpmcDoi:'DOI declared in article XML (not authenticated)',
+ chatEpmcDoiAmbiguous:'conflicting deposited DOIs — check the original source',
+ chatEpmcRelated:'Related-article notice types (not a comprehensive status check)',
  chatEpmcSections:'Possible matching section headings (not a support verdict)',
  chatEpmcDtd:'XML declaration handling (no DTD loaded)',
  chatEpmcCount:'Number of literal matches (capped)',
@@ -161,6 +164,9 @@ Object.assign(FA,{
  chatEpmcAbsent:'نقل‌قول دقیق در متن دریافت‌شده یافت نشد؛ این ادعا را رد نمی‌کند.',
  chatEpmcArticle:'عنوان مقاله طبق سرویس',
  chatEpmcType:'نوع مقاله مطابق فرادادهٔ منبع (تأییدنشده)',
+ chatEpmcDoi:'شناسهٔ DOI در XML مقاله (اعتبارسنجی‌نشده)',
+ chatEpmcDoiAmbiguous:'شناسه‌های DOI ناسازگار؛ منبع اصلی را بررسی کنید',
+ chatEpmcRelated:'نوع پیوندهای مقالات مرتبط (نه بررسی کامل وضعیت مقاله)',
  chatEpmcSections:'سرعنوان‌های احتمالیِ شامل نقل‌قول (نه تأیید ادعا)',
  chatEpmcDtd:'نحوهٔ پردازش اعلان XML (بدون بارگیری DTD)',
  chatEpmcCount:'تعداد تطبیق‌های لفظی (محدود)',
@@ -636,6 +642,8 @@ function renderMessage(n){
         for(const [key,value] of [
          ['chatEpmcArticle',receipt.article_title],
          ['chatEpmcType',receipt.article_type_as_deposited],
+         ['chatEpmcDoi',receipt.article_doi_ambiguous?t('chatEpmcDoiAmbiguous'):receipt.article_doi_as_deposited],
+         ['chatEpmcRelated',receipt.related_article_types_as_deposited.join(' · ')],
          ['chatEpmcSections',receipt.matching_section_headings.join(' · ')],
          ['chatEpmcDtd',receipt.doctype_handling],
          ['chatEpmcCount',String(receipt.match_count)],
@@ -644,7 +652,7 @@ function renderMessage(n){
          ['chatEpmcDate',receipt.fetched_at_client_clock]
         ])if(value)epmcResult.append(el('p',t(key)+': '+value));
         epmcResult.append(el('small',receipt.content_scope+' · '+receipt.quotation_presence+
-         ' · article_license=not-certified · claim_verified=false · authority=none'));
+         ' · article_license=not-certified · retraction_status_verified=false · claim_verified=false · authority=none'));
        }catch{
         if(panel.isConnected)epmcStatus.textContent=t(controller.signal.aborted?'chatEpmcCancelled':'chatEpmcFailed');
        }finally{
