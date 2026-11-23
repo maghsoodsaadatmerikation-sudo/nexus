@@ -14,10 +14,11 @@ A small pattern-based credential preflight stops extraction and Markdown checkli
 ```bash
 node --check web/studio-claim-review.js
 node scripts/test-studio-claim-review.mjs
+python3 scripts/test-studio-claim-review-browser.py
 ```
 
 Synthetic tests cover English and Persian, duplicate text, exclusion of code/questions, upper bounds and non-echoing credential blocks. They do **not** establish truth detection, source retrieval, model quality, browser integration or production deployment.
 
 ## Release boundary / next increment
 
-This is a standalone **source-level foundation**. It is not yet in the NEXUS Studio chat controls or compiled static public bundle. A future reviewed increment can add an opt-in `Review claims` action on a selected answer, render text strictly as inert content, allow a human to add verified sources manually, and add real-browser acceptance. No automatic export or submission should occur. Do not advertise the feature as live until that UI, offline/static packaging and independent acceptance all pass.
+This is a **source-only developer preview**. Open `web/studio-claim-review-demo.html` alongside its two local JS files to try the opt-in input and inert claim cards. It is **not yet in the NEXUS Studio chat controls or compiled static public bundle**. The isolated DOM acceptance runs with injected, unchanged source scripts in real Chromium but does not inspect deployed CSP/network behavior. A future reviewed increment can add an opt-in `Review claims` action on a selected answer, render text strictly as inert content, allow a human to add verified sources manually, and add real-browser acceptance. No automatic export or submission should occur. Do not advertise the feature as live until that UI, offline/static packaging and independent acceptance all pass.
