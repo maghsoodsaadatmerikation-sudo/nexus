@@ -59,17 +59,18 @@ window.addEventListener('load',async()=>{
   ok(!!source&&!!date&&!!note&&!!assessment&&!!save,'per-claim-manual-evidence-inputs');
   const opens=[],openButton=panel.querySelector('[data-claim-source-open]');
   const beforeOpen=allRequests;
+  let navConfirm=0;
   window.open=(...args)=>{opens.push(args);return null};
   ok(!!openButton,'opt-in-source-navigation-action');
-  window.confirm=()=>{confirmed++;return true};
+  window.confirm=()=>{navConfirm++;return true};
   source.value='https://127.0.0.1/private';
   openButton.click();
   ok(opens.length===0&&panel.textContent.includes('public-looking domain'),'reject-local-private-target');
   source.value='https://example.org/human-only-source?search=reviewed';
-  window.confirm=()=>{confirmed++;return false};
+  window.confirm=()=>{navConfirm++;return false};
   openButton.click();
   ok(opens.length===0,'reject-navigation-when-user-declines');
-  window.confirm=()=>{confirmed++;return true};
+  window.confirm=()=>{navConfirm++;return true};
   openButton.click();
   ok(opens.length===1&&opens[0][0]==='https://example.org/human-only-source?search=reviewed'&&
    opens[0][1]==='_blank'&&opens[0][2]==='noopener,noreferrer',
