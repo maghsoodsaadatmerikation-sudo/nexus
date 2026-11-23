@@ -99,3 +99,9 @@ python3 scripts/probe-studio-europepmc-live-browser.py --live --pmcid PMC7029759
 \`\`\`
 
 A probe failure can mean lack of network/DNS, CORS differences, an article exceeding the strict caps, or changed XML structure; it must be investigated rather than automatically relaxed. The draft PR is not a deployment.
+
+## Increment: publisher-deposited article identifiers and related-article notices (23 November 2026)
+
+The consented Europe PMC JATS receipt additionally presents a **bounded article-level DOI** when it matches a conservative DOI syntax and has a single unambiguous value. Conflicting DOI values result in an explicit ambiguity warning, not a chosen identifier. The reader never searches a reference list to guess the article DOI. It also lists up to three publisher-deposited `related-article-type` values (such as `corrected-article`) as *untrusted orientation hints* only. These strings are inert text and are not interpreted as proof of correction, retraction, scientific reliability, or article identity. Their absence must never be presented as evidence that the article has not been retracted. The receipt explicitly states `retraction_status_verified=false` and `claim_verified=false`.
+
+The feature reuses the same already-consented, bounded XML body: **no additional network request or third-party disclosure**. DOI metadata and related-article types may be incomplete, stale, malformed, misleading or publisher-deposited without independent attestation. It does not query a retraction registry, cross-check Crossref, certify the publisher or change the human's assessment. Synthetic Node and narrow/wide Chromium fixtures cover a single DOI, conflicting identifiers, publisher notice hints, inert output and non-authoritative state. The feature remains a stacked draft pending review and exact-head CI; it is **not deployed**.
