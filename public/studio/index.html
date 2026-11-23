@@ -2752,6 +2752,7 @@ Object.assign(FA,{
 });
 Object.assign(EN,{
  chatEpmcId:'Open-article PMCID (PMC1234567)',
+ chatEpmcQuote:'Separate quotation to check against the retrieved article (30–400 characters)',
  chatEpmcRead:'Check selected quotation in Europe PMC text',
  chatEpmcConsent:'Retrieve bounded article XML from Europe PMC for this PMCID? The provider sees the PMCID and your network IP; your claim and quotation remain local. The text is not sent to an AI model. PMCID: ',
  chatEpmcPending:'Reading Europe PMC article text after consent…',
@@ -2768,6 +2769,7 @@ Object.assign(EN,{
 });
 Object.assign(FA,{
  chatEpmcId:'شناسهٔ PMCID مقالهٔ متن‌باز (PMC1234567)',
+ chatEpmcQuote:'نقل‌قول جداگانه برای سنجش حضور در متن دریافت‌شده (۳۰ تا ۴۰۰ نویسه)',
  chatEpmcRead:'یافتن نقل‌قول انتخاب‌شده در متن Europe PMC',
  chatEpmcConsent:'متن XML مقاله با این PMCID از Europe PMC دریافت شود؟ سرویس از PMCID و IP اتصال شما آگاه می‌شود، اما متن ادعا و نقل‌قول شما محلی می‌مانند و متن مقاله به مدل هوش مصنوعی ارسال نمی‌شود. PMCID: ',
  chatEpmcPending:'دریافت متن مقاله با اجازهٔ شما در جریان است…',
@@ -3225,13 +3227,15 @@ function renderMessage(n){
       quote.maxLength=NexusClaimReview.MAX_QUOTATION;quote.rows=2;quote.dir='auto';
       const pmcid=field(t('chatEpmcId'),'input','claimEpmcId');
       pmcid.type='text';pmcid.maxLength=13;pmcid.autocomplete='off';pmcid.dir='ltr';
+      const epmcQuote=field(t('chatEpmcQuote'),'textarea','claimEpmcQuote');
+      epmcQuote.maxLength=NexusClaimReview.MAX_QUOTATION;epmcQuote.rows=2;epmcQuote.dir='auto';
       const readArticle=el('button',t('chatEpmcRead'));readArticle.type='button';
       readArticle.className='secondary';readArticle.dataset.claimEpmcFetch='';
       const epmcStatus=el('p','');epmcStatus.className='help';epmcStatus.setAttribute('role','status');
       const epmcResult=el('div','');epmcResult.dataset.claimEpmcResult='';
       readArticle.onclick=async()=>{
        let plan;
-       try{plan=NexusClaimReview.planEuropePmcFullText(n.text,claim.id,pmcid.value.trim(),quote.value)}
+       try{plan=NexusClaimReview.planEuropePmcFullText(n.text,claim.id,pmcid.value.trim(),epmcQuote.value)}
        catch{epmcStatus.textContent=t('chatEpmcFailed');return}
        if(!confirm(t('chatEpmcConsent')+plan.pmcid))return;
        const controller=new AbortController();crossrefReads.add(controller);
