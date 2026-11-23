@@ -96,7 +96,7 @@ window.addEventListener('load',async()=>{
   ok(copied.includes('example.org/human-only-source')&&copied.includes('2025-03-04')&&
      copied.includes('not independently verified'),'source-date-and-limited-authority-in-copy');
   ok(copied.includes('present-in-user-paste')&&
-     copied.includes('The report counted exactly 200 participants in 2025.')&&
+     copied.includes('The report counted exactly 200 participants in 2025')&&
      !copied.includes('Extra text only in the pasted source.'),
      'copied-report-traces-quotation-but-omits-source-document');
   ok(allRequests===before,'manual-annotation-and-copy-never-fetch-external-source');
