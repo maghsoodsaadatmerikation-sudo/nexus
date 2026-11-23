@@ -34,6 +34,8 @@ Object.assign(FA,{
  gatewayTimeout:'مهلت پاسخ مدل تمام شد. پاسخی ذخیره نشد؛ پیش از تلاش مجدد، مصرف را بررسی کنید.',
  gatewayMalformedReply:'پاسخ مدل ناقص یا نامعتبر بود و ذخیره نشد. پیش از تکرار، وضعیت درگاه را بررسی کنید.'
 });
+Object.assign(EN,{chatReviewClaims:'Review claims',chatReviewHide:'Hide claim review',chatReviewBlocked:'Possible credential detected. Claim review is blocked; no private value shown.',chatReviewDisclaimer:'Locally extracted candidates only — not checked or verified. Compare each statement with independent sources and dates.',chatReviewEmpty:'No candidates found. This does not establish accuracy.',chatReviewTruncated:'Only the first 12 candidates are shown.'});
+Object.assign(FA,{chatReviewClaims:'بررسی ادعاها',chatReviewHide:'بستن بررسی ادعاها',chatReviewBlocked:'احتمال وجود کلید محرمانه شناسایی شد؛ بررسی متوقف شد و مقدار محرمانه نمایش داده نمی‌شود.',chatReviewDisclaimer:'گزاره‌ها فقط به‌صورت محلی استخراج شده‌اند و تأیید نشده‌اند. هر مورد را با منبع مستقل و تاریخ بررسی کنید.',chatReviewEmpty:'گزاره‌ای پیدا نشد؛ به معنی درستی متن نیست.',chatReviewTruncated:'فقط ۱۲ مورد نخست نمایش داده شده‌اند.'});
 Object.assign(EN,{chatAttachments:'Attach files to this message',chatAttachmentsHelp:'Up to four files. Text formats are limited to 128 KiB per file. Word (.docx) and PowerPoint (.pptx) files are limited to 2 MiB. Up to 20 slides are supported. Only text is extracted. Only short, clearly marked excerpts enter the exact reviewed model request. This is not image/PDF understanding. The original files are not stored in chat or archive; filenames are retained with your turn. Nothing is sent until you explicitly approve the model request.',chatAttachedDocument:'Include latest saved writing document as a temporary excerpt',chatClearAttachments:'Clear attachments',chatNoFiles:'No text files attached',chatAttachmentAdded:'Local files added to next reviewed model request.',chatAttachmentInvalid:'Could not read text files; check size, format and capacity.',chatAttachmentRequiresModel:'Attached file excerpts require a configured model request; the local guide cannot read them.',chatAttachedUsed:'One-turn excerpts supplied (not verified):',chatRegenRequiresFiles:'A response grounded in temporary files cannot be regenerated from the filenames alone. Edit the user message to a new branch and attach the files again.',chatFilesNotSaved:'Files are held only in this tab and their bytes are never saved to the chat archive.'});
 Object.assign(FA,{chatAttachments:'پیوست فایل برای همین پیام',chatAttachmentsHelp:'حداکثر چهار فایل. سقف هر فایل متنی ۱۲۸ کیبی‌بایت است. فایل‌های Word و PowerPoint تا ۲ مِبی‌بایت و ارائه‌ها تا ۲۰ اسلاید پذیرفته می‌شوند. فقط متن استخراج می‌شود. فقط گزیده‌های کوتاه و مشخص وارد درخواست مدل پس از بازبینی می‌شوند. تصویر و PDF تحلیل نمی‌شوند. محتوای فایل‌ها در تاریخچه یا آرشیو ذخیره نمی‌شود؛ فقط نامشان کنار پیام می‌ماند. تا تأیید صریح شما چیزی فرستاده نمی‌شود.',chatAttachedDocument:'افزودن گزیده‌ای از آخرین نسخهٔ ذخیره‌شدهٔ سند',chatClearAttachments:'پاک‌کردن پیوست‌ها',chatNoFiles:'فایل متنی پیوست نشده است',chatAttachmentAdded:'فایل‌های محلی به درخواست بعدی اضافه شدند؛ قبل از ارسال بازبینی می‌شوند.',chatAttachmentInvalid:'خواندن فایل‌های متنی انجام نشد؛ اندازه، قالب یا ظرفیت را بررسی کن.',chatAttachmentRequiresModel:'گزیدهٔ فایل‌ها فقط در درخواست مدل پیکربندی‌شده استفاده می‌شود؛ راهنمای محلی فایل را نمی‌خواند.',chatAttachedUsed:'گزیده‌های موقت ارائه‌شده (تأییدنشده):',chatRegenRequiresFiles:'پاسخ مبتنی بر فایل موقت را نمی‌توان فقط از نام فایل بازتولید کرد. پیام را در شاخهٔ تازه ویرایش کن و فایل‌ها را دوباره اضافه کن.',chatFilesNotSaved:'محتوای فایل‌ها فقط در همین برگه است و در آرشیو گفتگو ذخیره نمی‌شود.'});
 Object.assign(EN,{
@@ -380,7 +382,30 @@ function renderMessage(n){
   const speak=el('button',t('speak'));
   speak.type='button';speak.dataset.chatSpeak='';
   speak.onclick=()=>window.NexusSpeechPlayback?.start(body.innerText||n.text,speak);
+  const review=el('button',t('chatReviewClaims'));
+  review.type='button';review.className='secondary';review.dataset.chatReviewClaims='';
+  review.onclick=()=>{
+   const existing=item.querySelector('.claim-review-panel');
+   if(existing){existing.remove();review.textContent=t('chatReviewClaims');return}
+   const panel=el('section','');panel.className='claim-review-panel';panel.setAttribute('aria-label',t('chatReviewClaims'));
+   try{
+    const report=NexusClaimReview.review(n.text);
+    if(report.blocked)panel.append(el('p',t('chatReviewBlocked')));
+    else {
+     panel.append(el('p',t('chatReviewDisclaimer')));
+     for(const claim of report.claims){
+      const entry=el('div','');entry.className='claim-review-entry';
+      entry.append(el('small',claim.id+' · '+claim.review_reason+' · '+claim.verification));
+      const statement=el('p',claim.statement);statement.dir='auto';entry.append(statement);panel.append(entry);
+     }
+     if(!report.claims.length)panel.append(el('p',t('chatReviewEmpty')));
+     if(report.truncated)panel.append(el('p',t('chatReviewTruncated')));
+    }
+   }catch{panel.append(el('p',t('chatReviewEmpty')))}
+   item.append(panel);review.textContent=t('chatReviewHide');
+  };
   item.append(copy,exportAnswer,exportWord,canvas,speak);
+  if(n.origin==='model')item.append(review);
  }
  return item;
 }
@@ -922,7 +947,7 @@ $('language-file').onchange=async event=>{
  if(!f||busy)return;if(f.size>NexusLocales.MAX_BYTES)return status('failed');
  const current=()=>task===languageImport&&rev===revision&&!busy;
  try{
-  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:[...Object.keys(PRIVACY_EN),...Object.keys(CHAT_CONTEXT_EN),'storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchAll','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed','routeMismatch',...Object.keys(EN).filter(key=>key.startsWith('gateway')),...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
+  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:[...Object.keys(PRIVACY_EN),...Object.keys(CHAT_CONTEXT_EN),'storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchAll','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed','routeMismatch',...Object.keys(EN).filter(key=>key.startsWith('chatReview')),...Object.keys(EN).filter(key=>key.startsWith('gateway')),...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
   if(!$('language').querySelector('option[value="'+pack.code+'"]'))$('language').append(option(pack.code,pack.code));
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}
