@@ -154,6 +154,96 @@ function planSourceOpen(answer,claimId,sourceURL){
   authority:'none'
  });
 }
+// Crossref only: an opted-in browser CORS request for deposited bibliographic metadata.
+// This is not full-text retrieval, publisher authentication, or fact verification.
+const CROSSREF_MAX_BYTES=65536,CROSSREF_TIMEOUT_MS=10000;
+function planCrossrefLookup(answer,claimId,doi){
+ const claim=recordEvidence(answer,claimId,{}); // Re-check selected answer and known-secret shapes.
+ if(typeof doi!=='string'||doi.length>200||!/^10\.\d{4,9}\/[A-Za-z0-9][A-Za-z0-9._;()/:+-]{0,180}$/.test(doi))
+  throw Error('crossref-doi');
+ const canonical=doi.toLowerCase();
+ return Object.freeze({
+  schema:'nexus.crossref-plan.v1',claim_id:claim.claim_id,doi:canonical,
+  url:'https://api.crossref.org/works/'+encodeURIComponent(canonical),
+  provider:'Crossref REST API',transmission:'DOI-only',requires_consent:true,
+  source_retrieved:false,claim_verified:false,authority:'none'
+ });
+}
+async function lookupCrossref(answer,claimId,doi,{consent=false,fetcher,signal,cryptoProvider}={}){
+ const plan=planCrossrefLookup(answer,claimId,doi);
+ if(consent!==true)throw Error('crossref-consent-required');
+ const cryptoAPI=cryptoProvider||globalThis.crypto;
+ if(!cryptoAPI?.subtle?.digest)throw Error('crossref-hash-unavailable');
+ if(typeof fetcher!=='function')fetcher=globalThis.fetch;
+ if(typeof fetcher!=='function')throw Error('crossref-fetch-unavailable');
+ const timeout=AbortSignal.timeout(CROSSREF_TIMEOUT_MS);
+ const combined=signal?AbortSignal.any([signal,timeout]):timeout;
+ let response;
+ try{
+  response=await fetcher(plan.url,{
+   method:'GET',mode:'cors',credentials:'omit',redirect:'error',
+   referrerPolicy:'no-referrer',cache:'no-store',
+   headers:{Accept:'application/vnd.crossref-api-message+json'},signal:combined
+  });
+ }catch{throw Error('crossref-network-unavailable')}
+ if(!response?.ok||response.status!==200)throw Error('crossref-response-unavailable');
+ if(!response.url||new URL(response.url).href!==plan.url)throw Error('crossref-response-origin');
+ const kind=(response.headers?.get('content-type')||'').split(';')[0].toLowerCase().trim();
+ if(!['application/json','application/vnd.crossref-api-message+json'].includes(kind))
+  throw Error('crossref-type');
+ const sizeHeader=response.headers?.get('content-length');
+ if(sizeHeader&&(!/^\d+$/.test(sizeHeader)||Number(sizeHeader)>CROSSREF_MAX_BYTES))
+  throw Error('crossref-size');
+ if(!response.body?.getReader)throw Error('crossref-stream-required');
+ const reader=response.body.getReader(),chunks=[];
+ let total=0,finished=false;
+ try{
+  for(;;){
+   const {done,value}=await reader.read();
+   if(done){finished=true;break}
+   if(!(value instanceof Uint8Array))throw Error('crossref-stream-invalid');
+   total+=value.byteLength;
+   if(total>CROSSREF_MAX_BYTES)throw Error('crossref-size');
+   chunks.push(value);
+  }
+ }finally{
+  if(!finished)await reader.cancel().catch(()=>{});
+  reader.releaseLock();
+ }
+ if(combined.aborted)throw Error('crossref-interrupted');
+ const bytes=new Uint8Array(total);
+ let position=0;for(const chunk of chunks){bytes.set(chunk,position);position+=chunk.length}
+ let json;
+ try{json=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes))}
+ catch{throw Error('crossref-json')}
+ const data=json?.message;
+ if(!data||typeof data!=='object'||typeof data.DOI!=='string'||
+    data.DOI.toLowerCase()!==plan.doi)throw Error('crossref-doi-mismatch');
+ const clean=(value,max)=>typeof value==='string'?value.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,max):'';
+ const title=clean(Array.isArray(data.title)?data.title[0]:'',300);
+ const publisher=clean(data.publisher,160);
+ const type=clean(data.type,70);
+ const parts=data.published?.['date-parts']?.[0]||data.issued?.['date-parts']?.[0];
+ let depositedDate='';
+ if(Array.isArray(parts)&&Number.isInteger(parts[0])&&parts[0]>=1000&&parts[0]<=9999){
+  const yy=String(parts[0]),mm=parts[1],dd=parts[2];
+  depositedDate=yy+(Number.isInteger(mm)&&mm>=1&&mm<=12?'-'+String(mm).padStart(2,'0'):'');
+  if(Number.isInteger(dd)&&dd>=1&&dd<=31&&depositedDate.length>4)
+   depositedDate+='-'+String(dd).padStart(2,'0');
+ }
+ const digest=await cryptoAPI.subtle.digest('SHA-256',bytes);
+ if(combined.aborted)throw Error('crossref-interrupted');
+ const sha=Array.from(new Uint8Array(digest),n=>n.toString(16).padStart(2,'0')).join('');
+ return Object.freeze({
+  schema:'nexus.crossref-metadata-receipt.v1',claim_id:plan.claim_id,doi:plan.doi,
+  title,publisher,type,deposited_publication_date:depositedDate,
+  publisher_metadata:'as-deposited-not-independently-verified',
+  response_url:plan.url,response_sha256:sha,response_bytes:total,
+  fetched_at_client_clock:new Date().toISOString(),retrieval:'consented-browser-CORS',
+  content_scope:'Crossref-bibliographic-metadata-only',source_retrieved:true,
+  publisher_verified:false,claim_verified:false,authority:'none'
+ });
+}
 function evidenceReport(answer,entries,language='en'){
  if(!['en','fa'].includes(language)||!Array.isArray(entries)||entries.length>MAX_CLAIMS)
   throw Error('claim-evidence-report');
@@ -205,5 +295,5 @@ function evidenceReport(answer,entries,language='en'){
  }
  return lines.join('\n');
 }
-root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,MAX_QUOTATION,MAX_SOURCE_TEXT,review,checklist,recordEvidence,locateQuote,planSourceOpen,evidenceReport});
+root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,MAX_QUOTATION,MAX_SOURCE_TEXT,CROSSREF_MAX_BYTES,review,checklist,recordEvidence,locateQuote,planSourceOpen,planCrossrefLookup,lookupCrossref,evidenceReport});
 })(globalThis);
