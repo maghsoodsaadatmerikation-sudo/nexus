@@ -178,6 +178,7 @@ async function lookupCrossref(answer,claimId,doi,{consent=false,fetcher,signal,c
  if(typeof fetcher!=='function')throw Error('crossref-fetch-unavailable');
  const timeout=AbortSignal.timeout(CROSSREF_TIMEOUT_MS);
  const combined=signal?AbortSignal.any([signal,timeout]):timeout;
+ if(combined.aborted)throw Error('crossref-interrupted');
  let response;
  try{
   response=await fetcher(plan.url,{
