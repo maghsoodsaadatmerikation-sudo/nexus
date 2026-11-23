@@ -3165,6 +3165,13 @@ for(const id of ['gateway','gateway-token'])$(id).addEventListener('input',()=>{
 (function(){
 const L=NexusLab,run=new L.Sandbox();let epoch=0,searchController=null,codeController=null,cards=[],result=null,chartData=null;
 const selectedSources=new Set();
+let localAttempt=0,activeResearchAttempt=null,activeCodeAttempt=null;
+function localLifecycle(tool,runId,phase){
+ // No prompts, user input, result bytes, credentials, or arbitrary payload.
+ document.dispatchEvent(new CustomEvent('nexus-studio-local-tool-lifecycle',{
+  detail:{tool,runId,phase}
+ }));
+}
 Object.assign(EN,{research:'Live research desk',researchHelp:'Only the exact queries below are sent directly to the selected public APIs. Conversations, files, memory and credentials are not added. Results are source leads, not verified facts or automatic research conclusions.',researchQuery:'Public query (up to 250 characters)',researchProvider:'Source provider',researchLanguage:'Wikipedia language',researchConsent:'Send this exact query to the selected source provider(s) once.',researchSearch:'Search public sources',researchStop:'Cancel research',researchAdd:'Keep excerpt as a project source',researchEmpty:'No matching sources were returned.',researchWorking:'Retrieving public source leads…',researchFailed:'Source retrieval failed or was blocked. Check connectivity, provider availability and query.',researchNote:'Crossref provides bibliographic metadata, not paper findings or full text. Wikipedia extracts carry its attribution terms.',codeLab:'Local JavaScript lab',codeHelp:'Runs exactly the code and input shown in an opaque-origin browser worker. It has no access to Studio DOM, archive storage or network. Execution stops after 3 seconds and output is capped at 64,000 bytes. There is no hard memory quota; this is not a Python or operating-system sandbox. Inputs and outputs are temporary; copy output to the writing canvas to keep it.',codeSource:'JavaScript function body — use input (a string), console.log and return',codeInput:'Only this input is passed to the code',codeConsent:'Run this exact code and input locally once.',codeSample:'Load calculation sample',codeRun:'Run locally',codeStop:'Stop execution',codeCopy:'Copy output into writing canvas',codeOutput:'Untrusted local program output',codeWorking:'Running locally…',codeFailed:'Execution failed, exceeded a limit, or was cancelled.',chartLab:'Local data chart',chartHelp:'Provide JSON: type (bar or line), title, labels and numeric values. At most 200 points; finite values up to ±10¹². No model, upload or code execution is used to draw the chart.',chartDraw:'Draw chart',chartUse:'Use code result',chartExport:'Export PNG',chartJson:'Chart data JSON',chartFailed:'Invalid chart data. Check type, matching labels/values and numeric limits.'});
 Object.assign(FA,{research:'میز پژوهش زنده',researchHelp:'فقط عبارت‌های دقیق زیر مستقیماً به APIهای عمومی انتخاب‌شده فرستاده می‌شوند. گفتگو، فایل، حافظه و توکن‌ها اضافه نمی‌شوند. نتیجه‌ها سرنخ منبع‌اند، نه حقیقت تأییدشده یا نتیجه‌گیری خودکار.',researchQuery:'عبارت عمومی — حداکثر ۲۵۰ نویسه',researchProvider:'ارائه‌دهندهٔ منبع',researchLanguage:'زبان ویکی‌پدیا',researchConsent:'این عبارت دقیق را یک بار به منابع انتخاب‌شده بفرست.',researchSearch:'جست‌وجوی منابع عمومی',researchStop:'لغو پژوهش',researchAdd:'نگهداری گزیده به‌عنوان منبع پروژه',researchEmpty:'منبع مطابق پیدا نشد.',researchWorking:'در حال دریافت سرنخ‌های منابع عمومی…',researchFailed:'دریافت منبع ناموفق یا مسدود شد. اتصال، دسترس‌پذیری سرویس و عبارت را بررسی کن.',researchNote:'Crossref اطلاعات کتاب‌شناختی می‌دهد، نه یافته یا متن کامل مقاله. گزیده‌های ویکی‌پدیا تابع شرایط انتساب آن هستند.',codeLab:'آزمایشگاه محلی JavaScript',codeHelp:'فقط کد و ورودی نمایش‌داده‌شده در یک Worker مرورگر با مبدأ ایزوله اجرا می‌شوند. به صفحه، آرشیو و شبکهٔ Studio دسترسی ندارد. پس از ۳ ثانیه متوقف می‌شود و خروجی تا ۶۴٬۰۰۰ بایت محدود است. سقف سخت حافظه ندارد؛ محیط Python یا سیستم‌عامل نیست. ورودی و خروجی موقت‌اند؛ برای نگهداری، خروجی را به ویرایشگر نوشته کپی کن.',codeSource:'بدنهٔ تابع JavaScript — از input به‌صورت رشته، console.log و return استفاده کن',codeInput:'فقط همین ورودی به کد داده می‌شود',codeConsent:'این کد و ورودی دقیق را یک بار محلی اجرا کن.',codeSample:'بارگذاری نمونهٔ محاسبه',codeRun:'اجرای محلی',codeStop:'توقف اجرا',codeCopy:'کپی خروجی به ویرایشگر نوشته',codeOutput:'خروجی تأییدنشدهٔ برنامهٔ محلی',codeWorking:'در حال اجرای محلی…',codeFailed:'اجرا ناموفق، لغو یا متوقف شد یا از محدودیت گذشت.',chartLab:'نمودار دادهٔ محلی',chartHelp:'JSON شامل type برابر bar یا line، عنوان title، برچسب‌های labels و مقادیر عددی values بده. حداکثر ۲۰۰ نقطه و عدد متناهی تا ±۱۰¹². رسم نمودار به مدل، ارسال داده یا اجرای کد نیاز ندارد.',chartDraw:'رسم نمودار',chartUse:'استفاده از نتیجهٔ کد',chartExport:'خروجی PNG',chartJson:'دادهٔ JSON نمودار',chartFailed:'دادهٔ نمودار معتبر نیست. نوع، تعداد برابر برچسب و مقدار و محدودیت عددی را بررسی کن.'});
 Object.assign(EN,{researchChat:'Use source excerpt in next chat',codeChat:'Use code result in next chat'});Object.assign(FA,{researchChat:'استفاده از گزیدهٔ منبع در پیام بعدی',codeChat:'استفاده از نتیجهٔ کد در پیام بعدی'});
@@ -3196,7 +3203,11 @@ function renderBrief(){
   checkbox.disabled=limit&&!checkbox.checked;
  }
 }
-function cancel(){epoch++;searchController?.abort();codeController?.abort();searchController=codeController=null;run.cancel();$('research-consent').checked=false;$('code-consent').checked=false;$('research-run').disabled=false;$('code-run').disabled=false;$('research-stop').disabled=true;$('code-stop').disabled=true;$('code-status').textContent='';$('research-status').textContent=''}
+function cancel(){const oldResearch=activeResearchAttempt,oldCode=activeCodeAttempt;
+ activeResearchAttempt=activeCodeAttempt=null;
+ epoch++;searchController?.abort();codeController?.abort();searchController=codeController=null;
+ if(oldResearch!==null)localLifecycle('research',oldResearch,'cancelled');
+ if(oldCode!==null)localLifecycle('code',oldCode,'cancelled');run.cancel();$('research-consent').checked=false;$('code-consent').checked=false;$('research-run').disabled=false;$('code-run').disabled=false;$('research-stop').disabled=true;$('code-stop').disabled=true;$('code-status').textContent='';$('research-status').textContent=''}
 const workFields=['research-query','code','code-input','chart-json'];
 function hasTransientWork(){return workFields.some(id=>$(id).value.length>0)}
 function clear(){cancel();cards=[];selectedSources.clear();result=chartData=null;for(const id of workFields)$(id).value='';for(const id of ['research-cards','research-status','code-result','code-console','code-status'])$(id).replaceChildren();$('chart').hidden=true;$('chart').width=1;$('chart').height=1;renderBrief()}
@@ -3211,7 +3222,8 @@ function renderCards(){
 for(const id of ['research-query','research-provider','research-language'])for(const event of ['input','change'])$(id).addEventListener(event,()=>{cancel();cards=[];selectedSources.clear();renderCards();$('research-status').textContent=''});
 $('research-run').onclick=async()=>{
  if(!$('research-consent').checked||searchController)return;
- const query=$('research-query').value.trim(),provider=$('research-provider').value,lang=$('research-language').value,scope=epoch;const abort=new AbortController();searchController=abort;$('research-consent').checked=false;$('research-run').disabled=true;$('research-stop').disabled=false;$('research-status').textContent=t('researchWorking');cards=[];selectedSources.clear();renderCards();const timer=setTimeout(()=>abort.abort(),20000);
+ const query=$('research-query').value.trim(),provider=$('research-provider').value,lang=$('research-language').value,scope=epoch;const abort=new AbortController();searchController=abort;$('research-consent').checked=false;$('research-run').disabled=true;$('research-stop').disabled=false;$('research-status').textContent=t('researchWorking');cards=[];selectedSources.clear();renderCards();const timer=setTimeout(()=>abort.abort(),20000),runId=++localAttempt;
+ activeResearchAttempt=runId;localLifecycle('research',runId,'started');
  try{
   const {cards:found,failed,successful,timedOut}=await L.researchPlan(provider,query,lang,abort.signal,(completed,total)=>{
    if(scope===epoch&&total>1)$('research-status').textContent=t('researchProgress')+' · '+completed+'/'+total;
@@ -3220,14 +3232,16 @@ $('research-run').onclick=async()=>{
   cards=found;renderCards();
   $('research-status').textContent=timedOut?t('researchTimeLimit'):!successful?t('researchFailed'):
    failed.length?t('researchPartial')+failed.join(', '):cards.length?'':t('researchEmpty');
- }catch(error){if(scope===epoch)$('research-status').textContent=t(error?.message==='query-plan'?'researchInvalidPlan':'researchFailed')}finally{clearTimeout(timer);if(scope===epoch){searchController=null;$('research-run').disabled=false;$('research-stop').disabled=true}}
+  localLifecycle('research',runId,!successful?'failed':timedOut||failed.length?'partial':'succeeded');
+ }catch(error){if(scope===epoch){$('research-status').textContent=t(error?.message==='query-plan'?'researchInvalidPlan':'researchFailed');localLifecycle('research',runId,'failed')}}finally{clearTimeout(timer);if(scope===epoch){activeResearchAttempt=null;searchController=null;$('research-run').disabled=false;$('research-stop').disabled=true}}
 };
 $('research-stop').onclick=cancel;
 for(const id of ['code','code-input'])$(id).addEventListener('input',()=>{cancel();result=null;$('code-result').textContent='';$('code-console').textContent=''});
 $('code-sample').onclick=()=>{if($('code').value&&!confirm(t('discard')))return;cancel();result=null;$('code-result').textContent='';$('code-console').textContent='';$('code-input').value='{"values":[3,5,2]}';$('code').value="const data = JSON.parse(input);\nconst values = data.values;\nconsole.log({count: values.length, sum: values.reduce((a,b)=>a+b, 0)});\nreturn {type:'bar', title:'Local calculation', labels: values.map((_,i)=>String(i+1)), values};";renderStorage()};
 $('code-run').onclick=async()=>{
  if(!$('code-consent').checked||codeController)return;const scope=epoch,abort=new AbortController();codeController=abort;$('code-consent').checked=false;$('code-run').disabled=true;$('code-stop').disabled=false;$('code-status').textContent=t('codeWorking');$('code-console').textContent='';$('code-result').textContent='';result=null;
- try{const text=await run.run($('code').value,$('code-input').value,{signal:abort.signal,onLog:line=>{if(scope===epoch)$('code-console').textContent+=line+'\n'}});if(scope!==epoch)return;result=text;$('code-result').textContent=text;$('code-status').textContent=''}catch{if(scope===epoch)$('code-status').textContent=t('codeFailed')}finally{if(scope===epoch){codeController=null;$('code-run').disabled=false;$('code-stop').disabled=true}}
+ const runId=++localAttempt;activeCodeAttempt=runId;localLifecycle('code',runId,'started');
+ try{const text=await run.run($('code').value,$('code-input').value,{signal:abort.signal,onLog:line=>{if(scope===epoch)$('code-console').textContent+=line+'\n'}});if(scope!==epoch)return;result=text;$('code-result').textContent=text;$('code-status').textContent='';localLifecycle('code',runId,'succeeded')}catch{if(scope===epoch){$('code-status').textContent=t('codeFailed');localLifecycle('code',runId,'failed')}}finally{if(scope===epoch){activeCodeAttempt=null;codeController=null;$('code-run').disabled=false;$('code-stop').disabled=true}}
 };
 $('code-stop').onclick=cancel;
 $('code-chat').onclick=()=>{if(result!==null)window.NexusStudioUI?.stageChatContext('Local code result · untrusted',result)};
@@ -4029,6 +4043,19 @@ function openReviewedSurface(result,message){
  }else window.NexusStudioFocus?.openPanel(panel);
  return true;
 }
+function workflowReport(){
+ if(!retainedWorkflow())return null;
+ return {
+  schema:'nexus.workflow-review.v1',authority:'none',
+  evidence:'tab-local-ui-and-human-acknowledgment-not-independent-proof',
+  complete:workflowState.index===workflowState.steps.length,
+  steps:workflowState.steps.map(step=>({
+   command:step.result.route[0],request:step.line,
+   opened:step.opened===true,acknowledged_by_user:step.acknowledged===true,
+   local_ui_outcome:step.observed||null
+  }))
+ };
+}
 function showWorkflow(){
  if(!workflowState)return;
  workflow.hidden=false;workflow.replaceChildren();
@@ -4036,8 +4063,8 @@ function showWorkflow(){
  title.textContent=words('Your reviewed workflow','گردش‌کار قابل بازبینی');
  const info=document.createElement('p');info.className='help';
  info.textContent=words(
-  'Temporary checklist only. Opening a step does not run it. Mark each step done yourself after completing it in the separate tool.',
-  'فهرست موقت است. بازکردن هر گام آن را اجرا نمی‌کند. پس از انجام کار در ابزار مربوطه، گام را خودت تکمیل‌شده علامت بزن.');
+  'Opening a step does not run it. Local code and research can show a tab-observed outcome, not independent proof. Progress still requires your acknowledgment.',
+  'بازکردن گام آن را اجرا نمی‌کند. نتیجهٔ اجرای کد و پژوهش فقط در همین برگه مشاهده می‌شود، نه به‌عنوان مدرک مستقل. پیشرفت همچنان به تأیید شما نیاز دارد.');
  const list=document.createElement('ol');
  workflowState.steps.forEach((step,i)=>{
   const item=document.createElement('li'),span=document.createElement('span');
@@ -4048,6 +4075,20 @@ function showWorkflow(){
   const boundary=document.createElement('small');boundary.className='help';
   boundary.textContent=' · '+toolBoundary(step.result.route[0]);
   item.append(boundary);
+  if(step.observed){
+   const observation=document.createElement('small');observation.className='help';
+   const phase=step.observed;
+   observation.textContent=' · '+(phase==='started'?
+    words('Local tool started (awaiting result)','ابزار محلی شروع شد (در انتظار نتیجه)'):
+    phase==='succeeded'?
+    words('Local UI reported success · not independent proof','رابط محلی موفقیت را گزارش کرد؛ مدرک مستقل نیست'):
+    phase==='partial'?
+    words('Local UI reported partial result · not verified','رابط محلی نتیجهٔ ناقص گزارش کرد؛ راستی‌آزمایی نشده'):
+    phase==='cancelled'?
+    words('Local execution cancelled · no result','اجرای محلی لغو شد؛ نتیجه‌ای ثبت نشد'):
+    words('Local UI reported failure · do not treat as success','رابط محلی شکست را گزارش کرد؛ موفقیت محسوب نمی‌شود'));
+   item.append(observation);
+  }
   if(i===workflowState.index){
    const open=document.createElement('button');open.type='button';open.className='secondary';
    open.textContent=words('Open tool for review','بازکردن ابزار برای بازبینی');
@@ -4055,16 +4096,18 @@ function showWorkflow(){
     if(!retainedWorkflow()){clearWorkflow();return}
     if(!validWorkflow())return;
     if(openReviewedSurface(step.result,step.line)){
-     workflowState.opened=true;showWorkflow();
+     workflowState.opened=true;step.opened=true;showWorkflow();
     }
    };
    const done=document.createElement('button');done.type='button';done.className='secondary';
-   done.textContent=words('I completed this step','این گام را انجام دادم');
+   done.textContent=['failed','cancelled','partial'].includes(step.observed)?
+    words('Acknowledge failure and continue','ثبت شکست و ادامه'):
+    words('I reviewed this step · continue','این گام را بازبینی کردم؛ ادامه');
    done.disabled=!workflowState.opened;
    done.onclick=()=>{
     if(!retainedWorkflow()){clearWorkflow();return}
     if(!validWorkflow()||!workflowState.opened)return;
-    workflowState.index++;workflowState.opened=false;showWorkflow();
+    step.acknowledged=true;workflowState.index++;workflowState.opened=false;showWorkflow();
    };
    item.append(open,done);
   }
@@ -4081,14 +4124,42 @@ function showWorkflow(){
   workflow.append(note);
  }
  workflow.append(cancel);
+ const exportButton=document.createElement('button');exportButton.type='button';
+ exportButton.className='secondary';exportButton.dataset.workflowReport='true';
+ exportButton.textContent=words('Download review report','دریافت گزارش بازبینی');
+ exportButton.onclick=()=>{
+  const record=workflowReport();
+  if(!record||!confirm(words(
+   'Download an unencrypted report containing your workflow commands and local status? This is not verified execution evidence.',
+   'گزارش بدون رمزگذاری شامل فرمان‌های گردش‌کار و وضعیت محلی دریافت شود؟ این مدرک اجرای تأییدشده نیست.')))return;
+  download(JSON.stringify(record,null,2),'nexus-workflow-review.json','application/json');
+ };
+ workflow.append(exportButton);
 }
 function reviewWorkflow(message){
  closeDirectory();clearOffer();
  const parsed=parseWorkflow(message);
  if(parsed.error){workflowError(parsed.error);return}
- workflowState={draft:message,scope:workflowScope(),steps:parsed.steps,index:0,opened:false};
+ workflowState={draft:message,scope:workflowScope(),steps:parsed.steps.map(step=>({
+  ...step,opened:false,acknowledged:false,runId:null,observed:null
+ })),index:0,opened:false};
  showWorkflow();
 }
+// These UI events come from local tool controllers after an explicitly
+// consented action; they are not authorization tokens or signed attestations.
+document.addEventListener('nexus-studio-local-tool-lifecycle',event=>{
+ if(!retainedWorkflow()||!workflowState.opened)return;
+ const detail=event.detail;
+ if(!detail||!['code','research'].includes(detail.tool)||
+    !Number.isSafeInteger(detail.runId)||detail.runId<1||
+    !['started','succeeded','partial','failed','cancelled'].includes(detail.phase))return;
+ const step=workflowState.steps[workflowState.index];
+ if(!step||step.result.route[0]!==detail.tool)return;
+ if(detail.phase==='started'){step.runId=detail.runId;step.observed='started'}
+ else if(step.runId===detail.runId&&step.observed==='started')step.observed=detail.phase;
+ else return;
+ showWorkflow();
+});
 
 let offeredDraft=null;
 function clearOffer(){
