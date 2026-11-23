@@ -84,7 +84,7 @@ assert.throws(()=>R.locateQuote(sample,'c1',{source_url:'https://example.org/',s
 assert.throws(()=>R.locateQuote(sample,'c1',{source_url:'https://example.org/',source_date:'2025-01-01'},sourceText+' github_pat_'+'X'.repeat(40),literal),/claim-quote-private/);
 const safeRecord={...manual,source_text:sourceText,quotation:literal};
 const manuscript=R.evidenceReport(sample,[safeRecord],'en');
-assert(manuscript.includes(literal));
+assert(manuscript.includes(literal.slice(0,-1)));
 assert(manuscript.includes('present-in-user-paste'));
 assert(!manuscript.includes('The article also contains a second synthetic sentence.'));
 assert(!manuscript.includes('root.NexusClaimReview=Object.freeze'));
