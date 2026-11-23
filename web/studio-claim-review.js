@@ -312,12 +312,24 @@ async function lookupEuropePmcFullText(answer,claimId,pmcid,quotation,{
  let raw;
  try{raw=new TextDecoder('utf-8',{fatal:true}).decode(bytes)}
  catch{throw Error('epmc-encoding')}
- // Strictly refuse DTD/entity declarations; do not attempt XML entity resolution or external loads.
- if(/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(raw))throw Error('epmc-xml-declaration');
+ // JATS files often declare a *simple external DTD*. Strip (never resolve) it
+ // before DOMParser; reject internal subsets, entity declarations and ambiguous DTDs.
+ if(/<!\s*ENTITY\b/i.test(raw))throw Error('epmc-xml-declaration');
+ let safeXml=raw,doctypeStripped=false;
+ if(/<!\s*DOCTYPE\b/i.test(raw)){
+  const externalId='["\x27][^"\x27<>\\[\\]\\r\\n]{1,240}["\x27]';
+  const pattern=new RegExp('<!DOCTYPE\\s+article\\s+(?:PUBLIC\\s+'+
+   externalId+'\\s+'+externalId+'|SYSTEM\\s+'+externalId+')\\s*>','i');
+  const match=pattern.exec(raw);
+  if(!match||match.index>2048)throw Error('epmc-xml-declaration');
+  safeXml=raw.slice(0,match.index)+raw.slice(match.index+match[0].length);
+  if(/<!\s*DOCTYPE\b/i.test(safeXml))throw Error('epmc-xml-declaration');
+  doctypeStripped=true;
+ }
  const parser=xmlParser||(typeof DOMParser!=='undefined'?new DOMParser():null);
  if(!parser||typeof parser.parseFromString!=='function')throw Error('epmc-parser-unavailable');
  let parsed;
- try{parsed=parser.parseFromString(raw,'application/xml')}
+ try{parsed=parser.parseFromString(safeXml,'application/xml')}
  catch{throw Error('epmc-xml')}
  if(parsed?.getElementsByTagName?.('parsererror')?.length||
     parsed?.documentElement?.localName!=='article')throw Error('epmc-xml');
@@ -330,6 +342,19 @@ async function lookupEuropePmcFullText(answer,claimId,pmcid,quotation,{
  const fold=text=>text.normalize('NFKC').replace(/\s+/gu,' ').trim();
  const text=fold(body.textContent),needle=fold(plan.quotation);
  const occurrences=text.split(needle).length-1;
+ // Context headings are source-supplied orientation aids, not evidence quality scores.
+ const matchingSections=[];
+ for(const section of Array.from(body.querySelectorAll?.('sec')||[]).slice(0,250)){
+  if(matchingSections.length>=3)break;
+  if(typeof section.textContent!=='string'||!fold(section.textContent).includes(needle))continue;
+  const heading=section.querySelector?.(':scope > title')?.textContent;
+  if(typeof heading!=='string')continue;
+  const cleanHeading=heading.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,90);
+  if(cleanHeading&&!matchingSections.includes(cleanHeading))matchingSections.push(cleanHeading);
+ }
+ const declaredArticleType=parsed.documentElement?.getAttribute?.('article-type');
+ const articleType=typeof declaredArticleType==='string'&&
+    /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(declaredArticleType)?declaredArticleType:'';
  const titleNode=parsed.querySelector?.('article-title');
  const title=typeof titleNode?.textContent==='string'?
   titleNode.textContent.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,240):'';
@@ -340,6 +365,10 @@ async function lookupEuropePmcFullText(answer,claimId,pmcid,quotation,{
   schema:'nexus.epmc-open-text-receipt.v1',claim_id:plan.claim_id,pmcid:plan.pmcid,
   source_url:plan.url,article_title:title,source_retrieved:true,
   content_scope:'bounded-Europe-PMC-XML-article-body',body_character_count:text.length,
+  article_type_as_deposited:articleType,
+  matching_section_headings:Object.freeze(matchingSections),
+  doctype_handling:doctypeStripped?'simple-external-declaration-stripped':'absent',
+  section_context_is_support_verdict:false,
   quotation_presence:occurrences?'present-in-retrieved-body':'not-found-in-retrieved-body',
   match_count:Math.min(occurrences,99),normalization:'NFKC-and-whitespace-case-sensitive',
   response_sha256:sha,response_bytes:count,fetched_at_client_clock:new Date().toISOString(),
