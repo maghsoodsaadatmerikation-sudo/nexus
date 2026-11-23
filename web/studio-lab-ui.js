@@ -2,7 +2,7 @@
 (function(){
 const L=NexusLab,run=new L.Sandbox();let epoch=0,searchController=null,codeController=null,cards=[],result=null,chartData=null;
 const selectedSources=new Set();
-let localAttempt=0;
+let localAttempt=0,activeResearchAttempt=null,activeCodeAttempt=null;
 function localLifecycle(tool,runId,phase){
  // No prompts, user input, result bytes, credentials, or arbitrary payload.
  document.dispatchEvent(new CustomEvent('nexus-studio-local-tool-lifecycle',{
@@ -40,7 +40,11 @@ function renderBrief(){
   checkbox.disabled=limit&&!checkbox.checked;
  }
 }
-function cancel(){epoch++;searchController?.abort();codeController?.abort();searchController=codeController=null;run.cancel();$('research-consent').checked=false;$('code-consent').checked=false;$('research-run').disabled=false;$('code-run').disabled=false;$('research-stop').disabled=true;$('code-stop').disabled=true;$('code-status').textContent='';$('research-status').textContent=''}
+function cancel(){const oldResearch=activeResearchAttempt,oldCode=activeCodeAttempt;
+ activeResearchAttempt=activeCodeAttempt=null;
+ epoch++;searchController?.abort();codeController?.abort();searchController=codeController=null;
+ if(oldResearch!==null)localLifecycle('research',oldResearch,'cancelled');
+ if(oldCode!==null)localLifecycle('code',oldCode,'cancelled');run.cancel();$('research-consent').checked=false;$('code-consent').checked=false;$('research-run').disabled=false;$('code-run').disabled=false;$('research-stop').disabled=true;$('code-stop').disabled=true;$('code-status').textContent='';$('research-status').textContent=''}
 const workFields=['research-query','code','code-input','chart-json'];
 function hasTransientWork(){return workFields.some(id=>$(id).value.length>0)}
 function clear(){cancel();cards=[];selectedSources.clear();result=chartData=null;for(const id of workFields)$(id).value='';for(const id of ['research-cards','research-status','code-result','code-console','code-status'])$(id).replaceChildren();$('chart').hidden=true;$('chart').width=1;$('chart').height=1;renderBrief()}
@@ -56,7 +60,7 @@ for(const id of ['research-query','research-provider','research-language'])for(c
 $('research-run').onclick=async()=>{
  if(!$('research-consent').checked||searchController)return;
  const query=$('research-query').value.trim(),provider=$('research-provider').value,lang=$('research-language').value,scope=epoch;const abort=new AbortController();searchController=abort;$('research-consent').checked=false;$('research-run').disabled=true;$('research-stop').disabled=false;$('research-status').textContent=t('researchWorking');cards=[];selectedSources.clear();renderCards();const timer=setTimeout(()=>abort.abort(),20000),runId=++localAttempt;
- localLifecycle('research',runId,'started');
+ activeResearchAttempt=runId;localLifecycle('research',runId,'started');
  try{
   const {cards:found,failed,successful,timedOut}=await L.researchPlan(provider,query,lang,abort.signal,(completed,total)=>{
    if(scope===epoch&&total>1)$('research-status').textContent=t('researchProgress')+' · '+completed+'/'+total;
@@ -66,15 +70,15 @@ $('research-run').onclick=async()=>{
   $('research-status').textContent=timedOut?t('researchTimeLimit'):!successful?t('researchFailed'):
    failed.length?t('researchPartial')+failed.join(', '):cards.length?'':t('researchEmpty');
   localLifecycle('research',runId,!successful?'failed':timedOut||failed.length?'partial':'succeeded');
- }catch(error){if(scope===epoch){$('research-status').textContent=t(error?.message==='query-plan'?'researchInvalidPlan':'researchFailed');localLifecycle('research',runId,'failed')}}finally{clearTimeout(timer);if(scope===epoch){searchController=null;$('research-run').disabled=false;$('research-stop').disabled=true}}
+ }catch(error){if(scope===epoch){$('research-status').textContent=t(error?.message==='query-plan'?'researchInvalidPlan':'researchFailed');localLifecycle('research',runId,'failed')}}finally{clearTimeout(timer);if(scope===epoch){activeResearchAttempt=null;searchController=null;$('research-run').disabled=false;$('research-stop').disabled=true}}
 };
 $('research-stop').onclick=cancel;
 for(const id of ['code','code-input'])$(id).addEventListener('input',()=>{cancel();result=null;$('code-result').textContent='';$('code-console').textContent=''});
 $('code-sample').onclick=()=>{if($('code').value&&!confirm(t('discard')))return;cancel();result=null;$('code-result').textContent='';$('code-console').textContent='';$('code-input').value='{"values":[3,5,2]}';$('code').value="const data = JSON.parse(input);\nconst values = data.values;\nconsole.log({count: values.length, sum: values.reduce((a,b)=>a+b, 0)});\nreturn {type:'bar', title:'Local calculation', labels: values.map((_,i)=>String(i+1)), values};";renderStorage()};
 $('code-run').onclick=async()=>{
  if(!$('code-consent').checked||codeController)return;const scope=epoch,abort=new AbortController();codeController=abort;$('code-consent').checked=false;$('code-run').disabled=true;$('code-stop').disabled=false;$('code-status').textContent=t('codeWorking');$('code-console').textContent='';$('code-result').textContent='';result=null;
- const runId=++localAttempt;localLifecycle('code',runId,'started');
- try{const text=await run.run($('code').value,$('code-input').value,{signal:abort.signal,onLog:line=>{if(scope===epoch)$('code-console').textContent+=line+'\n'}});if(scope!==epoch)return;result=text;$('code-result').textContent=text;$('code-status').textContent='';localLifecycle('code',runId,'succeeded')}catch{if(scope===epoch){$('code-status').textContent=t('codeFailed');localLifecycle('code',runId,'failed')}}finally{if(scope===epoch){codeController=null;$('code-run').disabled=false;$('code-stop').disabled=true}}
+ const runId=++localAttempt;activeCodeAttempt=runId;localLifecycle('code',runId,'started');
+ try{const text=await run.run($('code').value,$('code-input').value,{signal:abort.signal,onLog:line=>{if(scope===epoch)$('code-console').textContent+=line+'\n'}});if(scope!==epoch)return;result=text;$('code-result').textContent=text;$('code-status').textContent='';localLifecycle('code',runId,'succeeded')}catch{if(scope===epoch){$('code-status').textContent=t('codeFailed');localLifecycle('code',runId,'failed')}}finally{if(scope===epoch){activeCodeAttempt=null;codeController=null;$('code-run').disabled=false;$('code-stop').disabled=true}}
 };
 $('code-stop').onclick=cancel;
 $('code-chat').onclick=()=>{if(result!==null)window.NexusStudioUI?.stageChatContext('Local code result · untrusted',result)};
