@@ -140,6 +140,9 @@ Object.assign(EN,{
  chatEpmcFound:'Exact quotation found in retrieved article body; this does NOT verify the claim.',
  chatEpmcAbsent:'Exact quotation was not found in retrieved article body; this does NOT disprove the claim.',
  chatEpmcArticle:'Article title (as supplied by API)',
+ chatEpmcType:'Article type as deposited (not independently checked)',
+ chatEpmcSections:'Possible matching section headings (not a support verdict)',
+ chatEpmcDtd:'XML declaration handling (no DTD loaded)',
  chatEpmcCount:'Number of literal matches (capped)',
  chatEpmcBodySize:'Normalized body length',
  chatEpmcHash:'SHA-256 of fetched XML bytes',
@@ -157,6 +160,9 @@ Object.assign(FA,{
  chatEpmcFound:'نقل‌قول دقیق در بدنهٔ مقالهٔ دریافت‌شده یافت شد؛ این صحت ادعا را تأیید نمی‌کند.',
  chatEpmcAbsent:'نقل‌قول دقیق در متن دریافت‌شده یافت نشد؛ این ادعا را رد نمی‌کند.',
  chatEpmcArticle:'عنوان مقاله طبق سرویس',
+ chatEpmcType:'نوع مقاله مطابق فرادادهٔ منبع (تأییدنشده)',
+ chatEpmcSections:'سرعنوان‌های احتمالیِ شامل نقل‌قول (نه تأیید ادعا)',
+ chatEpmcDtd:'نحوهٔ پردازش اعلان XML (بدون بارگیری DTD)',
  chatEpmcCount:'تعداد تطبیق‌های لفظی (محدود)',
  chatEpmcBodySize:'طول بدنهٔ متنی همسان‌سازی‌شده',
  chatEpmcHash:'هش SHA-256 بایت‌های XML',
@@ -628,7 +634,11 @@ function renderMessage(n){
         if(controller.signal.aborted||!panel.isConnected)return;
         epmcStatus.textContent=t(receipt.match_count?'chatEpmcFound':'chatEpmcAbsent');
         for(const [key,value] of [
-         ['chatEpmcArticle',receipt.article_title],['chatEpmcCount',String(receipt.match_count)],
+         ['chatEpmcArticle',receipt.article_title],
+         ['chatEpmcType',receipt.article_type_as_deposited],
+         ['chatEpmcSections',receipt.matching_section_headings.join(' · ')],
+         ['chatEpmcDtd',receipt.doctype_handling],
+         ['chatEpmcCount',String(receipt.match_count)],
          ['chatEpmcBodySize',String(receipt.body_character_count)],
          ['chatEpmcHash',receipt.response_sha256],['chatEpmcBytes',String(receipt.response_bytes)],
          ['chatEpmcDate',receipt.fetched_at_client_clock]
