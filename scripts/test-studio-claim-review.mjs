@@ -203,7 +203,7 @@ for(const badId of ['PM12345','PMC0','PMC001','PMC1/../../','https://www.ebi.ac.
  assert.throws(()=>R.planEuropePmcFullText(sample,'c1',badId,epmcQuote),/epmc-pmcid/);
 }
 assert.throws(()=>R.planEuropePmcFullText(sample,'c1','PMC123456','short'),/epmc-quote/);
-assert.throws(()=>R.planEuropePmcFullText(sample,'c9','PMC123456',epmcQuote),/claim-evidence-id/);
+assert.throws(()=>R.planEuropePmcFullText(sample,'c9','PMC123456',epmcQuote),/claim-evidence-input/);
 const xml='<article><front><article-meta><article-id pub-id-type="pmc">123456</article-id>'+
  '<title-group><article-title>Fake <b>Story</b></article-title></title-group></article-meta></front>'+
  '<body><sec><p>Introduction. '+epmcQuote+'</p></sec></body></article>';
