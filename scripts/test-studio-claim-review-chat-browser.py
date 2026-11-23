@@ -15,11 +15,26 @@ window.addEventListener('load',async()=>{
  const change=(id,value)=>{$(id).value=value;$(id).dispatchEvent(new Event('change',{bubbles:true}))};
  const wait=async fn=>{for(let i=0;i<300;i++){if(fn())return;await new Promise(r=>setTimeout(r,15))}throw Error('wait-timeout')};
  const fingerprint='f'.repeat(64),token='github_pat_'+'A'.repeat(40);
- let discovery=0,sends=0,allRequests=0;
+ let discovery=0,sends=0,allRequests=0,crossrefCalls=0,lastCrossrefSignal=null;
  window.confirm=()=>true;
  window.fetch=async(url,opts={})=>{
   allRequests++;
   const target=String(url);
+  if(target.startsWith('https://api.crossref.org/works/')){
+   crossrefCalls++;lastCrossrefSignal=opts.signal;
+   ok(opts.credentials==='omit'&&opts.redirect==='error'&&opts.mode==='cors'&&
+      opts.referrerPolicy==='no-referrer'&&opts.cache==='no-store'&&opts.method==='GET',
+      'crossref-privacy-preserving-transport');
+   const doi=decodeURIComponent(target.slice('https://api.crossref.org/works/'.length));
+   if(doi==='10.5555/slow-request')
+    return new Promise((resolve,reject)=>opts.signal.addEventListener('abort',
+     ()=>reject(Error('synthetic-aborted')),{once:true}));
+   const body=JSON.stringify({message:{DOI:doi,title:['Synthetic <b>citation</b>'],
+     publisher:'Synthetic Depositor',published:{'date-parts':[[2025,5,6]]}}});
+   return {ok:true,status:200,url:target,
+     headers:new Headers({'content-type':'application/vnd.crossref-api-message+json'}),
+     body:new Response(body).body};
+  }
   if(target.endsWith('/studio-api/status')){discovery++;return Response.json({
     configured:true,model:'synthetic-provider',provider_host:'fixture.invalid',
     configuration_id:fingerprint,reply_receipt_version:1,authority:'none'})}
@@ -57,6 +72,29 @@ window.addEventListener('load',async()=>{
    writeText:async text=>{copied=text}
   }});
   ok(!!source&&!!date&&!!note&&!!assessment&&!!save,'per-claim-manual-evidence-inputs');
+  const doiInput=panel.querySelector('[data-claim-crossref-doi]');
+  const crossrefButton=panel.querySelector('[data-claim-crossref-fetch]');
+  const metadata=panel.querySelector('[data-claim-crossref-result]');
+  ok(!!doiInput&&!!crossrefButton&&!!metadata,'crossref-metadata-is-separate-action');
+  doiInput.value='10.5555/synthetic-2025';
+  let crossrefConsent=0,preCrossref=allRequests;
+  window.confirm=()=>{crossrefConsent++;return false};
+  crossrefButton.click();
+  await new Promise(r=>setTimeout(r,40));
+  ok(crossrefConsent===1&&allRequests===preCrossref&&crossrefCalls===0,
+    'crossref-requires-explicit-confirmation');
+  window.confirm=()=>{crossrefConsent++;return true};
+  crossrefButton.click();
+  await wait(()=>metadata.textContent.includes('Synthetic <b>citation</b>'));
+  ok(crossrefCalls===1&&crossrefConsent===2&&allRequests===preCrossref+1,
+    'crossref-only-after-consent');
+  ok(metadata.textContent.includes('claim_verified=false')&&
+     /^[a-f0-9]{64}$/.test(metadata.textContent.match(/[a-f0-9]{64}/)?.[0]||'')&&
+     !JSON.stringify(NexusStudioUI.snapshot()).includes('Synthetic Depositor'),
+     'digest-metadata-inert-and-never-saved-to-chat');
+  ok(!metadata.querySelector('b'),'crossref-api-title-cannot-render-html');
+  before=allRequests;
+
   const opens=[],openButton=panel.querySelector('[data-claim-source-open]');
   const beforeOpen=allRequests;
   let navConfirm=0;
@@ -122,7 +160,11 @@ window.addEventListener('load',async()=>{
      !copied.includes('Extra text only in the pasted source.'),
      'copied-report-traces-quotation-but-omits-source-document');
   ok(allRequests===before,'manual-annotation-and-copy-never-fetch-external-source');
+  // An outstanding DOI request must abort when the reviewer closes the panel.
+  doiInput.value='10.5555/slow-request';window.confirm=()=>true;
+  crossrefButton.click();await wait(()=>crossrefCalls===2);
   button.click();ok(!$('messages').querySelector('.claim-review-panel'),'panel-closes-without-mutation');
+  ok(lastCrossrefSignal?.aborted,'review-close-aborts-inflight-metadata-fetch');
   button.click();
   ok(!$('messages').querySelector('.claim-review-panel').textContent.includes('human-only-source'),
    'closing-panel-discards-manual-notes');
