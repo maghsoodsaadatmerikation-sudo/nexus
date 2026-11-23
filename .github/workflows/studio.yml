@@ -60,6 +60,8 @@ jobs:
           node scripts/test-studio-sky.mjs
           node scripts/test-studio-astrology.mjs
           node scripts/test-studio-core.mjs
+          node --check web/studio-claim-review.js
+          node scripts/test-studio-claim-review.mjs
           node scripts/test-studio-chat-attachments.mjs
           node scripts/test-studio-source-imports.mjs
           node scripts/test-studio-storage.mjs
