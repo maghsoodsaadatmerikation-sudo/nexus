@@ -280,6 +280,19 @@ function openReviewedSurface(result,message){
  }else window.NexusStudioFocus?.openPanel(panel);
  return true;
 }
+function workflowReport(){
+ if(!retainedWorkflow())return null;
+ return {
+  schema:'nexus.workflow-review.v1',authority:'none',
+  evidence:'tab-local-ui-and-human-acknowledgment-not-independent-proof',
+  complete:workflowState.index===workflowState.steps.length,
+  steps:workflowState.steps.map(step=>({
+   command:step.result.route[0],request:step.line,
+   opened:step.opened===true,acknowledged_by_user:step.acknowledged===true,
+   local_ui_outcome:step.observed||null
+  }))
+ };
+}
 function showWorkflow(){
  if(!workflowState)return;
  workflow.hidden=false;workflow.replaceChildren();
@@ -287,8 +300,8 @@ function showWorkflow(){
  title.textContent=words('Your reviewed workflow','گردش‌کار قابل بازبینی');
  const info=document.createElement('p');info.className='help';
  info.textContent=words(
-  'Temporary checklist only. Opening a step does not run it. Mark each step done yourself after completing it in the separate tool.',
-  'فهرست موقت است. بازکردن هر گام آن را اجرا نمی‌کند. پس از انجام کار در ابزار مربوطه، گام را خودت تکمیل‌شده علامت بزن.');
+  'Opening a step does not run it. Local code and research can show a tab-observed outcome, not independent proof. Progress still requires your acknowledgment.',
+  'بازکردن گام آن را اجرا نمی‌کند. نتیجهٔ اجرای کد و پژوهش فقط در همین برگه مشاهده می‌شود، نه به‌عنوان مدرک مستقل. پیشرفت همچنان به تأیید شما نیاز دارد.');
  const list=document.createElement('ol');
  workflowState.steps.forEach((step,i)=>{
   const item=document.createElement('li'),span=document.createElement('span');
@@ -299,6 +312,18 @@ function showWorkflow(){
   const boundary=document.createElement('small');boundary.className='help';
   boundary.textContent=' · '+toolBoundary(step.result.route[0]);
   item.append(boundary);
+  if(step.observed){
+   const observation=document.createElement('small');observation.className='help';
+   const phase=step.observed;
+   observation.textContent=' · '+(phase==='started'?
+    words('Local tool started (awaiting result)','ابزار محلی شروع شد (در انتظار نتیجه)'):
+    phase==='succeeded'?
+    words('Local UI reported success · not independent proof','رابط محلی موفقیت را گزارش کرد؛ مدرک مستقل نیست'):
+    phase==='partial'?
+    words('Local UI reported partial result · not verified','رابط محلی نتیجهٔ ناقص گزارش کرد؛ راستی‌آزمایی نشده'):
+    words('Local UI reported failure · do not treat as success','رابط محلی شکست را گزارش کرد؛ موفقیت محسوب نمی‌شود'));
+   item.append(observation);
+  }
   if(i===workflowState.index){
    const open=document.createElement('button');open.type='button';open.className='secondary';
    open.textContent=words('Open tool for review','بازکردن ابزار برای بازبینی');
@@ -306,16 +331,18 @@ function showWorkflow(){
     if(!retainedWorkflow()){clearWorkflow();return}
     if(!validWorkflow())return;
     if(openReviewedSurface(step.result,step.line)){
-     workflowState.opened=true;showWorkflow();
+     workflowState.opened=true;step.opened=true;showWorkflow();
     }
    };
    const done=document.createElement('button');done.type='button';done.className='secondary';
-   done.textContent=words('I completed this step','این گام را انجام دادم');
+   done.textContent=step.observed==='failed'?
+    words('Acknowledge failure and continue','ثبت شکست و ادامه'):
+    words('I reviewed this step · continue','این گام را بازبینی کردم؛ ادامه');
    done.disabled=!workflowState.opened;
    done.onclick=()=>{
     if(!retainedWorkflow()){clearWorkflow();return}
     if(!validWorkflow()||!workflowState.opened)return;
-    workflowState.index++;workflowState.opened=false;showWorkflow();
+    step.acknowledged=true;workflowState.index++;workflowState.opened=false;showWorkflow();
    };
    item.append(open,done);
   }
@@ -332,14 +359,42 @@ function showWorkflow(){
   workflow.append(note);
  }
  workflow.append(cancel);
+ const exportButton=document.createElement('button');exportButton.type='button';
+ exportButton.className='secondary';exportButton.dataset.workflowReport='true';
+ exportButton.textContent=words('Download review report','دریافت گزارش بازبینی');
+ exportButton.onclick=()=>{
+  const record=workflowReport();
+  if(!record||!confirm(words(
+   'Download an unencrypted report containing your workflow commands and local status? This is not verified execution evidence.',
+   'گزارش بدون رمزگذاری شامل فرمان‌های گردش‌کار و وضعیت محلی دریافت شود؟ این مدرک اجرای تأییدشده نیست.')))return;
+  download(JSON.stringify(record,null,2),'nexus-workflow-review.json','application/json');
+ };
+ workflow.append(exportButton);
 }
 function reviewWorkflow(message){
  closeDirectory();clearOffer();
  const parsed=parseWorkflow(message);
  if(parsed.error){workflowError(parsed.error);return}
- workflowState={draft:message,scope:workflowScope(),steps:parsed.steps,index:0,opened:false};
+ workflowState={draft:message,scope:workflowScope(),steps:parsed.steps.map(step=>({
+  ...step,opened:false,acknowledged:false,runId:null,observed:null
+ })),index:0,opened:false};
  showWorkflow();
 }
+// These UI events come from local tool controllers after an explicitly
+// consented action; they are not authorization tokens or signed attestations.
+document.addEventListener('nexus-studio-local-tool-lifecycle',event=>{
+ if(!retainedWorkflow()||!workflowState.opened)return;
+ const detail=event.detail;
+ if(!detail||!['code','research'].includes(detail.tool)||
+    !Number.isSafeInteger(detail.runId)||detail.runId<1||
+    !['started','succeeded','partial','failed'].includes(detail.phase))return;
+ const step=workflowState.steps[workflowState.index];
+ if(!step||step.result.route[0]!==detail.tool)return;
+ if(detail.phase==='started'){step.runId=detail.runId;step.observed='started'}
+ else if(step.runId===detail.runId&&step.observed==='started')step.observed=detail.phase;
+ else return;
+ showWorkflow();
+});
 
 let offeredDraft=null;
 function clearOffer(){
