@@ -289,15 +289,26 @@ assert.equal(differentIdentifiers.retraction_status_verified,false);
 assert.equal(differentIdentifiers.claim_verified,false);
 assert.equal(differentIdentifiers.authority,'none');
 assert(Object.isFrozen(differentIdentifiers));
-const identicalIdentifiers=R.compareCitationIdentifiers(sample,'c1',crossrefReceipt,{
- ...pmcReceipt,article_doi_as_deposited:doi
+// Genuine receipts must be minted by a consented read, not produced by object spreads.
+const issueArticleReceipt=async articleDoi=>R.lookupEuropePmcFullText(sample,'c1','PMC123456',epmcQuote,{
+ consent:true,fetcher:async()=>pmcReply(),cryptoProvider:webcrypto,
+ xmlParser:{parseFromString(){return {...parsedMock,querySelectorAll(selector){
+  if(selector==='article-meta > article-id[pub-id-type="doi"]')
+   return articleDoi?[{textContent:articleDoi}]:[];
+  return parsedMock.querySelectorAll(selector);
+ }}}}
 });
+const matchedArticle=await issueArticleReceipt(doi);
+const identicalIdentifiers=R.compareCitationIdentifiers(sample,'c1',crossrefReceipt,matchedArticle);
 assert.equal(identicalIdentifiers.comparison,'same-deposited-identifier');
 assert.equal(identicalIdentifiers.same_publication_verified,false);
-const unavailableIdentifiers=R.compareCitationIdentifiers(sample,'c1',crossrefReceipt,{
- ...pmcReceipt,article_doi_as_deposited:''
-});
+const unavailableArticle=await issueArticleReceipt('');
+const unavailableIdentifiers=R.compareCitationIdentifiers(sample,'c1',crossrefReceipt,unavailableArticle);
 assert.equal(unavailableIdentifiers.comparison,'article-doi-unavailable');
+assert.throws(()=>R.compareCitationIdentifiers(sample,'c1',{...crossrefReceipt},matchedArticle),/citation-compare-receipts/);
+assert.throws(()=>R.compareCitationIdentifiers(sample,'c1',crossrefReceipt,{...matchedArticle}),/citation-compare-receipts/);
+// Even a frozen, field-for-field clone is not an authentic in-memory receipt.
+assert.throws(()=>R.compareCitationIdentifiers(sample,'c1',crossrefReceipt,Object.freeze({...matchedArticle})),/citation-compare-receipts/);
 const ambiguousIdentifiers=R.compareCitationIdentifiers(sample,'c1',crossrefReceipt,ambiguous);
 assert.equal(ambiguousIdentifiers.comparison,'ambiguous-article-doi');
 for(const [badCrossref,badArticle] of [
