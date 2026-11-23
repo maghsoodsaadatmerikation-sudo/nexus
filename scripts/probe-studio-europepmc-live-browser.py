@@ -24,7 +24,8 @@ def main():
         parser.error('Live network probe is disabled unless --live is explicitly passed')
     if not re.fullmatch(r'PMC[1-9][0-9]{0,9}',args.pmcid):
         parser.error('PMCID must match PMC followed by 1-10 decimal digits')
-    if not shutil.which('chromium') and not shutil.which('google-chrome'):
+    browser=shutil.which('chromium') or shutil.which('google-chrome')
+    if not browser:
         parser.error('Chromium or google-chrome is required')
     module=(ROOT/'web/studio-claim-review.js').read_text(encoding='utf-8')
     pmcid=json.dumps(args.pmcid)
@@ -65,7 +66,7 @@ def main():
         location=Path(td)/'probe.html'
         location.write_text(html,encoding='utf-8')
         command=['node',str(ROOT/'scripts/workspace-browser-runner.mjs'),
-                 'chromium',location.as_uri(),str(Path(td)/'report'),
+                 browser,location.as_uri(),str(Path(td)/'report'),
                  '1280,900','45000','16000']
         proc=subprocess.run(command,capture_output=True,text=True,timeout=80)
         if proc.returncode:
