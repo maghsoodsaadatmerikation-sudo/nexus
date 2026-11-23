@@ -184,7 +184,7 @@ window.addEventListener('load',async()=>{
   assert(formatted.querySelector('h3').textContent==='Synthetic answer'&&formatted.querySelector('p strong').textContent==='carefully'&&
    formatted.querySelector('p code').textContent==='sample()'&&formatted.querySelector('p em').textContent==='context',
    'finished-reply-displays-headings-and-inline-formatting');
-  assert(formatted.querySelectorAll('ul > li').length===2&&formatted.querySelector('ol').start===3&&
+  assert(formatted.querySelector('ul').querySelectorAll(':scope > li').length===2&&formatted.querySelector('ol').start===3&&
    formatted.querySelector('blockquote').textContent==='An attributed quote','finished-reply-displays-lists-and-quotations');
   assert(formatted.querySelector('p del')?.textContent==='obsolete'&&
    formatted.querySelectorAll('ul input[type="checkbox"]').length===2&&
