@@ -98,6 +98,38 @@ Object.assign(FA,{
  chatSourceOpenInvalid:'فقط نشانی HTTPS با دامنهٔ عمومی‌نما و درگاه استاندارد در این قسمت پذیرفته می‌شود. نشانی را شخصاً بررسی کنید.',
  chatSourceOpenBlocked:'احتمال وجود کلید محرمانه؛ بازکردن وب‌سایت متوقف شد.'
 });
+Object.assign(EN,{
+ chatCrossrefLabel:'DOI for Crossref citation metadata (10.xxxx/...)',
+ chatCrossrefFetch:'Retrieve Crossref citation metadata',
+ chatCrossrefConfirm:'Send only this DOI to the Crossref REST API? The provider will learn the DOI and your connection IP. No claim text or private notes are sent. DOI: ',
+ chatCrossrefPending:'Requesting Crossref metadata with your consent…',
+ chatCrossrefFailed:'Crossref metadata was not retrieved. The DOI may be absent, the browser may block CORS, or the request may have failed. No claim was verified.',
+ chatCrossrefSuccess:'Crossref-deposited metadata received. The publisher, article text and claim have NOT been independently verified.',
+ chatCrossrefDOI:'Returned DOI',
+ chatCrossrefTitle:'Deposited title',
+ chatCrossrefPublisher:'Deposited publisher',
+ chatCrossrefDate:'Deposited date (not independently checked)',
+ chatCrossrefHash:'SHA-256 of exact API response',
+ chatCrossrefTimestamp:'Browser-clock receipt time',
+ chatCrossrefBytes:'Response bytes',
+ chatCrossrefAbort:'Request cancelled or review closed.'
+});
+Object.assign(FA,{
+ chatCrossrefLabel:'شناسهٔ DOI برای دریافت فرادادهٔ کتاب‌شناختی کراس‌رف (10.xxxx/...)',
+ chatCrossrefFetch:'دریافت فرادادهٔ ارجاع از Crossref',
+ chatCrossrefConfirm:'فقط همین DOI به API کراس‌رف ارسال شود؟ این سرویس از DOI و نشانی IP اتصال شما آگاه خواهد شد. متن ادعا یا یادداشت خصوصی ارسال نمی‌شود. DOI: ',
+ chatCrossrefPending:'درخواست فراداده با اجازهٔ شما در حال انجام است…',
+ chatCrossrefFailed:'فراداده دریافت نشد. احتمال نبود شناسه، محدودیت CORS مرورگر یا شکست درخواست وجود دارد. هیچ ادعایی تأیید نشده است.',
+ chatCrossrefSuccess:'فرادادهٔ ثبت‌شده در کراس‌رف دریافت شد؛ ناشر، متن مقاله و ادعا مستقلاً تأیید نشده‌اند.',
+ chatCrossrefDOI:'DOI بازگشتی',
+ chatCrossrefTitle:'عنوان ثبت‌شده',
+ chatCrossrefPublisher:'ناشر ثبت‌شده',
+ chatCrossrefDate:'تاریخ ثبت‌شده (بررسی‌نشده)',
+ chatCrossrefHash:'هش SHA-256 پاسخ دقیق API',
+ chatCrossrefTimestamp:'زمان رسید طبق ساعت مرورگر',
+ chatCrossrefBytes:'حجم پاسخ (بایت)',
+ chatCrossrefAbort:'درخواست لغو شد یا پنل بسته شد.'
+});
 Object.assign(EN,{chatReviewClaims:'Review claims',chatReviewHide:'Hide claim review',chatReviewBlocked:'Possible credential detected. Claim review is blocked; no private value shown.',chatReviewDisclaimer:'Locally extracted candidates only — not checked or verified. Compare each statement with independent sources and dates.',chatReviewEmpty:'No candidates found. This does not establish accuracy.',chatReviewTruncated:'Only the first 12 candidates are shown.'});
 Object.assign(FA,{chatReviewClaims:'بررسی ادعاها',chatReviewHide:'بستن بررسی ادعاها',chatReviewBlocked:'احتمال وجود کلید محرمانه شناسایی شد؛ بررسی متوقف شد و مقدار محرمانه نمایش داده نمی‌شود.',chatReviewDisclaimer:'گزاره‌ها فقط به‌صورت محلی استخراج شده‌اند و تأیید نشده‌اند. هر مورد را با منبع مستقل و تاریخ بررسی کنید.',chatReviewEmpty:'گزاره‌ای پیدا نشد؛ به معنی درستی متن نیست.',chatReviewTruncated:'فقط ۱۲ مورد نخست نمایش داده شده‌اند.'});
 Object.assign(EN,{chatAttachments:'Attach files to this message',chatAttachmentsHelp:'Up to four files. Text formats are limited to 128 KiB per file. Word (.docx) and PowerPoint (.pptx) files are limited to 2 MiB. Up to 20 slides are supported. Only text is extracted. Only short, clearly marked excerpts enter the exact reviewed model request. This is not image/PDF understanding. The original files are not stored in chat or archive; filenames are retained with your turn. Nothing is sent until you explicitly approve the model request.',chatAttachedDocument:'Include latest saved writing document as a temporary excerpt',chatClearAttachments:'Clear attachments',chatNoFiles:'No text files attached',chatAttachmentAdded:'Local files added to next reviewed model request.',chatAttachmentInvalid:'Could not read text files; check size, format and capacity.',chatAttachmentRequiresModel:'Attached file excerpts require a configured model request; the local guide cannot read them.',chatAttachedUsed:'One-turn excerpts supplied (not verified):',chatRegenRequiresFiles:'A response grounded in temporary files cannot be regenerated from the filenames alone. Edit the user message to a new branch and attach the files again.',chatFilesNotSaved:'Files are held only in this tab and their bytes are never saved to the chat archive.'});
@@ -392,6 +424,11 @@ function option(value,label){const o=el('option',label);o.value=value;return o}
 function fillProfile(){$('instructions').value=p()?.instructions||'';$('memories').value=p()?.memories.join('\n')||''}
 function fillDoc(){$('editor').value=doc()?.versions.at(-1)?.text||'';renderVersions()}
 function renderVersions(){const d=doc();$('versions').replaceChildren(...(d?.versions||[]).map((v,i)=>option(v.id,(i+1)+' · '+v.at)));$('versions').value=d?.versions.at(-1)?.id||'';$('version-diff').textContent=''}
+const crossrefReads=new Set();
+function cancelCrossrefReads(){
+ for(const ctrl of crossrefReads)ctrl.abort();
+ crossrefReads.clear();
+}
 let lastChatView;
 function messageOriginLabel(n){
  const ordinary=t(n.origin==='human'?'human':n.origin==='model'?'model':'local');
@@ -450,7 +487,7 @@ function renderMessage(n){
   review.type='button';review.className='secondary';review.dataset.chatReviewClaims='';
   review.onclick=()=>{
    const existing=item.querySelector('.claim-review-panel');
-   if(existing){existing.remove();review.textContent=t('chatReviewClaims');return}
+   if(existing){cancelCrossrefReads();existing.remove();review.textContent=t('chatReviewClaims');return}
    const panel=el('section','');panel.className='claim-review-panel';panel.setAttribute('aria-label',t('chatReviewClaims'));
    try{
     const report=NexusClaimReview.review(n.text);
@@ -487,6 +524,45 @@ function renderMessage(n){
        }
       };
       details.append(openSource,openStatus);
+      const doi=field(t('chatCrossrefLabel'),'input','claimCrossrefDoi');
+      doi.type='text';doi.maxLength=200;doi.autocomplete='off';doi.dir='ltr';
+      const fetchCitation=el('button',t('chatCrossrefFetch'));
+      fetchCitation.type='button';fetchCitation.className='secondary';fetchCitation.dataset.claimCrossrefFetch='';
+      const crossrefStatus=el('p','');crossrefStatus.className='help';
+      crossrefStatus.setAttribute('role','status');
+      const crossrefResult=el('div','');crossrefResult.dataset.claimCrossrefResult='';
+      fetchCitation.onclick=async()=>{
+       let plan;
+       try{plan=NexusClaimReview.planCrossrefLookup(n.text,claim.id,doi.value.trim())}
+       catch{crossrefStatus.textContent=t('chatCrossrefFailed');return}
+       if(!confirm(t('chatCrossrefConfirm')+plan.doi))return;
+       const controller=new AbortController();crossrefReads.add(controller);
+       fetchCitation.disabled=true;crossrefResult.replaceChildren();
+       crossrefStatus.textContent=t('chatCrossrefPending');
+       try{
+        const receipt=await NexusClaimReview.lookupCrossref(n.text,claim.id,plan.doi,{
+         consent:true,signal:controller.signal
+        });
+        if(controller.signal.aborted||!panel.isConnected)return;
+        crossrefStatus.textContent=t('chatCrossrefSuccess');
+        for(const [key,value] of [
+         ['chatCrossrefDOI',receipt.doi],['chatCrossrefTitle',receipt.title],
+         ['chatCrossrefPublisher',receipt.publisher],['chatCrossrefDate',receipt.deposited_publication_date],
+         ['chatCrossrefHash',receipt.response_sha256],['chatCrossrefTimestamp',receipt.fetched_at_client_clock],
+         ['chatCrossrefBytes',String(receipt.response_bytes)]
+        ]){
+         if(value)crossrefResult.append(el('p',t(key)+': '+value));
+        }
+        crossrefResult.append(el('small',receipt.content_scope+' · '+receipt.publisher_metadata+
+         ' · claim_verified=false · authority=none'));
+       }catch{
+        if(panel.isConnected)crossrefStatus.textContent=t(controller.signal.aborted?'chatCrossrefAbort':'chatCrossrefFailed');
+       }finally{
+        crossrefReads.delete(controller);
+        if(panel.isConnected)fetchCitation.disabled=false;
+       }
+      };
+      details.append(fetchCitation,crossrefStatus,crossrefResult);
       const date=field(t('chatEvidenceDate'),'input','claimEvidenceDate');
       date.type='date';
       const note=field(t('chatEvidenceNote'),'textarea','claimEvidenceNote');
@@ -563,6 +639,7 @@ function render(){
   b.disabled=busy;b.onclick=()=>openHistoryThread(h);$('history').append(b);
  }
  const stamp=projectId+':'+(p()?.sources||[]).map(s=>s.id).join(',');if(stamp!==sourceViewStamp){$('source-results').textContent='';sourceViewStamp=stamp}
+ cancelCrossrefReads();
  const c=chat();$('messages').replaceChildren(...(c?S.path(c).map(renderMessage):[el('p',t('empty'))]));
  const chatView=[projectId,threadId,c?.head].join(':');
  if(chatView!==lastChatView){
