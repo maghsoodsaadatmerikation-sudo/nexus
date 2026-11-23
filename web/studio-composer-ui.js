@@ -321,6 +321,8 @@ function showWorkflow(){
     words('Local UI reported success · not independent proof','رابط محلی موفقیت را گزارش کرد؛ مدرک مستقل نیست'):
     phase==='partial'?
     words('Local UI reported partial result · not verified','رابط محلی نتیجهٔ ناقص گزارش کرد؛ راستی‌آزمایی نشده'):
+    phase==='cancelled'?
+    words('Local execution cancelled · no result','اجرای محلی لغو شد؛ نتیجه‌ای ثبت نشد'):
     words('Local UI reported failure · do not treat as success','رابط محلی شکست را گزارش کرد؛ موفقیت محسوب نمی‌شود'));
    item.append(observation);
   }
@@ -335,7 +337,7 @@ function showWorkflow(){
     }
    };
    const done=document.createElement('button');done.type='button';done.className='secondary';
-   done.textContent=step.observed==='failed'?
+   done.textContent=['failed','cancelled','partial'].includes(step.observed)?
     words('Acknowledge failure and continue','ثبت شکست و ادامه'):
     words('I reviewed this step · continue','این گام را بازبینی کردم؛ ادامه');
    done.disabled=!workflowState.opened;
@@ -387,7 +389,7 @@ document.addEventListener('nexus-studio-local-tool-lifecycle',event=>{
  const detail=event.detail;
  if(!detail||!['code','research'].includes(detail.tool)||
     !Number.isSafeInteger(detail.runId)||detail.runId<1||
-    !['started','succeeded','partial','failed'].includes(detail.phase))return;
+    !['started','succeeded','partial','failed','cancelled'].includes(detail.phase))return;
  const step=workflowState.steps[workflowState.index];
  if(!step||step.result.route[0]!==detail.tool)return;
  if(detail.phase==='started'){step.runId=detail.runId;step.observed='started'}
