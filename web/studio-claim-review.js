@@ -389,6 +389,54 @@ async function lookupEuropePmcFullText(answer,claimId,pmcid,quotation,{
   claim_verified:false,authority:'none'
  });
 }
+// Local, human-requested comparison of two separately consented metadata receipts.
+// A matching identifier is never scientific verification or independent provenance.
+function compareCitationIdentifiers(answer,claimId,crossref,article){
+ const selected=recordEvidence(answer,claimId,{});
+ const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+ if(!object(crossref)||!object(article)||
+    crossref.schema!=='nexus.crossref-metadata-receipt.v1'||
+    article.schema!=='nexus.epmc-open-text-receipt.v1'||
+    crossref.claim_id!==selected.claim_id||article.claim_id!==selected.claim_id||
+    crossref.source_retrieved!==true||article.source_retrieved!==true||
+    crossref.claim_verified!==false||article.claim_verified!==false||
+    crossref.authority!=='none'||article.authority!=='none'||
+    crossref.publisher_verified!==false||article.retraction_status_verified!==false||
+    crossref.retrieval!=='consented-browser-CORS'||article.retrieval!=='consented-browser-CORS'||
+    crossref.content_scope!=='Crossref-bibliographic-metadata-only'||
+    article.content_scope!=='bounded-Europe-PMC-XML-article-body')
+  throw Error('citation-compare-receipts');
+ let crossrefPlan;
+ try{crossrefPlan=planCrossrefLookup(answer,claimId,crossref.doi)}
+ catch{throw Error('citation-compare-receipts')}
+ if(crossrefPlan.doi!==crossref.doi||crossref.response_url!==crossrefPlan.url||
+    typeof article.pmcid!=='string'||!/^PMC[1-9][0-9]{0,9}$/.test(article.pmcid)||
+    article.source_url!=='https://www.ebi.ac.uk/europepmc/webservices/rest/'+article.pmcid+'/fullTextXML'||
+    !/^[a-f0-9]{64}$/.test(crossref.response_sha256||'')||
+    !/^[a-f0-9]{64}$/.test(article.response_sha256||'')||
+    !Number.isInteger(crossref.response_bytes)||crossref.response_bytes<1||
+    crossref.response_bytes>CROSSREF_MAX_BYTES||
+    !Number.isInteger(article.response_bytes)||article.response_bytes<1||
+    article.response_bytes>EPMC_MAX_BYTES||
+    typeof article.article_doi_ambiguous!=='boolean'||
+    typeof article.article_doi_as_deposited!=='string'||
+    (article.article_doi_ambiguous&&article.article_doi_as_deposited))
+  throw Error('citation-compare-receipts');
+ const deposited=article.article_doi_as_deposited;
+ if(deposited&&!/^10\.[0-9]{4,9}\/[a-z0-9._;():+\/-]{1,180}$/.test(deposited))
+  throw Error('citation-compare-receipts');
+ const status=article.article_doi_ambiguous?'ambiguous-article-doi':
+  !deposited?'article-doi-unavailable':
+  deposited===crossref.doi?'same-deposited-identifier':'different-deposited-identifiers';
+ return Object.freeze({
+  schema:'nexus.citation-identifier-comparison.v1',claim_id:selected.claim_id,
+  crossref_doi:crossref.doi,article_doi:deposited,article_pmcid:article.pmcid,
+  comparison:status,comparison_scope:'exact-deposited-doi-text-only',
+  network_requests:0,extra_provider_disclosure:false,
+  same_publication_verified:false,publisher_verified:false,
+  retraction_status_verified:false,claim_verified:false,authority:'none'
+ });
+}
 function evidenceReport(answer,entries,language='en'){
  if(!['en','fa'].includes(language)||!Array.isArray(entries)||entries.length>MAX_CLAIMS)
   throw Error('claim-evidence-report');
@@ -440,5 +488,5 @@ function evidenceReport(answer,entries,language='en'){
  }
  return lines.join('\n');
 }
-root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,MAX_QUOTATION,MAX_SOURCE_TEXT,CROSSREF_MAX_BYTES,EPMC_MAX_BYTES,review,checklist,recordEvidence,locateQuote,planSourceOpen,planCrossrefLookup,lookupCrossref,planEuropePmcFullText,lookupEuropePmcFullText,evidenceReport});
+root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,MAX_QUOTATION,MAX_SOURCE_TEXT,CROSSREF_MAX_BYTES,EPMC_MAX_BYTES,review,checklist,recordEvidence,locateQuote,planSourceOpen,planCrossrefLookup,lookupCrossref,planEuropePmcFullText,lookupEuropePmcFullText,compareCitationIdentifiers,evidenceReport});
 })(globalThis);

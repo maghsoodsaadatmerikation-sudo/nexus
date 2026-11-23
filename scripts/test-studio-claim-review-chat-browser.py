@@ -155,6 +155,33 @@ window.addEventListener('load',async()=>{
      'article-body-and-markup-not-leaked-or-rendered');
   ok(!JSON.stringify(NexusStudioUI.snapshot()).includes('Invented Scientific study'),
      'article-review-not-persisted-in-archive');
+  const compareButton=panel.querySelector('[data-claim-citation-compare]');
+  const compareStatus=panel.querySelector('[data-claim-citation-result]');
+  ok(!!compareButton&&!!compareStatus&&!compareButton.disabled,
+     'local-identifier-comparison-available-only-after-two-consented-receipts');
+  let beforeCompare=allRequests;
+  compareButton.click();
+  ok(compareStatus.textContent.includes('different DOI values')&&
+     compareStatus.textContent.includes('no new requests')&&allRequests===beforeCompare,
+     'local-crossref-epmc-mismatch-disclosed-without-network');
+  doiInput.value='10.1234/fictional-study.2025';
+  doiInput.dispatchEvent(new Event('input',{bubbles:true}));
+  ok(compareButton.disabled&&compareStatus.textContent==='',
+     'editing-doi-revokes-previous-comparison');
+  window.confirm=()=>true;
+  crossrefButton.click();
+  await wait(()=>crossrefCalls===2&&!crossrefButton.disabled);
+  ok(!compareButton.disabled,'both-retrieved-receipts-required-again');
+  beforeCompare=allRequests;
+  compareButton.click();
+  ok(compareStatus.textContent.includes('same DOI text')&&
+     compareStatus.textContent.includes('scientific accuracy')&&allRequests===beforeCompare,
+     'matching-deposited-dois-never-certified-as-scientific-proof');
+  epmcQuoteInput.value='An altered quotation that has not yet been retrieved by the article lookup.';
+  compareButton.click();
+  ok(compareStatus.textContent.includes('Cannot compare these records safely.')&&
+     allRequests===beforeCompare,'changed-quotation-needs-new-source-review');
+
   pmcidInput.value='PMC1234567';
   epmcQuoteInput.value='A different sentence that was never inside this open article.';
   articleButton.click();

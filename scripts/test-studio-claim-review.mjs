@@ -279,6 +279,40 @@ const ambiguous=await R.lookupEuropePmcFullText(sample,'c1','PMC123456',epmcQuot
 assert.equal(ambiguous.article_doi_as_deposited,'');
 assert.equal(ambiguous.article_doi_ambiguous,true);
 assert.equal(ambiguous.claim_verified,false);
+const differentIdentifiers=R.compareCitationIdentifiers(sample,'c1',crossrefReceipt,pmcReceipt);
+assert.equal(differentIdentifiers.schema,'nexus.citation-identifier-comparison.v1');
+assert.equal(differentIdentifiers.comparison,'different-deposited-identifiers');
+assert.equal(differentIdentifiers.network_requests,0);
+assert.equal(differentIdentifiers.extra_provider_disclosure,false);
+assert.equal(differentIdentifiers.same_publication_verified,false);
+assert.equal(differentIdentifiers.retraction_status_verified,false);
+assert.equal(differentIdentifiers.claim_verified,false);
+assert.equal(differentIdentifiers.authority,'none');
+assert(Object.isFrozen(differentIdentifiers));
+const identicalIdentifiers=R.compareCitationIdentifiers(sample,'c1',crossrefReceipt,{
+ ...pmcReceipt,article_doi_as_deposited:doi
+});
+assert.equal(identicalIdentifiers.comparison,'same-deposited-identifier');
+assert.equal(identicalIdentifiers.same_publication_verified,false);
+const unavailableIdentifiers=R.compareCitationIdentifiers(sample,'c1',crossrefReceipt,{
+ ...pmcReceipt,article_doi_as_deposited:''
+});
+assert.equal(unavailableIdentifiers.comparison,'article-doi-unavailable');
+const ambiguousIdentifiers=R.compareCitationIdentifiers(sample,'c1',crossrefReceipt,ambiguous);
+assert.equal(ambiguousIdentifiers.comparison,'ambiguous-article-doi');
+for(const [badCrossref,badArticle] of [
+ [{...crossrefReceipt,authority:'verified'},pmcReceipt],
+ [crossrefReceipt,{...pmcReceipt,claim_id:'c2'}],
+ [crossrefReceipt,{...pmcReceipt,retraction_status_verified:true}],
+ [{...crossrefReceipt,response_sha256:'invalid'},pmcReceipt],
+ [crossrefReceipt,{...pmcReceipt,article_doi_ambiguous:true}],
+ [crossrefReceipt,{...pmcReceipt,article_doi_as_deposited:'javascript:bad'}],
+ [{...crossrefReceipt,response_url:'https://host.invalid'},pmcReceipt]
+ ]){
+ assert.throws(()=>R.compareCitationIdentifiers(sample,'c1',badCrossref,badArticle),/citation-compare-receipts/);
+}
+assert.throws(()=>R.compareCitationIdentifiers(sample,'c2',crossrefReceipt,pmcReceipt),/citation-compare-receipts/);
+
 // Real JATS commonly advertises a public external DTD. Strip that declaration
 // before parsing; do not load the network DTD and do not accept internal entities.
 const jatsDoctype='<?xml version="1.0" encoding="utf-8"?>\n'+
