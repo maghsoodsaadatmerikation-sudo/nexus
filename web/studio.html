@@ -4101,12 +4101,12 @@ function showWorkflow(){
    };
    const done=document.createElement('button');done.type='button';done.className='secondary';
    done.textContent=['failed','cancelled','partial'].includes(step.observed)?
-    words('Acknowledge failure and continue','ثبت شکست و ادامه'):
+    words('Acknowledge incomplete result · continue','ثبت نتیجهٔ ناقص یا ناموفق و ادامه'):
     words('I reviewed this step · continue','این گام را بازبینی کردم؛ ادامه');
-   done.disabled=!workflowState.opened;
+   done.disabled=!workflowState.opened||step.observed==='started';
    done.onclick=()=>{
     if(!retainedWorkflow()){clearWorkflow();return}
-    if(!validWorkflow()||!workflowState.opened)return;
+    if(!validWorkflow()||!workflowState.opened||step.observed==='started')return;
     step.acknowledged=true;workflowState.index++;workflowState.opened=false;showWorkflow();
    };
    item.append(open,done);
