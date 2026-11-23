@@ -151,7 +151,15 @@ Object.assign(EN,{
  chatEpmcHash:'SHA-256 of fetched XML bytes',
  chatEpmcBytes:'XML response bytes',
  chatEpmcDate:'Receipt time (browser clock)',
- chatEpmcCancelled:'Source reading cancelled'
+ chatEpmcCancelled:'Source reading cancelled',
+ chatCitationCompare:'Compare the two DOI records locally',
+ chatCitationMissing:'First retrieve Crossref and Europe PMC separately with consent.',
+ chatCitationSame:'Both retrieved records contain the same DOI text; this does not establish source authenticity or scientific accuracy.',
+ chatCitationDifferent:'The two retrieved records contain different DOI values. Check the original publication manually.',
+ chatCitationAmbiguous:'Europe PMC lists conflicting article DOI values. No match can be concluded.',
+ chatCitationUnavailable:'Europe PMC has no unambiguous article DOI. Comparison is inconclusive.',
+ chatCitationInvalid:'Cannot compare these records safely. Retrieve fresh metadata.',
+ chatCitationBoundary:'Local DOI-text comparison only · no new requests · no claim, publication or retraction verified'
 });
 Object.assign(FA,{
  chatEpmcId:'شناسهٔ PMCID مقالهٔ متن‌باز (PMC1234567)',
@@ -174,7 +182,15 @@ Object.assign(FA,{
  chatEpmcHash:'هش SHA-256 بایت‌های XML',
  chatEpmcBytes:'تعداد بایت‌های پاسخ XML',
  chatEpmcDate:'زمان رسید طبق ساعت مرورگر',
- chatEpmcCancelled:'دریافت منبع لغو شد'
+ chatEpmcCancelled:'دریافت منبع لغو شد',
+ chatCitationCompare:'مقایسهٔ محلی شناسهٔ DOI دو منبع',
+ chatCitationMissing:'ابتدا اطلاعات Crossref و Europe PMC را جداگانه و با رضایت دریافت کنید.',
+ chatCitationSame:'دو منبع DOI یکسانی ثبت کرده‌اند؛ این موضوع اصالت یا صحت علمی را تأیید نمی‌کند.',
+ chatCitationDifferent:'شناسه‌های DOI دو منبع متفاوت‌اند. مقالهٔ اصلی باید به‌صورت دستی بررسی شود.',
+ chatCitationAmbiguous:'در Europe PMC شناسه‌های DOI متناقض ثبت شده‌اند؛ تطبیق ممکن نیست.',
+ chatCitationUnavailable:'در Europe PMC شناسهٔ DOI بدون ابهام وجود ندارد؛ نتیجه نامشخص است.',
+ chatCitationInvalid:'مقایسهٔ امن این داده‌ها ممکن نیست؛ فراداده را دوباره دریافت کنید.',
+ chatCitationBoundary:'فقط مقایسهٔ محلی DOI · بدون درخواست تازه · بدون تأیید ادعا، مقاله یا وضعیت بازپس‌گیری'
 });
 Object.assign(EN,{chatReviewClaims:'Review claims',chatReviewHide:'Hide claim review',chatReviewBlocked:'Possible credential detected. Claim review is blocked; no private value shown.',chatReviewDisclaimer:'Locally extracted candidates only — not checked or verified. Compare each statement with independent sources and dates.',chatReviewEmpty:'No candidates found. This does not establish accuracy.',chatReviewTruncated:'Only the first 12 candidates are shown.'});
 Object.assign(FA,{chatReviewClaims:'بررسی ادعاها',chatReviewHide:'بستن بررسی ادعاها',chatReviewBlocked:'احتمال وجود کلید محرمانه شناسایی شد؛ بررسی متوقف شد و مقدار محرمانه نمایش داده نمی‌شود.',chatReviewDisclaimer:'گزاره‌ها فقط به‌صورت محلی استخراج شده‌اند و تأیید نشده‌اند. هر مورد را با منبع مستقل و تاریخ بررسی کنید.',chatReviewEmpty:'گزاره‌ای پیدا نشد؛ به معنی درستی متن نیست.',chatReviewTruncated:'فقط ۱۲ مورد نخست نمایش داده شده‌اند.'});
@@ -577,11 +593,23 @@ function renderMessage(n){
       const crossrefStatus=el('p','');crossrefStatus.className='help';
       crossrefStatus.setAttribute('role','status');
       const crossrefResult=el('div','');crossrefResult.dataset.claimCrossrefResult='';
+      let crossrefReceipt=null,articleReceipt=null,articleQuote='';
+      const compareCitation=el('button',t('chatCitationCompare'));
+      compareCitation.type='button';compareCitation.className='secondary';
+      compareCitation.dataset.claimCitationCompare='';compareCitation.disabled=true;
+      const compareResult=el('p','');compareResult.dataset.claimCitationResult='';
+      compareResult.className='help';compareResult.setAttribute('role','status');
+      const resetComparison=()=>{
+       compareCitation.disabled=!(crossrefReceipt&&articleReceipt);
+       compareResult.textContent='';
+      };
+      doi.addEventListener('input',()=>{crossrefReceipt=null;resetComparison()});
       fetchCitation.onclick=async()=>{
        let plan;
        try{plan=NexusClaimReview.planCrossrefLookup(n.text,claim.id,doi.value.trim())}
        catch{crossrefStatus.textContent=t('chatCrossrefFailed');return}
        if(!confirm(t('chatCrossrefConfirm')+plan.doi))return;
+       crossrefReceipt=null;resetComparison();
        const controller=new AbortController();crossrefReads.add(controller);
        fetchCitation.disabled=true;crossrefResult.replaceChildren();
        crossrefStatus.textContent=t('chatCrossrefPending');
@@ -590,6 +618,7 @@ function renderMessage(n){
          consent:true,signal:controller.signal
         });
         if(controller.signal.aborted||!panel.isConnected)return;
+        crossrefReceipt=receipt;resetComparison();
         crossrefStatus.textContent=t('chatCrossrefSuccess');
         for(const [key,value] of [
          ['chatCrossrefDOI',receipt.doi],['chatCrossrefTitle',receipt.title],
@@ -621,6 +650,9 @@ function renderMessage(n){
       pmcid.type='text';pmcid.maxLength=13;pmcid.autocomplete='off';pmcid.dir='ltr';
       const epmcQuote=field(t('chatEpmcQuote'),'textarea','claimEpmcQuote');
       epmcQuote.maxLength=NexusClaimReview.MAX_QUOTATION;epmcQuote.rows=2;epmcQuote.dir='auto';
+      for(const field of [pmcid,epmcQuote])field.addEventListener('input',()=>{
+       articleReceipt=null;articleQuote='';resetComparison();
+      });
       const readArticle=el('button',t('chatEpmcRead'));readArticle.type='button';
       readArticle.className='secondary';readArticle.dataset.claimEpmcFetch='';
       const epmcStatus=el('p','');epmcStatus.className='help';epmcStatus.setAttribute('role','status');
@@ -630,6 +662,7 @@ function renderMessage(n){
        try{plan=NexusClaimReview.planEuropePmcFullText(n.text,claim.id,pmcid.value.trim(),epmcQuote.value)}
        catch{epmcStatus.textContent=t('chatEpmcFailed');return}
        if(!confirm(t('chatEpmcConsent')+plan.pmcid))return;
+       articleReceipt=null;articleQuote='';resetComparison();
        const controller=new AbortController();crossrefReads.add(controller);
        readArticle.disabled=true;epmcResult.replaceChildren();
        epmcStatus.textContent=t('chatEpmcPending');
@@ -638,6 +671,7 @@ function renderMessage(n){
          n.text,claim.id,plan.pmcid,plan.quotation,{consent:true,signal:controller.signal}
         );
         if(controller.signal.aborted||!panel.isConnected)return;
+        articleReceipt=receipt;articleQuote=plan.quotation;resetComparison();
         epmcStatus.textContent=t(receipt.match_count?'chatEpmcFound':'chatEpmcAbsent');
         for(const [key,value] of [
          ['chatEpmcArticle',receipt.article_title],
@@ -661,6 +695,27 @@ function renderMessage(n){
        }
       };
       details.append(readArticle,epmcStatus,epmcResult);
+      compareCitation.onclick=()=>{
+       try{
+        if(!crossrefReceipt||!articleReceipt)throw Error('citation-not-ready');
+        const crossrefPlan=NexusClaimReview.planCrossrefLookup(n.text,claim.id,doi.value.trim());
+        const articlePlan=NexusClaimReview.planEuropePmcFullText(n.text,claim.id,pmcid.value.trim(),epmcQuote.value);
+        if(crossrefPlan.doi!==crossrefReceipt.doi||articlePlan.pmcid!==articleReceipt.pmcid||
+           articlePlan.quotation!==articleQuote)throw Error('citation-stale-input');
+        const result=NexusClaimReview.compareCitationIdentifiers(n.text,claim.id,crossrefReceipt,articleReceipt);
+        const key={
+         'same-deposited-identifier':'chatCitationSame',
+         'different-deposited-identifiers':'chatCitationDifferent',
+         'ambiguous-article-doi':'chatCitationAmbiguous',
+         'article-doi-unavailable':'chatCitationUnavailable'
+        }[result.comparison];
+        if(!key)throw Error('citation-unrecognized');
+        compareResult.textContent=t(key)+' '+t('chatCitationBoundary');
+       }catch{
+        compareResult.textContent=t(crossrefReceipt&&articleReceipt?'chatCitationInvalid':'chatCitationMissing');
+       }
+      };
+      details.append(compareCitation,compareResult);
       const assessment=field(t('chatEvidenceAssessment'),'select','claimEvidenceAssessment');
       for(const [id,key] of [['not-assessed','chatEvidenceNotAssessed'],['supports','chatEvidenceSupports'],
        ['contradicts','chatEvidenceContradicts'],['unclear','chatEvidenceUnclear']]){
