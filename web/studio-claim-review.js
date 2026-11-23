@@ -131,6 +131,29 @@ function locateQuote(answer,claimId,entry,sourceText,quotation){
   claim_support:'not-assessed',verification:'not-independently-verified',authority:'none'
  });
 }
+// Browser navigation is a separate user action, not source retrieval or verification.
+// A syntactically public DNS name is NOT a vetted or safe website.
+function planSourceOpen(answer,claimId,sourceURL){
+ const entry=recordEvidence(answer,claimId,{source_url:sourceURL});
+ if(!entry.source_url)throw Error('claim-source-url-required');
+ const parsed=new URL(entry.source_url),hostname=parsed.hostname.toLowerCase();
+ // Disallow local names, IP literals, unusual ports and reserved network suffixes.
+ // The destination can still redirect or be malicious after the user opens it.
+ const parts=hostname.split('.');
+ const reserved=new Set(['localhost','local','internal','lan','home','corp','onion','arpa','test','invalid','example']);
+ if(parts.length<2||reserved.has(parts.at(-1))||reserved.has(parts.at(-2))||
+    !/^[a-z]{2,63}$/.test(parts.at(-1))||parsed.port||
+    parts.some(part=>!part||part.length>63||!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(part))||
+    /^(?:\d+\.){3}\d+$/.test(hostname)||
+    hostname.includes(':')||hostname.includes('[')||hostname.includes(']'))
+   throw Error('claim-source-public-host-required');
+ return Object.freeze({
+  schema:'nexus.source-open-plan.v1',claim_id:entry.claim_id,
+  url:entry.source_url,hostname,method:'explicit-browser-navigation',
+  source_retrieved:false,source_verified:false,claim_verified:false,
+  authority:'none'
+ });
+}
 function evidenceReport(answer,entries,language='en'){
  if(!['en','fa'].includes(language)||!Array.isArray(entries)||entries.length>MAX_CLAIMS)
   throw Error('claim-evidence-report');
@@ -182,5 +205,5 @@ function evidenceReport(answer,entries,language='en'){
  }
  return lines.join('\n');
 }
-root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,MAX_QUOTATION,MAX_SOURCE_TEXT,review,checklist,recordEvidence,locateQuote,evidenceReport});
+root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,MAX_QUOTATION,MAX_SOURCE_TEXT,review,checklist,recordEvidence,locateQuote,planSourceOpen,evidenceReport});
 })(globalThis);
