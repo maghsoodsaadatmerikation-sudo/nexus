@@ -133,7 +133,7 @@ window.addEventListener('load',async()=>{
      'one-approved-fixed-endpoint-article-request');
   ok(articleResult.textContent.includes('claim_verified=false')&&
      articleResult.textContent.includes('present-in-retrieved-body')&&
-     articleResult.textContent.includes('b6')===false,
+     /[0-9a-f]{64}/.test(articleResult.textContent),
      'article-presence-is-not-scientific-verification');
   ok(!articleResult.querySelector('b')&&
      !articleResult.textContent.includes('Second paragraph only in the remote XML.'),
