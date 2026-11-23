@@ -130,6 +130,40 @@ Object.assign(FA,{
  chatCrossrefBytes:'حجم پاسخ (بایت)',
  chatCrossrefAbort:'درخواست لغو شد یا پنل بسته شد.'
 });
+Object.assign(EN,{
+ chatEpmcId:'Open-article PMCID (PMC1234567)',
+ chatEpmcQuote:'Separate quotation to check against the retrieved article (30–400 characters)',
+ chatEpmcRead:'Check selected quotation in Europe PMC text',
+ chatEpmcConsent:'Retrieve bounded article XML from Europe PMC for this PMCID? The provider sees the PMCID and your network IP; your claim and quotation remain local. The text is not sent to an AI model. PMCID: ',
+ chatEpmcPending:'Reading Europe PMC article text after consent…',
+ chatEpmcFailed:'Europe PMC text could not be read. The article may not offer XML, reject CORS, exceed size limits, or contain a DTD that NEXUS refuses for safety. No truth verdict.',
+ chatEpmcFound:'Exact quotation found in retrieved article body; this does NOT verify the claim.',
+ chatEpmcAbsent:'Exact quotation was not found in retrieved article body; this does NOT disprove the claim.',
+ chatEpmcArticle:'Article title (as supplied by API)',
+ chatEpmcCount:'Number of literal matches (capped)',
+ chatEpmcBodySize:'Normalized body length',
+ chatEpmcHash:'SHA-256 of fetched XML bytes',
+ chatEpmcBytes:'XML response bytes',
+ chatEpmcDate:'Receipt time (browser clock)',
+ chatEpmcCancelled:'Source reading cancelled'
+});
+Object.assign(FA,{
+ chatEpmcId:'شناسهٔ PMCID مقالهٔ متن‌باز (PMC1234567)',
+ chatEpmcQuote:'نقل‌قول جداگانه برای سنجش حضور در متن دریافت‌شده (۳۰ تا ۴۰۰ نویسه)',
+ chatEpmcRead:'یافتن نقل‌قول انتخاب‌شده در متن Europe PMC',
+ chatEpmcConsent:'متن XML مقاله با این PMCID از Europe PMC دریافت شود؟ سرویس از PMCID و IP اتصال شما آگاه می‌شود، اما متن ادعا و نقل‌قول شما محلی می‌مانند و متن مقاله به مدل هوش مصنوعی ارسال نمی‌شود. PMCID: ',
+ chatEpmcPending:'دریافت متن مقاله با اجازهٔ شما در جریان است…',
+ chatEpmcFailed:'متن Europe PMC دریافت نشد؛ ممکن است مقاله XML نداشته باشد، CORS محدود باشد، حجم از سقف بگذرد یا سند دارای DTD غیرمجاز باشد. هیچ حکمی دربارهٔ صحت ادعا صادر نشد.',
+ chatEpmcFound:'نقل‌قول دقیق در بدنهٔ مقالهٔ دریافت‌شده یافت شد؛ این صحت ادعا را تأیید نمی‌کند.',
+ chatEpmcAbsent:'نقل‌قول دقیق در متن دریافت‌شده یافت نشد؛ این ادعا را رد نمی‌کند.',
+ chatEpmcArticle:'عنوان مقاله طبق سرویس',
+ chatEpmcCount:'تعداد تطبیق‌های لفظی (محدود)',
+ chatEpmcBodySize:'طول بدنهٔ متنی همسان‌سازی‌شده',
+ chatEpmcHash:'هش SHA-256 بایت‌های XML',
+ chatEpmcBytes:'تعداد بایت‌های پاسخ XML',
+ chatEpmcDate:'زمان رسید طبق ساعت مرورگر',
+ chatEpmcCancelled:'دریافت منبع لغو شد'
+});
 Object.assign(EN,{chatReviewClaims:'Review claims',chatReviewHide:'Hide claim review',chatReviewBlocked:'Possible credential detected. Claim review is blocked; no private value shown.',chatReviewDisclaimer:'Locally extracted candidates only — not checked or verified. Compare each statement with independent sources and dates.',chatReviewEmpty:'No candidates found. This does not establish accuracy.',chatReviewTruncated:'Only the first 12 candidates are shown.'});
 Object.assign(FA,{chatReviewClaims:'بررسی ادعاها',chatReviewHide:'بستن بررسی ادعاها',chatReviewBlocked:'احتمال وجود کلید محرمانه شناسایی شد؛ بررسی متوقف شد و مقدار محرمانه نمایش داده نمی‌شود.',chatReviewDisclaimer:'گزاره‌ها فقط به‌صورت محلی استخراج شده‌اند و تأیید نشده‌اند. هر مورد را با منبع مستقل و تاریخ بررسی کنید.',chatReviewEmpty:'گزاره‌ای پیدا نشد؛ به معنی درستی متن نیست.',chatReviewTruncated:'فقط ۱۲ مورد نخست نمایش داده شده‌اند.'});
 Object.assign(EN,{chatAttachments:'Attach files to this message',chatAttachmentsHelp:'Up to four files. Text formats are limited to 128 KiB per file. Word (.docx) and PowerPoint (.pptx) files are limited to 2 MiB. Up to 20 slides are supported. Only text is extracted. Only short, clearly marked excerpts enter the exact reviewed model request. This is not image/PDF understanding. The original files are not stored in chat or archive; filenames are retained with your turn. Nothing is sent until you explicitly approve the model request.',chatAttachedDocument:'Include latest saved writing document as a temporary excerpt',chatClearAttachments:'Clear attachments',chatNoFiles:'No text files attached',chatAttachmentAdded:'Local files added to next reviewed model request.',chatAttachmentInvalid:'Could not read text files; check size, format and capacity.',chatAttachmentRequiresModel:'Attached file excerpts require a configured model request; the local guide cannot read them.',chatAttachedUsed:'One-turn excerpts supplied (not verified):',chatRegenRequiresFiles:'A response grounded in temporary files cannot be regenerated from the filenames alone. Edit the user message to a new branch and attach the files again.',chatFilesNotSaved:'Files are held only in this tab and their bytes are never saved to the chat archive.'});
@@ -571,6 +605,44 @@ function renderMessage(n){
       sourceText.maxLength=NexusClaimReview.MAX_SOURCE_TEXT;sourceText.rows=3;sourceText.dir='auto';
       const quote=field(t('chatQuoteSelection'),'textarea','claimQuoteSelection');
       quote.maxLength=NexusClaimReview.MAX_QUOTATION;quote.rows=2;quote.dir='auto';
+      const pmcid=field(t('chatEpmcId'),'input','claimEpmcId');
+      pmcid.type='text';pmcid.maxLength=13;pmcid.autocomplete='off';pmcid.dir='ltr';
+      const epmcQuote=field(t('chatEpmcQuote'),'textarea','claimEpmcQuote');
+      epmcQuote.maxLength=NexusClaimReview.MAX_QUOTATION;epmcQuote.rows=2;epmcQuote.dir='auto';
+      const readArticle=el('button',t('chatEpmcRead'));readArticle.type='button';
+      readArticle.className='secondary';readArticle.dataset.claimEpmcFetch='';
+      const epmcStatus=el('p','');epmcStatus.className='help';epmcStatus.setAttribute('role','status');
+      const epmcResult=el('div','');epmcResult.dataset.claimEpmcResult='';
+      readArticle.onclick=async()=>{
+       let plan;
+       try{plan=NexusClaimReview.planEuropePmcFullText(n.text,claim.id,pmcid.value.trim(),epmcQuote.value)}
+       catch{epmcStatus.textContent=t('chatEpmcFailed');return}
+       if(!confirm(t('chatEpmcConsent')+plan.pmcid))return;
+       const controller=new AbortController();crossrefReads.add(controller);
+       readArticle.disabled=true;epmcResult.replaceChildren();
+       epmcStatus.textContent=t('chatEpmcPending');
+       try{
+        const receipt=await NexusClaimReview.lookupEuropePmcFullText(
+         n.text,claim.id,plan.pmcid,plan.quotation,{consent:true,signal:controller.signal}
+        );
+        if(controller.signal.aborted||!panel.isConnected)return;
+        epmcStatus.textContent=t(receipt.match_count?'chatEpmcFound':'chatEpmcAbsent');
+        for(const [key,value] of [
+         ['chatEpmcArticle',receipt.article_title],['chatEpmcCount',String(receipt.match_count)],
+         ['chatEpmcBodySize',String(receipt.body_character_count)],
+         ['chatEpmcHash',receipt.response_sha256],['chatEpmcBytes',String(receipt.response_bytes)],
+         ['chatEpmcDate',receipt.fetched_at_client_clock]
+        ])if(value)epmcResult.append(el('p',t(key)+': '+value));
+        epmcResult.append(el('small',receipt.content_scope+' · '+receipt.quotation_presence+
+         ' · article_license=not-certified · claim_verified=false · authority=none'));
+       }catch{
+        if(panel.isConnected)epmcStatus.textContent=t(controller.signal.aborted?'chatEpmcCancelled':'chatEpmcFailed');
+       }finally{
+        crossrefReads.delete(controller);
+        if(panel.isConnected)readArticle.disabled=false;
+       }
+      };
+      details.append(readArticle,epmcStatus,epmcResult);
       const assessment=field(t('chatEvidenceAssessment'),'select','claimEvidenceAssessment');
       for(const [id,key] of [['not-assessed','chatEvidenceNotAssessed'],['supports','chatEvidenceSupports'],
        ['contradicts','chatEvidenceContradicts'],['unclear','chatEvidenceUnclear']]){

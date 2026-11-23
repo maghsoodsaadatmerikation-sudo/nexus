@@ -15,11 +15,30 @@ window.addEventListener('load',async()=>{
  const change=(id,value)=>{$(id).value=value;$(id).dispatchEvent(new Event('change',{bubbles:true}))};
  const wait=async fn=>{for(let i=0;i<300;i++){if(fn())return;await new Promise(r=>setTimeout(r,15))}throw Error('wait-timeout')};
  const fingerprint='f'.repeat(64),token='github_pat_'+'A'.repeat(40);
- let discovery=0,sends=0,allRequests=0,crossrefCalls=0,lastCrossrefSignal=null;
+ let discovery=0,sends=0,allRequests=0,crossrefCalls=0,lastCrossrefSignal=null,epmcCalls=0,lastEpmcSignal=null;
  window.confirm=()=>true;
  window.fetch=async(url,opts={})=>{
   allRequests++;
   const target=String(url);
+  if(target.startsWith('https://www.ebi.ac.uk/europepmc/webservices/rest/')){
+   epmcCalls++;lastEpmcSignal=opts.signal;
+   ok(opts.method==='GET'&&opts.credentials==='omit'&&opts.redirect==='error'&&
+      opts.mode==='cors'&&opts.referrerPolicy==='no-referrer'&&opts.cache==='no-store',
+      'epmc-no-credentials-no-redirect-transport');
+   if(target.endsWith('/PMC1234567/fullTextXML')){
+    const body='<article><front><article-meta><article-id pub-id-type="pmc">1234567</article-id>'+
+    '<title-group><article-title>Invented <b>Scientific</b> study</article-title></title-group></article-meta></front>'+
+    '<body><sec><p>Introduction: The report counted exactly 200 participants in 2025.'+
+    '</p><p>Second paragraph only in the remote XML.</p></sec></body></article>';
+    return {ok:true,status:200,url:target,
+     headers:new Headers({'content-type':'application/xml'}),body:new Response(body).body};
+   }
+   if(target.endsWith('/PMC1234568/fullTextXML')){
+    return new Promise((resolve,reject)=>opts.signal.addEventListener('abort',
+      ()=>reject(Error('epmc-stub-aborted')),{once:true}));
+   }
+   throw Error('epmc-not-allowlisted');
+  }
   if(target.startsWith('https://api.crossref.org/works/')){
    crossrefCalls++;lastCrossrefSignal=opts.signal;
    ok(opts.credentials==='omit'&&opts.redirect==='error'&&opts.mode==='cors'&&
@@ -93,6 +112,41 @@ window.addEventListener('load',async()=>{
      !JSON.stringify(NexusStudioUI.snapshot()).includes('Synthetic Depositor'),
      'digest-metadata-inert-and-never-saved-to-chat');
   ok(!metadata.querySelector('b'),'crossref-api-title-cannot-render-html');
+  const pmcidInput=panel.querySelector('[data-claim-epmc-id]');
+  const articleButton=panel.querySelector('[data-claim-epmc-fetch]');
+  const articleResult=panel.querySelector('[data-claim-epmc-result]');
+  const epmcQuoteInput=panel.querySelector('[data-claim-epmc-quote]');
+  ok(!!pmcidInput&&!!articleButton&&!!articleResult&&!!epmcQuoteInput,
+    'real-article-quote-review-requires-user-inputs');
+  ok(epmcQuoteInput!==panel.querySelector('[data-claim-quote-selection]'),
+    'remote-article-quote-is-independent-of-human-paste-quote');
+  pmcidInput.value='PMC1234567';
+  epmcQuoteInput.value='The report counted exactly 200 participants in 2025.';
+  let articleConsent=0;
+  let requestsBefore=allRequests;
+  window.confirm=()=>{articleConsent++;return false};
+  articleButton.click();await new Promise(r=>setTimeout(r,35));
+  ok(articleConsent===1&&epmcCalls===0&&allRequests===requestsBefore,
+     'no-open-article-lookup-before-consent');
+  window.confirm=()=>{articleConsent++;return true};
+  articleButton.click();
+  await wait(()=>articleResult.textContent.includes('Invented Scientific study'));
+  ok(epmcCalls===1&&articleConsent===2&&allRequests===requestsBefore+1,
+     'one-approved-fixed-endpoint-article-request');
+  ok(articleResult.textContent.includes('claim_verified=false')&&
+     articleResult.textContent.includes('present-in-retrieved-body')&&
+     /[0-9a-f]{64}/.test(articleResult.textContent),
+     'article-presence-is-not-scientific-verification');
+  ok(!articleResult.querySelector('b')&&
+     !articleResult.textContent.includes('Second paragraph only in the remote XML.'),
+     'article-body-and-markup-not-leaked-or-rendered');
+  ok(!JSON.stringify(NexusStudioUI.snapshot()).includes('Invented Scientific study'),
+     'article-review-not-persisted-in-archive');
+  pmcidInput.value='PMC1234567';
+  epmcQuoteInput.value='A different sentence that was never inside this open article.';
+  articleButton.click();
+  await wait(()=>panel.textContent.includes('Exact quotation was not found'));
+  ok(epmcCalls===2,'absent-quote-is-not-claim-refutation');
   before=allRequests;
 
   const opens=[],openButton=panel.querySelector('[data-claim-source-open]');
@@ -163,8 +217,11 @@ window.addEventListener('load',async()=>{
   // An outstanding DOI request must abort when the reviewer closes the panel.
   doiInput.value='10.5555/slow-request';window.confirm=()=>true;
   crossrefButton.click();await wait(()=>crossrefCalls===2);
+  pmcidInput.value='PMC1234568';epmcQuoteInput.value='The report counted exactly 200 participants in 2025.';
+  articleButton.click();await wait(()=>epmcCalls===3);
   button.click();ok(!$('messages').querySelector('.claim-review-panel'),'panel-closes-without-mutation');
   ok(lastCrossrefSignal?.aborted,'review-close-aborts-inflight-metadata-fetch');
+  ok(lastEpmcSignal?.aborted,'review-close-aborts-inflight-open-article-fetch');
   button.click();
   ok(!$('messages').querySelector('.claim-review-panel').textContent.includes('human-only-source'),
    'closing-panel-discards-manual-notes');

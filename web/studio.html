@@ -2419,6 +2419,109 @@ async function lookupCrossref(answer,claimId,doi,{consent=false,fetcher,signal,c
   publisher_verified:false,claim_verified:false,authority:'none'
  });
 }
+// Europe PMC: one human-consented, open-access full-text XML URL per PMCID.
+// A returned text match is literal presence only, never scientific verification.
+const EPMC_MAX_BYTES=1048576,EPMC_MAX_TEXT=240000,EPMC_TIMEOUT_MS=12000;
+function planEuropePmcFullText(answer,claimId,pmcid,quotation){
+ const claim=recordEvidence(answer,claimId,{});
+ if(typeof pmcid!=='string'||!/^PMC[1-9][0-9]{0,9}$/i.test(pmcid))throw Error('epmc-pmcid');
+ if(typeof quotation!=='string'||quotation.length<30||quotation.length>MAX_QUOTATION||
+    quotation.normalize('NFKC').replace(/\s+/gu,' ').trim().length<30)
+  throw Error('epmc-quote');
+ if(inspect(quotation).length)throw Error('epmc-private');
+ const id=pmcid.toUpperCase();
+ return Object.freeze({
+  schema:'nexus.epmc-open-text-plan.v1',claim_id:claim.claim_id,pmcid:id,quotation,
+  url:'https://www.ebi.ac.uk/europepmc/webservices/rest/'+id+'/fullTextXML',
+  scope:'Europe-PMC-open-full-text-XML',requires_consent:true,
+  source_retrieved:false,claim_verified:false,authority:'none'
+ });
+}
+async function lookupEuropePmcFullText(answer,claimId,pmcid,quotation,{
+ consent=false,fetcher,signal,cryptoProvider,xmlParser
+}={}){
+ const plan=planEuropePmcFullText(answer,claimId,pmcid,quotation);
+ if(consent!==true)throw Error('epmc-consent-required');
+ const cryptoAPI=cryptoProvider||globalThis.crypto;
+ if(!cryptoAPI?.subtle?.digest)throw Error('epmc-hash-unavailable');
+ if(typeof fetcher!=='function')fetcher=globalThis.fetch;
+ if(typeof fetcher!=='function')throw Error('epmc-fetch-unavailable');
+ const timeout=AbortSignal.timeout(EPMC_TIMEOUT_MS);
+ const combined=signal?AbortSignal.any([signal,timeout]):timeout;
+ if(combined.aborted)throw Error('epmc-interrupted');
+ let response;
+ try{
+  response=await fetcher(plan.url,{
+   method:'GET',mode:'cors',credentials:'omit',redirect:'error',
+   referrerPolicy:'no-referrer',cache:'no-store',
+   headers:{Accept:'application/xml, text/xml'},signal:combined
+  });
+ }catch{throw Error('epmc-network-unavailable')}
+ if(!response?.ok||response.status!==200)throw Error('epmc-response-unavailable');
+ if(!response.url||new URL(response.url).href!==plan.url)throw Error('epmc-response-origin');
+ const type=(response.headers?.get('content-type')||'').split(';')[0].trim().toLowerCase();
+ if(!['application/xml','text/xml','application/jats+xml'].includes(type))throw Error('epmc-type');
+ const declared=response.headers?.get('content-length');
+ if(declared&&(!/^\d+$/.test(declared)||Number(declared)>EPMC_MAX_BYTES))throw Error('epmc-size');
+ if(!response.body?.getReader)throw Error('epmc-stream-required');
+ const reader=response.body.getReader(),chunks=[];
+ let count=0,finished=false;
+ try{
+  for(;;){
+   const {done,value}=await reader.read();
+   if(combined.aborted)throw Error('epmc-interrupted');
+   if(done){finished=true;break}
+   if(!(value instanceof Uint8Array))throw Error('epmc-stream-invalid');
+   count+=value.byteLength;
+   if(count>EPMC_MAX_BYTES)throw Error('epmc-size');
+   chunks.push(value);
+  }
+ }finally{
+  if(!finished)await reader.cancel().catch(()=>{});
+  reader.releaseLock();
+ }
+ if(combined.aborted)throw Error('epmc-interrupted');
+ const bytes=new Uint8Array(count);
+ let at=0;for(const chunk of chunks){bytes.set(chunk,at);at+=chunk.byteLength}
+ let raw;
+ try{raw=new TextDecoder('utf-8',{fatal:true}).decode(bytes)}
+ catch{throw Error('epmc-encoding')}
+ // Strictly refuse DTD/entity declarations; do not attempt XML entity resolution or external loads.
+ if(/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(raw))throw Error('epmc-xml-declaration');
+ const parser=xmlParser||(typeof DOMParser!=='undefined'?new DOMParser():null);
+ if(!parser||typeof parser.parseFromString!=='function')throw Error('epmc-parser-unavailable');
+ let parsed;
+ try{parsed=parser.parseFromString(raw,'application/xml')}
+ catch{throw Error('epmc-xml')}
+ if(parsed?.getElementsByTagName?.('parsererror')?.length||
+    parsed?.documentElement?.localName!=='article')throw Error('epmc-xml');
+ const idNode=parsed.querySelector?.('article-id[pub-id-type="pmc"]');
+ const body=parsed.querySelector?.('body');
+ if(!idNode||!body||typeof idNode.textContent!=='string'||
+    idNode.textContent.trim().replace(/^PMC/i,'')!==plan.pmcid.slice(3)||
+    typeof body.textContent!=='string'||body.textContent.length>EPMC_MAX_TEXT)
+  throw Error('epmc-article-mismatch');
+ const fold=text=>text.normalize('NFKC').replace(/\s+/gu,' ').trim();
+ const text=fold(body.textContent),needle=fold(plan.quotation);
+ const occurrences=text.split(needle).length-1;
+ const titleNode=parsed.querySelector?.('article-title');
+ const title=typeof titleNode?.textContent==='string'?
+  titleNode.textContent.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,240):'';
+ const digest=await cryptoAPI.subtle.digest('SHA-256',bytes);
+ if(combined.aborted)throw Error('epmc-interrupted');
+ const sha=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+ return Object.freeze({
+  schema:'nexus.epmc-open-text-receipt.v1',claim_id:plan.claim_id,pmcid:plan.pmcid,
+  source_url:plan.url,article_title:title,source_retrieved:true,
+  content_scope:'bounded-Europe-PMC-XML-article-body',body_character_count:text.length,
+  quotation_presence:occurrences?'present-in-retrieved-body':'not-found-in-retrieved-body',
+  match_count:Math.min(occurrences,99),normalization:'NFKC-and-whitespace-case-sensitive',
+  response_sha256:sha,response_bytes:count,fetched_at_client_clock:new Date().toISOString(),
+  retrieval:'consented-browser-CORS',source_authenticity:'not-independently-verified',
+  article_is_open_access:'endpoint-served-XML-not-license-certified',
+  claim_verified:false,authority:'none'
+ });
+}
 function evidenceReport(answer,entries,language='en'){
  if(!['en','fa'].includes(language)||!Array.isArray(entries)||entries.length>MAX_CLAIMS)
   throw Error('claim-evidence-report');
@@ -2470,7 +2573,7 @@ function evidenceReport(answer,entries,language='en'){
  }
  return lines.join('\n');
 }
-root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,MAX_QUOTATION,MAX_SOURCE_TEXT,CROSSREF_MAX_BYTES,review,checklist,recordEvidence,locateQuote,planSourceOpen,planCrossrefLookup,lookupCrossref,evidenceReport});
+root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,MAX_QUOTATION,MAX_SOURCE_TEXT,CROSSREF_MAX_BYTES,EPMC_MAX_BYTES,review,checklist,recordEvidence,locateQuote,planSourceOpen,planCrossrefLookup,lookupCrossref,planEuropePmcFullText,lookupEuropePmcFullText,evidenceReport});
 })(globalThis);
 </script><script>'use strict';
 const S=NexusStudio,$=id=>document.getElementById(id),vault=new S.Vault(),undoSlot=new S.UndoSlot(),localePacks=new NexusLocales.Registry();
@@ -2603,6 +2706,40 @@ Object.assign(FA,{
  chatCrossrefTimestamp:'زمان رسید طبق ساعت مرورگر',
  chatCrossrefBytes:'حجم پاسخ (بایت)',
  chatCrossrefAbort:'درخواست لغو شد یا پنل بسته شد.'
+});
+Object.assign(EN,{
+ chatEpmcId:'Open-article PMCID (PMC1234567)',
+ chatEpmcQuote:'Separate quotation to check against the retrieved article (30–400 characters)',
+ chatEpmcRead:'Check selected quotation in Europe PMC text',
+ chatEpmcConsent:'Retrieve bounded article XML from Europe PMC for this PMCID? The provider sees the PMCID and your network IP; your claim and quotation remain local. The text is not sent to an AI model. PMCID: ',
+ chatEpmcPending:'Reading Europe PMC article text after consent…',
+ chatEpmcFailed:'Europe PMC text could not be read. The article may not offer XML, reject CORS, exceed size limits, or contain a DTD that NEXUS refuses for safety. No truth verdict.',
+ chatEpmcFound:'Exact quotation found in retrieved article body; this does NOT verify the claim.',
+ chatEpmcAbsent:'Exact quotation was not found in retrieved article body; this does NOT disprove the claim.',
+ chatEpmcArticle:'Article title (as supplied by API)',
+ chatEpmcCount:'Number of literal matches (capped)',
+ chatEpmcBodySize:'Normalized body length',
+ chatEpmcHash:'SHA-256 of fetched XML bytes',
+ chatEpmcBytes:'XML response bytes',
+ chatEpmcDate:'Receipt time (browser clock)',
+ chatEpmcCancelled:'Source reading cancelled'
+});
+Object.assign(FA,{
+ chatEpmcId:'شناسهٔ PMCID مقالهٔ متن‌باز (PMC1234567)',
+ chatEpmcQuote:'نقل‌قول جداگانه برای سنجش حضور در متن دریافت‌شده (۳۰ تا ۴۰۰ نویسه)',
+ chatEpmcRead:'یافتن نقل‌قول انتخاب‌شده در متن Europe PMC',
+ chatEpmcConsent:'متن XML مقاله با این PMCID از Europe PMC دریافت شود؟ سرویس از PMCID و IP اتصال شما آگاه می‌شود، اما متن ادعا و نقل‌قول شما محلی می‌مانند و متن مقاله به مدل هوش مصنوعی ارسال نمی‌شود. PMCID: ',
+ chatEpmcPending:'دریافت متن مقاله با اجازهٔ شما در جریان است…',
+ chatEpmcFailed:'متن Europe PMC دریافت نشد؛ ممکن است مقاله XML نداشته باشد، CORS محدود باشد، حجم از سقف بگذرد یا سند دارای DTD غیرمجاز باشد. هیچ حکمی دربارهٔ صحت ادعا صادر نشد.',
+ chatEpmcFound:'نقل‌قول دقیق در بدنهٔ مقالهٔ دریافت‌شده یافت شد؛ این صحت ادعا را تأیید نمی‌کند.',
+ chatEpmcAbsent:'نقل‌قول دقیق در متن دریافت‌شده یافت نشد؛ این ادعا را رد نمی‌کند.',
+ chatEpmcArticle:'عنوان مقاله طبق سرویس',
+ chatEpmcCount:'تعداد تطبیق‌های لفظی (محدود)',
+ chatEpmcBodySize:'طول بدنهٔ متنی همسان‌سازی‌شده',
+ chatEpmcHash:'هش SHA-256 بایت‌های XML',
+ chatEpmcBytes:'تعداد بایت‌های پاسخ XML',
+ chatEpmcDate:'زمان رسید طبق ساعت مرورگر',
+ chatEpmcCancelled:'دریافت منبع لغو شد'
 });
 Object.assign(EN,{chatReviewClaims:'Review claims',chatReviewHide:'Hide claim review',chatReviewBlocked:'Possible credential detected. Claim review is blocked; no private value shown.',chatReviewDisclaimer:'Locally extracted candidates only — not checked or verified. Compare each statement with independent sources and dates.',chatReviewEmpty:'No candidates found. This does not establish accuracy.',chatReviewTruncated:'Only the first 12 candidates are shown.'});
 Object.assign(FA,{chatReviewClaims:'بررسی ادعاها',chatReviewHide:'بستن بررسی ادعاها',chatReviewBlocked:'احتمال وجود کلید محرمانه شناسایی شد؛ بررسی متوقف شد و مقدار محرمانه نمایش داده نمی‌شود.',chatReviewDisclaimer:'گزاره‌ها فقط به‌صورت محلی استخراج شده‌اند و تأیید نشده‌اند. هر مورد را با منبع مستقل و تاریخ بررسی کنید.',chatReviewEmpty:'گزاره‌ای پیدا نشد؛ به معنی درستی متن نیست.',chatReviewTruncated:'فقط ۱۲ مورد نخست نمایش داده شده‌اند.'});
@@ -3045,6 +3182,44 @@ function renderMessage(n){
       sourceText.maxLength=NexusClaimReview.MAX_SOURCE_TEXT;sourceText.rows=3;sourceText.dir='auto';
       const quote=field(t('chatQuoteSelection'),'textarea','claimQuoteSelection');
       quote.maxLength=NexusClaimReview.MAX_QUOTATION;quote.rows=2;quote.dir='auto';
+      const pmcid=field(t('chatEpmcId'),'input','claimEpmcId');
+      pmcid.type='text';pmcid.maxLength=13;pmcid.autocomplete='off';pmcid.dir='ltr';
+      const epmcQuote=field(t('chatEpmcQuote'),'textarea','claimEpmcQuote');
+      epmcQuote.maxLength=NexusClaimReview.MAX_QUOTATION;epmcQuote.rows=2;epmcQuote.dir='auto';
+      const readArticle=el('button',t('chatEpmcRead'));readArticle.type='button';
+      readArticle.className='secondary';readArticle.dataset.claimEpmcFetch='';
+      const epmcStatus=el('p','');epmcStatus.className='help';epmcStatus.setAttribute('role','status');
+      const epmcResult=el('div','');epmcResult.dataset.claimEpmcResult='';
+      readArticle.onclick=async()=>{
+       let plan;
+       try{plan=NexusClaimReview.planEuropePmcFullText(n.text,claim.id,pmcid.value.trim(),epmcQuote.value)}
+       catch{epmcStatus.textContent=t('chatEpmcFailed');return}
+       if(!confirm(t('chatEpmcConsent')+plan.pmcid))return;
+       const controller=new AbortController();crossrefReads.add(controller);
+       readArticle.disabled=true;epmcResult.replaceChildren();
+       epmcStatus.textContent=t('chatEpmcPending');
+       try{
+        const receipt=await NexusClaimReview.lookupEuropePmcFullText(
+         n.text,claim.id,plan.pmcid,plan.quotation,{consent:true,signal:controller.signal}
+        );
+        if(controller.signal.aborted||!panel.isConnected)return;
+        epmcStatus.textContent=t(receipt.match_count?'chatEpmcFound':'chatEpmcAbsent');
+        for(const [key,value] of [
+         ['chatEpmcArticle',receipt.article_title],['chatEpmcCount',String(receipt.match_count)],
+         ['chatEpmcBodySize',String(receipt.body_character_count)],
+         ['chatEpmcHash',receipt.response_sha256],['chatEpmcBytes',String(receipt.response_bytes)],
+         ['chatEpmcDate',receipt.fetched_at_client_clock]
+        ])if(value)epmcResult.append(el('p',t(key)+': '+value));
+        epmcResult.append(el('small',receipt.content_scope+' · '+receipt.quotation_presence+
+         ' · article_license=not-certified · claim_verified=false · authority=none'));
+       }catch{
+        if(panel.isConnected)epmcStatus.textContent=t(controller.signal.aborted?'chatEpmcCancelled':'chatEpmcFailed');
+       }finally{
+        crossrefReads.delete(controller);
+        if(panel.isConnected)readArticle.disabled=false;
+       }
+      };
+      details.append(readArticle,epmcStatus,epmcResult);
       const assessment=field(t('chatEvidenceAssessment'),'select','claimEvidenceAssessment');
       for(const [id,key] of [['not-assessed','chatEvidenceNotAssessed'],['supports','chatEvidenceSupports'],
        ['contradicts','chatEvidenceContradicts'],['unclear','chatEvidenceUnclear']]){

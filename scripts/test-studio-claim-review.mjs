@@ -190,4 +190,94 @@ const ctrl=new AbortController();ctrl.abort();
 await assert.rejects(R.lookupCrossref(sample,'c1',doi,{
  consent:true,signal:ctrl.signal,cryptoProvider:webcrypto,fetcher:async()=>createReply()
 }),/crossref-interrupted/);
+
+// Europe PMC open-article XML: fixed endpoint, manual consent, strict safety checks.
+// A quote match inside actual retrieved text is not verification of the answer.
+const epmcQuote='The study included exactly two hundred participants in its sample.';
+const epmcPlan=R.planEuropePmcFullText(sample,'c1','pmc123456',epmcQuote);
+assert.equal(epmcPlan.pmcid,'PMC123456');
+assert.equal(epmcPlan.url,'https://www.ebi.ac.uk/europepmc/webservices/rest/PMC123456/fullTextXML');
+assert.equal(epmcPlan.requires_consent,true);
+assert.equal(epmcPlan.source_retrieved,false);
+for(const badId of ['PM12345','PMC0','PMC001','PMC1/../../','https://www.ebi.ac.uk','PMC1234?x','PMC'+'1'.repeat(11)]){
+ assert.throws(()=>R.planEuropePmcFullText(sample,'c1',badId,epmcQuote),/epmc-pmcid/);
+}
+assert.throws(()=>R.planEuropePmcFullText(sample,'c1','PMC123456','short'),/epmc-quote/);
+assert.throws(()=>R.planEuropePmcFullText(sample,'c9','PMC123456',epmcQuote),/claim-evidence-input/);
+const xml='<article><front><article-meta><article-id pub-id-type="pmc">123456</article-id>'+
+ '<title-group><article-title>Fake <b>Story</b></article-title></title-group></article-meta></front>'+
+ '<body><sec><p>Introduction. '+epmcQuote+'</p></sec></body></article>';
+const parsedMock={documentElement:{localName:'article'},getElementsByTagName:()=>[],
+ querySelector(selector){
+  if(selector==='article-id[pub-id-type="pmc"]')return {textContent:'123456'};
+  if(selector==='body')return {textContent:'Introduction. '+epmcQuote};
+  if(selector==='article-title')return {textContent:'Fake Story'};
+  return null;
+ }};
+const xmlParser={parseFromString(text,mime){assert.equal(mime,'application/xml');return parsedMock}};
+let epmcCalls=0,epmcOptions=null;
+const pmcReply=(text=xml,options={})=>({
+ ok:options.ok??true,status:options.status??200,url:options.url??epmcPlan.url,
+ headers:new Headers({'content-type':options.type||'application/xml',
+  ...('length' in options?{'content-length':String(options.length)}:{})}),
+ body:new Response(text).body
+});
+const pmcMock=async(url,options)=>{
+ epmcCalls++;epmcOptions=options;assert.equal(url,epmcPlan.url);
+ return pmcReply();
+};
+await assert.rejects(R.lookupEuropePmcFullText(sample,'c1','PMC123456',epmcQuote,{
+ fetcher:pmcMock,cryptoProvider:webcrypto,xmlParser
+}),/epmc-consent-required/);
+assert.equal(epmcCalls,0);
+const pmcReceipt=await R.lookupEuropePmcFullText(sample,'c1','PMC123456',epmcQuote,{
+ consent:true,fetcher:pmcMock,cryptoProvider:webcrypto,xmlParser
+});
+assert.equal(epmcCalls,1);
+assert.equal(epmcOptions.credentials,'omit');
+assert.equal(epmcOptions.redirect,'error');
+assert.equal(epmcOptions.referrerPolicy,'no-referrer');
+assert.equal(epmcOptions.cache,'no-store');
+assert.equal(epmcOptions.mode,'cors');
+assert.equal(epmcOptions.method,'GET');
+assert.equal(pmcReceipt.article_title,'Fake Story');
+assert.equal(pmcReceipt.match_count,1);
+assert.equal(pmcReceipt.quotation_presence,'present-in-retrieved-body');
+assert.equal(pmcReceipt.source_retrieved,true);
+assert.equal(pmcReceipt.source_authenticity,'not-independently-verified');
+assert.equal(pmcReceipt.article_is_open_access,'endpoint-served-XML-not-license-certified');
+assert.equal(pmcReceipt.claim_verified,false);
+assert.equal(pmcReceipt.authority,'none');
+assert.match(pmcReceipt.response_sha256,/^[0-9a-f]{64}$/);
+assert(!JSON.stringify(pmcReceipt).includes('Introduction.'));
+const missing=await R.lookupEuropePmcFullText(sample,'c1','PMC123456',
+ 'An unrelated sentence with no literal occurrence in the article.',{
+ consent:true,fetcher:async()=>pmcReply(),cryptoProvider:webcrypto,xmlParser
+});
+assert.equal(missing.quotation_presence,'not-found-in-retrieved-body');
+for(const [name,reply,expected] of [
+ ['off-origin',pmcReply(xml,{url:'https://other.example/fullTextXML'}),/epmc-response-origin/],
+ ['wrong-media',pmcReply(xml,{type:'text/html'}),/epmc-type/],
+ ['declared-large',pmcReply(xml,{length:1048577}),/epmc-size/],
+ ['actual-large',pmcReply('Z'.repeat(1048577)),/epmc-size/],
+ ['status',pmcReply(xml,{ok:false,status:404}),/epmc-response-unavailable/],
+ ['DTD',pmcReply('<!DOCTYPE article SYSTEM "http://not-allowed"><article/>'),/epmc-xml-declaration/],
+ ['Entity',pmcReply('<!ENTITY x "EXPAND"><article/>'),/epmc-xml-declaration/]
+]){
+ await assert.rejects(R.lookupEuropePmcFullText(sample,'c1','PMC123456',epmcQuote,{
+  consent:true,fetcher:async()=>reply,cryptoProvider:webcrypto,xmlParser
+ }),expected,name);
+}
+const wrongParser={parseFromString:()=>({
+ documentElement:{localName:'article'},getElementsByTagName:()=>[],
+ querySelector(key){return key==='article-id[pub-id-type="pmc"]'?{textContent:'999999'}:
+   key==='body'?{textContent:epmcQuote}:null}
+})};
+await assert.rejects(R.lookupEuropePmcFullText(sample,'c1','PMC123456',epmcQuote,{
+ consent:true,fetcher:async()=>pmcReply(),cryptoProvider:webcrypto,xmlParser:wrongParser
+}),/epmc-article-mismatch/);
+const cancelled=new AbortController();cancelled.abort();
+await assert.rejects(R.lookupEuropePmcFullText(sample,'c1','PMC123456',epmcQuote,{
+ consent:true,signal:cancelled.signal,fetcher:pmcMock,cryptoProvider:webcrypto,xmlParser
+}),/epmc-interrupted/);
 console.log('NEXUS local claim-review: PASS');
