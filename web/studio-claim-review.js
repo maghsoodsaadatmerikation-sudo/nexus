@@ -108,22 +108,53 @@ function recordEvidence(answer,claimId,entry){
   verification:'not-independently-verified',source_retrieved:false,authority:'none'
  });
 }
+
+const MAX_QUOTATION=400,MAX_SOURCE_TEXT=12000;
+// A text-presence result says nothing about provenance, authorship or support.
+function locateQuote(answer,claimId,entry,sourceText,quotation){
+ const evidence=recordEvidence(answer,claimId,entry);
+ if(!evidence.source_url||!evidence.source_date)throw Error('claim-quote-source-needed');
+ if(typeof sourceText!=='string'||sourceText.length<30||sourceText.length>MAX_SOURCE_TEXT||
+    typeof quotation!=='string'||quotation.length<30||quotation.length>MAX_QUOTATION)
+  throw Error('claim-quote-input');
+ if(inspect(sourceText+'\n'+quotation).length)throw Error('claim-quote-private');
+ const fold=s=>s.normalize('NFKC').replace(/\s+/gu,' ').trim();
+ const text=fold(sourceText),needle=fold(quotation);
+ if(needle.length<30)throw Error('claim-quote-input');
+ const occurrences=text.split(needle).length-1;
+ return Object.freeze({
+  schema:'nexus.quote-presence.v1',claim_id:evidence.claim_id,
+  text_presence:occurrences?'present-in-user-paste':'not-found-in-user-paste',
+  match_count:Math.min(occurrences,99),normalization:'NFKC-and-whitespace',
+  quotation,source_url:evidence.source_url,source_date:evidence.source_date,
+  source_origin:'human-pasted',source_retrieved:false,source_authenticity:'not-assessed',
+  claim_support:'not-assessed',verification:'not-independently-verified',authority:'none'
+ });
+}
 function evidenceReport(answer,entries,language='en'){
  if(!['en','fa'].includes(language)||!Array.isArray(entries)||entries.length>MAX_CLAIMS)
   throw Error('claim-evidence-report');
  const checked=review(answer);if(checked.blocked)throw Error('claim-evidence-blocked');
  const seen=new Set(),safe=[];
  for(const entry of entries){
-  if(!entry||typeof entry!=='object'||Array.isArray(entry)||seen.has(entry.claim_id))
+  if(!entry||typeof entry!=='object'||Array.isArray(entry)||seen.has(entry.claim_id)||
+     Object.keys(entry).some(key=>!['schema','claim_id','statement','source_url','source_date','user_note','reviewer_assessment','verification','source_retrieved','authority','source_text','quotation'].includes(key))||
+     (entry.schema!==undefined&&entry.schema!=='nexus.claim-evidence.v1')||
+     (entry.verification!==undefined&&entry.verification!=='not-independently-verified')||
+     (entry.source_retrieved!==undefined&&entry.source_retrieved!==false)||
+     (entry.authority!==undefined&&entry.authority!=='none'))
    throw Error('claim-evidence-report');
   seen.add(entry.claim_id);
-  safe.push(recordEvidence(answer,entry.claim_id,{
+  const checked=recordEvidence(answer,entry.claim_id,{
    source_url:entry.source_url,source_date:entry.source_date,
    note:entry.user_note,assessment:entry.reviewer_assessment
-  }));
+  });
+  if(entry.statement!==undefined&&entry.statement!==checked.statement)
+   throw Error('claim-evidence-report');
+  safe.push(checked);
  }
  const fa=language==='fa';
- const plain=value=>value.replace(/[\r\n]+/g,' ').replace(/[\\`*_{}\[\]()#+.!>|~<]/g,'\\root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,review,checklist});');
+ const plain=value=>value.replace(/[\r\n]+/g,' ').replace(/[\\`*_{}\[\]()#+.!>|~<]/g,character=>'\\'+character);
  const lines=[
   fa?'# یادداشت بررسی ادعاها — تأیید مستقل نشده':'# Human claim review notes — not independently verified',
   '',
@@ -137,8 +168,19 @@ function evidenceReport(answer,entries,language='en'){
    (fa?'تاریخ منبع به ادعای کاربر: ':'Source date as entered: ')+(entry.source_date||'—'),
    (fa?'یادداشت کاربر: ':'User note: ')+(entry.user_note?plain(entry.user_note):'—'),
    fa?'وضعیت: تأیید مستقل نشده':'Status: not independently verified','');
+  const original=entries.find(candidate=>candidate.claim_id===entry.claim_id);
+  const sourceText=original.source_text??'',quotation=original.quotation??'';
+  if(sourceText||quotation){
+   const checked=locateQuote(answer,entry.claim_id,{
+    source_url:entry.source_url,source_date:entry.source_date,
+    note:entry.user_note,assessment:entry.reviewer_assessment
+   },sourceText,quotation);
+   lines.push(fa?'نقل‌قولِ واردشده:':'User-entered quotation:',plain(checked.quotation),
+    (fa?'حضور رشته در متن چسبانده‌شده: ':'Text sequence in pasted text: ')+checked.text_presence,
+    fa?'اعتبار متن منبع و ارتباط آن با ادعا بررسی نشده است.':'Source authenticity and claim support have not been checked.','');
+  }
  }
  return lines.join('\n');
 }
-root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,review,checklist,recordEvidence,evidenceReport});
+root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,MAX_QUOTATION,MAX_SOURCE_TEXT,review,checklist,recordEvidence,locateQuote,evidenceReport});
 })(globalThis);

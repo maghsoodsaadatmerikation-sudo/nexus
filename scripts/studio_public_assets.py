@@ -18,8 +18,10 @@ import stat
 # remaining assets and PDF worker hard-capped.
 # The optional human-evidence notebook uses no new network assets.
 # Raise only the index ceiling by 10 KiB to keep its inert bilingual form bounded.
+# Optional pasted-source quote matching is an offline, in-chat feature;
+# adjust only the bounded public Studio HTML cap; no new remote assets.
 MAX_FILE = 625_000
-STUDIO_INDEX_LIMIT = 655_000
+STUDIO_INDEX_LIMIT = 665_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000

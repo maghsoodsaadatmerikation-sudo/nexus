@@ -52,4 +52,47 @@ assert.throws(()=>R.recordEvidence(sample,'c1',{note:'github_pat_'+'Q'.repeat(40
 assert.throws(()=>R.evidenceReport(sample,[manual,manual]),/claim-evidence-report/);
 assert.throws(()=>R.recordEvidence('The report in 2025 used 15 people. github_pat_'+'Q'.repeat(40),'c1',{}),/claim-evidence-blocked/);
 assert.throws(()=>R.evidenceReport(sample,[{claim_id:'c1',source_url:'https://example.org/',reviewer_assessment:'proven'}]),/claim-evidence-input/);
+// Bounded substring detection is NOT evidence of source authenticity or claim truth.
+const sourceText='Editorial note: This controlled synthetic text says exactly that 200 patients were enrolled in 2025.\nThe article also contains a second synthetic sentence.';
+const literal='This controlled synthetic text says exactly that 200 patients were enrolled in 2025.';
+const located=R.locateQuote(sample,'c1',{
+ source_url:'https://example.org/synthetic-article',source_date:'2025-06-10',
+ assessment:'unclear',note:'reviewed locally'
+},sourceText,literal);
+assert.equal(located.text_presence,'present-in-user-paste');
+assert.equal(located.match_count,1);
+assert.equal(located.claim_support,'not-assessed');
+assert.equal(located.source_authenticity,'not-assessed');
+assert.equal(located.source_origin,'human-pasted');
+assert.equal(located.source_retrieved,false);
+assert.equal(located.authority,'none');
+assert.equal(located.verification,'not-independently-verified');
+const unmatched=R.locateQuote(sample,'c1',{
+ source_url:'https://example.org/synthetic-article',source_date:'2025-06-10'
+},sourceText,'An entirely different synthetic quotation with no match.');
+assert.equal(unmatched.text_presence,'not-found-in-user-paste');
+assert.equal(unmatched.match_count,0);
+const linebreak=R.locateQuote(sample,'c1',{
+ source_url:'https://example.org/synthetic-article',source_date:'2025-06-10'
+},'An article provided a 2025 result.\nIt described observations of 200 people.',
+ 'An article provided a 2025 result. It described observations of 200 people.');
+assert.equal(linebreak.match_count,1);
+assert.throws(()=>R.locateQuote(sample,'c1',{},sourceText,literal),/claim-quote-source-needed/);
+assert.throws(()=>R.locateQuote(sample,'c1',{source_url:'https://example.org/',source_date:'2025-01-01'},sourceText,'tiny quote'),/claim-quote-input/);
+assert.throws(()=>R.locateQuote(sample,'c1',{source_url:'https://example.org/',source_date:'2025-01-01'},'a'.repeat(12001),literal),/claim-quote-input/);
+assert.throws(()=>R.locateQuote(sample,'c1',{source_url:'https://example.org/',source_date:'2025-01-01'},sourceText,'a'.repeat(401)),/claim-quote-input/);
+assert.throws(()=>R.locateQuote(sample,'c1',{source_url:'https://example.org/',source_date:'2025-01-01'},sourceText+' github_pat_'+'X'.repeat(40),literal),/claim-quote-private/);
+const safeRecord={...manual,source_text:sourceText,quotation:literal};
+const manuscript=R.evidenceReport(sample,[safeRecord],'en');
+assert(manuscript.includes(literal.slice(0,-1)));
+assert(manuscript.includes('present-in-user-paste'));
+assert(!manuscript.includes('The article also contains a second synthetic sentence.'));
+assert(!manuscript.includes('root.NexusClaimReview=Object.freeze'));
+assert.match(manuscript,/Source authenticity and claim support have not been checked/);
+assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,quotation:'tiny'}]),/claim-quote-input/);
+assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,source_text:''}]),/claim-quote-input/);
+assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,verified:true}]),/claim-evidence-report/);
+assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,verification:'independently-verified'}]),/claim-evidence-report/);
+assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,statement:'Fake claimed assertion'}]),/claim-evidence-report/);
+assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,source_retrieved:true}]),/claim-evidence-report/);
 console.log('NEXUS local claim-review: PASS');

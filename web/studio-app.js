@@ -53,7 +53,13 @@ Object.assign(EN,{
  chatEvidenceCopyFailed:'Clipboard unavailable; notes remain in the open panel.',
  chatEvidenceCopyEmpty:'Add a source note first.',
  chatEvidencePlaintext:'Copy unencrypted source notes to the system clipboard? They may include private text.',
- chatEvidenceTransient:'Notes vanish when the panel closes, changes language or conversation, or the workspace locks. Copy explicitly to keep them.'
+ chatEvidenceTransient:'Notes vanish when the panel closes, changes language or conversation, or the workspace locks. Copy explicitly to keep them.',
+ chatQuoteText:'Paste source text you obtained independently (never fetched)',
+ chatQuoteSelection:'Exact quotation to locate within the pasted text',
+ chatQuoteFound:'Literal quotation present in human-pasted text; source authenticity and claim support NOT checked.',
+ chatQuoteMissing:'Quotation not found in the human-pasted text; this alone does not disprove the claim.',
+ chatQuoteFailure:'A quotation requires at least 30 characters of both source and quote, plus a source HTTPS URL and publication date.',
+ chatQuotePrivate:'Possible credential detected in source text. No quotation result was saved.'
 });
 Object.assign(FA,{
  chatEvidenceTitle:'یادداشت منبع توسط کاربر ـ تأییدنشده',
@@ -74,7 +80,13 @@ Object.assign(FA,{
  chatEvidenceCopyFailed:'دسترسی به کلیپ‌بورد ممکن نیست؛ یادداشت‌ها در پنل باقی‌اند.',
  chatEvidenceCopyEmpty:'ابتدا یادداشت منبع ثبت کن.',
  chatEvidencePlaintext:'یادداشت‌ها بدون رمزگذاری در کلیپ‌بورد کپی شوند؟ ممکن است حاوی متن خصوصی باشند.',
- chatEvidenceTransient:'یادداشت‌ها با بستن پنل، تغییر زبان یا گفتگو، یا قفل‌کردن پاک می‌شوند. برای نگهداری باید صریحاً کپی کنید.'
+ chatEvidenceTransient:'یادداشت‌ها با بستن پنل، تغییر زبان یا گفتگو، یا قفل‌کردن پاک می‌شوند. برای نگهداری باید صریحاً کپی کنید.',
+ chatQuoteText:'متن منبعی را که خودتان به‌دست آورده‌اید بچسبانید (بدون دریافت خودکار)',
+ chatQuoteSelection:'نقل‌قول دقیق برای یافتن در متن چسبانده‌شده',
+ chatQuoteFound:'عبارت در متن واردشده یافت شد؛ اصالت منبع و ارتباطش با ادعا تأیید نشده است.',
+ chatQuoteMissing:'عبارت در متن واردشده پیدا نشد؛ این به‌تنهایی ادعا را رد نمی‌کند.',
+ chatQuoteFailure:'نقل‌قول به متن و عبارت حداقل ۳۰ نویسه‌ای و نیز نشانی HTTPS و تاریخ منبع نیاز دارد.',
+ chatQuotePrivate:'احتمال وجود کلید محرمانه در متن منبع؛ نتیجه‌ای ذخیره نشد.'
 });
 Object.assign(EN,{chatReviewClaims:'Review claims',chatReviewHide:'Hide claim review',chatReviewBlocked:'Possible credential detected. Claim review is blocked; no private value shown.',chatReviewDisclaimer:'Locally extracted candidates only — not checked or verified. Compare each statement with independent sources and dates.',chatReviewEmpty:'No candidates found. This does not establish accuracy.',chatReviewTruncated:'Only the first 12 candidates are shown.'});
 Object.assign(FA,{chatReviewClaims:'بررسی ادعاها',chatReviewHide:'بستن بررسی ادعاها',chatReviewBlocked:'احتمال وجود کلید محرمانه شناسایی شد؛ بررسی متوقف شد و مقدار محرمانه نمایش داده نمی‌شود.',chatReviewDisclaimer:'گزاره‌ها فقط به‌صورت محلی استخراج شده‌اند و تأیید نشده‌اند. هر مورد را با منبع مستقل و تاریخ بررسی کنید.',chatReviewEmpty:'گزاره‌ای پیدا نشد؛ به معنی درستی متن نیست.',chatReviewTruncated:'فقط ۱۲ مورد نخست نمایش داده شده‌اند.'});
@@ -454,6 +466,10 @@ function renderMessage(n){
       date.type='date';
       const note=field(t('chatEvidenceNote'),'textarea','claimEvidenceNote');
       note.maxLength=500;note.rows=2;note.dir='auto';
+      const sourceText=field(t('chatQuoteText'),'textarea','claimQuoteSource');
+      sourceText.maxLength=NexusClaimReview.MAX_SOURCE_TEXT;sourceText.rows=3;sourceText.dir='auto';
+      const quote=field(t('chatQuoteSelection'),'textarea','claimQuoteSelection');
+      quote.maxLength=NexusClaimReview.MAX_QUOTATION;quote.rows=2;quote.dir='auto';
       const assessment=field(t('chatEvidenceAssessment'),'select','claimEvidenceAssessment');
       for(const [id,key] of [['not-assessed','chatEvidenceNotAssessed'],['supports','chatEvidenceSupports'],
        ['contradicts','chatEvidenceContradicts'],['unclear','chatEvidenceUnclear']]){
@@ -466,10 +482,23 @@ function renderMessage(n){
         const record=NexusClaimReview.recordEvidence(n.text,claim.id,{
          source_url:url.value.trim(),source_date:date.value,note:note.value,assessment:assessment.value
         });
-        annotations.set(claim.id,record);
-        saveStatus.textContent=t('chatEvidenceSaved');
+        let presence=null;
+        if(sourceText.value||quote.value){
+         presence=NexusClaimReview.locateQuote(n.text,claim.id,{
+          source_url:record.source_url,source_date:record.source_date,
+          note:record.user_note,assessment:record.reviewer_assessment
+         },sourceText.value,quote.value);
+        }
+        annotations.set(claim.id,presence?{
+         ...record,source_text:sourceText.value,quotation:quote.value
+        }:record);
+        saveStatus.textContent=t('chatEvidenceSaved')+
+         (presence?' '+t(presence.match_count?'chatQuoteFound':'chatQuoteMissing'):'');
        }catch(error){
-        saveStatus.textContent=t(error.message==='claim-evidence-private'?'chatEvidenceBlocked':'chatEvidenceInvalid');
+        const code=error.message==='claim-quote-private'?'chatQuotePrivate':
+         error.message.startsWith('claim-quote-')?'chatQuoteFailure':
+         error.message==='claim-evidence-private'?'chatEvidenceBlocked':'chatEvidenceInvalid';
+        saveStatus.textContent=t(code);
        }
       };
       details.append(save,saveStatus);entry.append(details);panel.append(entry);
