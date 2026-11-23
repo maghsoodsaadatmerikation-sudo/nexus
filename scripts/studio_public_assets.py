@@ -13,8 +13,9 @@ import stat
 # Studio HTML. Credential preflight adds a small additional prompt-review panel;
 # increase only the HTML ceiling by another 5 KiB. Retain the
 # original cap on every other static asset and the independent PDF worker cap.
+# Read-only tasks and code copying add ~2 KiB; cap stays narrowly bounded at 640 KiB-class.
 MAX_FILE = 625_000
-STUDIO_INDEX_LIMIT = 635_000
+STUDIO_INDEX_LIMIT = 640_000
 PDF_MODULES = ("pdf/studio-pdf.mjs", "pdf/pdf.min.mjs", "pdf/pdf.worker.min.mjs")
 PDF_FILES = PDF_MODULES + ("pdf/LICENSE-pdfjs.txt",)
 WORKER_LIMIT = 1_300_000
