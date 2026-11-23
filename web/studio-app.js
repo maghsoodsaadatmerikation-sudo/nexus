@@ -34,6 +34,48 @@ Object.assign(FA,{
  gatewayTimeout:'مهلت پاسخ مدل تمام شد. پاسخی ذخیره نشد؛ پیش از تلاش مجدد، مصرف را بررسی کنید.',
  gatewayMalformedReply:'پاسخ مدل ناقص یا نامعتبر بود و ذخیره نشد. پیش از تکرار، وضعیت درگاه را بررسی کنید.'
 });
+Object.assign(EN,{
+ chatEvidenceTitle:'Add human source note (not verified)',
+ chatEvidenceURL:'Source HTTPS URL (entered by you)',
+ chatEvidenceDate:'Source publication date (as reported)',
+ chatEvidenceNote:'Your evidence note (optional, 500 characters)',
+ chatEvidenceAssessment:'Your assessment — not a NEXUS verdict',
+ chatEvidenceNotAssessed:'Not assessed',
+ chatEvidenceSupports:'Appears to support',
+ chatEvidenceContradicts:'Appears to contradict',
+ chatEvidenceUnclear:'Inconclusive',
+ chatEvidenceSave:'Keep note in open panel',
+ chatEvidenceSaved:'Your unverified note is kept only in this open panel.',
+ chatEvidenceInvalid:'Could not add note: use a valid HTTPS URL and date when marking support or contradiction.',
+ chatEvidenceBlocked:'Potential credential detected. Nothing was added.',
+ chatEvidenceCopy:'Copy human review notes',
+ chatEvidenceCopied:'Unverified notes copied to clipboard.',
+ chatEvidenceCopyFailed:'Clipboard unavailable; notes remain in the open panel.',
+ chatEvidenceCopyEmpty:'Add a source note first.',
+ chatEvidencePlaintext:'Copy unencrypted source notes to the system clipboard? They may include private text.',
+ chatEvidenceTransient:'Notes vanish when the panel closes, changes language or conversation, or the workspace locks. Copy explicitly to keep them.'
+});
+Object.assign(FA,{
+ chatEvidenceTitle:'یادداشت منبع توسط کاربر ـ تأییدنشده',
+ chatEvidenceURL:'نشانی HTTPS منبع (ورود دستی)',
+ chatEvidenceDate:'تاریخ انتشار منبع (به اظهار کاربر)',
+ chatEvidenceNote:'یادداشت شواهد (اختیاری، حداکثر ۵۰۰ نویسه)',
+ chatEvidenceAssessment:'برداشت شما ـ نه رأی نکسوس',
+ chatEvidenceNotAssessed:'بررسی‌نشده',
+ chatEvidenceSupports:'به‌نظر مؤید است',
+ chatEvidenceContradicts:'به‌نظر مخالف است',
+ chatEvidenceUnclear:'نتیجه روشن نیست',
+ chatEvidenceSave:'ثبت موقت در این پنل',
+ chatEvidenceSaved:'یادداشت تأییدنشده فقط در همین پنل نگهداری می‌شود.',
+ chatEvidenceInvalid:'ثبت انجام نشد؛ برای مؤید یا مخالف، نشانی امن HTTPS و تاریخ معتبر لازم است.',
+ chatEvidenceBlocked:'احتمال وجود کلید محرمانه شناسایی شد؛ چیزی ثبت نشد.',
+ chatEvidenceCopy:'کپی یادداشت‌های بررسی',
+ chatEvidenceCopied:'یادداشت‌های تأییدنشده کپی شدند.',
+ chatEvidenceCopyFailed:'دسترسی به کلیپ‌بورد ممکن نیست؛ یادداشت‌ها در پنل باقی‌اند.',
+ chatEvidenceCopyEmpty:'ابتدا یادداشت منبع ثبت کن.',
+ chatEvidencePlaintext:'یادداشت‌ها بدون رمزگذاری در کلیپ‌بورد کپی شوند؟ ممکن است حاوی متن خصوصی باشند.',
+ chatEvidenceTransient:'یادداشت‌ها با بستن پنل، تغییر زبان یا گفتگو، یا قفل‌کردن پاک می‌شوند. برای نگهداری باید صریحاً کپی کنید.'
+});
 Object.assign(EN,{chatReviewClaims:'Review claims',chatReviewHide:'Hide claim review',chatReviewBlocked:'Possible credential detected. Claim review is blocked; no private value shown.',chatReviewDisclaimer:'Locally extracted candidates only — not checked or verified. Compare each statement with independent sources and dates.',chatReviewEmpty:'No candidates found. This does not establish accuracy.',chatReviewTruncated:'Only the first 12 candidates are shown.'});
 Object.assign(FA,{chatReviewClaims:'بررسی ادعاها',chatReviewHide:'بستن بررسی ادعاها',chatReviewBlocked:'احتمال وجود کلید محرمانه شناسایی شد؛ بررسی متوقف شد و مقدار محرمانه نمایش داده نمی‌شود.',chatReviewDisclaimer:'گزاره‌ها فقط به‌صورت محلی استخراج شده‌اند و تأیید نشده‌اند. هر مورد را با منبع مستقل و تاریخ بررسی کنید.',chatReviewEmpty:'گزاره‌ای پیدا نشد؛ به معنی درستی متن نیست.',chatReviewTruncated:'فقط ۱۲ مورد نخست نمایش داده شده‌اند.'});
 Object.assign(EN,{chatAttachments:'Attach files to this message',chatAttachmentsHelp:'Up to four files. Text formats are limited to 128 KiB per file. Word (.docx) and PowerPoint (.pptx) files are limited to 2 MiB. Up to 20 slides are supported. Only text is extracted. Only short, clearly marked excerpts enter the exact reviewed model request. This is not image/PDF understanding. The original files are not stored in chat or archive; filenames are retained with your turn. Nothing is sent until you explicitly approve the model request.',chatAttachedDocument:'Include latest saved writing document as a temporary excerpt',chatClearAttachments:'Clear attachments',chatNoFiles:'No text files attached',chatAttachmentAdded:'Local files added to next reviewed model request.',chatAttachmentInvalid:'Could not read text files; check size, format and capacity.',chatAttachmentRequiresModel:'Attached file excerpts require a configured model request; the local guide cannot read them.',chatAttachedUsed:'One-turn excerpts supplied (not verified):',chatRegenRequiresFiles:'A response grounded in temporary files cannot be regenerated from the filenames alone. Edit the user message to a new branch and attach the files again.',chatFilesNotSaved:'Files are held only in this tab and their bytes are never saved to the chat archive.'});
@@ -393,10 +435,59 @@ function renderMessage(n){
     if(report.blocked)panel.append(el('p',t('chatReviewBlocked')));
     else {
      panel.append(el('p',t('chatReviewDisclaimer')));
+     const annotations=new Map();
      for(const claim of report.claims){
       const entry=el('div','');entry.className='claim-review-entry';
       entry.append(el('small',claim.id+' · '+claim.review_reason+' · '+claim.verification));
-      const statement=el('p',claim.statement);statement.dir='auto';entry.append(statement);panel.append(entry);
+      const statement=el('p',claim.statement);statement.dir='auto';entry.append(statement);
+      const details=el('details','');
+      details.className='claim-evidence-editor';
+      details.append(el('summary',t('chatEvidenceTitle')));
+      const field=(labelText,tag,marker)=>{
+       const label=el('label',labelText),control=el(tag,'');
+       control.dataset[marker]='';
+       label.append(control);details.append(label);return control;
+      };
+      const url=field(t('chatEvidenceURL'),'input','claimEvidenceUrl');
+      url.type='url';url.maxLength=1000;url.autocomplete='off';url.dir='ltr';
+      const date=field(t('chatEvidenceDate'),'input','claimEvidenceDate');
+      date.type='date';
+      const note=field(t('chatEvidenceNote'),'textarea','claimEvidenceNote');
+      note.maxLength=500;note.rows=2;note.dir='auto';
+      const assessment=field(t('chatEvidenceAssessment'),'select','claimEvidenceAssessment');
+      for(const [id,key] of [['not-assessed','chatEvidenceNotAssessed'],['supports','chatEvidenceSupports'],
+       ['contradicts','chatEvidenceContradicts'],['unclear','chatEvidenceUnclear']]){
+       const option=el('option',t(key));option.value=id;assessment.append(option);
+      }
+      const save=el('button',t('chatEvidenceSave'));save.type='button';save.dataset.claimEvidenceSave='';
+      const saveStatus=el('p','');saveStatus.className='help';saveStatus.setAttribute('role','status');
+      save.onclick=()=>{
+       try{
+        const record=NexusClaimReview.recordEvidence(n.text,claim.id,{
+         source_url:url.value.trim(),source_date:date.value,note:note.value,assessment:assessment.value
+        });
+        annotations.set(claim.id,record);
+        saveStatus.textContent=t('chatEvidenceSaved');
+       }catch(error){
+        saveStatus.textContent=t(error.message==='claim-evidence-private'?'chatEvidenceBlocked':'chatEvidenceInvalid');
+       }
+      };
+      details.append(save,saveStatus);entry.append(details);panel.append(entry);
+     }
+     if(report.claims.length){
+      panel.append(el('p',t('chatEvidenceTransient')));
+      const copyNotes=el('button',t('chatEvidenceCopy'));
+      copyNotes.type='button';copyNotes.className='secondary';copyNotes.dataset.claimEvidenceCopy='';
+      copyNotes.onclick=async()=>{
+       if(!annotations.size){status('chatEvidenceCopyEmpty');return}
+       if(!confirm(t('chatEvidencePlaintext')))return;
+       try{
+        const text=NexusClaimReview.evidenceReport(n.text,[...annotations.values()],language==='fa'?'fa':'en');
+        await navigator.clipboard.writeText(text);
+        if(copyNotes.isConnected)status('chatEvidenceCopied');
+       }catch{if(copyNotes.isConnected)status('chatEvidenceCopyFailed')}
+      };
+      panel.append(copyNotes);
      }
      if(!report.claims.length)panel.append(el('p',t('chatReviewEmpty')));
      if(report.truncated)panel.append(el('p',t('chatReviewTruncated')));
@@ -947,7 +1038,7 @@ $('language-file').onchange=async event=>{
  if(!f||busy)return;if(f.size>NexusLocales.MAX_BYTES)return status('failed');
  const current=()=>task===languageImport&&rev===revision&&!busy;
  try{
-  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:[...Object.keys(PRIVACY_EN),...Object.keys(CHAT_CONTEXT_EN),'storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchAll','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed','routeMismatch',...Object.keys(EN).filter(key=>key.startsWith('chatReview')),...Object.keys(EN).filter(key=>key.startsWith('gateway')),...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
+  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:[...Object.keys(PRIVACY_EN),...Object.keys(CHAT_CONTEXT_EN),'storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchAll','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed','routeMismatch',...Object.keys(EN).filter(key=>key.startsWith('chatReview')),...Object.keys(EN).filter(key=>key.startsWith('chatEvidence')),...Object.keys(EN).filter(key=>key.startsWith('gateway')),...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
   if(!$('language').querySelector('option[value="'+pack.code+'"]'))$('language').append(option(pack.code,pack.code));
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}

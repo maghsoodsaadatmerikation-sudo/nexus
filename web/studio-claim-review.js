@@ -66,5 +66,79 @@ function checklist(answer,language='en'){
  if(report.truncated)parts.push(fa?'فهرست به ۱۲ مورد محدود شد.':'Only the first 12 candidates are listed.');
  return parts.join('\n');
 }
-root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,review,checklist});
+// Human-entered source notes are never downloaded, fetched, trusted or persisted.
+// A quoted source or user's classification is not independent evidence.
+const ASSESSMENTS=Object.freeze(['not-assessed','supports','contradicts','unclear']);
+function recordEvidence(answer,claimId,entry){
+ const report=review(answer);
+ if(report.blocked)throw Error('claim-evidence-blocked');
+ if(typeof claimId!=='string'||!/^c(?:[1-9]|1[0-2])$/.test(claimId))throw Error('claim-evidence-id');
+ const claim=report.claims.find(c=>c.id===claimId);
+ if(!claim||!entry||typeof entry!=='object'||Array.isArray(entry)||
+    Object.keys(entry).some(k=>!['source_url','source_date','note','assessment'].includes(k)))throw Error('claim-evidence-input');
+ const {source_url='',source_date='',note='',assessment='not-assessed'}=entry;
+ if(typeof source_url!=='string'||source_url.length>1000||
+    typeof source_date!=='string'||source_date.length>10||
+    typeof note!=='string'||note.length>500||
+    !ASSESSMENTS.includes(assessment))throw Error('claim-evidence-input');
+ if(inspect(source_url+'\n'+note).length)throw Error('claim-evidence-private');
+ let url='';
+ if(source_url){
+  try{
+   const parsed=new URL(source_url);
+   if(parsed.protocol!=='https:'||!parsed.hostname||parsed.username||parsed.password||
+      /[\s<>"'\\]/.test(source_url))throw Error('invalid');
+   url=parsed.href;
+  }catch{throw Error('claim-evidence-url')}
+ }
+ if(source_date){
+  let valid=false;
+  if(/^\d{4}-\d{2}-\d{2}$/.test(source_date)){
+   const d=new Date(source_date+'T00:00:00Z');
+   valid=Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===source_date;
+  }
+  if(!valid)throw Error('claim-evidence-date');
+  if(!url)throw Error('claim-evidence-url');
+ }
+ if(['supports','contradicts'].includes(assessment)&&(!url||!source_date))
+  throw Error('claim-evidence-needs-source-and-date');
+ return Object.freeze({
+  schema:'nexus.claim-evidence.v1',claim_id:claim.id,statement:claim.statement,
+  source_url:url,source_date,user_note:note,reviewer_assessment:assessment,
+  verification:'not-independently-verified',source_retrieved:false,authority:'none'
+ });
+}
+function evidenceReport(answer,entries,language='en'){
+ if(!['en','fa'].includes(language)||!Array.isArray(entries)||entries.length>MAX_CLAIMS)
+  throw Error('claim-evidence-report');
+ const checked=review(answer);if(checked.blocked)throw Error('claim-evidence-blocked');
+ const seen=new Set(),safe=[];
+ for(const entry of entries){
+  if(!entry||typeof entry!=='object'||Array.isArray(entry)||seen.has(entry.claim_id))
+   throw Error('claim-evidence-report');
+  seen.add(entry.claim_id);
+  safe.push(recordEvidence(answer,entry.claim_id,{
+   source_url:entry.source_url,source_date:entry.source_date,
+   note:entry.user_note,assessment:entry.reviewer_assessment
+  }));
+ }
+ const fa=language==='fa';
+ const plain=value=>value.replace(/[\r\n]+/g,' ').replace(/[\\`*_{}\[\]()#+.!>|~<]/g,'\\root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,review,checklist});');
+ const lines=[
+  fa?'# یادداشت بررسی ادعاها — تأیید مستقل نشده':'# Human claim review notes — not independently verified',
+  '',
+  fa?'منابع و ارزیابی‌ها فقط توسط کاربر وارد شده‌اند. نکسوس هیچ منبعی را باز نکرده، اعتبارسنجی نکرده و صحت هیچ ادعایی را تأیید نکرده است.':'All references and assessments were entered by the user. NEXUS has not fetched or validated sources or verified any claim.',
+  ''
+ ];
+ for(const entry of safe){
+  lines.push('## '+entry.claim_id,'',plain(entry.statement),'',
+   (fa?'ارزیابی کاربر: ':'User assessment: ')+entry.reviewer_assessment,
+   (fa?'نشانی منبعِ واردشده: ':'User-entered source: ')+(entry.source_url||'—'),
+   (fa?'تاریخ منبع به ادعای کاربر: ':'Source date as entered: ')+(entry.source_date||'—'),
+   (fa?'یادداشت کاربر: ':'User note: ')+(entry.user_note?plain(entry.user_note):'—'),
+   fa?'وضعیت: تأیید مستقل نشده':'Status: not independently verified','');
+ }
+ return lines.join('\n');
+}
+root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,review,checklist,recordEvidence,evidenceReport});
 })(globalThis);
