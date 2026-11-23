@@ -65,6 +65,26 @@ window.addEventListener('load',async()=>{
   save.click();
   ok(panel.textContent.includes('Your unverified note is kept'),'valid-user-note-shown-as-unverified');
   ok(!JSON.stringify(NexusStudioUI.snapshot()).includes('human-only-source'),'note-not-stored');
+  const pasted=panel.querySelector('[data-claim-quote-source]'),
+        quotation=panel.querySelector('[data-claim-quote-selection]');
+  ok(!!pasted&&!!quotation,'user-pasted-source-and-exact-quotation-controls');
+  pasted.value='Synthetic article states: The report counted exactly 200 participants in 2025. Extra text only in the pasted source.';
+  quotation.value='The report counted exactly 200 participants in 2025.';
+  save.click();
+  ok(panel.textContent.includes('Literal quotation present')&&
+    !panel.textContent.includes('Extra text only in the pasted source'),
+    'only-verbatim-presence-not-source-content-exposed');
+  quotation.value='The article contains a fabricated statement never found here.';
+  save.click();
+  ok(panel.textContent.includes('Quotation not found'),'quote-mismatch-remains-unverified');
+  quotation.value='The report counted exactly 200 participants in 2025.';
+  pasted.value+=' github_pat_'+'Z'.repeat(40);
+  save.click();
+  ok(panel.textContent.includes('Possible credential detected in source text')&&
+    !panel.textContent.includes('github_pat_'),'source-secret-block-has-no-value-echo');
+  pasted.value=pasted.value.split(' github_pat_')[0];
+  save.click();
+  ok(panel.textContent.includes('Literal quotation present'),'original-safe-manual-quote-reconfirmed');
   const copy=panel.querySelector('[data-claim-evidence-copy]');
   ok(!!copy&&copied===null,'copy-is-explicit-only');
   window.confirm=()=>{confirmed++;return false};
@@ -75,6 +95,10 @@ window.addEventListener('load',async()=>{
   copy.click();await wait(()=>copied!==null);
   ok(copied.includes('example.org/human-only-source')&&copied.includes('2025-03-04')&&
      copied.includes('not independently verified'),'source-date-and-limited-authority-in-copy');
+  ok(copied.includes('present-in-user-paste')&&
+     copied.includes('The report counted exactly 200 participants in 2025.')&&
+     !copied.includes('Extra text only in the pasted source.'),
+     'copied-report-traces-quotation-but-omits-source-document');
   ok(allRequests===before,'manual-annotation-and-copy-never-fetch-external-source');
   button.click();ok(!$('messages').querySelector('.claim-review-panel'),'panel-closes-without-mutation');
   button.click();
