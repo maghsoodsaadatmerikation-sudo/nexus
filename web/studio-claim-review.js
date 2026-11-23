@@ -339,6 +339,16 @@ async function lookupEuropePmcFullText(answer,claimId,pmcid,quotation,{
     idNode.textContent.trim().replace(/^PMC/i,'')!==plan.pmcid.slice(3)||
     typeof body.textContent!=='string'||body.textContent.length>EPMC_MAX_TEXT)
   throw Error('epmc-article-mismatch');
+ // Publisher-deposited identifiers and links are orientation aids, not status proofs.
+ // Read article-level metadata only; references and body citations are excluded.
+ const doiNodes=Array.from(parsed.querySelectorAll?.('article-meta > article-id[pub-id-type="doi"]')||[]).slice(0,16);
+ const doiValues=[...new Set(doiNodes.map(node=>
+  typeof node.textContent==='string'?node.textContent.trim().toLowerCase():''
+ ).filter(value=>/^10\.[0-9]{4,9}\/[a-z0-9._;():+\/-]{1,180}$/.test(value)))];
+ const articleDoi=doiValues.length===1?doiValues[0]:'';
+ const relatedNodes=Array.from(parsed.querySelectorAll?.('article-meta > related-article[related-article-type]')||[]).slice(0,32);
+ const relatedKinds=[...new Set(relatedNodes.map(node=>node.getAttribute?.('related-article-type'))
+  .filter(value=>typeof value==='string'&&/^[a-z][a-z0-9_-]{0,50}$/i.test(value)))].slice(0,3);
  const fold=text=>text.normalize('NFKC').replace(/\s+/gu,' ').trim();
  const text=fold(body.textContent),needle=fold(plan.quotation);
  const occurrences=text.split(needle).length-1;
@@ -366,6 +376,8 @@ async function lookupEuropePmcFullText(answer,claimId,pmcid,quotation,{
   source_url:plan.url,article_title:title,source_retrieved:true,
   content_scope:'bounded-Europe-PMC-XML-article-body',body_character_count:text.length,
   article_type_as_deposited:articleType,
+  article_doi_as_deposited:articleDoi,article_doi_ambiguous:doiValues.length>1,
+  related_article_types_as_deposited:Object.freeze(relatedKinds),retraction_status_verified:false,
   matching_section_headings:Object.freeze(matchingSections),
   doctype_handling:doctypeStripped?'simple-external-declaration-stripped':'absent',
   section_context_is_support_verdict:false,
