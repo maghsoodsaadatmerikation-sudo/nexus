@@ -207,10 +207,14 @@ assert.throws(()=>R.planEuropePmcFullText(sample,'c9','PMC123456',epmcQuote),/cl
 const xml='<article><front><article-meta><article-id pub-id-type="pmc">123456</article-id>'+
  '<title-group><article-title>Fake <b>Story</b></article-title></title-group></article-meta></front>'+
  '<body><sec><p>Introduction. '+epmcQuote+'</p></sec></body></article>';
-const parsedMock={documentElement:{localName:'article'},getElementsByTagName:()=>[],
+const parsedMock={documentElement:{localName:'article',getAttribute:()=> 'research-article'},getElementsByTagName:()=>[],
  querySelector(selector){
   if(selector==='article-id[pub-id-type="pmc"]')return {textContent:'123456'};
-  if(selector==='body')return {textContent:'Introduction. '+epmcQuote};
+  if(selector==='body')return {
+   textContent:'Introduction. '+epmcQuote,
+   querySelectorAll:()=>[{textContent:'Introduction. '+epmcQuote,
+     querySelector:()=>({textContent:'Results and interpretation'})}]
+  };
   if(selector==='article-title')return {textContent:'Fake Story'};
   return null;
  }};
@@ -241,6 +245,10 @@ assert.equal(epmcOptions.cache,'no-store');
 assert.equal(epmcOptions.mode,'cors');
 assert.equal(epmcOptions.method,'GET');
 assert.equal(pmcReceipt.article_title,'Fake Story');
+assert.equal(pmcReceipt.article_type_as_deposited,'research-article');
+assert.deepEqual(pmcReceipt.matching_section_headings,['Results and interpretation']);
+assert.equal(pmcReceipt.section_context_is_support_verdict,false);
+assert.equal(pmcReceipt.doctype_handling,'absent');
 assert.equal(pmcReceipt.match_count,1);
 assert.equal(pmcReceipt.quotation_presence,'present-in-retrieved-body');
 assert.equal(pmcReceipt.source_retrieved,true);
@@ -250,6 +258,24 @@ assert.equal(pmcReceipt.claim_verified,false);
 assert.equal(pmcReceipt.authority,'none');
 assert.match(pmcReceipt.response_sha256,/^[0-9a-f]{64}$/);
 assert(!JSON.stringify(pmcReceipt).includes('Introduction.'));
+// Real JATS commonly advertises a public external DTD. Strip that declaration
+// before parsing; do not load the network DTD and do not accept internal entities.
+const jatsDoctype='<?xml version="1.0" encoding="utf-8"?>\n'+
+ '<!DOCTYPE article PUBLIC "-//NLM//DTD JATS Journal Publishing DTD 1.2//EN" '+
+ '"https://jats.nlm.nih.gov/publishing/1.2/JATS-journalpublishing1.dtd">\n';
+const safeReader={parseFromString(data,mime){
+ assert.equal(mime,'application/xml');
+ assert(!data.includes('<!DOCTYPE'),'DTD must be stripped before DOMParser');
+ assert(data.includes('<article>'));
+ return parsedMock;
+}};
+const dtdAccepted=await R.lookupEuropePmcFullText(sample,'c1','PMC123456',epmcQuote,{
+ consent:true,fetcher:async()=>pmcReply(jatsDoctype+xml),
+ cryptoProvider:webcrypto,xmlParser:safeReader
+});
+assert.equal(dtdAccepted.doctype_handling,'simple-external-declaration-stripped');
+assert.equal(dtdAccepted.match_count,1);
+assert(dtdAccepted.response_bytes>pmcReceipt.response_bytes);
 const missing=await R.lookupEuropePmcFullText(sample,'c1','PMC123456',
  'An unrelated sentence with no literal occurrence in the article.',{
  consent:true,fetcher:async()=>pmcReply(),cryptoProvider:webcrypto,xmlParser
@@ -261,7 +287,9 @@ for(const [name,reply,expected] of [
  ['declared-large',pmcReply(xml,{length:1048577}),/epmc-size/],
  ['actual-large',pmcReply('Z'.repeat(1048577)),/epmc-size/],
  ['status',pmcReply(xml,{ok:false,status:404}),/epmc-response-unavailable/],
- ['DTD',pmcReply('<!DOCTYPE article SYSTEM "http://not-allowed"><article/>'),/epmc-xml-declaration/],
+ ['internal-DTD',pmcReply('<!DOCTYPE article [<!ENTITY x "EXPAND">]><article/>'),/epmc-xml-declaration/],
+ ['duplicate-DTD',pmcReply(jatsDoctype+jatsDoctype+xml),/epmc-xml-declaration/],
+ ['malformed-DTD',pmcReply('<!DOCTYPE article PUBLIC "x" "x" [not-safe]>'+xml),/epmc-xml-declaration/],
  ['Entity',pmcReply('<!ENTITY x "EXPAND"><article/>'),/epmc-xml-declaration/]
 ]){
  await assert.rejects(R.lookupEuropePmcFullText(sample,'c1','PMC123456',epmcQuote,{
