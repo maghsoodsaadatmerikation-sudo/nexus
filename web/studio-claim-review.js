@@ -157,6 +157,9 @@ function planSourceOpen(answer,claimId,sourceURL){
 // Crossref only: an opted-in browser CORS request for deposited bibliographic metadata.
 // This is not full-text retrieval, publisher authentication, or fact verification.
 const CROSSREF_MAX_BYTES=65536,CROSSREF_TIMEOUT_MS=10000;
+// Only receipts actually issued by these in-memory, consented readers may be compared.
+// WeakSets do not authenticate third parties or survive reloads; do not serialize them.
+const issuedCrossrefReceipts=new WeakSet(),issuedEuropePmcReceipts=new WeakSet();
 function planCrossrefLookup(answer,claimId,doi){
  const claim=recordEvidence(answer,claimId,{}); // Re-check selected answer and known-secret shapes.
  if(typeof doi!=='string'||doi.length>200||!/^10\.\d{4,9}\/[A-Za-z0-9][A-Za-z0-9._;()/:+-]{0,180}$/.test(doi))
@@ -235,7 +238,7 @@ async function lookupCrossref(answer,claimId,doi,{consent=false,fetcher,signal,c
  const digest=await cryptoAPI.subtle.digest('SHA-256',bytes);
  if(combined.aborted)throw Error('crossref-interrupted');
  const sha=Array.from(new Uint8Array(digest),n=>n.toString(16).padStart(2,'0')).join('');
- return Object.freeze({
+ const receipt=Object.freeze({
   schema:'nexus.crossref-metadata-receipt.v1',claim_id:plan.claim_id,doi:plan.doi,
   title,publisher,type,deposited_publication_date:depositedDate,
   publisher_metadata:'as-deposited-not-independently-verified',
@@ -244,6 +247,8 @@ async function lookupCrossref(answer,claimId,doi,{consent=false,fetcher,signal,c
   content_scope:'Crossref-bibliographic-metadata-only',source_retrieved:true,
   publisher_verified:false,claim_verified:false,authority:'none'
  });
+ issuedCrossrefReceipts.add(receipt);
+ return receipt;
 }
 // Europe PMC: one human-consented, open-access full-text XML URL per PMCID.
 // A returned text match is literal presence only, never scientific verification.
@@ -371,7 +376,7 @@ async function lookupEuropePmcFullText(answer,claimId,pmcid,quotation,{
  const digest=await cryptoAPI.subtle.digest('SHA-256',bytes);
  if(combined.aborted)throw Error('epmc-interrupted');
  const sha=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
- return Object.freeze({
+ const receipt=Object.freeze({
   schema:'nexus.epmc-open-text-receipt.v1',claim_id:plan.claim_id,pmcid:plan.pmcid,
   source_url:plan.url,article_title:title,source_retrieved:true,
   content_scope:'bounded-Europe-PMC-XML-article-body',body_character_count:text.length,
@@ -388,6 +393,8 @@ async function lookupEuropePmcFullText(answer,claimId,pmcid,quotation,{
   article_is_open_access:'endpoint-served-XML-not-license-certified',
   claim_verified:false,authority:'none'
  });
+ issuedEuropePmcReceipts.add(receipt);
+ return receipt;
 }
 // Local, human-requested comparison of two separately consented metadata receipts.
 // A matching identifier is never scientific verification or independent provenance.
@@ -395,6 +402,7 @@ function compareCitationIdentifiers(answer,claimId,crossref,article){
  const selected=recordEvidence(answer,claimId,{});
  const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
  if(!object(crossref)||!object(article)||
+    !issuedCrossrefReceipts.has(crossref)||!issuedEuropePmcReceipts.has(article)||
     crossref.schema!=='nexus.crossref-metadata-receipt.v1'||
     article.schema!=='nexus.epmc-open-text-receipt.v1'||
     crossref.claim_id!==selected.claim_id||article.claim_id!==selected.claim_id||
