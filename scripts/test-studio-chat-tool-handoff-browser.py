@@ -270,6 +270,46 @@ window.addEventListener('load',async()=>{
   workflow.querySelector(':scope > button').click();
   assert(workflow.hidden&&$('message').value==='/plan\n/research study\n/data',
    'discard-workflow-keeps-unsent-chat-text');
+  // A reviewed /plan observes an actual local worker lifecycle without
+  // mistaking opening a tool or a human checkmark for verified execution.
+  fill('message','/plan\n/code\n/write');
+  chatSend.click();
+  const receiptWorkflow=$('studio-chat-workflow');
+  assert(!receiptWorkflow.textContent.includes('Local UI reported success'),
+   'new-plan-has-no-invented-tool-result');
+  receiptWorkflow.querySelector('li button').click();
+  assert(NexusStudioFocus.active()==='code-card'&&!$('code-consent').checked,
+   'workflow-opens-code-review-without-approval');
+  fill('code','return 40 + 2;');
+  $('code-consent').checked=true;$('code-run').click();
+  await wait(()=>$('code-result').textContent.includes('42'));
+  await wait(()=>receiptWorkflow.textContent.includes('Local UI reported success'));
+  assert(receiptWorkflow.textContent.includes('not independent proof'),
+   'local-worker-success-is-labelled-tab-observed-not-attested');
+  assert(receiptWorkflow.querySelector('li button')&&
+   receiptWorkflow.querySelectorAll('li button').length===2,
+   'observed-result-does-not-skip-manual-workflow-confirmation');
+  receiptWorkflow.querySelectorAll('li button')[1].click();
+  const oldCreateURL=URL.createObjectURL,oldAnchorClick=HTMLAnchorElement.prototype.click;
+  let reportBlob=null,reportName='';
+  URL.createObjectURL=blob=>{reportBlob=blob;return oldCreateURL.call(URL,blob)};
+  HTMLAnchorElement.prototype.click=function(){reportName=this.download};
+  try{
+   receiptWorkflow.querySelector('[data-workflow-report]').click();
+   assert(reportName==='nexus-workflow-review.json'&&reportBlob,
+    'report-export-requires-explicit-user-action');
+   const exported=JSON.parse(await reportBlob.text());
+   assert(exported.schema==='nexus.workflow-review.v1'&&exported.authority==='none'&&
+    exported.complete===false&&exported.steps[0].command==='code'&&
+    exported.steps[0].local_ui_outcome==='succeeded'&&
+    exported.steps[0].acknowledged_by_user===true&&
+    exported.steps[1].local_ui_outcome===null&&exported.steps[1].acknowledged_by_user===false,
+    'report-separates-local-observation-from-human-acknowledgment');
+  }finally{
+   URL.createObjectURL=oldCreateURL;HTMLAnchorElement.prototype.click=oldAnchorClick;
+  }
+  fill('message','/plan\n/code\n/write modified');
+  assert(receiptWorkflow.hidden,'editing-workflow-invalidates-observed-local-receipts');
   // The local-guide mode retains broad opt-in natural-language discovery.
   // Explicit slash commands still work in both modes.
   chooser.value='guide';chooser.dispatchEvent(new Event('change',{bubbles:true}));
