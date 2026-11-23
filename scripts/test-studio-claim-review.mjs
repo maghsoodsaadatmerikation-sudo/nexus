@@ -92,4 +92,7 @@ assert.match(manuscript,/Source authenticity and claim support have not been che
 assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,quotation:'tiny'}]),/claim-quote-input/);
 assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,source_text:''}]),/claim-quote-input/);
 assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,verified:true}]),/claim-evidence-report/);
+assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,verification:'independently-verified'}]),/claim-evidence-report/);
+assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,statement:'Fake claimed assertion'}]),/claim-evidence-report/);
+assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,source_retrieved:true}]),/claim-evidence-report/);
 console.log('NEXUS local claim-review: PASS');
