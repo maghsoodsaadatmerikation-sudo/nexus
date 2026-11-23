@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {webcrypto} from 'node:crypto';
 import '../web/studio-claim-review.js';
 const R=globalThis.NexusClaimReview;
 const sample='A study in 2025 included 200 patients. The rate increased by 15 percent. Treatment caused improvement.';
@@ -120,4 +121,73 @@ assert.throws(()=>R.planSourceOpen(sample,'c1',''),/claim-source-url-required/);
 assert.throws(()=>R.planSourceOpen(sample,'c13','https://example.org/'),/claim-evidence-id/);
 assert.throws(()=>R.planSourceOpen('In 2025 the result was found. github_pat_'+'A'.repeat(40),
  'c1','https://example.org/'),/claim-evidence-blocked/);
+
+// Crossref DOI metadata: consent, fixed host, size, origin, content type and truthful receipt.
+const doi='10.5555/synthetic-2025',crossrefPlan=R.planCrossrefLookup(sample,'c1',doi);
+assert.equal(crossrefPlan.url,'https://api.crossref.org/works/10.5555%2Fsynthetic-2025');
+assert.equal(crossrefPlan.transmission,'DOI-only');
+assert.equal(crossrefPlan.source_retrieved,false);
+assert.equal(crossrefPlan.requires_consent,true);
+for(const invalid of ['https://example.org','10.1/x','10.1234/','10.1234/%2Fbad','10.1234/x?token=secret',
+ '10.1234/'+'x'.repeat(201),'10.1234/<script>']){
+ assert.throws(()=>R.planCrossrefLookup(sample,'c1',invalid),/crossref-doi/);
+}
+assert.throws(()=>R.planCrossrefLookup(sample,'c13',doi),/claim-evidence-id/);
+assert.throws(()=>R.planCrossrefLookup('The report in 2025 used 15 people. github_pat_'+'X'.repeat(40),'c1',doi),/claim-evidence-blocked/);
+let crossrefCalls=0,seenOptions=null;
+const crossrefFixture={message:{DOI:doi,title:['Synthetic <b>study</b>'],publisher:'Fictional Press',
+ type:'journal-article',published:{'date-parts':[[2025,3,17]]}}};
+const responseBody=JSON.stringify(crossrefFixture);
+const createReply=(body=responseBody,opts={})=>({
+ ok:opts.ok??true,status:opts.status??200,url:opts.url||crossrefPlan.url,
+ headers:new Headers({'content-type':opts.type||'application/vnd.crossref-api-message+json',
+  ...('length' in opts?{'content-length':String(opts.length)}:{})}),
+ body:new Response(body).body
+});
+const mockCrossref=async(url,options)=>{
+ crossrefCalls++;seenOptions=options;
+ assert.equal(url,crossrefPlan.url);
+ return createReply();
+};
+await assert.rejects(R.lookupCrossref(sample,'c1',doi,{fetcher:mockCrossref,cryptoProvider:webcrypto}),
+ /crossref-consent-required/);
+assert.equal(crossrefCalls,0);
+const crossrefReceipt=await R.lookupCrossref(sample,'c1',doi,{
+ consent:true,fetcher:mockCrossref,cryptoProvider:webcrypto
+});
+assert.equal(crossrefCalls,1);
+assert.equal(seenOptions.credentials,'omit');
+assert.equal(seenOptions.redirect,'error');
+assert.equal(seenOptions.referrerPolicy,'no-referrer');
+assert.equal(seenOptions.cache,'no-store');
+assert.equal(seenOptions.mode,'cors');
+assert.equal(seenOptions.method,'GET');
+assert.equal(crossrefReceipt.response_url,crossrefPlan.url);
+assert.equal(crossrefReceipt.title,'Synthetic <b>study</b>');
+assert.equal(crossrefReceipt.deposited_publication_date,'2025-03-17');
+assert.equal(crossrefReceipt.publisher,'Fictional Press');
+assert.equal(crossrefReceipt.content_scope,'Crossref-bibliographic-metadata-only');
+assert.equal(crossrefReceipt.source_retrieved,true);
+assert.equal(crossrefReceipt.publisher_verified,false);
+assert.equal(crossrefReceipt.claim_verified,false);
+assert.equal(crossrefReceipt.authority,'none');
+assert.match(crossrefReceipt.response_sha256,/^[a-f0-9]{64}$/);
+assert.equal(crossrefReceipt.response_bytes,new TextEncoder().encode(responseBody).length);
+for(const [label,reply,expected] of [
+ ['unrelated-origin',createReply(responseBody,{url:'https://other.example/works/10.5555'}),/crossref-response-origin/],
+ ['oversized-header',createReply(responseBody,{length:1000000}),/crossref-size/],
+ ['oversized-stream',createReply('z'.repeat(66000)),/crossref-size/],
+ ['wrong-type',createReply(responseBody,{type:'text/html'}),/crossref-type/],
+ ['non-200',createReply(responseBody,{status:404,ok:false}),/crossref-response-unavailable/],
+ ['invalid-json',createReply('not-json'),/crossref-json/],
+ ['doi-mismatch',createReply(JSON.stringify({message:{DOI:'10.5555/not-the-requested'}})),/crossref-doi-mismatch/],
+ ]){
+ await assert.rejects(R.lookupCrossref(sample,'c1',doi,{
+  consent:true,fetcher:async()=>reply,cryptoProvider:webcrypto
+ }),expected,label);
+}
+const ctrl=new AbortController();ctrl.abort();
+await assert.rejects(R.lookupCrossref(sample,'c1',doi,{
+ consent:true,signal:ctrl.signal,cryptoProvider:webcrypto,fetcher:async()=>createReply()
+}),/crossref-interrupted/);
 console.log('NEXUS local claim-review: PASS');
