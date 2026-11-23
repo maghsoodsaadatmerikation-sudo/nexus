@@ -282,6 +282,8 @@ window.addEventListener('load',async()=>{
    'workflow-opens-code-review-without-approval');
   fill('code','return 40 + 2;');
   $('code-consent').checked=true;$('code-run').click();
+  assert(receiptWorkflow.querySelectorAll('li button')[1].disabled,
+   'running-local-action-cannot-be-acknowledged-before-outcome');
   await wait(()=>$('code-result').textContent.includes('42'));
   await wait(()=>receiptWorkflow.textContent.includes('Local UI reported success'));
   assert(receiptWorkflow.textContent.includes('not independent proof'),
