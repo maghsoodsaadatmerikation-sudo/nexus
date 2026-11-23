@@ -15,10 +15,13 @@ A small pattern-based credential preflight stops extraction and Markdown checkli
 node --check web/studio-claim-review.js
 node scripts/test-studio-claim-review.mjs
 python3 scripts/test-studio-claim-review-browser.py
+python3 scripts/test-studio-claim-review-chat-browser.py
 ```
 
 Synthetic tests cover English and Persian, duplicate text, exclusion of code/questions, upper bounds and non-echoing credential blocks. They do **not** establish truth detection, source retrieval, model quality, browser integration or production deployment.
 
 ## Release boundary / next increment
 
-This is a **source-only developer preview**. Open `web/studio-claim-review-demo.html` alongside its two local JS files to try the opt-in input and inert claim cards. It is **not yet in the NEXUS Studio chat controls or compiled static public bundle**. The isolated DOM acceptance runs with injected, unchanged source scripts in real Chromium but does not inspect deployed CSP/network behavior. A future reviewed increment can add an opt-in `Review claims` action on a selected answer, render text strictly as inert content, allow a human to add verified sources manually, and add real-browser acceptance. No automatic export or submission should occur. Do not advertise the feature as live until that UI, offline/static packaging and independent acceptance all pass.
+The feature is now **integrated in the source Studio chat**: after an actual model response, select **Review claims / بررسی ادعاها**. A temporary panel below that exact reply displays up to 12 **not-checked** candidates. Close the panel, change conversation or language, or lock the workspace to discard the panel; it is not stored in the encrypted conversation archive. Synthetic provider browser acceptance checks this integrated workflow at narrow and wide widths. The separate source-only developer preview `web/studio-claim-review-demo.html` is retained for isolated testing.
+
+The deterministic standalone and static Studio files are rebuilt with this code. Their service-worker SHA-256 digest and package ID are recalculated from the exact updated public HTML. **Deployment is not implied.** No real provider-backed claim verification, public-host witness or physical-device acceptance has occurred. A future reviewed increment can add an opt-in `Review claims` action on a selected answer, render text strictly as inert content, allow a human to add verified sources manually, and add real-browser acceptance. No automatic export or submission should occur. Do not advertise the feature as live until that UI, offline/static packaging and independent acceptance all pass.
