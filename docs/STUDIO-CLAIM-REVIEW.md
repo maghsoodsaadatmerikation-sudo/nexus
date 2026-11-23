@@ -47,3 +47,13 @@ The isolated Chromium test now exercises present/missing quotations, secret-shap
 A regression in the prior plain-Markdown escaping helper was also corrected. The helper now escapes each character via a callback, so punctuation cannot accidentally interpolate an unrelated program source fragment into copied review notes.
 
 These are checks of **user-pasted text**, not real web evidence. Future opt-in source retrieval would need a separate, security-reviewed proxy and clear user consent, SSRF/redirect controls, domain trust policy, caching/privacy review and real-source attribution. It is not part of this draft.
+
+## Increment: explicitly reviewed browser source opening (23 November 2026)
+
+A reviewer can select **Open source website / بازکردن وب‌سایت منبع** beside an entered HTTPS source URL. This is the first intentional navigation step toward an external source, **not a model/tool retrieval operation**. The URL and hostname are validated synchronously with the original answer and claim ID. Unsupported schemes, userinfo, local hostnames, single-label names, reserved/private-network suffixes, numeric IPs, IPv6 literals and nonstandard ports are rejected. Ordinary public-looking DNS names are syntactic candidates only, not trusted publishers.
+
+A browser-native consent dialog shows the exact parsed hostname and warns that opening the **full URL** contacts a third-party site, which may track the visit or redirect. Only a separate affirmative click triggers \`window.open(fullURL, '_blank', 'noopener,noreferrer')\`. Neither opening the link nor declining consent changes the claim assessment, opens a source automatically, stores a URL in the project, or initiates a \`fetch\` from NEXUS. Browsers may block a popup; UI reports the action as **requested**, never as confirmed completed. A destination may redirect or be malicious after opening, and the lack of a referrer header does not guarantee anonymous browsing.
+
+The pure \`planSourceOpen\` helper has fixed \`source_retrieved=false\`, \`source_verified=false\`, \`claim_verified=false\` and \`authority=none\`. Synthetic Node tests reject localhost, IP literals, internal hostnames, non-HTTPS and userinfo. Narrow/wide Chromium acceptance stubs \`window.open\` and confirms no navigation on decline, exact URL only on approval, requested \`noopener,noreferrer\` and no additional background network fetch.
+
+No web scraping, remote source parsing, independent citation retrieval, claims scoring, billing, token transmission, or public deployment is represented by this feature. Any future proxy-backed web research needs a separate reviewed consent, server-side SSRF and redirect protection, provider/source provenance, anti-injection boundaries and network/privacy tests.

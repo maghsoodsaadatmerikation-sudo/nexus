@@ -57,6 +57,28 @@ window.addEventListener('load',async()=>{
    writeText:async text=>{copied=text}
   }});
   ok(!!source&&!!date&&!!note&&!!assessment&&!!save,'per-claim-manual-evidence-inputs');
+  const opens=[],openButton=panel.querySelector('[data-claim-source-open]');
+  const beforeOpen=allRequests;
+  let navConfirm=0;
+  window.open=(...args)=>{opens.push(args);return null};
+  ok(!!openButton,'opt-in-source-navigation-action');
+  window.confirm=()=>{navConfirm++;return true};
+  source.value='https://127.0.0.1/private';
+  openButton.click();
+  ok(opens.length===0&&panel.textContent.includes('public-looking domain'),'reject-local-private-target');
+  source.value='https://example.org/human-only-source?search=reviewed';
+  window.confirm=()=>{navConfirm++;return false};
+  openButton.click();
+  ok(opens.length===0,'reject-navigation-when-user-declines');
+  window.confirm=()=>{navConfirm++;return true};
+  openButton.click();
+  ok(opens.length===1&&opens[0][0]==='https://example.org/human-only-source?search=reviewed'&&
+   opens[0][1]==='_blank'&&opens[0][2]==='noopener,noreferrer',
+   'explicit-navigation-after-consent-with-no-referrer');
+  ok(allRequests===beforeOpen,'browser-opening-requests-no-background-fetch');
+  source.value='https://portal.local/private';
+  openButton.click();
+  ok(opens.length===1,'local-suffix-not-opened');
   source.value='http://unsafe.example.org';date.value='2025-03-04';assessment.value='supports';
   save.click();
   ok(panel.textContent.includes('Could not add note'),'unsafe-source-refused');
