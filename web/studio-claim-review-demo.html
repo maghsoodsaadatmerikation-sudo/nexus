@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; connect-src 'none'">
+<title>NEXUS — local claim review (development preview)</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;background:#0c0e13;color:#f1f2f7}
+*{box-sizing:border-box}body{margin:0;padding:clamp(16px,3vw,40px);max-width:980px;margin-inline:auto}
+h1{font-size:clamp(1.5rem,3vw,2rem);letter-spacing:.03em;margin:.2em 0}
+p{color:#b9bac5;line-height:1.6}label{display:block;font-weight:600;margin:20px 0 8px}
+textarea,select{width:100%;border:1px solid #424653;border-radius:12px;background:#171a22;color:inherit;font:inherit;padding:14px}
+textarea{min-height:170px;resize:vertical}select{max-width:180px}button{cursor:pointer;border-radius:10px;border:1px solid #8c75b7;background:#553674;color:white;padding:12px 18px;font:inherit;font-weight:600}button.secondary{background:transparent;color:#e8ddfc;border-color:#51525c}
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.panel{border:1px solid #3c414b;border-radius:14px;padding:18px;margin-top:24px}.claim{border-top:1px solid #343945;padding:14px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.kind{color:#83dfbb;font-size:.85rem}.hint{font-size:.88rem}.danger{color:#ffb3b9}#results:empty{display:none}
+</style>
+</head>
+<body>
+<h1>NEXUS · Claim Review</h1>
+<p>Development preview. This local checklist is not fact-checking and never marks a statement as true. Nothing is sent or saved by this page.</p>
+<form id="review-form" autocomplete="off">
+<label for="language">Checklist language</label>
+<select id="language"><option value="en">English</option><option value="fa">فارسی</option></select>
+<label for="answer">Paste an AI answer to inspect (up to 24,000 characters)</label>
+<textarea id="answer" maxlength="24000" autocomplete="off" spellcheck="false" aria-describedby="privacy"></textarea>
+<p class="hint" id="privacy">Do not paste passwords, access tokens, or sensitive personal data. The pattern scanner cannot detect every secret.</p>
+<div class="controls"><button id="review" type="submit">Review claims</button><button id="clear" class="secondary" type="button">Clear</button></div>
+</form>
+<div class="panel" id="results" role="status" aria-live="polite"></div>
+<script src="studio-claim-review.js"></script>
+<script src="studio-claim-review-demo.js"></script>
+</body>
+</html>
