@@ -93,6 +93,8 @@ jobs:
         run: python3 scripts/test-studio-gateway-errors-browser.py
       - name: Exercise the local claim review preview in disposable Chromium
         run: python3 scripts/test-studio-claim-review-browser.py
+      - name: Check opt-in claim review inside real chat with synthetic provider
+        run: python3 scripts/test-studio-claim-review-chat-browser.py
       - name: Review probable credentials with separate consent in isolated Chromium
         run: python3 scripts/test-studio-credential-preflight-browser.py
       - name: Verify storage status separates encrypted archive, unsaved drafts and local media in Chromium
