@@ -115,9 +115,11 @@ window.addEventListener('load',async()=>{
   const pmcidInput=panel.querySelector('[data-claim-epmc-id]');
   const articleButton=panel.querySelector('[data-claim-epmc-fetch]');
   const articleResult=panel.querySelector('[data-claim-epmc-result]');
-  const epmcQuoteInput=panel.querySelector('[data-claim-quote-selection]');
+  const epmcQuoteInput=panel.querySelector('[data-claim-epmc-quote]');
   ok(!!pmcidInput&&!!articleButton&&!!articleResult&&!!epmcQuoteInput,
     'real-article-quote-review-requires-user-inputs');
+  ok(epmcQuoteInput!==panel.querySelector('[data-claim-quote-selection]'),
+    'remote-article-quote-is-independent-of-human-paste-quote');
   pmcidInput.value='PMC1234567';
   epmcQuoteInput.value='The report counted exactly 200 participants in 2025.';
   let articleConsent=0;
