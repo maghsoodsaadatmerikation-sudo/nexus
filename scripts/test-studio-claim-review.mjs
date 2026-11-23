@@ -29,4 +29,27 @@ for(const secret of ['github_pat_'+'A'.repeat(40),'sk-proj-'+'b'.repeat(40),'AKI
  assert(!JSON.stringify(blocked).includes(secret));
  assert.throws(()=>R.checklist(phrase),/claim-review-possible-credentials/);
 }
+// A user-supplied reference is a review note, never a verified citation.
+const manual=R.recordEvidence(sample,'c1',{
+ source_url:'https://example.org/research?q=study',
+ source_date:'2025-03-01',note:'Human entered a summary',assessment:'supports'
+});
+assert.equal(manual.claim_id,'c1');
+assert.equal(manual.reviewer_assessment,'supports');
+assert.equal(manual.verification,'not-independently-verified');
+assert.equal(manual.source_retrieved,false);
+assert.equal(manual.authority,'none');
+assert.match(R.evidenceReport(sample,[manual]),/not independently verified/);
+assert.match(R.evidenceReport(sample,[manual],'fa'),/تأیید مستقل نشده/);
+assert.throws(()=>R.recordEvidence(sample,'c999',{}),/claim-evidence-id/);
+assert.throws(()=>R.recordEvidence(sample,'c1',{source_url:'http://example.com'}),/claim-evidence-url/);
+assert.throws(()=>R.recordEvidence(sample,'c1',{source_url:'https://user:password@example.org/'}),/claim-evidence-url/);
+assert.throws(()=>R.recordEvidence(sample,'c1',{source_url:'https://example.org/',source_date:'2026-02-30'}),/claim-evidence-date/);
+assert.throws(()=>R.recordEvidence(sample,'c1',{assessment:'supports',source_url:'https://example.org/'}),/claim-evidence-needs-source-and-date/);
+assert.throws(()=>R.recordEvidence(sample,'c1',{assessment:'proven'}),/claim-evidence-input/);
+assert.throws(()=>R.recordEvidence(sample,'c1',{unexpected:'tool-access'}),/claim-evidence-input/);
+assert.throws(()=>R.recordEvidence(sample,'c1',{note:'github_pat_'+'Q'.repeat(40)}),/claim-evidence-private/);
+assert.throws(()=>R.evidenceReport(sample,[manual,manual]),/claim-evidence-report/);
+assert.throws(()=>R.recordEvidence('The report in 2025 used 15 people. github_pat_'+'Q'.repeat(40),'c1',{}),/claim-evidence-blocked/);
+assert.throws(()=>R.evidenceReport(sample,[{claim_id:'c1',source_url:'https://example.org/',reviewer_assessment:'proven'}]),/claim-evidence-input/);
 console.log('NEXUS local claim-review: PASS');
