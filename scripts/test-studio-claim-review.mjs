@@ -95,4 +95,29 @@ assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,verified:true}]),/clai
 assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,verification:'independently-verified'}]),/claim-evidence-report/);
 assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,statement:'Fake claimed assertion'}]),/claim-evidence-report/);
 assert.throws(()=>R.evidenceReport(sample,[{...safeRecord,source_retrieved:true}]),/claim-evidence-report/);
+
+// A manually reviewed navigation plan does not retrieve or validate a page.
+const planned=R.planSourceOpen(sample,'c1','https://example.org/research/2025?source=human');
+assert.equal(planned.schema,'nexus.source-open-plan.v1');
+assert.equal(planned.url,'https://example.org/research/2025?source=human');
+assert.equal(planned.hostname,'example.org');
+assert.equal(planned.method,'explicit-browser-navigation');
+assert.equal(planned.source_retrieved,false);
+assert.equal(planned.source_verified,false);
+assert.equal(planned.claim_verified,false);
+assert.equal(planned.authority,'none');
+for(const rejected of [
+ 'http://example.org/','https://localhost/p','https://admin@public.example.org/',
+ 'https://127.0.0.1/','https://2130706433/','https://[::1]/',
+ 'https://metadata.google.internal/','https://portal.local/',
+ 'https://example.org:8443/p','https://site.test/path',
+ 'https://foo.invalid/','https://host.onion/','https://foo.example/'
+]){
+ assert.throws(()=>R.planSourceOpen(sample,'c1',rejected),
+  /claim-evidence-url|claim-source-public-host-required/,rejected);
+}
+assert.throws(()=>R.planSourceOpen(sample,'c1',''),/claim-source-url-required/);
+assert.throws(()=>R.planSourceOpen(sample,'c13','https://example.org/'),/claim-evidence-id/);
+assert.throws(()=>R.planSourceOpen('In 2025 the result was found. github_pat_'+'A'.repeat(40),
+ 'c1','https://example.org/'),/claim-evidence-blocked/);
 console.log('NEXUS local claim-review: PASS');
