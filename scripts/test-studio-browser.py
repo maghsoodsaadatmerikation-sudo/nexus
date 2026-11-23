@@ -21,8 +21,9 @@ window.addEventListener('load',async()=>{
  let network=0,posted=null,delayResponse=null,late=false;
  const formattedReply=[
   '# Synthetic answer',
-  'Read **carefully** with `sample()` and *context*.',
-  '- First item','- Second item','3. Third step','4. Fourth step',
+  'Read **carefully** with `sample()` and *context*; ~~obsolete~~ detail.',
+  '- First item','- Second item','','- [ ] Open task','- [x] Finished task','','---',
+  '3. Third step','4. Fourth step',
   '> An attributed quote',
   '```text','<div>literal code</div>','```',
   '| Term | Meaning |','| --- | --- |','| مثال | Example |',
@@ -183,8 +184,18 @@ window.addEventListener('load',async()=>{
   assert(formatted.querySelector('h3').textContent==='Synthetic answer'&&formatted.querySelector('p strong').textContent==='carefully'&&
    formatted.querySelector('p code').textContent==='sample()'&&formatted.querySelector('p em').textContent==='context',
    'finished-reply-displays-headings-and-inline-formatting');
-  assert(formatted.querySelectorAll('ul > li').length===2&&formatted.querySelector('ol').start===3&&
+  assert(formatted.querySelector('ul').querySelectorAll(':scope > li').length===2&&formatted.querySelector('ol').start===3&&
    formatted.querySelector('blockquote').textContent==='An attributed quote','finished-reply-displays-lists-and-quotations');
+  assert(formatted.querySelector('p del')?.textContent==='obsolete'&&
+   formatted.querySelectorAll('ul input[type="checkbox"]').length===2&&
+   [...formatted.querySelectorAll('ul input[type="checkbox"]')].every(node=>node.disabled)&&
+   !formatted.querySelectorAll('ul input[type="checkbox"]')[0].checked&&
+   formatted.querySelectorAll('ul input[type="checkbox"]')[1].checked&&
+   formatted.querySelector('hr')&&!formatted.querySelector('script'),
+   'finished-reply-uses-inert-tasks-strike-and-thematic-break');
+  assert(formatted.querySelector('pre code')?.dataset.language==='text'&&
+   formatted.querySelector('button.reply-copy-code')?.type==='button',
+   'code-action-is-visible-only-in-live-reply');
   assert(formatted.querySelector('pre code').textContent==='<div>literal code</div>'&&
    formatted.querySelector('table tbody td').textContent==='مثال','code-and-table-render-as-structured-text');
   const links=formatted.querySelectorAll('a');
@@ -193,6 +204,11 @@ window.addEventListener('load',async()=>{
    'plain-html-and-unsafe-links-cannot-become-interactive-elements');
   let copiedReply;
   Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{copiedReply=text}}});
+  formatted.querySelector('.reply-copy-code').click();
+  await wait(()=>copiedReply==='<div>literal code</div>');
+  assert(formatted.querySelector('.reply-copy-code').textContent==='Copied',
+   'copy-code-is-explicit-and-preserves-literal-snippet');
+  copiedReply=undefined;
   formatted.parentElement.querySelector('[data-chat-copy]').click();
   await wait(()=>copiedReply!==undefined);
   assert(copiedReply===formattedReply&&current().threads[0].nodes.at(-1).text===formattedReply,'copy-and-history-keep-original-markdown');
@@ -215,6 +231,10 @@ window.addEventListener('load',async()=>{
   assert(exported.documentElement.lang==='en'&&exported.querySelector('main h3')?.textContent==='Synthetic answer'&&
    exported.querySelector('table td')?.textContent==='مثال'&&exported.querySelector('pre code')?.textContent==='<div>literal code</div>',
    'standalone-answer-keeps-structured-markdown-and-unicode');
+  assert(!exported.querySelector('.reply-copy-code')&&
+   exported.querySelectorAll('ul input[type="checkbox"]:disabled').length===2&&
+   exported.querySelector('hr')&&exported.querySelector('del')?.textContent==='obsolete',
+   'offline-export-retains-readable-structure-without-clipboard-controls');
   assert(!exported.querySelector('script,img,iframe,base,link,form')&&exported.querySelectorAll('a').length===1&&
    exported.querySelector('meta[http-equiv="Content-Security-Policy"]').content.includes("default-src 'none'"),
    'exported-html-keeps-unsupported-markup-inert');

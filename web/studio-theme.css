@@ -58,7 +58,11 @@ summary {cursor: pointer; padding: 7px 0; font-weight: 600;}
 .reply-format > :last-child {margin-block-end: .35rem;}
 .reply-format :is(ul,ol) {padding-inline-start: 1.5rem;}
 .reply-format blockquote {margin-inline: 0; padding-inline-start: .75rem; border-inline-start: 3px solid currentColor;}
-.reply-format pre {direction: ltr; text-align: left; white-space: pre; overflow: auto; padding: .65rem; border: 1px solid currentColor; border-radius: 8px;}
+.reply-format pre {direction: ltr; text-align: left; white-space: pre; overflow: auto; padding: .65rem; border: 1px solid currentColor; border-radius: 8px; position: relative;}
+.reply-format pre:has(.reply-copy-code) {padding-top: 3.2rem;}
+.reply-copy-code {position: absolute; top: .3rem; right: .3rem; min-height: 34px; padding-inline: .65rem; font-size: .8rem;}
+.reply-format hr {border: 0; border-block-start: 1px solid currentColor; opacity: .4;}
+.reply-format li input[type="checkbox"] {margin-inline-end: .35rem;}
 .reply-format pre:focus-visible, .reply-table:focus-visible {outline: 2px solid currentColor; outline-offset: 2px;}
 .reply-format a {color: inherit; text-decoration: underline;}
 .reply-table {overflow: auto;}
