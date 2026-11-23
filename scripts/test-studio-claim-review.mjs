@@ -208,6 +208,11 @@ const xml='<article><front><article-meta><article-id pub-id-type="pmc">123456</a
  '<title-group><article-title>Fake <b>Story</b></article-title></title-group></article-meta></front>'+
  '<body><sec><p>Introduction. '+epmcQuote+'</p></sec></body></article>';
 const parsedMock={documentElement:{localName:'article',getAttribute:()=> 'research-article'},getElementsByTagName:()=>[],
+ querySelectorAll(selector){
+  if(selector==='article-meta > article-id[pub-id-type="doi"]')return [{textContent:'10.1234/fictional-study.2025'}];
+  if(selector==='article-meta > related-article[related-article-type]')return [{getAttribute:()=> 'corrected-article'}];
+  return [];
+ },
  querySelector(selector){
   if(selector==='article-id[pub-id-type="pmc"]')return {textContent:'123456'};
   if(selector==='body')return {
@@ -246,6 +251,10 @@ assert.equal(epmcOptions.mode,'cors');
 assert.equal(epmcOptions.method,'GET');
 assert.equal(pmcReceipt.article_title,'Fake Story');
 assert.equal(pmcReceipt.article_type_as_deposited,'research-article');
+assert.equal(pmcReceipt.article_doi_as_deposited,'10.1234/fictional-study.2025');
+assert.equal(pmcReceipt.article_doi_ambiguous,false);
+assert.deepEqual(pmcReceipt.related_article_types_as_deposited,['corrected-article']);
+assert.equal(pmcReceipt.retraction_status_verified,false);
 assert.deepEqual(pmcReceipt.matching_section_headings,['Results and interpretation']);
 assert.equal(pmcReceipt.section_context_is_support_verdict,false);
 assert.equal(pmcReceipt.doctype_handling,'absent');
@@ -258,6 +267,18 @@ assert.equal(pmcReceipt.claim_verified,false);
 assert.equal(pmcReceipt.authority,'none');
 assert.match(pmcReceipt.response_sha256,/^[0-9a-f]{64}$/);
 assert(!JSON.stringify(pmcReceipt).includes('Introduction.'));
+// Conflicting deposited identifiers are disclosed, never silently resolved.
+const conflictingParser={parseFromString(){return {...parsedMock,querySelectorAll(selector){
+ if(selector==='article-meta > article-id[pub-id-type="doi"]')return [
+  {textContent:'10.1234/first'},{textContent:'10.1234/second'}];
+ return parsedMock.querySelectorAll(selector);
+}}}};
+const ambiguous=await R.lookupEuropePmcFullText(sample,'c1','PMC123456',epmcQuote,{
+ consent:true,fetcher:async()=>pmcReply(),cryptoProvider:webcrypto,xmlParser:conflictingParser
+});
+assert.equal(ambiguous.article_doi_as_deposited,'');
+assert.equal(ambiguous.article_doi_ambiguous,true);
+assert.equal(ambiguous.claim_verified,false);
 // Real JATS commonly advertises a public external DTD. Strip that declaration
 // before parsing; do not load the network DTD and do not accept internal entities.
 const jatsDoctype='<?xml version="1.0" encoding="utf-8"?>\n'+

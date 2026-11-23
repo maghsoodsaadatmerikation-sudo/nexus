@@ -1,9 +1,9 @@
 /* Reviewed public Studio application code only; model bytes use a separate opt-in cache. */
 'use strict';
-const EXPECTED_SHA256='ab91c0d1910d1b0e077975616b005cf353db79f6e033014dba7f25a24f45ef03';
-const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'749629f2d0dc17e4';
+const EXPECTED_SHA256='2d068d2f321a56fa22e49cd29d23d7608f9225369114deb74202b458cc771366';
+const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'71caf5eef28818a9';
 const ENTRY=new URL('./',self.location.href).href;
-const HTML={url:ENTRY,bytes:684869,sha256:EXPECTED_SHA256,kind:'html'};
+const HTML={url:ENTRY,bytes:686707,sha256:EXPECTED_SHA256,kind:'html'};
 const CODE=[{"path":"device/device-engine.js","bytes":5332,"sha256":"aa7efe4d708f854ca35ff863edb602da7a9fb164d62e427c6521ddbd957e9175","kind":"javascript"},{"path":"device/device-worker.js","bytes":7863,"sha256":"a2b396fb0fe7a4411ba8a4e678b6c4f79bfc0eed673e1712f445baa8a9c60e85","kind":"javascript"},{"path":"device/device-ui.js","bytes":8683,"sha256":"08343f58bb01d1f26d37f55e1d3842e7f2fd22a02b23f8cfa4b7b7a2583192cd","kind":"javascript"},{"path":"device/model-manifest.json","bytes":3196,"sha256":"49353c4a16f7912fd4251b6d048923fd41d2819f9fab2faf5bfbccab9a7e3983","kind":"json"},{"path":"pdf/studio-pdf.mjs","bytes":4866,"sha256":"d506e6a2cf1ff9f5ee7849b82d53483980d407af40f0eadba07faa13184a3552","kind":"javascript"},{"path":"pdf/pdf.min.mjs","bytes":474284,"sha256":"3a88402882cfa3e7e72c2c9b5149f52f0f88baf1c5b62aa11a41abdbc2072440","kind":"javascript"},{"path":"pdf/pdf.worker.min.mjs","bytes":1271915,"sha256":"1e64c8240e54735ec5913b37acd5134747799cb8c6bb3777c70adbc01232d2aa","kind":"javascript"}].map(a=>({...a,url:new URL(a.path,ENTRY).href}));
 async function verified(response,asset=HTML){
  if(!response||response.status!==200||response.redirected||response.type!=='basic')return false;
