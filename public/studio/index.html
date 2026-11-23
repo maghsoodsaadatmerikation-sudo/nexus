@@ -2358,7 +2358,7 @@ function planSourceOpen(answer,claimId,sourceURL){
  // The destination can still redirect or be malicious after the user opens it.
  const parts=hostname.split('.');
  const reserved=new Set(['localhost','local','internal','lan','home','corp','onion','arpa','test','invalid','example']);
- if(parts.length<2||reserved.has(parts.at(-1))||reserved.has(parts.at(-2))||
+ if(parts.length<2||reserved.has(parts.at(-1))||
     !/^[a-z]{2,63}$/.test(parts.at(-1))||parsed.port||
     parts.some(part=>!part||part.length>63||!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(part))||
     /^(?:\d+\.){3}\d+$/.test(hostname)||
