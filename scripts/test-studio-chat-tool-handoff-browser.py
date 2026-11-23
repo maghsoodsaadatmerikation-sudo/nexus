@@ -310,6 +310,15 @@ window.addEventListener('load',async()=>{
   }
   fill('message','/plan\n/code\n/write modified');
   assert(receiptWorkflow.hidden,'editing-workflow-invalidates-observed-local-receipts');
+  fill('message','/plan\n/code\n/write');
+  chatSend.click();receiptWorkflow.querySelector('li button').click();
+  fill('code','while (true) {}');
+  $('code-consent').checked=true;$('code-run').click();$('code-stop').click();
+  assert(receiptWorkflow.textContent.includes('Local execution cancelled')&&
+   !receiptWorkflow.textContent.includes('Local UI reported success'),
+   'cancellation-records-no-completed-worker-result');
+  fill('message','/plan\n/code\n/write changed');
+  assert(receiptWorkflow.hidden,'canceled-workflow-receipt-is-cleared-with-draft');
   // The local-guide mode retains broad opt-in natural-language discovery.
   // Explicit slash commands still work in both modes.
   chooser.value='guide';chooser.dispatchEvent(new Event('change',{bubbles:true}));
