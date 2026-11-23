@@ -138,13 +138,20 @@ function evidenceReport(answer,entries,language='en'){
  const seen=new Set(),safe=[];
  for(const entry of entries){
   if(!entry||typeof entry!=='object'||Array.isArray(entry)||seen.has(entry.claim_id)||
-     Object.keys(entry).some(key=>!['claim_id','source_url','source_date','user_note','reviewer_assessment','source_text','quotation'].includes(key)))
+     Object.keys(entry).some(key=>!['schema','claim_id','statement','source_url','source_date','user_note','reviewer_assessment','verification','source_retrieved','authority','source_text','quotation'].includes(key))||
+     (entry.schema!==undefined&&entry.schema!=='nexus.claim-evidence.v1')||
+     (entry.verification!==undefined&&entry.verification!=='not-independently-verified')||
+     (entry.source_retrieved!==undefined&&entry.source_retrieved!==false)||
+     (entry.authority!==undefined&&entry.authority!=='none'))
    throw Error('claim-evidence-report');
   seen.add(entry.claim_id);
-  safe.push(recordEvidence(answer,entry.claim_id,{
+  const checked=recordEvidence(answer,entry.claim_id,{
    source_url:entry.source_url,source_date:entry.source_date,
    note:entry.user_note,assessment:entry.reviewer_assessment
-  }));
+  });
+  if(entry.statement!==undefined&&entry.statement!==checked.statement)
+   throw Error('claim-evidence-report');
+  safe.push(checked);
  }
  const fa=language==='fa';
  const plain=value=>value.replace(/[\r\n]+/g,' ').replace(/[\\`*_{}\[\]()#+.!>|~<]/g,character=>'\\'+character);
