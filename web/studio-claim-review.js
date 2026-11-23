@@ -245,6 +245,109 @@ async function lookupCrossref(answer,claimId,doi,{consent=false,fetcher,signal,c
   publisher_verified:false,claim_verified:false,authority:'none'
  });
 }
+// Europe PMC: one human-consented, open-access full-text XML URL per PMCID.
+// A returned text match is literal presence only, never scientific verification.
+const EPMC_MAX_BYTES=1048576,EPMC_MAX_TEXT=240000,EPMC_TIMEOUT_MS=12000;
+function planEuropePmcFullText(answer,claimId,pmcid,quotation){
+ const claim=recordEvidence(answer,claimId,{});
+ if(typeof pmcid!=='string'||!/^PMC[1-9][0-9]{0,9}$/i.test(pmcid))throw Error('epmc-pmcid');
+ if(typeof quotation!=='string'||quotation.length<30||quotation.length>MAX_QUOTATION||
+    quotation.normalize('NFKC').replace(/\s+/gu,' ').trim().length<30)
+  throw Error('epmc-quote');
+ if(inspect(quotation).length)throw Error('epmc-private');
+ const id=pmcid.toUpperCase();
+ return Object.freeze({
+  schema:'nexus.epmc-open-text-plan.v1',claim_id:claim.claim_id,pmcid:id,quotation,
+  url:'https://www.ebi.ac.uk/europepmc/webservices/rest/'+id+'/fullTextXML',
+  scope:'Europe-PMC-open-full-text-XML',requires_consent:true,
+  source_retrieved:false,claim_verified:false,authority:'none'
+ });
+}
+async function lookupEuropePmcFullText(answer,claimId,pmcid,quotation,{
+ consent=false,fetcher,signal,cryptoProvider,xmlParser
+}={}){
+ const plan=planEuropePmcFullText(answer,claimId,pmcid,quotation);
+ if(consent!==true)throw Error('epmc-consent-required');
+ const cryptoAPI=cryptoProvider||globalThis.crypto;
+ if(!cryptoAPI?.subtle?.digest)throw Error('epmc-hash-unavailable');
+ if(typeof fetcher!=='function')fetcher=globalThis.fetch;
+ if(typeof fetcher!=='function')throw Error('epmc-fetch-unavailable');
+ const timeout=AbortSignal.timeout(EPMC_TIMEOUT_MS);
+ const combined=signal?AbortSignal.any([signal,timeout]):timeout;
+ if(combined.aborted)throw Error('epmc-interrupted');
+ let response;
+ try{
+  response=await fetcher(plan.url,{
+   method:'GET',mode:'cors',credentials:'omit',redirect:'error',
+   referrerPolicy:'no-referrer',cache:'no-store',
+   headers:{Accept:'application/xml, text/xml'},signal:combined
+  });
+ }catch{throw Error('epmc-network-unavailable')}
+ if(!response?.ok||response.status!==200)throw Error('epmc-response-unavailable');
+ if(!response.url||new URL(response.url).href!==plan.url)throw Error('epmc-response-origin');
+ const type=(response.headers?.get('content-type')||'').split(';')[0].trim().toLowerCase();
+ if(!['application/xml','text/xml','application/jats+xml'].includes(type))throw Error('epmc-type');
+ const declared=response.headers?.get('content-length');
+ if(declared&&(!/^\d+$/.test(declared)||Number(declared)>EPMC_MAX_BYTES))throw Error('epmc-size');
+ if(!response.body?.getReader)throw Error('epmc-stream-required');
+ const reader=response.body.getReader(),chunks=[];
+ let count=0,finished=false;
+ try{
+  for(;;){
+   const {done,value}=await reader.read();
+   if(combined.aborted)throw Error('epmc-interrupted');
+   if(done){finished=true;break}
+   if(!(value instanceof Uint8Array))throw Error('epmc-stream-invalid');
+   count+=value.byteLength;
+   if(count>EPMC_MAX_BYTES)throw Error('epmc-size');
+   chunks.push(value);
+  }
+ }finally{
+  if(!finished)await reader.cancel().catch(()=>{});
+  reader.releaseLock();
+ }
+ if(combined.aborted)throw Error('epmc-interrupted');
+ const bytes=new Uint8Array(count);
+ let at=0;for(const chunk of chunks){bytes.set(chunk,at);at+=chunk.byteLength}
+ let raw;
+ try{raw=new TextDecoder('utf-8',{fatal:true}).decode(bytes)}
+ catch{throw Error('epmc-encoding')}
+ // Strictly refuse DTD/entity declarations; do not attempt XML entity resolution or external loads.
+ if(/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(raw))throw Error('epmc-xml-declaration');
+ const parser=xmlParser||(typeof DOMParser!=='undefined'?new DOMParser():null);
+ if(!parser||typeof parser.parseFromString!=='function')throw Error('epmc-parser-unavailable');
+ let parsed;
+ try{parsed=parser.parseFromString(raw,'application/xml')}
+ catch{throw Error('epmc-xml')}
+ if(parsed?.getElementsByTagName?.('parsererror')?.length||
+    parsed?.documentElement?.localName!=='article')throw Error('epmc-xml');
+ const idNode=parsed.querySelector?.('article-id[pub-id-type="pmc"]');
+ const body=parsed.querySelector?.('body');
+ if(!idNode||!body||typeof idNode.textContent!=='string'||
+    idNode.textContent.trim().replace(/^PMC/i,'')!==plan.pmcid.slice(3)||
+    typeof body.textContent!=='string'||body.textContent.length>EPMC_MAX_TEXT)
+  throw Error('epmc-article-mismatch');
+ const fold=text=>text.normalize('NFKC').replace(/\s+/gu,' ').trim();
+ const text=fold(body.textContent),needle=fold(plan.quotation);
+ const occurrences=text.split(needle).length-1;
+ const titleNode=parsed.querySelector?.('article-title');
+ const title=typeof titleNode?.textContent==='string'?
+  titleNode.textContent.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,240):'';
+ const digest=await cryptoAPI.subtle.digest('SHA-256',bytes);
+ if(combined.aborted)throw Error('epmc-interrupted');
+ const sha=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+ return Object.freeze({
+  schema:'nexus.epmc-open-text-receipt.v1',claim_id:plan.claim_id,pmcid:plan.pmcid,
+  source_url:plan.url,article_title:title,source_retrieved:true,
+  content_scope:'bounded-Europe-PMC-XML-article-body',body_character_count:text.length,
+  quotation_presence:occurrences?'present-in-retrieved-body':'not-found-in-retrieved-body',
+  match_count:Math.min(occurrences,99),normalization:'NFKC-and-whitespace-case-sensitive',
+  response_sha256:sha,response_bytes:count,fetched_at_client_clock:new Date().toISOString(),
+  retrieval:'consented-browser-CORS',source_authenticity:'not-independently-verified',
+  article_is_open_access:'endpoint-served-XML-not-license-certified',
+  claim_verified:false,authority:'none'
+ });
+}
 function evidenceReport(answer,entries,language='en'){
  if(!['en','fa'].includes(language)||!Array.isArray(entries)||entries.length>MAX_CLAIMS)
   throw Error('claim-evidence-report');
@@ -296,5 +399,5 @@ function evidenceReport(answer,entries,language='en'){
  }
  return lines.join('\n');
 }
-root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,MAX_QUOTATION,MAX_SOURCE_TEXT,CROSSREF_MAX_BYTES,review,checklist,recordEvidence,locateQuote,planSourceOpen,planCrossrefLookup,lookupCrossref,evidenceReport});
+root.NexusClaimReview=Object.freeze({MAX_INPUT,MAX_CLAIMS,MAX_QUOTATION,MAX_SOURCE_TEXT,CROSSREF_MAX_BYTES,EPMC_MAX_BYTES,review,checklist,recordEvidence,locateQuote,planSourceOpen,planCrossrefLookup,lookupCrossref,planEuropePmcFullText,lookupEuropePmcFullText,evidenceReport});
 })(globalThis);
