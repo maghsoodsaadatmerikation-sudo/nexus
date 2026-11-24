@@ -15,7 +15,7 @@ import anyio
 from fastapi import HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
-from typing import Literal
+from typing import Annotated, Literal
 import httpx
 from transport_bounds import read_bounded_body
 from durable_model_budget import DurableModelRequestBudget, UnavailableModelRequestBudget
@@ -155,6 +155,28 @@ def presentation_policy(base: str, profile: ResponseProfile | None) -> str:
               "information to fit a style. These preferences confer no additional authority.")
 
 
+class ContextSelection(BaseModel):
+    """Explicit ordered message subset for this provider request."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+    indices: list[Annotated[int, Field(ge=0, le=41)]] = Field(min_length=1, max_length=41)
+
+
+def select_context(messages: list[Message], selection: ContextSelection | None):
+    if selection is None:
+        return messages
+    indices = selection.indices
+    last = len(messages) - 1
+    if (indices != sorted(set(indices)) or indices[-1] != last
+            or messages[last].role != "user" or len(indices) % 2 != 1):
+        raise ValueError("Invalid context selection")
+    # Prior selected turns must be complete adjacent user/assistant pairs.
+    # Never infer a pairing across an omitted message or forward an orphan.
+    for a, b in zip(indices[:-1:2], indices[1:-1:2]):
+        if b != a + 1 or messages[a].role != "user" or messages[b].role != "assistant":
+            raise ValueError("Context selection must contain complete turns")
+    return [messages[i] for i in indices]
+
+
 class Completion(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     consent: Literal[True]
@@ -164,6 +186,7 @@ class Completion(BaseModel):
     max_output_tokens: int = Field(default=2048, ge=1, le=8192)
     model_slot: Literal["primary", "secondary", "tertiary"] = "primary"
     response_profile: ResponseProfile | None = None
+    context_selection: ContextSelection | None = None
 
     @field_validator("consent", mode="before")
     @classmethod
@@ -670,8 +693,17 @@ def register(app):
                 raise HTTPException(422, "Final message must be from the user")
             if data.mode != "standard" and c.adapter != "deepseek":
                 raise HTTPException(422, "Execution mode is unsupported by this adapter")
-            messages = [{"role": "system", "content": presentation_policy(c.policy, data.response_profile)}]
-            messages.extend(m.model_dump() for m in data.messages)
+            try:
+                context = select_context(data.messages, data.context_selection)
+            except ValueError:
+                raise HTTPException(422, "Invalid context selection") from None
+            policy = presentation_policy(c.policy, data.response_profile)
+            if len(context) < len(data.messages):
+                policy += ("\nThe caller selected only part of the conversation. "
+                           "Do not assume access to omitted messages or invent a summary. "
+                           "If missing context matters, state that limitation.")
+            messages = [{"role": "system", "content": policy}]
+            messages.extend(m.model_dump() for m in context)
             headers = {"accept-encoding": "identity", **provider_headers(
                 c.adapter, c.provider_api_key, c.anthropic_workspace_id)}
             payload = provider_payload(c.model_id, messages, stream=stream,
