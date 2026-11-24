@@ -663,6 +663,21 @@ def register(app):
                     "POST", c.endpoint, headers=headers, follow_redirects=False,
                     json=payload,
                 ) as upstream:
+                    if upstream.status_code in {429, 503, 529}:
+                        # Provider capacity/quota is distinct from the local 429
+                        # budget. Never replay the prompt or select another model.
+                        retry_values = upstream.headers.get_list("retry-after")
+                        response_headers = {"Cache-Control": "no-store"}
+                        if len(retry_values) == 1:
+                            delay = retry_values[0]
+                            # Only bounded ASCII delta-seconds; never relay
+                            # arbitrary provider strings, dates or duplicates.
+                            if re.fullmatch(r"[0-9]{1,4}", delay) and int(delay) <= 3600:
+                                response_headers["Retry-After"] = str(int(delay))
+                        raise HTTPException(
+                            503, "Selected model provider is temporarily unavailable or rate limited",
+                            headers=response_headers,
+                        )
                     if upstream.status_code != 200:
                         raise HTTPException(502, "Model provider rejected the request")
                     if upstream.headers.get("content-encoding", "identity").lower() != "identity":
