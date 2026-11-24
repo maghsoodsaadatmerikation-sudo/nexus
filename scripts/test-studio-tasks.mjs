@@ -34,3 +34,35 @@ try{
  checks+=2;
 }finally{globalThis.setTimeout=nativeSetTimeout}
 console.log(JSON.stringify({status:'PASS',checks,real_browser_worker_tested:false}));
+
+const {reviewWorkflowRecovery}=await import('../web/studio-workflow-recovery.mjs');
+function testRecovery(review){
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('fixture mismatch '+checks)};
+ const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('expected rejection '+checks)};
+ const on={enabled:true},plan=Object.freeze([{id:'final',needs:['left','right']},{id:'left',needs:[]},{id:'right',needs:[]},{id:'independent',needs:[]}]);
+ const obs=(id,status)=>({id,status}),st=[obs('left','succeeded'),obs('right','failed'),obs('final','queued'),obs('independent','queued')];
+ const result=review(plan,st,on);
+ eq(result.items.map(x=>[x.id,x.disposition]),[['left','reported_success'],['right','review_retry'],['final','wait_for_dependencies'],['independent','review_next_step']]);
+ eq(result.items[2].unresolved_dependencies,['right']);eq(result.execution_authorized,false);
+ eq(review(plan,[obs('left','succeeded'),obs('right','succeeded'),obs('final','queued')],on).items[2].disposition,'review_next_step');
+ eq(review(plan,[obs('final','succeeded')],on).items[2].disposition,'inconsistent_observation');
+ eq(review(plan,[obs('right','running')],on).items[1].disposition,'reconcile_before_action');
+ eq(review(plan,[],on).items.every(x=>x.disposition==='reconcile_before_action'),true);
+ eq(review(plan,[obs('left','cancelled')],on).items[0].disposition,'review_retry');
+ eq(review(plan,[obs('left','blocked')],on).items[0].disposition,'review_blocked_state');
+ eq(review(null,null).status,'off');eq(review(null,null,{enabled:true,isolated:true}).status,'isolated');
+ eq(review([{id:'a',needs:[]},{id:'b',needs:['a']},{id:'c',needs:['b']}],[obs('a','failed'),obs('b','succeeded'),obs('c','queued')],on).items.map(x=>x.disposition),['review_retry','inconsistent_observation','wait_for_dependencies']);
+ eq(JSON.stringify(result).includes('code'),false);eq(plan[0].needs,['left','right']);eq(st.length,4);
+ reject(()=>review([{id:'a',needs:['a']}],[],on),'cyclic-dependency');
+ reject(()=>review([{id:'a',needs:['b']}],[],on),'unknown-dependency');
+ reject(()=>review([{id:'a',needs:[]},{id:'a',needs:[]}],[],on),'invalid-step');
+ reject(()=>review([{id:'a',needs:[]},{id:'b',needs:['a','a']}],[],on),'invalid-step');
+ reject(()=>review(plan,[obs('left','queued'),obs('left','failed')],on),'invalid-observation');
+ reject(()=>review(plan,[obs('ghost','succeeded')],on),'invalid-observation');
+ reject(()=>review(plan,[obs('left','done')],on),'invalid-observation');
+ reject(()=>review([],[],on),'invalid-recovery-input');
+ reject(()=>review(plan,st,{enabled:1}),'invalid-options');
+ return checks;
+}
+console.log('WORKFLOW RECOVERY REVIEW: PASS ('+testRecovery(reviewWorkflowRecovery)+' checks)');
