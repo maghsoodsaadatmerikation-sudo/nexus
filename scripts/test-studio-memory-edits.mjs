@@ -67,3 +67,38 @@ const other=createMemoryEditReview();
 assert.throws(()=>other.approve(staged.ticket,'project-a',notes,opts),/inactive/);
 assert.deepEqual(notes,['first','second']);
 console.log('ONE-USE MEMORY REVIEW: PASS');
+
+const {reviewPreference}=await import('../web/studio-memory-edits.mjs');
+function testPreference(review){
+ let checks=0;const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('fixture mismatch '+checks)};
+ const reject=fn=>{checks++;let ok=false;try{fn()}catch{ok=true}if(!ok)throw Error('expected rejection '+checks)};
+ const on={enabled:true,origin:'human'},note='[preference] language = English',notes=Object.freeze([note,'ordinary note']);
+ eq(review(null,null).status,'off');eq(review(null,null,{...on,isolated:true}).status,'isolated');
+ eq(review(null,note,{...on,origin:'model'}).status,'ignored-origin');
+ eq(review(null,note,{...on,origin:'unknown'}).status,'ignored-origin');
+ eq(review(null,'I like music',on).status,'no-explicit-preference');
+ eq(review(null,'[preference] language = ',on).status,'invalid-preference');
+ eq(review(null,'[preference] language = English\nother',on).status,'invalid-preference');
+ eq(review(null,'[preference] x = '+'a'.repeat(500),on).status,'invalid-preference');
+ eq(review(notes,note,on),{status:'unchanged',index:0});
+ eq(review(notes,'[preference] language = Persian',on),{status:'review-replacement',operation:{kind:'replace',index:0,value:'[preference] language = Persian'}});
+ eq(review(notes,'[preference] موسیقی = پیانو',on),{status:'review-addition',operation:{kind:'add',value:'[preference] موسیقی = پیانو'}});
+ eq(review([note,note],note,on),{status:'ambiguous',indices:[0,1]});
+ eq(review(['[preference] Café = yes'],'[preference] Cafe\u0301 = yes',on).status,'unchanged');
+ eq(review(notes,'[preference] Language = English',on).status,'review-addition');
+ eq(review(Array(30).fill('ordinary'),note,on).status,'capacity');
+ eq(review([note,...Array(29).fill('ordinary')],'[preference] language = French',on).status,'review-replacement');
+ eq(notes,[note,'ordinary note']);
+ reject(()=>review(Array(31).fill('x'),note,on));reject(()=>review(['x'.repeat(501)],note,on));reject(()=>review(notes,note,{...on,enabled:1}));
+ return checks;
+}
+console.log('EXPLICIT PREFERENCE REVIEW: PASS ('+testPreference(reviewPreference)+' checks)');
+const prefController=createMemoryEditReview();
+const prefNotes=['[preference] language = English'];
+const prefCandidate=reviewPreference(prefNotes,'[preference] language = Persian',{enabled:true,origin:'human'});
+const prefReview=prefController.stage('project-a',prefNotes,prefCandidate.operation,{revision:7});
+assert.throws(()=>prefController.approve(prefReview.ticket,'project-a',prefNotes,{revision:7}),/not-approved/);
+const prefSecond=prefController.stage('project-a',prefNotes,prefCandidate.operation,{revision:7});
+assert.deepEqual(prefController.approve(prefSecond.ticket,'project-a',prefNotes,{revision:7,approved:true}),['[preference] language = Persian']);
+assert.deepEqual(prefNotes,['[preference] language = English']);
+console.log('PREFERENCE APPROVAL INTEGRATION: PASS');
