@@ -52,3 +52,26 @@ assert.throws(()=>rankMemoryContext(Array(31).fill('x'),'music',{enabled:true}),
 assert.throws(()=>rankMemoryContext(['x'.repeat(501)],'music',{enabled:true}),/invalid-note/);
 assert.deepEqual(context,['music piano','music piano recording','music guitar','weather']);
 console.log('MEMORY CONTEXT RANKING: PASS');
+
+const {reviewProjectContinuity}=await import('../web/studio-memory-review.mjs');
+function testContinuity(review){
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('fixture mismatch '+checks)};
+ const reject=fn=>{checks++;let ok=false;try{fn()}catch{ok=true}if(!ok)throw Error('expected rejection '+checks)};
+ const on={enabled:true},notes=Object.freeze(['[project next task-a] private action','[project goal goal-a] private goal','[project done task-b] declared finished','[project blocked task-c] مانع','[project decision decision-a] choice','[project done task-a] contradictory claim','[project next task-d] continue','[project next task-d] continue','ordinary','[project unknown x] invalid','[project goal x] ','[project next task-e] first','[project next task-e] second']);
+ const x=review(notes,on);
+ eq(x.items,[{kind:'goal',index:1,duplicates:[]},{kind:'decision',index:4,duplicates:[]},{kind:'blocked',index:3,duplicates:[]},{kind:'next',index:6,duplicates:[7]},{kind:'done',index:2,duplicates:[]}]);
+ eq(x.ambiguous,[{alternatives:[{kind:'next',indices:[0]},{kind:'done',indices:[5]}]},{alternatives:[{kind:'next',indices:[11]},{kind:'next',indices:[12]}]}]);
+ eq(x.invalid,[9,10]);eq(x.status,'review_only');eq(JSON.stringify(x).includes('private'),false);eq(JSON.stringify(x).includes('task-a'),false);
+ eq(review(null).status,'off');eq(review(null,{enabled:true,isolated:true}).status,'isolated');
+ eq(review(['[project next a] Café','[project next a] Cafe\u0301'],on).items,[{kind:'next',index:0,duplicates:[1]}]);
+ eq(review(['[project next A] one','[project done a] two'],on).ambiguous,[]);
+ eq(review(['[project next a] one\nother','[PROJECT next b] two','[project] malformed'],on).invalid,[0,1,2]);
+ eq(review(['ordinary'],on).items,[]);eq(review([],on).ambiguous,[]);
+ eq(review(['[project done a] done','[project next a] next','[project done a] done'],on).items,[]);
+ eq(review(['[project done a] done','[project next a] next','[project done a] done'],on).ambiguous,[{alternatives:[{kind:'done',indices:[0,2]},{kind:'next',indices:[1]}]}]);
+ eq(notes.length,13);
+ reject(()=>review(Array(31).fill('note'),on));reject(()=>review(['x'.repeat(501)],on));reject(()=>review([''],on));reject(()=>review(notes,{enabled:1}));
+ return checks;
+}
+console.log('PROJECT CONTINUITY REVIEW: PASS ('+testContinuity(reviewProjectContinuity)+' checks)');

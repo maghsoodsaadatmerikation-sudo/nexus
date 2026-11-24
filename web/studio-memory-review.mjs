@@ -88,3 +88,34 @@ export function rankMemoryContext(notes,query,{enabled=false,isolated=false,limi
  matches.sort((a,b)=>b.score-a.score||a.index-b.index);
  return {status:'review_only',basis:'bounded_lexical_context_and_explicit_aliases',matches:matches.slice(0,limit),truncated:matches.length>limit};
 }
+
+// Explicit, local project continuity hints. No inference, execution, storage or network.
+// [project goal|decision|next|blocked|done ID] text; IDs are case-sensitive and unique across kinds.
+// The caller must supply only the selected project's reviewed notes. 'done' is a declaration, not proof.
+export function reviewProjectContinuity(notes,{enabled=false,isolated=false}={}){
+ if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
+ if(isolated||!enabled)return {status:isolated?'isolated':'off',items:[],ambiguous:[],invalid:[]};
+ if(!Array.isArray(notes)||notes.length>30)throw Error('invalid-memory-list');
+ const groups=new Map(),invalid=[];
+ for(let index=0;index<notes.length;index++){
+  const note=notes[index];
+  if(typeof note!=='string'||!note.trim()||note.length>500)throw Error('invalid-memory-note');
+  if(!/^\[project(?:\s|\]|$)/i.test(note))continue;
+  const m=/^\[project (goal|decision|next|blocked|done) ([a-zA-Z0-9][a-zA-Z0-9-]{0,39})\] ([^\r\n]+)$/.exec(note);
+  if(!m||!m[3].trim()){invalid.push(index);continue}
+  const [,kind,id,text]=m,key=text.normalize('NFC').trim();
+  if(!groups.has(id))groups.set(id,new Map());
+  const variants=groups.get(id),signature=kind+'\u0000'+key;
+  if(!variants.has(signature))variants.set(signature,{kind,indices:[]});
+  variants.get(signature).indices.push(index);
+ }
+ const items=[],ambiguous=[];
+ for(const variants of groups.values()){
+  if(variants.size>1){ambiguous.push({alternatives:[...variants.values()].map(v=>({kind:v.kind,indices:v.indices}))});continue}
+  const v=variants.values().next().value;
+  items.push({kind:v.kind,index:v.indices[0],duplicates:v.indices.slice(1)});
+ }
+ const order=['goal','decision','blocked','next','done'];
+ items.sort((a,b)=>order.indexOf(a.kind)-order.indexOf(b.kind)||a.index-b.index);
+ return {status:'review_only',basis:'human_declared_project_notes_not_execution_evidence',items,ambiguous,invalid};
+}
