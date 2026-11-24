@@ -10,13 +10,14 @@ from typing import Literal
 
 from fastapi import HTTPException, Request
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from studio_analysis_audit import AuditRequest, audit
 from studio_analysis_batch import ApprovedBatch, run
 from studio_office_report import docx, xlsx
 from studio_paged_report import pdf, pptx
 from studio_analysis_chart import chart_svg
+from studio_analysis_dashboard import dashboard
 from studio_connections import operator_auth
 from transport_bounds import read_bounded_body
 
@@ -24,12 +25,16 @@ NO_STORE = {"Cache-Control": "no-store"}
 MAX_EXPORT = 128 * 1024
 
 
+Metric = Literal["characters", "utf8_bytes", "whitespace_tokens", "lines",
+                 "count", "sum", "min", "max", "mean", "median"]
+
+
 class ExportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     approved: ApprovedBatch
-    format: Literal["json", "csv", "html", "xlsx", "docx", "pdf", "pptx", "svg"]
-    chart_metric: Literal["characters", "utf8_bytes", "whitespace_tokens", "lines",
-                          "count", "sum", "min", "max", "mean", "median"] | None = None
+    format: Literal["json", "csv", "html", "xlsx", "docx", "pdf", "pptx", "svg", "dashboard"]
+    chart_metric: Metric | None = None
+    dashboard_metrics: list[Metric] = Field(default_factory=list, max_length=4)
     export_consent: bool
 
 
@@ -54,6 +59,10 @@ def build_export(request: ExportRequest):
         raise ValueError("Explicit export consent required")
     if (request.format == "svg") != (request.chart_metric is not None):
         raise ValueError("Select a chart metric only for SVG")
+    if (request.format == "dashboard") != bool(request.dashboard_metrics):
+        raise ValueError("Select dashboard metrics only for dashboard")
+    if len(set(request.dashboard_metrics)) != len(request.dashboard_metrics):
+        raise ValueError("Duplicate dashboard metric")
     computed = run(request.approved)
     checked = audit(AuditRequest(approved=request.approved, candidate=computed))
     if checked["status"] != "consistent":
@@ -99,6 +108,9 @@ def build_export(request: ExportRequest):
     elif request.format == "svg":
         data = chart_svg(computed, request.chart_metric)
         media = "image/svg+xml"
+    elif request.format == "dashboard":
+        data = dashboard(computed, request.dashboard_metrics)
+        media = "text/html; charset=utf-8"
     else:
         def cell(value):
             return html.escape(str(value), quote=True)
@@ -139,10 +151,14 @@ def register(app):
             raise HTTPException(409, "Analysis consistency check failed", headers=NO_STORE) from None
         except (ValidationError, ValueError, RecursionError, OverflowError):
             raise HTTPException(422, "Invalid analysis export", headers=NO_STORE) from None
+        filename = ("nexus-analysis-dashboard.html" if export.format == "dashboard"
+                    else f"nexus-analysis.{export.format}")
+        policy = ("default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
+                  if export.format == "dashboard" else "default-src 'none'")
         return Response(data, media_type=media, headers={
             **NO_STORE,
-            "Content-Disposition": f'attachment; filename="nexus-analysis.{export.format}"',
+            "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Content-Type-Options": "nosniff",
-            "Content-Security-Policy": "default-src 'none'",
+            "Content-Security-Policy": policy,
             "X-Nexus-Content-SHA256": hashlib.sha256(data).hexdigest(),
         })

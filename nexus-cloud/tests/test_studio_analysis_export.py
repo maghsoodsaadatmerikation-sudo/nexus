@@ -207,3 +207,65 @@ def test_svg_requires_metric_and_consent_and_validates_download(monkeypatch):
         assert client.post(url, json=bad, headers=headers).status_code == 422
     monkeypatch.setattr(exports, "audit", lambda request: {"status": "mismatch"})
     assert client.post(url, json=data, headers=headers).status_code == 409
+
+
+def dashboard_request():
+    data = request_data("dashboard")
+    data["dashboard_metrics"] = ["sum", "characters"]
+    return data
+
+
+def test_dashboard_multiple_panels_and_exact_table():
+    req = exports.ExportRequest.model_validate(dashboard_request())
+    data, media = exports.build_export(req)
+    assert media == "text/html; charset=utf-8"
+    assert data == exports.build_export(req)[0]
+    assert data.count(b"<details open>") == 2
+    assert data.count(b"<svg ") == 2
+    assert data.count(b"<table>") == 2
+    assert b"<summary>sum</summary>" in data
+    assert b"<summary>characters</summary>" in data
+    assert b"Not applicable: text." in data
+    assert b"independent scales" in data
+    assert b"Review SHA-256" in data
+    assert b"<script" not in data and b"secret" not in data and b"HYPERLINK" not in data
+
+
+@pytest.mark.parametrize("metrics", [[], ["sum", "sum"], ["bad"],
+                                    ["sum", "mean", "min", "max", "count"]])
+def test_dashboard_rejects_invalid_metric_selection(metrics):
+    data = dashboard_request()
+    data["dashboard_metrics"] = metrics
+    with pytest.raises(ValueError):
+        exports.build_export(exports.ExportRequest.model_validate(data))
+
+
+def test_dashboard_requires_applicable_metric():
+    from studio_analysis_dashboard import dashboard
+    result = {"review_sha256": "a" * 64,
+              "results": [{"step_id": "step", "operation": "numeric.summary", "metrics": {"sum": 0}}]}
+    with pytest.raises(ValueError):
+        dashboard(result, ["characters"])
+
+
+def test_dashboard_endpoint_auth_and_csp(monkeypatch):
+    token = "test-token-" + "x" * 40
+    monkeypatch.setenv("NEXUS_STUDIO_TOKEN", token)
+    app = FastAPI()
+    exports.register(app)
+    client = TestClient(app)
+    url = "/studio/api/analysis-batch/export"
+    headers = {"Authorization": "Bearer " + token}
+    data = dashboard_request()
+    assert client.post(url, json=data).status_code == 401
+    response = client.post(url, json=data, headers=headers)
+    assert response.status_code == 200
+    assert response.headers["content-disposition"] == 'attachment; filename="nexus-analysis-dashboard.html"'
+    assert response.headers["x-nexus-content-sha256"] == hashlib.sha256(response.content).hexdigest()
+    assert "default-src 'none'" in response.headers["content-security-policy"]
+    assert "style-src 'unsafe-inline'" in response.headers["content-security-policy"]
+    for bad in ({**data, "export_consent": False}, {**data, "format": "csv"},
+                {**data, "chart_metric": "sum"}):
+        assert client.post(url, json=bad, headers=headers).status_code == 422
+    monkeypatch.setattr(exports, "audit", lambda request: {"status": "mismatch"})
+    assert client.post(url, json=data, headers=headers).status_code == 409
