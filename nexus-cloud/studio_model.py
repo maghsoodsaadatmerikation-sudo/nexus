@@ -178,17 +178,26 @@ def select_context(messages: list[Message], selection: ContextSelection | None):
     return [messages[i] for i in indices]
 
 
-class Completion(BaseModel):
+class CompletionContext(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    consent: Literal[True]
-    configuration_id: str = Field(pattern=r"^[a-f0-9]{64}$")
     messages: list[Message] = Field(min_length=1, max_length=42)
     mode: Literal["standard", "thinking", "non-thinking"] = "standard"
     max_output_tokens: int = Field(default=2048, ge=1, le=8192)
-    model_slot: Literal["primary", "secondary", "tertiary"] = "primary"
     response_profile: ResponseProfile | None = None
     context_selection: ContextSelection | None = None
     creative_profile: CreativeProfile | None = None
+
+
+class ModelPlan(CompletionContext):
+    slots: list[Literal["primary", "secondary", "tertiary"]] = Field(min_length=1, max_length=3)
+    stream: bool = False
+
+
+class Completion(CompletionContext):
+    consent: Literal[True]
+    configuration_id: str = Field(pattern=r"^[a-f0-9]{64}$")
+    model_slot: Literal["primary", "secondary", "tertiary"] = "primary"
+    request_review_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
     @field_validator("consent", mode="before")
     @classmethod
@@ -569,6 +578,38 @@ async def response_frames(request, endpoint, headers, payload, *, receipt=None):
             limiter.release()
 
 
+def reviewed_payload(c: ModelSettings, data: CompletionContext, stream: bool):
+    """Build exactly the same provider payload for preview and dispatch."""
+    if stream and not c.streaming:
+        raise ValueError("Streaming unsupported")
+    if data.messages[-1].role != "user":
+        raise ValueError("Final message must be from the user")
+    if data.mode != "standard" and c.adapter != "deepseek":
+        raise ValueError("Unsupported model mode")
+    context = select_context(data.messages, data.context_selection)
+    policy = creative_policy(presentation_policy(c.policy, data.response_profile), data.creative_profile)
+    if len(context) < len(data.messages):
+        policy += ("\nThe caller selected only part of the conversation. "
+                   "Do not assume access to omitted messages or invent a summary. "
+                   "If missing context matters, state that limitation.")
+    messages = [{"role": "system", "content": policy}]
+    messages.extend(m.model_dump() for m in context)
+    payload = provider_payload(c.model_id, messages, stream=stream,
+                               max_output_tokens=data.max_output_tokens,
+                               mode=data.mode, adapter_name=c.adapter)
+    return payload, len(context)
+
+
+def request_review_id(c: ModelSettings, payload: dict) -> str:
+    # Keyed binding to exact outbound payload and frozen credential/route.
+    # Not a one-use authorization token or proof of human review.
+    canonical = json.dumps([c.slot, configuration_id(c), c.provider_api_key, payload],
+                           sort_keys=True, ensure_ascii=True, separators=(",", ":")).encode("ascii")
+    return hmac.new(c.studio_token.encode("utf-8"),
+                    b"nexus-model-request-review-v1\x00" + canonical,
+                    hashlib.sha256).hexdigest()
+
+
 def register(app):
     @app.get("/studio", include_in_schema=False)
     async def studio_page():
@@ -652,6 +693,51 @@ def register(app):
             **({"model_slot": slot} if requested else {}),
         }, headers={"Cache-Control": "no-store"})
 
+    @app.post("/studio-api/model-plan")
+    async def model_plan(request: Request):
+        catalog = read_model_catalog()
+        primary = catalog.get("primary")
+        if primary is None:
+            raise HTTPException(503, "No model provider is configured")
+        authorization = request.headers.getlist("authorization")
+        if len(authorization) != 1 or not hmac.compare_digest(
+            authorization[0].encode(), ("Bearer " + primary.studio_token).encode()
+        ):
+            raise HTTPException(401, "Studio authentication required")
+        media = request.headers.getlist("content-type")
+        if len(media) != 1 or media[0].split(";", 1)[0].strip().lower() != "application/json":
+            raise HTTPException(415, "JSON required")
+        body = await read_bounded_body(
+            request, max_bytes=MAX_INPUT, timeout_seconds=10.0,
+            too_large_detail="Model plan too large", timeout_detail="Model plan timed out",
+            timeout_status=408,
+        )
+        try:
+            data = ModelPlan.model_validate_json(body)
+            if len(set(data.slots)) != len(data.slots) or any(slot not in catalog for slot in data.slots):
+                raise ValueError("Invalid route selection")
+            routes = []
+            for slot in data.slots:
+                c = catalog[slot]
+                payload, count = reviewed_payload(c, data, data.stream)
+                routes.append({
+                    **public_model_choice(c),
+                    "request_review_id": request_review_id(c, payload),
+                    "included_message_count": count,
+                    "omitted_message_count": len(data.messages) - count,
+                })
+        except (ValidationError, ValueError, RecursionError):
+            raise HTTPException(422, "Invalid or incompatible model plan", headers={"Cache-Control": "no-store"}) from None
+        budget = await anyio.to_thread.run_sync(request.app.state.model_budget.snapshot)
+        return JSONResponse({
+            "status": "review_only", "routes": routes,
+            "planned_provider_attempts": len(routes), "stream": data.stream,
+            "max_output_tokens_per_route": data.max_output_tokens,
+            "local_request_budget_snapshot": budget,
+            "provider_contact_attempted": False, "budget_reserved": False,
+            "automatic_dispatch": False, "cost_verified": False, "authority": "none",
+        }, headers={"Cache-Control": "no-store"})
+
     async def handle_response(request: Request, stream: bool):
         catalog = read_model_catalog()
         c = catalog.get("primary")
@@ -696,21 +782,15 @@ def register(app):
             if data.mode != "standard" and c.adapter != "deepseek":
                 raise HTTPException(422, "Execution mode is unsupported by this adapter")
             try:
-                context = select_context(data.messages, data.context_selection)
+                payload, _ = reviewed_payload(c, data, stream)
             except ValueError:
                 raise HTTPException(422, "Invalid context selection") from None
-            policy = creative_policy(presentation_policy(c.policy, data.response_profile), data.creative_profile)
-            if len(context) < len(data.messages):
-                policy += ("\nThe caller selected only part of the conversation. "
-                           "Do not assume access to omitted messages or invent a summary. "
-                           "If missing context matters, state that limitation.")
-            messages = [{"role": "system", "content": policy}]
-            messages.extend(m.model_dump() for m in context)
+            if data.request_review_id is not None and not hmac.compare_digest(
+                data.request_review_id, request_review_id(c, payload)
+            ):
+                raise HTTPException(409, "Reviewed model request changed; review again")
             headers = {"accept-encoding": "identity", **provider_headers(
                 c.adapter, c.provider_api_key, c.anthropic_workspace_id)}
-            payload = provider_payload(c.model_id, messages, stream=stream,
-                                       max_output_tokens=data.max_output_tokens,
-                                       mode=data.mode, adapter_name=c.adapter)
             # The per-process attempt is charged only after authentication,
             # request bounds, explicit consent and configuration review pass.
             # Never refund a charged attempt: an interrupted call can still

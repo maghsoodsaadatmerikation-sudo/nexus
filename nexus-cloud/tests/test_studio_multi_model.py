@@ -355,3 +355,62 @@ def test_other_provider_failures_do_not_leak_raw_response(monkeypatch, status):
         assert response.headers.get("Retry-After") is None
         assert "private-provider-data" not in response.text
         assert client.app.state.model_budget.snapshot()["attempted"] == 1
+
+
+def test_model_plan_is_offline_and_exact_review_binds_dispatch(monkeypatch):
+    calls = []
+    def handler(req):
+        calls.append(json.loads(req.content))
+        if str(req.url) == model.ANTHROPIC_MESSAGES:
+            return httpx.Response(200, json=claude_answer("Secondary draft"))
+        return httpx.Response(200, json=chat_answer("Primary draft"))
+    with configured(monkeypatch, handler) as c:
+        set_secondary(monkeypatch)
+        context = {"messages": [{"role": "user", "content": "Private old question"},
+                                {"role": "assistant", "content": "Private old answer"},
+                                {"role": "user", "content": "Reviewed question"}],
+                   "context_selection": {"indices": [2]},
+                   "response_profile": {"language": "fa"}}
+        response = c.post("/studio-api/model-plan",
+                          json={**context, "slots": ["primary", "secondary"]}, headers=AUTH)
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        plan = response.json()
+        assert plan["planned_provider_attempts"] == 2
+        assert not plan["provider_contact_attempted"] and not plan["budget_reserved"]
+        assert not calls and c.app.state.model_budget.snapshot()["attempted"] == 0
+        assert "Private old" not in response.text and "Reviewed question" not in response.text
+        assert SECRET_PRIMARY not in response.text and SECRET_CLAUDE not in response.text
+        assert len({route["request_review_id"] for route in plan["routes"]}) == 2
+        for route in plan["routes"]:
+            assert route["included_message_count"] == 1 and route["omitted_message_count"] == 2
+            data = {**context, "consent": True, "model_slot": route["slot"],
+                    "configuration_id": route["configuration_id"],
+                    "request_review_id": route["request_review_id"]}
+            assert c.post("/studio-api/respond", json={**data, "max_output_tokens": 64},
+                          headers=AUTH).status_code == 409
+            assert c.post("/studio-api/respond", json={**data, "consent": False},
+                          headers=AUTH).status_code == 422
+            assert c.post("/studio-api/respond", json=data, headers=AUTH).status_code == 200
+        assert len(calls) == 2 and c.app.state.model_budget.snapshot()["attempted"] == 2
+        assert all("Private old" not in json.dumps(payload) for payload in calls)
+
+
+def test_model_plan_rejects_unsupported_routes_and_credential_rotation(monkeypatch):
+    with configured(monkeypatch, lambda _: pytest.fail("unexpected provider call")) as c:
+        set_secondary(monkeypatch)
+        data = {"messages": [{"role": "user", "content": "Question"}], "slots": ["primary"]}
+        assert c.post("/studio-api/model-plan", json=data).status_code == 401
+        for changes in ({"slots": ["primary", "primary"]}, {"slots": ["tertiary"]},
+                        {"mode": "thinking"}, {"slots": ["secondary"], "stream": True},
+                        {"context_selection": {"indices": [1]}}, {"slots": []}):
+            assert c.post("/studio-api/model-plan", json={**data, **changes}, headers=AUTH).status_code == 422
+        route = c.post("/studio-api/model-plan", json=data, headers=AUTH).json()["routes"][0]
+        monkeypatch.setenv("NEXUS_MODEL_API_KEY", "rotated-key")
+        body = {"messages": data["messages"], "consent": True,
+                "configuration_id": route["configuration_id"],
+                "request_review_id": route["request_review_id"]}
+        assert c.post("/studio-api/respond", json=body, headers=AUTH).status_code == 409
+        assert c.app.state.model_budget.snapshot()["attempted"] == 0
+        assert c.post("/studio-api/model-plan", content=b"x" * 96001,
+                      headers={**AUTH, "content-type": "application/json"}).status_code == 413
