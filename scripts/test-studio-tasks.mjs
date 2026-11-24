@@ -66,3 +66,32 @@ function testRecovery(review){
  return checks;
 }
 console.log('WORKFLOW RECOVERY REVIEW: PASS ('+testRecovery(reviewWorkflowRecovery)+' checks)');
+
+const {reviewWorkflowLessons}=await import('../web/studio-workflow-recovery.mjs');
+function testLessons(review){
+ let checks=0;const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('fixture mismatch '+checks)};
+ const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('expected rejection '+checks)};
+ const scope={project_id:'p',workflow_id:'w',criteria_sha256:'a'.repeat(64)},on={enabled:true};
+ const run=(run_id,outcome,failure_codes=[],extra={})=>({...scope,run_id,plan_sha256:'b'.repeat(64),outcome,failure_codes,...extra});
+ const runs=Object.freeze([run('r1','reported_failure',['timeout','bad-input']),run('r2','reported_failure',['timeout']),run('r3','reported_failure',['bad-input','timeout']),run('r4','reported_pass'),run('r5','inconclusive',['other'])]);
+ const result=review(scope,runs,on);
+ eq(result.candidates,[{kind:'recurring_reported_failure',code:'timeout',distinct_run_count:3},{kind:'recurring_reported_failure',code:'bad-input',distinct_run_count:2}]);
+ eq(result.automatic_learning,false);eq(result.execution_authorized,false);eq(result.review_required,true);
+ eq(review(scope,[runs[0]],on).candidates,[]);
+ eq(review(scope,[run('r1','inconclusive',['x']),run('r2','inconclusive',['x'])],on).candidates,[]);
+ eq(review(scope,[],on).candidates,[]);
+ eq(review(null,null).status,'off');eq(review(null,null,{...on,isolated:true}).status,'isolated');
+ eq(JSON.stringify(result).includes('r1'),false);eq(JSON.stringify(result).includes(scope.criteria_sha256),false);
+ eq(review(scope,[run('r1','reported_failure',['z','a']),run('r2','reported_failure',['z','a'])],on).candidates.map(x=>x.code),['a','z']);
+ reject(()=>review(scope,[runs[0],runs[0]],on),'invalid-run');
+ reject(()=>review(scope,[run('r1','reported_pass',['x'])],on),'inconsistent-run');
+ reject(()=>review(scope,[run('r1','reported_failure',['x','x'])],on),'invalid-run');
+ reject(()=>review(scope,[run('r1','reported_failure',['x'],{project_id:'other'})],on),'scope-mismatch');
+ reject(()=>review(scope,[run('r1','reported_failure',['x'],{workflow_id:'other'})],on),'scope-mismatch');
+ reject(()=>review(scope,[run('r1','reported_failure',['x'],{criteria_sha256:'c'.repeat(64)})],on),'scope-mismatch');
+ reject(()=>review(scope,[run('r1','reported_failure',['x'],{plan_sha256:'bad'})],on),'invalid-run');
+ reject(()=>review(scope,Array(31).fill(runs[0]),on),'invalid-learning-input');
+ reject(()=>review(scope,runs,{enabled:1}),'invalid-options');
+ eq(runs.length,5);return checks;
+}
+console.log('WORKFLOW LESSON REVIEW: PASS ('+testLessons(reviewWorkflowLessons)+' checks)');
