@@ -269,3 +269,51 @@ def test_dashboard_endpoint_auth_and_csp(monkeypatch):
         assert client.post(url, json=bad, headers=headers).status_code == 422
     monkeypatch.setattr(exports, "audit", lambda request: {"status": "mismatch"})
     assert client.post(url, json=data, headers=headers).status_code == 409
+
+
+@pytest.mark.parametrize("template_id,title", [
+    ("research-v1", "Research analysis report"),
+    ("business-v1", "Business analysis brief"),
+    ("technical-v1", "Technical verification report"),
+])
+def test_specialized_templates_are_deterministic(template_id, title):
+    data = {**request_data("template"), "template_id": template_id}
+    req = exports.ExportRequest.model_validate(data)
+    report, media = exports.build_export(req)
+    assert media == "text/html; charset=utf-8"
+    assert report == exports.build_export(req)[0]
+    assert title.encode() in report
+    assert report.count(b"<section>") == 4
+    assert b"Review SHA-256" in report
+    assert b"numeric.from_metrics" in report
+    assert b"Human review is required" in report
+    assert b"<script" not in report and b"secret" not in report and b"HYPERLINK" not in report
+
+
+def test_template_catalog_and_download(monkeypatch):
+    token = "test-token-" + "x" * 40
+    monkeypatch.setenv("NEXUS_STUDIO_TOKEN", token)
+    app = FastAPI()
+    exports.register(app)
+    client = TestClient(app)
+    base = "/studio/api/analysis-batch"
+    headers = {"Authorization": "Bearer " + token}
+    assert client.get(base + "/templates").status_code == 401
+    catalog = client.get(base + "/templates", headers=headers)
+    assert catalog.status_code == 200
+    assert catalog.headers["cache-control"] == "no-store"
+    assert {item["id"] for item in catalog.json()["templates"]} == {
+        "research-v1", "business-v1", "technical-v1"
+    }
+    data = {**request_data("template"), "template_id": "research-v1"}
+    assert client.post(base + "/export", json=data).status_code == 401
+    response = client.post(base + "/export", json=data, headers=headers)
+    assert response.status_code == 200
+    assert response.headers["content-disposition"] == 'attachment; filename="nexus-analysis-research-v1.html"'
+    assert "style-src 'unsafe-inline'" in response.headers["content-security-policy"]
+    assert response.headers["x-nexus-content-sha256"] == hashlib.sha256(response.content).hexdigest()
+    for bad in (request_data("template"), {**data, "format": "json"},
+                {**data, "template_id": "unknown"}, {**data, "export_consent": False}):
+        assert client.post(base + "/export", json=bad, headers=headers).status_code == 422
+    monkeypatch.setattr(exports, "audit", lambda request: {"status": "mismatch"})
+    assert client.post(base + "/export", json=data, headers=headers).status_code == 409

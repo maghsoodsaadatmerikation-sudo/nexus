@@ -9,7 +9,7 @@ import json
 from typing import Literal
 
 from fastapi import HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from studio_analysis_audit import AuditRequest, audit
@@ -18,6 +18,7 @@ from studio_office_report import docx, xlsx
 from studio_paged_report import pdf, pptx
 from studio_analysis_chart import chart_svg
 from studio_analysis_dashboard import dashboard
+from studio_report_templates import catalog, render_template
 from studio_connections import operator_auth
 from transport_bounds import read_bounded_body
 
@@ -32,9 +33,10 @@ Metric = Literal["characters", "utf8_bytes", "whitespace_tokens", "lines",
 class ExportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     approved: ApprovedBatch
-    format: Literal["json", "csv", "html", "xlsx", "docx", "pdf", "pptx", "svg", "dashboard"]
+    format: Literal["json", "csv", "html", "xlsx", "docx", "pdf", "pptx", "svg", "dashboard", "template"]
     chart_metric: Metric | None = None
     dashboard_metrics: list[Metric] = Field(default_factory=list, max_length=4)
+    template_id: Literal["research-v1", "business-v1", "technical-v1"] | None = None
     export_consent: bool
 
 
@@ -63,6 +65,8 @@ def build_export(request: ExportRequest):
         raise ValueError("Select dashboard metrics only for dashboard")
     if len(set(request.dashboard_metrics)) != len(request.dashboard_metrics):
         raise ValueError("Duplicate dashboard metric")
+    if (request.format == "template") != (request.template_id is not None):
+        raise ValueError("Select a template only for template export")
     computed = run(request.approved)
     checked = audit(AuditRequest(approved=request.approved, candidate=computed))
     if checked["status"] != "consistent":
@@ -111,6 +115,9 @@ def build_export(request: ExportRequest):
     elif request.format == "dashboard":
         data = dashboard(computed, request.dashboard_metrics)
         media = "text/html; charset=utf-8"
+    elif request.format == "template":
+        data = render_template(computed, request.template_id)
+        media = "text/html; charset=utf-8"
     else:
         def cell(value):
             return html.escape(str(value), quote=True)
@@ -136,6 +143,11 @@ def build_export(request: ExportRequest):
 
 
 def register(app):
+    @app.get("/studio/api/analysis-batch/templates")
+    async def template_catalog(request: Request):
+        operator_auth(request)
+        return JSONResponse({"schema_version": 1, "templates": catalog()}, headers=NO_STORE)
+
     @app.post("/studio/api/analysis-batch/export")
     async def export_endpoint(request: Request):
         operator_auth(request)
@@ -153,8 +165,10 @@ def register(app):
             raise HTTPException(422, "Invalid analysis export", headers=NO_STORE) from None
         filename = ("nexus-analysis-dashboard.html" if export.format == "dashboard"
                     else f"nexus-analysis.{export.format}")
+        if export.format == "template":
+            filename = f"nexus-analysis-{export.template_id}.html"
         policy = ("default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
-                  if export.format == "dashboard" else "default-src 'none'")
+                  if export.format in ("dashboard", "template") else "default-src 'none'")
         return Response(data, media_type=media, headers={
             **NO_STORE,
             "Content-Disposition": f'attachment; filename="{filename}"',
