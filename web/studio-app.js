@@ -323,14 +323,16 @@ function mutate(fn,{undoable=false,afterCommit}={}){
 }
 function projectIn(v){return v.projects.find(x=>x.id===projectId)}
 function option(value,label){const o=el('option',label);o.value=value;return o}
-function stageMemoryNote(note){
+function stageMemoryNote(note,remove=false){
  if(busy||!p()||chat()?.temporary||chat()?.isolated||chat()?.archived||profileDirty||
     branchBase!==undefined||attachmentLoading||chatAttachments.length||$('attach-document').checked||
     window.NexusStudioVision?.hasTransientWork?.()===true||
     typeof note!=='string'||!note.trim()||note.length>500||/[\r\n]/.test(note)||
-    p().memories.length>=30||p().memories.some(m=>/[\r\n]/.test(m))||
+    typeof remove!=='boolean'||(!remove&&p().memories.length>=30)||p().memories.some(m=>/[\r\n]/.test(m))||
     $('memories').value!==p().memories.join('\n')||$('instructions').value!==p().instructions)return false;
- $('memories').value=[...p().memories,note.trim()].join('\n');
+ const matches=p().memories.filter(m=>m===note.trim());
+ if(remove&&matches.length!==1)return false;
+ $('memories').value=(remove?p().memories.filter(m=>m!==note.trim()):[...p().memories,note.trim()]).join('\n');
  profileDirty=true;$('message').value='';stop();return true;
 }
 function fillProfile(){$('instructions').value=p()?.instructions||'';$('memories').value=p()?.memories.join('\n')||''}

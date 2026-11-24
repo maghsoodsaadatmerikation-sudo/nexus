@@ -163,6 +163,19 @@ window.addEventListener('load',async()=>{
    'memory-command-does-not-overwrite-existing-draft');
   fill('message','');$('apply-profile').click();
   assert(current().memories[1]==='Synthetic note'&&network===memoryNetwork,'memory-apply-remains-explicit');
+  fill('message','/forget Synthetic');compose.click();
+  assert($('message').value==='/forget Synthetic'&&current().memories.length===2,'memory-removal-rejects-partial-match');
+  fill('message','/forget Synthetic note');
+  assert(compose.textContent==='Review memory removal','memory-removal-command-visible');
+  compose.click();
+  assert(current().memories.length===2&&$('memories').value==='REVIEWED SECRET MEMORY'&&
+   !$('message').value&&NexusStudioUI.uiStatus().unsavedForms&&network===memoryNetwork,'memory-removal-draft-only');
+  $('apply-profile').click();
+  assert(current().memories.length===1&&network===memoryNetwork,'memory-removal-explicit-apply');
+  fill('memories','REVIEWED SECRET MEMORY\nREVIEWED SECRET MEMORY');$('apply-profile').click();
+  fill('message','/forget REVIEWED SECRET MEMORY');compose.click();
+  assert(current().memories.length===2&&$('message').value==='/forget REVIEWED SECRET MEMORY','memory-removal-ambiguous-rejected');
+  fill('message','');
   fill('memories','REVIEWED SECRET MEMORY');$('apply-profile').click();
   const transfer=new DataTransfer();transfer.items.add(new File(['The orchard has green trees.\nA source is not a verified fact.'],'notes.txt',{type:'text/plain'}));$('source-file').files=transfer.files;$('source-file').dispatchEvent(new Event('change'));
   await wait(()=>current().sources.length===1);fill('source-query','orchard');$('search-sources').click();assert($('source-results').textContent.includes('notes.txt:1'),'local-source-name-and-line');
