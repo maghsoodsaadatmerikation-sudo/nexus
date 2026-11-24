@@ -35,7 +35,8 @@ LEGACY_FILES = (
     "device/vendor/LICENSE-transformers.txt",
     "device/vendor/ort-wasm-simd-threaded.asyncify.mjs",
 )
-FILES = LEGACY_FILES + PDF_FILES
+ASTRONOMY_MODULE = "vendor/astronomy-2.1.19.min.js"
+FILES = LEGACY_FILES + PDF_FILES + (ASTRONOMY_MODULE,)
 
 def asset_limit(name):
     if name == 'pdf/pdf.worker.min.mjs':

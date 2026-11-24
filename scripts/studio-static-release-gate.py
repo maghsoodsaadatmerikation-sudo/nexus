@@ -18,7 +18,7 @@ import urllib.error
 import urllib.request
 import zipfile
 
-from studio_public_assets import FILES, MAX_FILE, asset_limit, check_public_tree
+from studio_public_assets import ASTRONOMY_MODULE, FILES, MAX_FILE, asset_limit, check_public_tree
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "public/studio"
@@ -29,7 +29,7 @@ OBSERVATION_SCHEMA = "nexus.studio.public-release-observation.v1"
 STAMP = (2020, 1, 1, 0, 0, 0)
 # A returned MATCH on nine reviewed public assets is not a substitute for
 # production owner-authorized release, nor the real public-origin browser tests.
-OBSERVE = FILES[:9]
+OBSERVE = FILES[:9] + (ASTRONOMY_MODULE,)
 MAX_ZIP = 2_800_000
 
 
