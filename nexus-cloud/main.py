@@ -22,6 +22,7 @@ import studio_research_reasoning
 import studio_research_graph
 import studio_research_conflicts
 import studio_research_uncertainty
+import studio_research_perspectives
 import studio_analysis_export
 import studio_analysis_batch
 import studio_workflow
@@ -110,6 +111,7 @@ studio_research_reasoning.register(app)
 studio_research_graph.register(app)
 studio_research_conflicts.register(app)
 studio_research_uncertainty.register(app)
+studio_research_perspectives.register(app)
 studio_analysis_export.register(app)
 if studio_origin := os.getenv("NEXUS_STUDIO_ORIGIN", "").strip():
     app.add_middleware(CORSMiddleware, allow_origins=[studio_origin],
