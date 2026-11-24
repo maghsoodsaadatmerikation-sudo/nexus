@@ -30,6 +30,17 @@ function testOutcome(evaluate){
  reject(()=>evaluate({...scope,plan_sha256:'bad'},criteria,[],on),'invalid-scope');
  reject(()=>evaluate(scope,criteria,Array(61).fill(good[0]),on),'invalid-outcome-input');
  reject(()=>evaluate(scope,criteria,good,{enabled:1}),'invalid-options');
+ reject(()=>evaluate(scope,criteria,[good[0],obs('approval','e1','human_review','pass')],on),'duplicate-evidence');
+ reject(()=>evaluate(scope,criteria,[good[0],obs('optional','e1','self_report','pass')],on),'duplicate-evidence');
+ eq(x.review_actions,[{criterion_id:'optional',required:false,evidence_kind:'independent_witness',action:'request_matching_evidence'}]);
+ eq(evaluate(scope,criteria,[],on).review_actions.map(a=>a.criterion_id),['tests','approval','optional']);
+ eq(evaluate(scope,[criteria[2],criteria[1],criteria[0]],[],on).review_actions.map(a=>a.criterion_id),['approval','tests','optional']);
+ eq(evaluate(scope,criteria,[obs('tests','e1','automated_check','fail'),obs('approval','e2','human_review','inconclusive')],on).review_actions.map(a=>a.action),['review_failure','request_conclusive_evidence','request_matching_evidence']);
+ eq(evaluate(scope,criteria,[...good,obs('tests','e3','automated_check','fail')],on).review_actions[0].action,'reconcile_reports');
+ eq(evaluate(scope,criteria,[...good,obs('approval','e3','human_review','inconclusive')],on).review_actions[0].action,'reconcile_reports');
+ eq(evaluate(scope,criteria,[...good,obs('optional','e3','independent_witness','pass')],on).review_actions,[]);
+ eq(evaluate(null,null,null).review_actions,undefined);
+ eq(JSON.stringify(x.review_actions).includes('e1'),false);
  eq(good.length,2);return checks;
 }
 console.log('WORKFLOW OUTCOME: PASS ('+testOutcome(evaluateWorkflowOutcome)+' checks)');

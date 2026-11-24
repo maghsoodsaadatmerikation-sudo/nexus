@@ -307,6 +307,18 @@ window.addEventListener('load',async()=>{
     exported.steps[0].acknowledged_by_user===true&&
     exported.steps[1].local_ui_outcome===null&&exported.steps[1].acknowledged_by_user===false,
     'report-separates-local-observation-from-human-acknowledgment');
+   assert(exported.steps[0].next_review==='verify'&&exported.steps[1].next_review==='inspect'&&receiptWorkflow.textContent.includes('Review: verify'),'workflow-suggests-review-without-execution');
+   assert(exported.outcome_review.succeeded===1&&exported.outcome_review.unobserved===1&&
+    exported.outcome_review.incomplete===0&&exported.outcome_review.verified===false,
+    'workflow-outcome-summary-separates-observation-and-verification');
+   receiptWorkflow.querySelector('li:nth-child(2) button').click();
+   receiptWorkflow.querySelectorAll('li button')[1].click();
+   assert(receiptWorkflow.textContent.includes('Review complete; execution not verified')&&
+    receiptWorkflow.textContent.includes('1 / 0 / 1'),'manual-review-completion-does-not-claim-execution');
+   receiptWorkflow.querySelector('[data-workflow-report]').click();
+   const finished=JSON.parse(await reportBlob.text());
+   assert(finished.complete===true&&finished.outcome_review.unobserved===1&&
+    finished.outcome_review.verified===false,'completed-review-export-remains-unverified');
   }finally{
    URL.createObjectURL=oldCreateURL;HTMLAnchorElement.prototype.click=oldAnchorClick;
   }
@@ -319,6 +331,7 @@ window.addEventListener('load',async()=>{
   assert(receiptWorkflow.textContent.includes('Local execution cancelled')&&
    !receiptWorkflow.textContent.includes('Local UI reported success'),
    'cancellation-records-no-completed-worker-result');
+  assert(receiptWorkflow.textContent.includes('Review: reconcile'),'cancelled-step-recommends-review-not-retry');
   fill('message','/plan\n/code\n/write changed');
   assert(receiptWorkflow.hidden,'canceled-workflow-receipt-is-cleared-with-draft');
   // The local-guide mode retains broad opt-in natural-language discovery.
