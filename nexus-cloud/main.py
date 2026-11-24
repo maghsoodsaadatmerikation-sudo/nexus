@@ -29,6 +29,7 @@ import studio_research_improvement
 import studio_research_synthesis
 import studio_research_export
 import studio_academic
+import studio_bibliography
 import studio_creative
 import studio_analysis_export
 import studio_analysis_batch
@@ -125,6 +126,7 @@ studio_research_improvement.register(app)
 studio_research_synthesis.register(app)
 studio_research_export.register(app)
 studio_academic.register(app)
+studio_bibliography.register(app)
 studio_creative.register(app)
 studio_analysis_export.register(app)
 if studio_origin := os.getenv("NEXUS_STUDIO_ORIGIN", "").strip():
