@@ -44,10 +44,14 @@ def load(path):
     require(len(data) <= 262144, "input exceeds 256 KiB")
     return json.loads(data, object_pairs_hook=no_duplicates)
 
+def encoded(obj):
+    data = (json.dumps(obj, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    require(len(data) <= 262144, "output exceeds 256 KiB")
+    return data
+
 def save(path, obj):
-    with path.open("x", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2)
-        f.write("\n")
+    with path.open("xb") as f:
+        f.write(encoded(obj))
 
 def build(nexus, reference, rng=None):
     rng = rng if rng is not None else random.SystemRandom()
@@ -69,6 +73,8 @@ def build(nexus, reference, rng=None):
     form = {"schema": 1, "packet_sha256": digest(packet),
             "ratings": {cid: {label: dict.fromkeys((*DIMENSIONS, "critical_failure"))
                               for label in LABELS} for cid in CASES}}
+    for obj in (packet, key, form):
+        encoded(obj)
     return packet, key, form
 
 def score(packet, key, form):
