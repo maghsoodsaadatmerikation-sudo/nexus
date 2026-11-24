@@ -414,3 +414,55 @@ def test_model_plan_rejects_unsupported_routes_and_credential_rotation(monkeypat
         assert c.app.state.model_budget.snapshot()["attempted"] == 0
         assert c.post("/studio-api/model-plan", content=b"x" * 96001,
                       headers={**AUTH, "content-type": "application/json"}).status_code == 413
+
+
+def test_reviewed_buffered_models_can_compare_exact_response_digests(monkeypatch):
+    calls = []
+    def handler(req):
+        calls.append(req)
+        if str(req.url) == model.ANTHROPIC_MESSAGES:
+            return httpx.Response(200, json=claude_answer("Same answer"))
+        return httpx.Response(200, json=chat_answer("Same answer"))
+    with configured(monkeypatch, handler) as c:
+        set_secondary(monkeypatch)
+        context = {"messages": [{"role": "user", "content": "Fictional comparison"}]}
+        preview = c.post("/studio-api/model-plan",
+                         json={**context, "slots": ["primary", "secondary"]}, headers=AUTH).json()
+        receipts = []
+        for route in preview["routes"]:
+            data = {**context, "consent": True, "model_slot": route["slot"],
+                    "configuration_id": route["configuration_id"],
+                    "request_review_id": route["request_review_id"]}
+            response = c.post("/studio-api/respond", json=data, headers=AUTH)
+            assert response.status_code == 200
+            receipts.append(response.json()["comparison_receipt"])
+        response = c.post("/studio-api/model-comparison", json={"receipts": receipts}, headers=AUTH)
+        assert response.status_code == 200
+        report = response.json()
+        assert report["comparisons"][0]["status"] == "exact_text_match"
+        assert not report["truth_verified"] and not report["semantic_agreement_verified"]
+        assert "Same answer" not in response.text and len(calls) == 2
+        assert c.post("/studio-api/model-comparison", json={"receipts": receipts}).status_code == 401
+        tampered = [dict(row) for row in receipts]
+        tampered[0]["text_sha256"] = "0" * 64
+        assert c.post("/studio-api/model-comparison", json={"receipts": tampered}, headers=AUTH).status_code == 422
+        assert c.post("/studio-api/model-comparison", json={"receipts": [receipts[0]] * 2}, headers=AUTH).status_code == 422
+        assert c.app.state.model_budget.snapshot()["attempted"] == 2
+
+
+def test_comparison_distinguishes_different_text_truncation_and_context():
+    def row(slot, context, text, truncated=False):
+        data = {"model_slot": slot, "configuration_id": "a" * 64,
+                "request_review_id": "b" * 64, "context_id": context,
+                "text_sha256": text, "truncated": truncated}
+        return {**data, "signature": model.comparison_tag(TOKEN, b"nexus-comparison-reply-v1", data)}
+    first = row("primary", "c" * 64, "d" * 64)
+    second = row("secondary", "c" * 64, "e" * 64)
+    third = row("tertiary", "c" * 64, "d" * 64, True)
+    request = model.ComparisonRequest.model_validate({"receipts": [first, second, third]})
+    report = model.compare_receipts(request, TOKEN)
+    assert [p["status"] for p in report["comparisons"]] == [
+        "different_text", "incomplete_response", "incomplete_response"]
+    with pytest.raises(ValueError, match="contexts"):
+        model.compare_receipts(model.ComparisonRequest.model_validate({
+            "receipts": [first, row("secondary", "f" * 64, "e" * 64)]}), TOKEN)

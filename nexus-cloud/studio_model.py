@@ -610,6 +610,77 @@ def request_review_id(c: ModelSettings, payload: dict) -> str:
                     hashlib.sha256).hexdigest()
 
 
+class ComparisonReceipt(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    model_slot: Literal["primary", "secondary", "tertiary"]
+    configuration_id: str = Field(pattern=r"^[a-f0-9]{64}$")
+    request_review_id: str = Field(pattern=r"^[a-f0-9]{64}$")
+    context_id: str = Field(pattern=r"^[a-f0-9]{64}$")
+    text_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    truncated: bool
+    signature: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class ComparisonRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    receipts: list[ComparisonReceipt] = Field(min_length=2, max_length=3)
+
+
+def comparison_tag(token: str, domain: bytes, value) -> str:
+    canonical = json.dumps(value, ensure_ascii=True, sort_keys=True,
+                           separators=(",", ":")).encode("ascii")
+    return hmac.new(token.encode("utf-8"), domain + b"\x00" + canonical,
+                    hashlib.sha256).hexdigest()
+
+
+def comparison_receipt(c: ModelSettings, data: Completion, payload: dict,
+                       text: str, truncated: bool) -> dict:
+    # Normalize only the known wire envelopes; bind the actual system/user/assistant
+    # messages and requested limits, not the omitted input or provider name.
+    messages = ([{"role": "system", "content": payload["system"]}] + payload["messages"]
+                if c.adapter == "anthropic" else payload["messages"])
+    context = comparison_tag(c.studio_token, b"nexus-comparison-context-v1",
+                             [messages, data.mode, data.max_output_tokens, False])
+    receipt = {
+        "model_slot": c.slot, "configuration_id": configuration_id(c),
+        "request_review_id": data.request_review_id, "context_id": context,
+        "text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        "truncated": truncated,
+    }
+    return {**receipt, "signature": comparison_tag(
+        c.studio_token, b"nexus-comparison-reply-v1", receipt)}
+
+
+def compare_receipts(request: ComparisonRequest, token: str) -> dict:
+    rows = request.receipts
+    if len({row.model_slot for row in rows}) != len(rows):
+        raise ValueError("Duplicate model slot")
+    for row in rows:
+        expected = comparison_tag(token, b"nexus-comparison-reply-v1",
+                                  row.model_dump(exclude={"signature"}))
+        if not hmac.compare_digest(row.signature, expected):
+            raise ValueError("Invalid receipt")
+    if len({row.context_id for row in rows}) != 1:
+        raise ValueError("Different reviewed contexts")
+    pairs = []
+    for i, left in enumerate(rows):
+        for right in rows[i+1:]:
+            pairs.append({
+                "left_slot": left.model_slot, "right_slot": right.model_slot,
+                "status": ("incomplete_response" if left.truncated or right.truncated
+                           else "exact_text_match" if left.text_sha256 == right.text_sha256
+                           else "different_text"),
+            })
+    return {
+        "status": "human_review_required", "context_id": rows[0].context_id,
+        "receipts": [row.model_dump(exclude={"signature"}) for row in rows],
+        "comparisons": pairs, "basis": "exact_text_digest_not_semantic_agreement",
+        "semantic_agreement_verified": False, "truth_verified": False,
+        "independent_provenance_verified": False, "provider_contact_attempted": False,
+        "authority": "none",
+    }
+
+
 def register(app):
     @app.get("/studio", include_in_schema=False)
     async def studio_page():
@@ -692,6 +763,23 @@ def register(app):
             "authority": "none",
             **({"model_slot": slot} if requested else {}),
         }, headers={"Cache-Control": "no-store"})
+
+    @app.post("/studio-api/model-comparison")
+    async def model_comparison(request: Request):
+        from studio_connections import operator_auth
+        operator_auth(request)
+        token = os.getenv("NEXUS_STUDIO_TOKEN", "").strip()
+        body = await read_bounded_body(
+            request, max_bytes=16384, timeout_seconds=10.0,
+            too_large_detail="Model comparison too large",
+            timeout_detail="Model comparison timed out", timeout_status=408,
+        )
+        try:
+            result = compare_receipts(ComparisonRequest.model_validate_json(body), token)
+        except (ValidationError, ValueError, RecursionError):
+            raise HTTPException(422, "Invalid or incompatible comparison receipts",
+                                headers={"Cache-Control": "no-store"}) from None
+        return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
     @app.post("/studio-api/model-plan")
     async def model_plan(request: Request):
@@ -842,9 +930,11 @@ def register(app):
                 )
             except ValueError:
                 raise HTTPException(502, "Invalid text-only model response") from None
+            comparison = ({"comparison_receipt": comparison_receipt(c, data, payload, content, truncated)}
+                          if data.request_review_id is not None else {})
             return JSONResponse({"text": content, "origin": "model", "model": c.model_id,
                                  "mode": data.mode, "max_output_tokens": data.max_output_tokens,
-                                 "truncated": truncated, "authority": "none", **receipt},
+                                 "truncated": truncated, "authority": "none", **receipt, **comparison},
                                 headers={"Cache-Control": "no-store"})
         except TimeoutError:
             raise HTTPException(504, "Model request timed out") from None
