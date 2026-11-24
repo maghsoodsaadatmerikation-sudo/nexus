@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import anyio
 from fastapi import HTTPException, Request
+from starlette.requests import ClientDisconnect
 
 
 async def read_bounded_body(
@@ -45,7 +46,11 @@ async def read_bounded_body(
             async for chunk in request.stream():
                 if len(chunk) > max_bytes - len(body):
                     raise HTTPException(status_code=413, detail=too_large_detail)
+                if declared_size is not None and len(chunk) > declared_size - len(body):
+                    raise HTTPException(status_code=400, detail="Content-Length mismatch")
                 body.extend(chunk)
+    except ClientDisconnect as exc:
+        raise HTTPException(status_code=400, detail="Incomplete request body") from exc
     except TimeoutError as exc:
         raise HTTPException(status_code=timeout_status, detail=timeout_detail) from exc
 
