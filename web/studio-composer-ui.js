@@ -280,6 +280,41 @@ function openReviewedSurface(result,message){
  }else window.NexusStudioFocus?.openPanel(panel);
  return true;
 }
+
+/* WORKFLOW_REVIEW_ENGINE */
+function engineInput(draft,steps,planHash){
+ const scope={project_id:'tab-local',workflow_id:'chat-review',run_id:'review',plan_sha256:planHash};
+ const phase={started:'running',succeeded:'succeeded',failed:'failed',cancelled:'cancelled',partial:'blocked'};
+ const plan={goal:'Review explicit chat workflow',steps:steps.map((step,i)=>({
+  id:'s'+(i+1),needs:[],effect:step.command==='code'?'local_compute':step.command==='research'?'network_read':'unknown'
+ }))};
+ const criteria=plan.steps.map(step=>({id:step.id,required:true,evidence_kind:'human_review'}));
+ const step_observations=steps.flatMap((step,i)=>phase[step.observed]?[{...scope,id:plan.steps[i].id,status:phase[step.observed]}]:[]);
+ return {scope,plan,criteria,step_observations,evidence:[]};
+}
+async function showEngineReview(button,notice){
+ const current=workflowState,state=window.NexusStudioUI.uiStatus();
+ if(!validWorkflow()||state.isolated||!current)return;
+ const snapshot=()=>JSON.stringify(current.steps.map(s=>({command:s.result.route[0],observed:s.observed||null,acknowledged:s.acknowledged})));
+ const captured=snapshot(),draft=current.draft;
+ button.disabled=true;
+ try{
+  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(draft))),b=>b.toString(16).padStart(2,'0')).join('');
+  if(workflowState!==current||!validWorkflow()||window.NexusStudioUI.uiStatus().isolated||captured!==snapshot()||!notice.isConnected)return;
+  const result=reviewAssistantWorkflow(engineInput(draft,JSON.parse(captured),hash),{enabled:true});
+  notice.textContent=words('Central review: ','بازبینی مرکزی: ')+({
+   review_plan_boundaries:words('review tool boundaries','بازبینی محدودیت ابزار'),
+   reconcile_execution_status:words('reconcile execution status','بررسی وضعیت اجرا'),
+   review_lost_criteria:words('review lost criteria','بازبینی معیارهای ازدست‌رفته'),
+   review_unfinished_steps:words('review unfinished steps','بازبینی مراحل ناتمام'),
+   review_plan_findings:words('define success criteria','تعریف معیار موفقیت'),
+   review_outcome_evidence:words('review evidence','بازبینی شواهد'),
+   manual_final_review:words('manual final review','بازبینی نهایی انسانی')
+  })[result.priority]+words(' · No completion verified; no action authorized.',' · تکمیل تأیید نشده؛ هیچ مجوز اجرایی صادر نشده.');
+ }catch{if(notice.isConnected)notice.textContent=words('Central review unavailable; no action taken.','بازبینی مرکزی در دسترس نیست؛ اقدامی انجام نشد.')}
+ finally{if(button.isConnected)button.disabled=false}
+}
+
 function workflowAction(p){return p==='started'?'wait':p==='succeeded'?'verify':p?'reconcile':'inspect'}
 function workflowOutcomes(){
  const counts={succeeded:0,incomplete:0,running:0,unobserved:0,verified:false};
@@ -380,6 +415,12 @@ function showWorkflow(){
   download(JSON.stringify(record,null,2),'nexus-workflow-review.json','application/json');
  };
  workflow.append(exportButton);
+ const central=document.createElement('button');central.type='button';central.className='secondary';central.dataset.centralReview='true';
+ central.textContent=words('Review with central engine','بازبینی با موتور مرکزی');
+ central.disabled=Boolean(window.NexusStudioUI.uiStatus().isolated);
+ const reviewNotice=document.createElement('p');reviewNotice.dataset.centralResult='true';reviewNotice.setAttribute('role','status');
+ central.onclick=()=>showEngineReview(central,reviewNotice);
+ workflow.append(central,reviewNotice);
 }
 function reviewWorkflow(message){
  closeDirectory();clearOffer();

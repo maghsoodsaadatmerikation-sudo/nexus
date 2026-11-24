@@ -275,9 +275,13 @@ window.addEventListener('load',async()=>{
   fill('message','/plan\n/code\n/write');
   chatSend.click();
   const receiptWorkflow=$('studio-chat-workflow');
+  receiptWorkflow.querySelector('[data-central-review]').click();
+  await wait(()=>receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Central review:'));
+  assert(receiptWorkflow.querySelector('[data-central-result]').textContent.includes('no action authorized')&&!$('code-consent').checked,'central-review-no-execution-authority');
   assert(!receiptWorkflow.textContent.includes('Local UI reported success'),
    'new-plan-has-no-invented-tool-result');
   receiptWorkflow.querySelector('li button').click();
+  assert(!receiptWorkflow.querySelector('[data-central-result]').textContent,'central-review-invalidated-on-workflow-change');
   assert(NexusStudioFocus.active()==='code-card'&&!$('code-consent').checked,
    'workflow-opens-code-review-without-approval');
   fill('code','return 40 + 2;');
