@@ -61,6 +61,7 @@ jobs:
           node scripts/test-studio-astrology.mjs
           node scripts/test-studio-core.mjs
           node scripts/test-studio-memory-review.mjs
+          node scripts/test-studio-memory-edits.mjs
           node scripts/test-studio-chat-attachments.mjs
           node scripts/test-studio-source-imports.mjs
           node scripts/test-studio-storage.mjs
