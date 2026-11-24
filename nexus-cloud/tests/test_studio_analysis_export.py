@@ -61,7 +61,7 @@ def test_endpoint_auth_consent_digest_and_download_headers(monkeypatch):
     headers = {"Authorization": "Bearer " + token}
     url = "/studio/api/analysis-batch/export"
     assert client.post(url, json=request_data()).status_code == 401
-    for fmt in ("json", "csv", "html", "xlsx", "docx"):
+    for fmt in ("json", "csv", "html", "xlsx", "docx", "pdf", "pptx"):
         response = client.post(url, json=request_data(fmt), headers=headers)
         assert response.status_code == 200
         assert response.headers["cache-control"] == "no-store"
@@ -109,3 +109,40 @@ def test_office_packages_are_deterministic_and_static(fmt, required):
         else:
             assert b"Review SHA-256" in archive.read(required)
             assert b"w:tblHeader" in archive.read(required)
+
+
+def test_pdf_objects_and_xref_are_consistent():
+    req = exports.ExportRequest.model_validate(request_data("pdf"))
+    data, media = exports.build_export(req)
+    assert data == exports.build_export(req)[0]
+    assert media == "application/pdf"
+    assert data.startswith(b"%PDF-1.4") and data.endswith(b"%%EOF\n")
+    offset = int(data.split(b"startxref\n")[1].splitlines()[0])
+    assert data[offset:].startswith(b"xref\n")
+    lines = data[offset:].splitlines()
+    count = int(lines[1].split()[1])
+    for index in range(1, count):
+        position = int(lines[index + 2].split()[0])
+        assert data[position:].startswith(f"{index} 0 obj\n".encode())
+    assert b"Review SHA-256" in data
+    assert b"HYPERLINK" not in data and b"secret" not in data
+
+
+def test_pptx_package_contains_all_rows_and_no_active_content():
+    req = exports.ExportRequest.model_validate(request_data("pptx"))
+    data, media = exports.build_export(req)
+    assert data == exports.build_export(req)[0]
+    assert media.endswith("presentation")
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        assert archive.testzip() is None
+        slides = [name for name in archive.namelist()
+                  if name.startswith("ppt/slides/slide") and name.endswith(".xml")]
+        assert len(slides) >= 2
+        for name in archive.namelist():
+            raw = archive.read(name)
+            ET.fromstring(raw)
+            assert b"HYPERLINK" not in raw and b"secret" not in raw
+            assert b'TargetMode="External"' not in raw
+        combined = b"".join(archive.read(name) for name in slides)
+        assert b"numeric.from_metrics" in combined
+        assert b"input text.characters" in combined
