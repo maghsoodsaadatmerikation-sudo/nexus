@@ -970,6 +970,14 @@ function availableModelOptions(){
  try{if(modelInfo?.gateway!==gateway())return []}catch{return []}
  return modelChoices.map(item=>({slot:item.slot,model:item.model,providerHost:item.provider_host}));
 }
+function modelRecommendation(){
+ if(!availableModelOptions().length)return null;
+ const mode=$('model-mode').value;
+ if(!['standard','thinking','non-thinking'].includes(mode))return null;
+ const compatible=modelChoices.filter(c=>mode==='standard'||c.modes?.includes(mode));
+ return {slot:(compatible.find(c=>c.slot===selectedModelSlot)||compatible[0])?.slot||null,
+  selectedCompatible:compatible.some(c=>c.slot===selectedModelSlot)};
+}
 function selectModelSlot(slot){
  if(busy||!['primary','secondary','tertiary'].includes(slot)||
     $('model-engine')?.value==='device')return false;
@@ -983,7 +991,7 @@ function selectModelSlot(slot){
  $('model-status').textContent=t('configured')+': '+choice.model+' · '+choice.provider_host;
  controls();return true;
 }
-window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,openConversation,selection:()=>({projectId,threadId,head:chat()?.head||null,revision,branchBase}),appendVisionResult,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),attachmentLoading,archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),modelAvailability,availableModelOptions,selectModelSlot,revokeModelReview:()=>stop(),resetModel:()=>{stop();modelChoices=[];selectedModelSlot='primary';modelInfo=null;modelReadiness=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
+window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,openConversation,selection:()=>({projectId,threadId,head:chat()?.head||null,revision,branchBase}),appendVisionResult,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),attachmentLoading,archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),modelAvailability,availableModelOptions,modelRecommendation,selectModelSlot,revokeModelReview:()=>stop(),resetModel:()=>{stop();modelChoices=[];selectedModelSlot='primary';modelInfo=null;modelReadiness=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
 for(const id of ['gateway','gateway-token'])$(id).addEventListener('input',()=>{modelReadiness=null});

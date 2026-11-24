@@ -645,7 +645,7 @@ window.addEventListener('load',async()=>{
     configured:true,configuration_id:'a'.repeat(64),model:'synthetic-model',
     provider_host:'primary.example',authority:'none',models:[
      {slot:'primary',configuration_id:'a'.repeat(64),model:'synthetic-model',provider_host:'primary.example'},
-     {slot:'secondary',configuration_id:slotId,model:'secondary-model',provider_host:'secondary.example'}
+     {slot:'secondary',configuration_id:slotId,model:'secondary-model',provider_host:'secondary.example',modes:['standard','thinking','non-thinking']}
     ]
    }));
    posted=JSON.parse(options.body);
@@ -663,6 +663,15 @@ window.addEventListener('load',async()=>{
    $('studio-compose-choice').options.length===2&&
    NexusStudioUI.modelAvailability().model==='synthetic-model',
    'model-check-lists-only-two-real-configured-synthetic-slots');
+  change('model-mode','thinking');
+  assert(NexusStudioUI.modelRecommendation().slot==='secondary'&&
+   !NexusStudioUI.modelRecommendation().selectedCompatible&&
+   $('studio-compose-choice').value==='primary'&&network===beforeMulti+1,
+   'compatible-model-advice-does-not-select-or-send');
+  change('model-mode','standard');
+  assert(NexusStudioUI.modelRecommendation().slot==='primary'&&
+   NexusStudioUI.modelRecommendation().selectedCompatible,
+   'standard-mode-keeps-user-preference');
   fill('message','Please provide a reviewed synthetic answer');
   $('prepare').click();assert(!$('request-review').hidden,
    'first-provider-exact-context-review-exists');

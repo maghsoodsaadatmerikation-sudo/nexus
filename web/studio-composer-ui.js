@@ -491,6 +491,13 @@ function refresh(){
  modelSelectTitle.textContent=words('Model','مدل');
  modelSelect.value=availability.slot||'primary';
  modelSelect.disabled=state.busy||state.attachmentLoading;
+ const advice=window.NexusStudioUI.modelRecommendation?.();
+ const suggested=available.find(item=>item.slot===advice?.slot);
+ if(model&&advice&&!advice.selectedCompatible){
+  modelSelectLabel.hidden=false;
+  modelSelectTitle.textContent=suggested?words('Model · compatible option: '+suggested.model,'مدل · گزینهٔ سازگار: '+suggested.model):
+   words('Model · no compatible option for this mode','مدل · گزینهٔ سازگار با این حالت وجود ندارد');
+ }
  modelStrip.hidden=!model;
  modelCheck.disabled=state.busy||state.attachmentLoading;
  modelCheck.textContent=availability.kind==='device'?
