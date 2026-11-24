@@ -1,4 +1,4 @@
-import {evaluateWorkflowOutcome,reviewOutcomeRevision} from '../web/studio-workflow-outcome.mjs';
+import {evaluateWorkflowOutcome,reviewOutcomeRevision,reviewCorrectionExperience} from '../web/studio-workflow-outcome.mjs';
 function testOutcome(evaluate){
  let checks=0;const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('fixture mismatch '+checks)};
  const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('expected rejection '+checks)};
@@ -84,3 +84,45 @@ function testOutcomeRevision(compare){
  return checks;
 }
 console.log('WORKFLOW OUTCOME REVISION: PASS ('+testOutcomeRevision(reviewOutcomeRevision)+' checks)');
+
+function testCorrectionExperience(review){
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('experience fixture '+checks)};
+ const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('experience rejection '+checks)};
+ const on={enabled:true},scope={project_id:'p',workflow_id:'w'};
+ const criteria=[{id:'test',required:true,evidence_kind:'automated_check'},{id:'other',required:false,evidence_kind:'human_review'}];
+ const run=(id,values,extra={})=>{
+  const s={...scope,run_id:id,plan_sha256:'a'.repeat(64),...extra};
+  return {scope:s,observations:values.flatMap((v,i)=>v===null?[]:[{...s,criterion_id:criteria[i].id,evidence_id:id+'-e'+i,kind:criteria[i].evidence_kind,result:v}])};
+ };
+ const pair=(n,b=['fail','pass'],a=['pass','pass'],code='fix-a')=>({correction_code:code,before:run('b'+n,b),after:run('a'+n,a)});
+ const good=[pair(1),pair(2)];
+ const r=review(scope,criteria,good,on);
+ eq(r.candidates,[{correction_code:'fix-a',criterion_id:'test',supporting_pair_count:2,review_required:true}]);
+ eq(r.automatic_learning,false);eq(r.completion_verified,false);eq(r.execution_authorized,false);
+ eq(review(scope,criteria,[pair(1)],on).candidates,[]);
+ eq(review(scope,criteria,[pair(1),pair(2, [null,'pass'])],on).candidates,[]);
+ eq(review(scope,criteria,[pair(1),pair(2,['pass','pass'])],on).candidates,[]);
+ eq(review(scope,criteria,[pair(1),pair(2,['fail','pass'],['pass',null])],on).candidates,[]);
+ eq(review(scope,criteria,[pair(1),pair(2,['fail','pass'],['pass','fail'])],on).summaries[0].regression_count,1);
+ eq(review(scope,criteria,[pair(1),pair(2,['pass','fail'])],on).candidates,[]);
+ eq(review(scope,criteria,[pair(1),pair(2,['fail','pass'],['pass','pass'],'fix-b')],on).candidates,[]);
+ eq(review(scope,criteria,[...good,pair(3,['pass','pass'])],on).summaries[0].non_supporting_count,1);
+ eq(review(scope,criteria,[...good,pair(3,['pass','pass'])],on).candidates,[]);
+ eq(review(scope,criteria,[...good,pair(3,['pass','pass'],['pass','pass'],'fix-b')],on).candidates.length,1);
+ reject(()=>review(scope,criteria,[good[0],good[0]],on),'reused-experience-run');
+ const reused=pair(3);reused.before.observations[0].evidence_id=good[0].before.observations[0].evidence_id;
+ reject(()=>review(scope,criteria,[...good,reused],on),'reused-experience-evidence');
+ const foreign=pair(3);foreign.after=run('x',['pass','pass'],{project_id:'foreign'});
+ reject(()=>review(scope,criteria,[...good,foreign],on),'experience-scope-mismatch');
+ reject(()=>review(scope,criteria,[{...pair(1),correction_code:'arbitrary text'}],on),'invalid-correction-code');
+ reject(()=>review(scope,criteria,Array(13).fill(pair(1)),on),'invalid-experience-input');
+ reject(()=>review(scope,criteria,[],on),'invalid-experience-input');
+ reject(()=>review(scope,[],good,on),'invalid-outcome-input');
+ reject(()=>review(scope,criteria,good,{enabled:1}),'invalid-options');
+ eq(review(null,null,null).status,'off');eq(review(null,null,null,{...on,isolated:true}).status,'isolated');
+ eq(JSON.stringify(r).includes('b1-e0'),false);
+ eq(good[0].before.observations[0].result,'fail');
+ return checks;
+}
+console.log('WORKFLOW EXPERIENCE: PASS ('+testCorrectionExperience(reviewCorrectionExperience)+' checks)');
