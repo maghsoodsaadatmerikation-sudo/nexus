@@ -280,12 +280,18 @@ function openReviewedSurface(result,message){
  }else window.NexusStudioFocus?.openPanel(panel);
  return true;
 }
+function workflowOutcomes(){
+ const counts={succeeded:0,incomplete:0,running:0,unobserved:0,verified:false};
+ for(const {observed} of workflowState.steps)counts[observed==='succeeded'?'succeeded':observed==='started'?'running':observed?'incomplete':'unobserved']++;
+ return counts;
+}
 function workflowReport(){
  if(!retainedWorkflow())return null;
  return {
   schema:'nexus.workflow-review.v1',authority:'none',
   evidence:'tab-local-ui-and-human-acknowledgment-not-independent-proof',
   complete:workflowState.index===workflowState.steps.length,
+  outcome_review:workflowOutcomes(),
   steps:workflowState.steps.map(step=>({
    command:step.result.route[0],request:step.line,
    opened:step.opened===true,acknowledged_by_user:step.acknowledged===true,
@@ -356,8 +362,8 @@ function showWorkflow(){
  workflow.append(title,info,list);
  if(workflowState.index===workflowState.steps.length){
   const note=document.createElement('p');note.setAttribute('role','status');
-  note.textContent=words('All steps marked done by you; NEXUS has not verified external results.',
-   'همهٔ گام‌ها به تأیید شما رسیدند؛ نکسوس نتیجهٔ خارجی را راستی‌آزمایی نکرده است.');
+  const {succeeded,incomplete,unobserved}=workflowOutcomes();
+  note.textContent=words('Review complete; execution not verified. Local success / incomplete / unobserved: ','بازبینی پایان یافت؛ اجرا تأیید نشده. موفق محلی / ناقص / مشاهده‌نشده: ')+[succeeded,incomplete,unobserved].join(' / ');
   workflow.append(note);
  }
  workflow.append(cancel);
