@@ -25,7 +25,9 @@ class SourceRestoreDrillTests(unittest.TestCase):
         self.witness = self.base / "witness.json"
         self.dest = self.base / "restored-source"
         self.report = self.base / "drill.json"
-        self.assets = drill.fallback.gate.source_assets()
+        # Synthetic historical-inventory fixture, not actual historical bytes.
+        current = drill.fallback.gate.source_assets()
+        self.assets = {name: current[name] for name in drill.FILES}
         self.assertEqual(len(self.assets), 17)
         drill.fallback.archive(self.assets, self.zip)
         statuses = {name: "MATCH" for name in drill.FILES}
@@ -74,6 +76,14 @@ class SourceRestoreDrillTests(unittest.TestCase):
         secret.unlink()
         shortcut = self.dest / "public/studio/icons/alias.png"
         shortcut.symlink_to(self.dest / "public/studio/icons/nexus-192.png")
+        with self.assertRaises(ValueError):
+            drill.verify_restored(self.dest, self.zip, self.witness)
+
+    def test_current_only_astronomy_asset_is_rejected_in_historical_restore(self):
+        self.build()
+        vendor = self.dest / "public/studio/vendor"
+        vendor.mkdir()
+        (vendor / "astronomy-2.1.19.min.js").write_bytes(b"synthetic extra asset")
         with self.assertRaises(ValueError):
             drill.verify_restored(self.dest, self.zip, self.witness)
 

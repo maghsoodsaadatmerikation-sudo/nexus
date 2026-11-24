@@ -17,7 +17,7 @@ import stat
 import sys
 import zipfile
 
-from studio_public_assets import FILES, asset_limit, check_public_tree
+from studio_public_assets import HISTORICAL_LIVE_FILES as FILES, asset_limit, check_historical_live_tree
 
 HERE = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location(
@@ -37,7 +37,7 @@ def digest(data):
 def restored_tree(directory):
     """Only the exact 17 reviewed paths may exist under public/studio."""
     dest = Path(directory) / "public" / "studio"
-    found = check_public_tree(dest)
+    found = check_historical_live_tree(dest)
     return {name: found[name].read_bytes() for name in FILES}
 
 

@@ -36,7 +36,8 @@ LEGACY_FILES = (
     "device/vendor/ort-wasm-simd-threaded.asyncify.mjs",
 )
 ASTRONOMY_MODULE = "vendor/astronomy-2.1.19.min.js"
-FILES = LEGACY_FILES + PDF_FILES + (ASTRONOMY_MODULE,)
+HISTORICAL_LIVE_FILES = LEGACY_FILES + PDF_FILES
+FILES = HISTORICAL_LIVE_FILES + (ASTRONOMY_MODULE,)
 
 def asset_limit(name):
     if name == 'pdf/pdf.worker.min.mjs':
@@ -47,6 +48,15 @@ def asset_limit(name):
 
 
 def check_public_tree(root):
+    return _check_tree(root, FILES)
+
+
+def check_historical_live_tree(root):
+    # Only for the immutable 17-file prior-live fallback and restore protocol.
+    return _check_tree(root, HISTORICAL_LIVE_FILES)
+
+
+def _check_tree(root, inventory):
     root = Path(root)
     paths = {}
     if root.is_symlink() or not root.is_dir():
@@ -56,10 +66,10 @@ def check_public_tree(root):
         if stat.S_ISDIR(info.st_mode):
             continue
         relative = path.relative_to(root).as_posix()
-        if (relative not in FILES or not stat.S_ISREG(info.st_mode) or
+        if (relative not in inventory or not stat.S_ISREG(info.st_mode) or
                 info.st_nlink != 1 or not 0 < info.st_size <= asset_limit(relative)):
             raise ValueError("public Studio contains an unreviewed or unsupported asset")
         paths[relative] = path
-    if paths.keys() != set(FILES):
+    if paths.keys() != set(inventory):
         raise ValueError("public Studio assets are incomplete")
     return paths
