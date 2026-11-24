@@ -205,3 +205,18 @@ def test_durable_limit_change_never_resets_existing_counter(tmp_path):
         assert not smaller.reserve()
     finally:
         smaller.close()
+
+
+def test_fifo_counter_fails_closed_without_blocking(tmp_path):
+    root = private_state(tmp_path)
+    fifo = root / "model-attempts.counter"
+    os.mkfifo(fifo, mode=0o600)
+    script = ("from durable_model_budget import DurableModelRequestBudget; "
+              "b = DurableModelRequestBudget(" + repr(str(root)) + ", 3); "
+              "assert b.reserve() is False; "
+              "assert b.snapshot() == {'limit': 3, 'attempted': None, 'remaining': 0}; "
+              "b.close()")
+    subprocess.run([sys.executable, "-c", script], check=True, timeout=5,
+                   cwd=Path(__file__).resolve().parents[1])
+    import stat
+    assert stat.S_ISFIFO(fifo.lstat().st_mode)

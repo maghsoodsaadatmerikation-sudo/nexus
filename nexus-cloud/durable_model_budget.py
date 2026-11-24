@@ -86,8 +86,9 @@ class DurableModelRequestBudget:
 
     def _read_locked(self) -> int:
         try:
-            fd = os.open(COUNTER_NAME, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC,
-                         dir_fd=self._fd)
+            # A corrupt FIFO must not block before the regular-file check.
+            fd = os.open(COUNTER_NAME, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+                         | os.O_NONBLOCK, dir_fd=self._fd)
         except FileNotFoundError:
             return 0
         try:

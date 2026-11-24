@@ -305,3 +305,53 @@ def test_model_catalog_excludes_optional_routes_if_primary_auth_is_missing(monke
                                  "configuration_id": "a" * 64,
                                  "messages": [{"role": "user", "content": "Test"}]},
                            headers=AUTH).status_code == 503
+
+
+@pytest.mark.parametrize("status,headers,expected", [
+    (429, {"Retry-After": "60"}, "60"),
+    (503, {"Retry-After": "0030"}, "30"),
+    (529, {}, None),
+    (429, {"Retry-After": "9999"}, None),
+    (503, {"Retry-After": "private-provider-data"}, None),
+    (429, [("Retry-After", "1"), ("Retry-After", "2")], None),
+    (503, {"Retry-After": "Wed, 21 Oct 2015 07:28:00 GMT"}, None),
+])
+def test_provider_capacity_failure_never_replays_or_switches_model(monkeypatch, status, headers, expected):
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        if str(request.url) == model.ANTHROPIC_MESSAGES:
+            return httpx.Response(status, headers=headers, text="private-provider-data")
+        return httpx.Response(200, json=chat_answer("Manually reviewed primary reply"))
+
+    with configured(monkeypatch, handler) as client:
+        set_secondary(monkeypatch)
+        state = client.get("/studio-api/status").json()
+        failed = client.post("/studio-api/respond", json=review(state, "secondary"), headers=AUTH)
+        assert failed.status_code == 503
+        assert failed.json()["detail"] == "Selected model provider is temporarily unavailable or rate limited"
+        assert failed.headers.get("Retry-After") == expected
+        assert failed.headers["Cache-Control"] == "no-store"
+        assert "private-provider-data" not in failed.text
+        assert len(seen) == 1
+        assert str(seen[0].url) == model.ANTHROPIC_MESSAGES
+        assert client.app.state.model_budget.snapshot()["attempted"] == 1
+        # A new explicitly reviewed request can choose a different slot.
+        success = client.post("/studio-api/respond", json=review(state, "primary"), headers=AUTH)
+        assert success.status_code == 200
+        assert success.json()["model_slot"] == "primary"
+        assert len(seen) == 2
+        assert client.app.state.model_budget.snapshot()["attempted"] == 2
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 500])
+def test_other_provider_failures_do_not_leak_raw_response(monkeypatch, status):
+    with configured(monkeypatch, lambda _: httpx.Response(
+            status, headers={"Retry-After": "10"}, text="private-provider-data")) as client:
+        response = client.post("/studio-api/respond", json=review(client.get("/studio-api/status").json()),
+                               headers=AUTH)
+        assert response.status_code == 502
+        assert response.headers.get("Retry-After") is None
+        assert "private-provider-data" not in response.text
+        assert client.app.state.model_budget.snapshot()["attempted"] == 1

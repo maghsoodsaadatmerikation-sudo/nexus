@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import studio_connections
 import studio_model
 import studio_vision
+import studio_workflow
 from transport_bounds import read_bounded_body
 
 
@@ -89,6 +90,7 @@ app = FastAPI(
 studio_model.register(app)
 studio_vision.register(app)
 studio_connections.register(app)
+studio_workflow.register(app)
 if studio_origin := os.getenv("NEXUS_STUDIO_ORIGIN", "").strip():
     app.add_middleware(CORSMiddleware, allow_origins=[studio_origin],
                        allow_methods=["GET", "POST"],
