@@ -64,6 +64,7 @@ jobs:
           node scripts/test-studio-memory-review.mjs
           node scripts/test-studio-memory-edits.mjs
           node scripts/test-studio-workflow-outcome.mjs
+          node scripts/test-studio-workflow-review.mjs
           node scripts/test-studio-memory-dates.mjs
           node scripts/test-studio-memory-vectors.mjs
           node scripts/test-studio-memory-hybrid.mjs

@@ -1,4 +1,4 @@
-import {evaluateWorkflowOutcome} from '../web/studio-workflow-outcome.mjs';
+import {evaluateWorkflowOutcome,reviewOutcomeRevision,reviewCorrectionExperience,createExperienceEditReview,reviewExperienceRecall} from '../web/studio-workflow-outcome.mjs';
 function testOutcome(evaluate){
  let checks=0;const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('fixture mismatch '+checks)};
  const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('expected rejection '+checks)};
@@ -44,3 +44,178 @@ function testOutcome(evaluate){
  eq(good.length,2);return checks;
 }
 console.log('WORKFLOW OUTCOME: PASS ('+testOutcome(evaluateWorkflowOutcome)+' checks)');
+
+function testOutcomeRevision(compare){
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('revision fixture '+checks)};
+ const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('revision rejection '+checks)};
+ const on={enabled:true};
+ const criteria=[{id:'tests',required:true,evidence_kind:'automated_check'},{id:'approval',required:true,evidence_kind:'human_review'},{id:'optional',required:false,evidence_kind:'automated_check'}];
+ const run=(id,values,extra={})=>{
+  const scope={project_id:'p',workflow_id:'w',run_id:id,plan_sha256:'a'.repeat(64),...extra};
+  return {scope,observations:values.flatMap((value,i)=>value===null?[]:[{...scope,criterion_id:criteria[i].id,evidence_id:id+'-e'+i,kind:criteria[i].evidence_kind,result:value}])};
+ };
+ const before=run('old',['pass','fail','pass']);
+ const after=run('new',['pass','pass','pass']);
+ const result=compare(before,after,criteria,on);
+ eq(result.assessment,'all_criteria_reported_pass');eq(result.gained_count,1);eq(result.lost_count,0);eq(result.unresolved_count,0);
+ eq(result.completion_verified,false);eq(result.execution_authorized,false);eq(result.plan_changed,false);
+ eq(result.changes.map(c=>c.transition),['unchanged','reported_pass_gained','unchanged']);
+ const regression=compare(before,run('new',[null,'pass','pass']),criteria,on);
+ eq(regression.assessment,'required_pass_lost');eq(regression.gained_count,1);eq(regression.lost_count,1);eq(regression.review_actions[0].action,'request_matching_evidence');
+ eq(compare(before,run('new',['pass','pass','fail']),criteria,on).assessment,'optional_pass_lost');
+ eq(compare(before,run('new',['pass',null,'pass']),criteria,on).changes[1].transition,'unresolved_change');
+ eq(compare(before,run('new',['pass',null,'pass']),criteria,on).assessment,'required_review_incomplete');
+ eq(compare(run('old',['pass','pass',null]),run('new',['pass','pass',null]),criteria,on).assessment,'optional_review_incomplete');
+ eq(compare(before,run('new',['pass','pass','pass'],{plan_sha256:'b'.repeat(64)}),criteria,on).plan_changed,true);
+ const conflict=run('new',['pass','pass','pass']);conflict.observations.push({...conflict.observations[0],evidence_id:'conflict',result:'fail'});
+ eq(compare(before,conflict,criteria,on).changes[0].transition,'reported_pass_lost');
+ reject(()=>compare(before,run('new',['pass','pass','pass'],{project_id:'other'}),criteria,on),'comparison-scope-mismatch');
+ reject(()=>compare(before,run('new',['pass','pass','pass'],{workflow_id:'other'}),criteria,on),'comparison-scope-mismatch');
+ reject(()=>compare(before,before,criteria,on),'comparison-scope-mismatch');
+ const reused=run('new',['pass','pass','pass']);reused.observations[0].evidence_id=before.observations[0].evidence_id;
+ reject(()=>compare(before,reused,criteria,on),'reused-run-evidence');
+ reject(()=>compare(before,after,[],on),'invalid-outcome-input');
+ reject(()=>compare(before,after,criteria,{enabled:'yes'}),'invalid-options');
+ const forged=run('new',['pass','pass','pass']);forged.observations[0].run_id='old';
+ reject(()=>compare(before,forged,criteria,on),'observation-scope-mismatch');
+ eq(compare(null,null,null).status,'off');eq(compare(null,null,null,{...on,isolated:true}).status,'isolated');
+ eq(JSON.stringify(result).includes('old-e0'),false);eq(before.observations.length,3);
+ return checks;
+}
+console.log('WORKFLOW OUTCOME REVISION: PASS ('+testOutcomeRevision(reviewOutcomeRevision)+' checks)');
+
+function testCorrectionExperience(review){
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('experience fixture '+checks)};
+ const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('experience rejection '+checks)};
+ const on={enabled:true},scope={project_id:'p',workflow_id:'w'};
+ const criteria=[{id:'test',required:true,evidence_kind:'automated_check'},{id:'other',required:false,evidence_kind:'human_review'}];
+ const run=(id,values,extra={})=>{
+  const s={...scope,run_id:id,plan_sha256:'a'.repeat(64),...extra};
+  return {scope:s,observations:values.flatMap((v,i)=>v===null?[]:[{...s,criterion_id:criteria[i].id,evidence_id:id+'-e'+i,kind:criteria[i].evidence_kind,result:v}])};
+ };
+ const pair=(n,b=['fail','pass'],a=['pass','pass'],code='fix-a')=>({correction_code:code,before:run('b'+n,b),after:run('a'+n,a)});
+ const good=[pair(1),pair(2)];
+ const r=review(scope,criteria,good,on);
+ eq(r.candidates,[{correction_code:'fix-a',criterion_id:'test',supporting_pair_count:2,review_required:true}]);
+ eq(r.automatic_learning,false);eq(r.completion_verified,false);eq(r.execution_authorized,false);
+ eq(review(scope,criteria,[pair(1)],on).candidates,[]);
+ eq(review(scope,criteria,[pair(1),pair(2, [null,'pass'])],on).candidates,[]);
+ eq(review(scope,criteria,[pair(1),pair(2,['pass','pass'])],on).candidates,[]);
+ eq(review(scope,criteria,[pair(1),pair(2,['fail','pass'],['pass',null])],on).candidates,[]);
+ eq(review(scope,criteria,[pair(1),pair(2,['fail','pass'],['pass','fail'])],on).summaries[0].regression_count,1);
+ eq(review(scope,criteria,[pair(1),pair(2,['pass','fail'])],on).candidates,[]);
+ eq(review(scope,criteria,[pair(1),pair(2,['fail','pass'],['pass','pass'],'fix-b')],on).candidates,[]);
+ eq(review(scope,criteria,[...good,pair(3,['pass','pass'])],on).summaries[0].non_supporting_count,1);
+ eq(review(scope,criteria,[...good,pair(3,['pass','pass'])],on).candidates,[]);
+ eq(review(scope,criteria,[...good,pair(3,['pass','pass'],['pass','pass'],'fix-b')],on).candidates.length,1);
+ reject(()=>review(scope,criteria,[good[0],good[0]],on),'reused-experience-run');
+ const reused=pair(3);reused.before.observations[0].evidence_id=good[0].before.observations[0].evidence_id;
+ reject(()=>review(scope,criteria,[...good,reused],on),'reused-experience-evidence');
+ const foreign=pair(3);foreign.after=run('x',['pass','pass'],{project_id:'foreign'});
+ reject(()=>review(scope,criteria,[...good,foreign],on),'experience-scope-mismatch');
+ reject(()=>review(scope,criteria,[{...pair(1),correction_code:'arbitrary text'}],on),'invalid-correction-code');
+ reject(()=>review(scope,criteria,Array(13).fill(pair(1)),on),'invalid-experience-input');
+ reject(()=>review(scope,criteria,[],on),'invalid-experience-input');
+ reject(()=>review(scope,[],good,on),'invalid-outcome-input');
+ reject(()=>review(scope,criteria,good,{enabled:1}),'invalid-options');
+ eq(review(null,null,null).status,'off');eq(review(null,null,null,{...on,isolated:true}).status,'isolated');
+ eq(JSON.stringify(r).includes('b1-e0'),false);
+ eq(good[0].before.observations[0].result,'fail');
+ return checks;
+}
+console.log('WORKFLOW EXPERIENCE: PASS ('+testCorrectionExperience(reviewCorrectionExperience)+' checks)');
+
+function testExperienceLifecycle(create){
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('lifecycle fixture '+checks)};
+ const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('lifecycle rejection '+checks)};
+ const scope={project_id:'p',workflow_id:'w'},empty={...scope,revision:0,entries:[]};
+ const criteria=[{id:'test',required:true,evidence_kind:'automated_check'}];
+ const run=(id,result)=>{const s={...scope,run_id:id,plan_sha256:'a'.repeat(64)};return {scope:s,observations:[{...s,criterion_id:'test',evidence_id:id+'-e',kind:'automated_check',result}]}};
+ const pair=n=>({correction_code:'fix-a',before:run('b'+n,'fail'),after:run('a'+n,'pass')});
+ const on={enabled:true,criteria,attempts:[pair(1),pair(2)]},yes={enabled:true,approved:true};
+ const op=kind=>({kind,correction_code:'fix-a',criterion_id:'test'});
+ const c=create();
+ reject(()=>c.stage(empty,op('accept')),'disabled');
+ reject(()=>c.stage(empty,op('accept'),{...on,isolated:true}),'disabled');
+ reject(()=>c.stage(empty,op('accept'),{...on,attempts:[pair(1)]}),'not-supported');
+ const p=c.stage(empty,op('accept'),on);
+ reject(()=>c.approve({},empty,yes),'inactive');
+ reject(()=>c.approve(p.ticket,empty,{enabled:true}),'not-approved');
+ reject(()=>c.approve(p.ticket,empty,yes),'inactive');
+ const q=c.stage(empty,op('accept'),on);
+ reject(()=>c.approve(q.ticket,{...empty,revision:1},yes),'stale');
+ const a=c.stage(empty,op('accept'),on);
+ const active=c.approve(a.ticket,empty,yes);
+ eq(active.revision,1);eq(active.entries,[{correction_code:'fix-a',criterion_id:'test',status:'active',supporting_pair_count:2}]);eq(empty.entries,[]);
+ reject(()=>c.stage(active,op('accept'),on),'already-present');
+ const v=c.stage(active,op('revoke'),on);
+ const revoked=c.approve(v.ticket,active,yes);
+ eq(revoked.entries[0].status,'revoked');eq(revoked.revision,2);eq(active.entries[0].status,'active');
+ reject(()=>c.stage(revoked,op('revoke'),on),'already-revoked');
+ reject(()=>c.stage(revoked,op('refresh'),{...on,attempts:[pair(1)]}),'not-supported');
+ const refresh=c.stage(revoked,op('refresh'),{...on,attempts:[pair(1),pair(2),pair(3)]});
+ const refreshed=c.approve(refresh.ticket,revoked,yes);
+ eq(refreshed.entries[0].status,'active');eq(refreshed.entries[0].supporting_pair_count,3);
+ const d=c.stage(refreshed,op('delete'),on);
+ reject(()=>c.approve(d.ticket,{...refreshed,workflow_id:'other'},yes),'stale');
+ const e=c.stage(refreshed,op('delete'),on);c.invalidate();
+ reject(()=>c.approve(e.ticket,refreshed,yes),'inactive');
+ const f=c.stage(refreshed,op('delete'),on);
+ const deleted=c.approve(f.ticket,refreshed,yes);eq(deleted.entries,[]);eq(deleted.revision,4);
+ eq(JSON.stringify(deleted).includes('fix-a'),false);
+ const g=c.stage(active,op('delete'),on);
+ reject(()=>c.stage(active,op('accept'),on),'already-present');
+ reject(()=>c.approve(g.ticket,active,yes),'inactive');
+ reject(()=>c.stage({...active,entries:[...active.entries,...active.entries]},op('delete'),on),'duplicate');
+ reject(()=>c.stage({...active,revision:Number.MAX_SAFE_INTEGER},op('delete'),on),'invalid-experience-snapshot');
+ const h=c.stage(active,op('delete'),on);
+ reject(()=>c.approve(h.ticket,{...active,entries:[{...active.entries[0],status:'revoked'}]},yes),'stale');
+ const i=c.stage(active,op('delete'),on);
+ reject(()=>c.approve(i.ticket,active,{...yes,isolated:true}),'not-approved');
+ eq(JSON.stringify(active).includes('b1-e'),false);
+ return checks;
+}
+console.log('WORKFLOW EXPERIENCE LIFECYCLE: PASS ('+testExperienceLifecycle(createExperienceEditReview)+' checks)');
+
+function testExperienceRecall(review){
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('recall fixture '+checks)};
+ const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('recall rejection '+checks)};
+ const scope={project_id:'p',workflow_id:'w'},criteria=[{id:'test',required:true,evidence_kind:'automated_check'},{id:'other',required:false,evidence_kind:'human_review'}];
+ const run=(id,values)=>{const s={...scope,run_id:id,plan_sha256:'a'.repeat(64)};return {scope:s,observations:values.map((result,i)=>({...s,criterion_id:criteria[i].id,evidence_id:id+'-e'+i,kind:criteria[i].evidence_kind,result}))}};
+ const pair=(n,code='fix-a',b=['fail','pass'],a=['pass','pass'])=>({correction_code:code,before:run('b'+n,b),after:run('a'+n,a)});
+ const attempts=[pair(1),pair(2),pair(3,'fix-b',['pass','fail']),pair(4,'fix-b',['pass','fail'])];
+ const entry=(correction_code,criterion_id,status='active',supporting_pair_count=2)=>({correction_code,criterion_id,status,supporting_pair_count});
+ const snap={...scope,revision:2,entries:[entry('fix-b','other'),entry('fix-a','test')]};
+ const req={...scope,revision:2,criterion_ids:['other','test']},on={enabled:true};
+ const r=review(snap,req,criteria,attempts,on);
+ eq(r.matches.map(x=>x.criterion_id),['test','other']);eq(r.withheld_count,0);eq(r.truncated,false);
+ eq(r.automatic_application,false);eq(r.execution_authorized,false);eq(r.completion_verified,false);
+ eq(review(snap,req,criteria,attempts,{...on,limit:1}).truncated,true);
+ eq(review(snap,{...req,criterion_ids:['other']},criteria,attempts,on).matches.map(x=>x.correction_code),['fix-b']);
+ const revoked={...snap,entries:[entry('fix-a','test','revoked'),entry('fix-b','other')]};
+ eq(review(revoked,req,criteria,attempts,on).matches.map(x=>x.correction_code),['fix-b']);
+ eq(review({...snap,entries:[]},req,criteria,attempts,on).matches,[]);
+ const stale=review(snap,req,criteria,[...attempts,pair(5)],on);
+ eq(stale.matches.map(x=>x.correction_code),['fix-b']);eq(stale.withheld_count,1);
+ const contradicted=review(snap,req,criteria,[...attempts,pair(5,'fix-a',['fail','pass'],['fail','pass'])],on);
+ eq(contradicted.matches.map(x=>x.correction_code),['fix-b']);eq(contradicted.withheld_count,1);
+ eq(review(snap,req,criteria,[],on).status,'no_current_evidence');
+ eq(review(snap,req,criteria,[pair(1)],on).matches,[]);
+ eq(review(null,null,null,null).status,'off');eq(review(null,null,null,null,{...on,isolated:true}).status,'isolated');
+ reject(()=>review(snap,{...req,revision:1},criteria,attempts,on),'scope-mismatch');
+ reject(()=>review(snap,{...req,workflow_id:'foreign'},criteria,attempts,on),'scope-mismatch');
+ reject(()=>review(snap,{...req,project_id:'foreign'},criteria,attempts,on),'scope-mismatch');
+ reject(()=>review(snap,{...req,criterion_ids:['missing']},criteria,attempts,on),'invalid-recall-criteria');
+ reject(()=>review(snap,{...req,criterion_ids:['test','test']},criteria,attempts,on),'invalid-recall-criteria');
+ reject(()=>review({...snap,entries:[...snap.entries,snap.entries[0]]},req,criteria,attempts,on),'duplicate-experience-entry');
+ reject(()=>review(snap,req,[criteria[0],criteria[0]],attempts,on),'invalid-criterion');
+ reject(()=>review(snap,req,criteria,[...attempts,attempts[0]],on),'reused-experience-run');
+ reject(()=>review(snap,req,criteria,attempts,{...on,limit:0}),'invalid-options');
+ eq(JSON.stringify(r).includes('b1-e0'),false);eq(snap.entries[0].correction_code,'fix-b');
+ return checks;
+}
+console.log('WORKFLOW EXPERIENCE RECALL: PASS ('+testExperienceRecall(reviewExperienceRecall)+' checks)');
