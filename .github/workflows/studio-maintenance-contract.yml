@@ -1,0 +1,29 @@
+name: Studio maintenance contract
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/studio-maintenance.py'
+      - 'scripts/test-studio-maintenance.py'
+      - '.github/workflows/studio-maintenance-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/studio-maintenance.py'
+      - 'scripts/test-studio-maintenance.py'
+      - '.github/workflows/studio-maintenance-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Test maintenance control flow
+        run: python3 -B scripts/test-studio-maintenance.py -v

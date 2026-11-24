@@ -2,6 +2,7 @@
 """Audit and optionally repair generated Studio assets from a clean commit."""
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -92,21 +93,36 @@ def inspect(base):
             git(ROOT, "worktree", "remove", "--force", str(checkout))
 
 
+def inspect_reproducibly(base):
+    """Require byte-identical patches from two independent clean worktrees."""
+    first = inspect(base)
+    second = inspect(base)
+    if first != second:
+        raise RuntimeError("independent Studio builds produced different patches; repair blocked")
+    return first
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repair", action="store_true", help="apply the verified generated diff")
+    parser.add_argument("--reproducible", action="store_true",
+                        help="compare two independent builds of the selected commit")
     args = parser.parse_args()
     try:
         base = git(ROOT, "rev-parse", "HEAD").decode().strip()
         require_base(base)
-        changed, patch = inspect(base)
+        double_build = args.reproducible or args.repair
+        changed, patch = inspect_reproducibly(base) if double_build else inspect(base)
+        require_base(base)
         status = "drift" if changed else "healthy"
         if args.repair and changed:
             require_base(base)
             git(ROOT, "apply", "--check", "-", patch=patch)
             git(ROOT, "apply", "-", patch=patch)
             status = "repaired"
-        print(json.dumps({"status": status, "base_commit": base, "changed_files": changed}))
+        print(json.dumps({"status": status, "base_commit": base, "changed_files": changed,
+                          "reproducibility": "matched" if double_build else "not_checked",
+                          "patch_sha256": hashlib.sha256(patch).hexdigest()}))
         return int(status == "drift")
     except (RuntimeError, OSError, subprocess.TimeoutExpired, UnicodeError) as error:
         print(json.dumps({"status": "blocked", "reason": str(error)}))

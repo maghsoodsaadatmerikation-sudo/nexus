@@ -405,9 +405,13 @@ the Studio builders. Run the icon builder with `--check` to verify the assets.
 Run `python3 scripts/studio-maintenance.py` from a clean checkout to audit
 the standalone, device-model and installable Studio packages. It rebuilds
 from the selected commit in a disposable worktree and reports any drift as
-JSON. On a review branch, add `--repair` to apply a verified diff limited to
-generated assets. This command leaves the review and release decisions to the
-existing pull-request and deployment process.
+JSON. Add `--reproducible` to compare two independent clean builds and report
+the SHA-256 of their matching patch. On a review branch, `--repair` now requires
+that same two-build match before applying a verified diff limited to generated
+assets. A mismatch or builder failure blocks repair. These are local build
+consistency checks, not release or deployment evidence. Run the control-flow
+regressions with `python3 -B scripts/test-studio-maintenance.py -v`.
+Review and release decisions remain in the existing pull-request and deployment process.
 
 ## Repository map
 
