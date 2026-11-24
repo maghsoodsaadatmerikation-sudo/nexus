@@ -96,6 +96,8 @@ impl PolicyEngine {
                 effective_authority: effective,
             },
             grant_id,
+            authorized_at: now,
+            expires_at: grant.expires_at,
             revocation_epoch: revocations.epoch(),
             revocation_snapshot: revocations.snapshot(),
         })
@@ -146,6 +148,8 @@ mod capability_boundary_tests {
             )
             .expect("delegated authorization");
         assert_eq!(request.authority(), Authority::User);
+        assert_eq!(request.authorized_at(), 15);
+        assert_eq!(request.expires_at(), 20);
         assert_eq!(audit.events().len(), 1);
         assert_eq!(
             audit.events()[0].outcome,

@@ -26,6 +26,8 @@ impl AuthorizedRequest {
 pub struct DelegatedAuthorizedRequest {
     pub(crate) request: AuthorizedRequest,
     pub(crate) grant_id: String,
+    pub(crate) authorized_at: u64,
+    pub(crate) expires_at: u64,
     pub(crate) revocation_epoch: u64,
     pub(crate) revocation_snapshot: RevocationSnapshot,
 }
@@ -39,6 +41,12 @@ impl DelegatedAuthorizedRequest {
     }
     pub fn grant_id(&self) -> &str {
         &self.grant_id
+    }
+    pub fn authorized_at(&self) -> u64 {
+        self.authorized_at
+    }
+    pub fn expires_at(&self) -> u64 {
+        self.expires_at
     }
     pub fn revocation_epoch(&self) -> u64 {
         self.revocation_epoch
