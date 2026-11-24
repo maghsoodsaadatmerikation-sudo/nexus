@@ -32,6 +32,8 @@ class BrowserRunnerFailures(unittest.TestCase):
         self.assertEqual(value['stage'], 'devtools-port')
         self.assertEqual(value['authority'], 'none')
         self.assertIs(value['production_verified'], False)
+        self.assertIsInstance(value['startup_signals'], list)
+        self.assertIsInstance(value['malformed_port_observed'], bool)
         self.assertNotIn(str(self.root), result.stderr)
         self.assertNotIn('synthetic-private-page', result.stderr)
         self.assertNotIn('SECRET_BROWSER_STDERR', result.stderr)
@@ -97,6 +99,30 @@ class BrowserRunnerFailures(unittest.TestCase):
         value = self.diagnostic(self.run_driver(browser))
         self.assertIs(value['process_exited'], True)
         self.assertIs(value['launch_failed'], False)
+
+    def test_startup_signals_are_fixed_labels_and_never_raw_stderr(self):
+        browser = self.root / 'diagnostic-browser'
+        browser.write_text('#!/bin/sh\n'
+                           'echo "DevTools listening on ws://SECRET_BROWSER_STDERR" >&2\n'
+                           'echo "error while loading shared libraries: SECRET_BROWSER_STDERR" >&2\n'
+                           'echo "profile appears to be in use: SECRET_BROWSER_STDERR" >&2\n'
+                           'exit 1\n')
+        browser.chmod(0o700)
+        value = self.diagnostic(self.run_driver(browser))
+        self.assertEqual(value['startup_signals'], [
+            'debugger-listening-reported', 'missing-library-reported', 'profile-lock-reported'])
+        self.assertIs(value['malformed_port_observed'], False)
+
+    def test_invalid_port_is_not_used_and_value_is_not_logged(self):
+        browser = self.root / 'malformed-port-browser'
+        browser.write_text('#!/bin/sh\n'
+                           'echo 99999 > "' + str(self.profile / 'DevToolsActivePort') + '"\n'
+                           'sleep 1\nexit 1\n')
+        browser.chmod(0o700)
+        result = self.run_driver(browser)
+        value = self.diagnostic(result)
+        self.assertIs(value['malformed_port_observed'], True)
+        self.assertNotIn('99999', result.stderr)
 
     def test_existing_profile_is_refused_without_launch(self):
         self.profile.mkdir()

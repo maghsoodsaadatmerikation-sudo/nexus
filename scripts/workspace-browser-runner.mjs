@@ -34,7 +34,17 @@ let stage = 'launch';
 let launchError;
 child.on('error', error => {launchError = error});
 const exited = new Promise(resolve => child.once('close', resolve));
-child.stderr.on('data', () => {}); // Chrome diagnostics are not acceptance evidence.
+// Fixed, non-authoritative startup indicators; never emit raw Chrome stderr.
+const startupSignals = new Set();
+let stderrTail = '';
+child.stderr.on('data', chunk => {
+  const window = stderrTail + chunk.toString('utf8');
+  if (/DevTools listening on ws:\/\//i.test(window)) startupSignals.add('debugger-listening-reported');
+  if (/Failed to create.*ProcessSingleton|profile appears to be in use/i.test(window)) startupSignals.add('profile-lock-reported');
+  if (/error while loading shared libraries/i.test(window)) startupSignals.add('missing-library-reported');
+  stderrTail = window.slice(-256);
+});
+let malformedPortObserved = false;
 let socket;
 let serial = 0;
 const pending = new Map();
@@ -68,7 +78,9 @@ try {
   const port = await waitFor(async () => {
     try {
       const value = (await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0];
-      return /^\d+$/.test(value) ? value : null;
+      if (/^[1-9]\d{0,4}$/.test(value) && Number(value) <= 65535) return value;
+      malformedPortObserved = true;
+      return null;
     } catch {return null}
   }, portStartupDeadline);
   stage = 'page-target';
@@ -123,7 +135,8 @@ try {
   // profile paths or exception messages into diagnostic evidence.
   process.stderr.write(JSON.stringify({event: 'browser-witness-failure', stage,
     elapsed_ms: Date.now() - started, process_exited: child.exitCode !== null || child.signalCode !== null,
-    launch_failed: Boolean(launchError), authority: 'none', production_verified: false}) + '\n');
+    launch_failed: Boolean(launchError), startup_signals: [...startupSignals].sort(),
+    malformed_port_observed: malformedPortObserved, authority: 'none', production_verified: false}) + '\n');
   throw error;
 } finally {
   if (socket?.readyState === WebSocket.OPEN) {
