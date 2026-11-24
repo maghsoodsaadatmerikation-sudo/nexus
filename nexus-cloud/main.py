@@ -16,6 +16,7 @@ import studio_connections
 import studio_model
 import studio_vision
 import studio_analysis_audit
+import studio_research_evidence
 import studio_analysis_export
 import studio_analysis_batch
 import studio_workflow
@@ -98,6 +99,7 @@ studio_workflow.register(app)
 studio_workflow_revision.register(app)
 studio_analysis_batch.register(app)
 studio_analysis_audit.register(app)
+studio_research_evidence.register(app)
 studio_analysis_export.register(app)
 if studio_origin := os.getenv("NEXUS_STUDIO_ORIGIN", "").strip():
     app.add_middleware(CORSMiddleware, allow_origins=[studio_origin],
