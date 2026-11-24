@@ -43,3 +43,33 @@ export function applyMemoryEdit(projectId,notes,proposal,{approved=false,isolate
  if(notes.length!==proposal.expected.length||notes.some((note,i)=>note!==proposal.expected[i]))throw Error('stale-memory-review');
  return nextNotes(notes,validateOperation(proposal.operation));
 }
+
+// A tab-local one-use review controller. The host must supply its own
+// monotonic revision and invalidate on lock, project switch, reset or teardown.
+// Never serialize tickets, previews or the controller; no storage or I/O.
+export function createMemoryEditReview(){
+ let pending=null;
+ const validRevision=n=>Number.isSafeInteger(n)&&n>=0;
+ function stage(projectId,notes,operation,{revision,isolated=false}={}){
+  pending=null; // Even a failed replacement invalidates the previous review.
+  if(!validRevision(revision))throw Error('invalid-memory-revision');
+  const proposal=proposeMemoryEdit(projectId,notes,operation,{isolated});
+  const ticket=Object.freeze(Object.create(null));
+  pending={ticket,proposal,revision};
+  return Object.freeze({ticket,project_id:projectId,operation:proposal.operation});
+ }
+ function approve(ticket,projectId,notes,{approved=false,revision,isolated=false}={}){
+  if(!pending||ticket!==pending.ticket)throw Error('inactive-memory-review');
+  const current=pending;
+  pending=null; // Consume on the first matching attempt, even if rejected.
+  if(!validRevision(revision)||revision!==current.revision)throw Error('stale-memory-revision');
+  return applyMemoryEdit(projectId,notes,current.proposal,{approved,isolated});
+ }
+ function cancel(ticket){
+  if(!pending||ticket!==pending.ticket)return false;
+  pending=null;
+  return true;
+ }
+ function invalidate(){pending=null;}
+ return Object.freeze({stage,approve,cancel,invalidate});
+}
