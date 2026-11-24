@@ -127,7 +127,7 @@ mod delegated_freshness_tests {
     fn revocation_after_authorization_rejects_stale_request() {
         let mut revocations = RevocationSet::default();
         let request = authorize(&revocations);
-        revocations.revoke_with_provenance("g-fresh", "human:revoke");
+        revocations.revoke_with_provenance("g-fresh", "human:revoke").unwrap();
         assert_eq!(
             Executor::new().execute_delegated(request, &revocations),
             Err(DelegatedExecutionDenial::StaleRevocationEpoch {
@@ -141,7 +141,7 @@ mod delegated_freshness_tests {
     fn unrelated_revocation_invalidates_cached_authorization() {
         let mut revocations = RevocationSet::default();
         let request = authorize(&revocations);
-        revocations.revoke_with_provenance("another-grant", "human:revoke-other");
+        revocations.revoke_with_provenance("another-grant", "human:revoke-other").unwrap();
         assert_eq!(
             Executor::new().execute_delegated(request, &revocations),
             Err(DelegatedExecutionDenial::StaleRevocationEpoch {
@@ -155,7 +155,7 @@ mod delegated_freshness_tests {
     fn older_snapshot_cannot_execute_newer_authorization() {
         let older = RevocationSet::default();
         let mut current = RevocationSet::default();
-        current.revoke_with_provenance("another-grant", "human:epoch-1");
+        current.revoke_with_provenance("another-grant", "human:epoch-1").unwrap();
         let request = authorize(&current);
         assert_eq!(
             Executor::new().execute_delegated(request, &older),
@@ -169,11 +169,11 @@ mod delegated_freshness_tests {
     #[test]
     fn equal_epoch_divergent_history_fails_closed() {
         let mut authorized_state = RevocationSet::default();
-        authorized_state.revoke_with_provenance("grant-a", "human:a");
+        authorized_state.revoke_with_provenance("grant-a", "human:a").unwrap();
         let request = authorize(&authorized_state);
 
         let mut divergent_state = RevocationSet::default();
-        divergent_state.revoke_with_provenance("grant-b", "human:b");
+        divergent_state.revoke_with_provenance("grant-b", "human:b").unwrap();
         assert_eq!(authorized_state.epoch(), divergent_state.epoch());
         assert_eq!(
             Executor::new().execute_delegated(request, &divergent_state),
@@ -184,7 +184,7 @@ mod delegated_freshness_tests {
     #[test]
     fn reauthorization_at_current_epoch_restores_only_unrevoked_request() {
         let mut revocations = RevocationSet::default();
-        revocations.revoke_with_provenance("another-grant", "human:epoch-1");
+        revocations.revoke_with_provenance("another-grant", "human:epoch-1").unwrap();
         let request = authorize(&revocations);
         assert!(Executor::new()
             .execute_delegated(request, &revocations)
