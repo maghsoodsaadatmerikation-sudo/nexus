@@ -819,3 +819,26 @@ def test_stream_disconnect_closes_silent_upstream_and_releases_capacity(monkeypa
             assert upstream_closed.is_set() and limiter.borrowed_tokens == 0
 
     anyio.run(exercise)
+
+
+def test_budget_io_runs_outside_asgi_event_loop(monkeypatch):
+    import threading
+
+    with configured(monkeypatch) as client:
+        budget = client.app.state.model_budget
+        calls = []
+
+        def observe(name, method):
+            def wrapped():
+                # Only an AnyIO worker can call back into its event loop.
+                loop_thread = anyio.from_thread.run_sync(threading.get_ident)
+                assert threading.get_ident() != loop_thread
+                calls.append(name)
+                return method()
+            return wrapped
+
+        monkeypatch.setattr(budget, "snapshot", observe("snapshot", budget.snapshot))
+        monkeypatch.setattr(budget, "reserve", observe("reserve", budget.reserve))
+        assert client.get("/studio-api/operator-readiness", headers=AUTH).status_code == 200
+        assert client.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 200
+        assert calls == ["snapshot", "reserve"]

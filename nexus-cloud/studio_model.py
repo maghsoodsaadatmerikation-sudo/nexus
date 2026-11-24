@@ -565,7 +565,8 @@ def register(app):
             raise HTTPException(422, "Invalid model slot")
         slot = requested[0] if requested else "primary"
         c = read_model_catalog().get(slot)
-        budget = request.app.state.model_budget.snapshot()
+        # Durable flock/fsync operations must not block unrelated ASGI requests.
+        budget = await anyio.to_thread.run_sync(request.app.state.model_budget.snapshot)
         readiness = ("NOT_CONFIGURED" if c is None
                      else "LOCAL_BUDGET_UNAVAILABLE" if budget["attempted"] is None
                      else "LOCAL_BUDGET_EXHAUSTED" if budget["remaining"] == 0
@@ -646,7 +647,7 @@ def register(app):
             # request bounds, explicit consent and configuration review pass.
             # Never refund a charged attempt: an interrupted call can still
             # reach and be billed by the upstream provider.
-            if not request.app.state.model_budget.reserve():
+            if not await anyio.to_thread.run_sync(request.app.state.model_budget.reserve):
                 raise HTTPException(
                     429, "Local model request budget exhausted or disabled",
                     headers={"Cache-Control": "no-store"},
