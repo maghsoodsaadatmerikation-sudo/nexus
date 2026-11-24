@@ -1,4 +1,4 @@
-import {evaluateWorkflowOutcome} from '../web/studio-workflow-outcome.mjs';
+import {evaluateWorkflowOutcome,reviewOutcomeRevision} from '../web/studio-workflow-outcome.mjs';
 function testOutcome(evaluate){
  let checks=0;const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('fixture mismatch '+checks)};
  const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('expected rejection '+checks)};
@@ -44,3 +44,43 @@ function testOutcome(evaluate){
  eq(good.length,2);return checks;
 }
 console.log('WORKFLOW OUTCOME: PASS ('+testOutcome(evaluateWorkflowOutcome)+' checks)');
+
+function testOutcomeRevision(compare){
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('revision fixture '+checks)};
+ const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('revision rejection '+checks)};
+ const on={enabled:true};
+ const criteria=[{id:'tests',required:true,evidence_kind:'automated_check'},{id:'approval',required:true,evidence_kind:'human_review'},{id:'optional',required:false,evidence_kind:'automated_check'}];
+ const run=(id,values,extra={})=>{
+  const scope={project_id:'p',workflow_id:'w',run_id:id,plan_sha256:'a'.repeat(64),...extra};
+  return {scope,observations:values.flatMap((value,i)=>value===null?[]:[{...scope,criterion_id:criteria[i].id,evidence_id:id+'-e'+i,kind:criteria[i].evidence_kind,result:value}])};
+ };
+ const before=run('old',['pass','fail','pass']);
+ const after=run('new',['pass','pass','pass']);
+ const result=compare(before,after,criteria,on);
+ eq(result.assessment,'all_criteria_reported_pass');eq(result.gained_count,1);eq(result.lost_count,0);eq(result.unresolved_count,0);
+ eq(result.completion_verified,false);eq(result.execution_authorized,false);eq(result.plan_changed,false);
+ eq(result.changes.map(c=>c.transition),['unchanged','reported_pass_gained','unchanged']);
+ const regression=compare(before,run('new',[null,'pass','pass']),criteria,on);
+ eq(regression.assessment,'required_pass_lost');eq(regression.gained_count,1);eq(regression.lost_count,1);eq(regression.review_actions[0].action,'request_matching_evidence');
+ eq(compare(before,run('new',['pass','pass','fail']),criteria,on).assessment,'optional_pass_lost');
+ eq(compare(before,run('new',['pass',null,'pass']),criteria,on).changes[1].transition,'unresolved_change');
+ eq(compare(before,run('new',['pass',null,'pass']),criteria,on).assessment,'required_review_incomplete');
+ eq(compare(run('old',['pass','pass',null]),run('new',['pass','pass',null]),criteria,on).assessment,'optional_review_incomplete');
+ eq(compare(before,run('new',['pass','pass','pass'],{plan_sha256:'b'.repeat(64)}),criteria,on).plan_changed,true);
+ const conflict=run('new',['pass','pass','pass']);conflict.observations.push({...conflict.observations[0],evidence_id:'conflict',result:'fail'});
+ eq(compare(before,conflict,criteria,on).changes[0].transition,'reported_pass_lost');
+ reject(()=>compare(before,run('new',['pass','pass','pass'],{project_id:'other'}),criteria,on),'comparison-scope-mismatch');
+ reject(()=>compare(before,run('new',['pass','pass','pass'],{workflow_id:'other'}),criteria,on),'comparison-scope-mismatch');
+ reject(()=>compare(before,before,criteria,on),'comparison-scope-mismatch');
+ const reused=run('new',['pass','pass','pass']);reused.observations[0].evidence_id=before.observations[0].evidence_id;
+ reject(()=>compare(before,reused,criteria,on),'reused-run-evidence');
+ reject(()=>compare(before,after,[],on),'invalid-outcome-input');
+ reject(()=>compare(before,after,criteria,{enabled:'yes'}),'invalid-options');
+ const forged=run('new',['pass','pass','pass']);forged.observations[0].run_id='old';
+ reject(()=>compare(before,forged,criteria,on),'observation-scope-mismatch');
+ eq(compare(null,null,null).status,'off');eq(compare(null,null,null,{...on,isolated:true}).status,'isolated');
+ eq(JSON.stringify(result).includes('old-e0'),false);eq(before.observations.length,3);
+ return checks;
+}
+console.log('WORKFLOW OUTCOME REVISION: PASS ('+testOutcomeRevision(reviewOutcomeRevision)+' checks)');
