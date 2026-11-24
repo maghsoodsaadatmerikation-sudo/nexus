@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import studio_model as model
+from studio_document_consensus import issue as issue_receipt
 import studio_document_generation as generation
 from studio_connections import operator_auth
 from studio_research_evidence import clean
@@ -178,6 +179,7 @@ def register(app):
                                         validator=lambda content, selected: assess(content, selected, statements))
         return JSONResponse({
             **out, "schema_version": 1, "request_review_id": review_id,
+            "critique_receipt": issue_receipt(route, payload, review_id, out),
             "evidence_sha256": approved.plan.context.evidence_sha256,
             "model_slot": route.slot, "configuration_id": model.configuration_id(route),
             "provider_contact_attempted": True, "provider_retention_verified": False,
