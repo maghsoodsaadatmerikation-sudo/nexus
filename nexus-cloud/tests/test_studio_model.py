@@ -781,6 +781,56 @@ def test_stream_without_valid_bounded_completion_has_no_done_frame(monkeypatch, 
             assert not any(frame["type"] == "done" for frame in frames)
 
 
+@pytest.mark.parametrize("fields", [
+    {"tool_calls": False}, {"tool_calls": {}}, {"function_call": ""},
+    {"function_call": {}}, {"refusal": "Provider refused"},
+])
+def test_falsey_actions_and_refusal_are_not_completed_answers(monkeypatch, fields):
+    monkeypatch.setenv("NEXUS_MODEL_STREAMING", "1")
+    message = {"role": "assistant", "content": "Draft", **fields}
+    buffered = {"choices": [{"index": 0, "message": message, "finish_reason": "stop"}]}
+    streamed = sse(message) + sse({}, "stop") + DONE
+
+    def handler(request):
+        if json.loads(request.content)["stream"]:
+            return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                                  content=streamed)
+        return httpx.Response(200, json=buffered)
+
+    with configured(monkeypatch, handler) as client:
+        body = {**BODY, "configuration_id": model.configuration_id(model.config())}
+        assert client.post("/studio-api/respond", json=body, headers=AUTH).status_code == 502
+        response = client.post("/studio-api/respond-stream", json=body, headers=AUTH)
+        assert list(map(json.loads, response.text.splitlines())) == [
+            {"type": "error", "reason": "incomplete"}
+        ]
+
+
+@pytest.mark.parametrize("extra,index", [
+    ({}, False), ({}, 1), ({}, 0.0), ({"error": {"message": "failed"}}, 0),
+])
+def test_ambiguous_provider_envelopes_are_rejected_in_both_modes(monkeypatch, extra, index):
+    monkeypatch.setenv("NEXUS_MODEL_STREAMING", "1")
+    message = {"content": "Draft"}
+    buffered = {**extra, "choices": [{"index": index, "message": message, "finish_reason": "stop"}]}
+    envelope = {**extra, "choices": [{"index": index, "delta": message, "finish_reason": "stop"}]}
+    streamed = ("data: " + json.dumps(envelope) + "\n\n").encode() + DONE
+
+    def handler(request):
+        if json.loads(request.content)["stream"]:
+            return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                                  content=streamed)
+        return httpx.Response(200, json=buffered)
+
+    with configured(monkeypatch, handler) as client:
+        body = {**BODY, "configuration_id": model.configuration_id(model.config())}
+        assert client.post("/studio-api/respond", json=body, headers=AUTH).status_code == 502
+        response = client.post("/studio-api/respond-stream", json=body, headers=AUTH)
+        assert list(map(json.loads, response.text.splitlines())) == [
+            {"type": "error", "reason": "incomplete"}
+        ]
+
+
 def test_stream_disconnect_closes_silent_upstream_and_releases_capacity(monkeypatch):
     from types import SimpleNamespace
 
