@@ -63,6 +63,15 @@ ok(()=>assert.deepEqual(S.context(related,recent).memory_review,{status:'off',re
 ok(()=>assert.deepEqual(S.context(related,recent,{memory:true}).memory_review,{status:'included',requested_count:1,included_count:1}));
 ok(()=>assert.deepEqual(isolated.memory_review,{status:'isolated',requested_count:0,included_count:0}));
 ok(()=>assert.deepEqual(S.context(S.project('Empty memory'),recent,{memory:true}).memory_review,{status:'empty',requested_count:0,included_count:0}));
+const selective=S.project('Selective memory');
+selective.memories=['orchard variety','PRIVATE UNRELATED','orchard variety','orchard notes'];
+const match=S.context(selective,recent,{memory:'related'});
+ok(()=>assert.deepEqual(match.memory_review,{status:'included',requested_count:4,included_count:2}));
+ok(()=>assert.match(match.messages[0].content,/orchard variety/));
+ok(()=>assert.doesNotMatch(JSON.stringify(match),/PRIVATE UNRELATED/));
+ok(()=>assert.equal(S.context(selective,S.append(S.thread('No matches'),'user','unmatched','human'),{memory:'related'}).memory_review.status,'no_match'));
+ok(()=>assert.equal(S.context(selective,privateThread,{memory:'related'}).memory_review.status,'isolated'));
+ok(()=>assert.match(JSON.stringify(S.context(selective,recent,{memory:true})),/PRIVATE UNRELATED/));
 const projectSession={schema:S.SCHEMA,projects:[related]};
 ok(()=>assert.equal(S.search(projectSession,'PRIVATE THREAD',true).length,0));
 ok(()=>assert(!S.retainHistory(projectSession).projects[0].threads.some(c=>c.id===privateThread.id)));
