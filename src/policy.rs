@@ -156,7 +156,7 @@ mod capability_boundary_tests {
     #[test]
     fn revoked_grant_never_constructs_authorized_request() {
         let mut revocations = RevocationSet::default();
-        revocations.revoke("g-cap");
+        revocations.revoke("g-cap").unwrap();
         let mut audit = CapabilityAuditLog::default();
         assert_eq!(
             PolicyEngine::new().authorize_delegated(
