@@ -17,3 +17,26 @@ export function reviewMemory(notes, query, {enabled=false, isolated=false, limit
  matches.sort((a,b)=>b.score-a.score||a.index-b.index);
  return {status:'review_only',basis:'lexical_overlap_not_semantic_verification',matches:matches.slice(0,limit),duplicates,truncated:matches.length>limit};
 }
+
+// Only explicitly structured notes: [fact] key = value.
+// Unequal values are review candidates, not proven contradictions or stale facts.
+export function reviewMemoryConflicts(notes,{enabled=false,isolated=false}={}){
+ if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
+ if(isolated||!enabled)return {status:isolated?'isolated':'off',groups:[]};
+ if(!Array.isArray(notes)||notes.length>30)throw Error('invalid-memory-input');
+ const groups=new Map();
+ for(let index=0;index<notes.length;index++){
+  const note=notes[index];
+  if(typeof note!=='string'||!note.trim()||note.length>500)throw Error('invalid-note');
+  const parts=/^\[fact\] ([\p{L}\p{N}][\p{L}\p{M}\p{N} _.-]{0,79}) = ([^\r\n]+)$/u.exec(note);
+  if(!parts)continue;
+  const key=parts[1].normalize('NFC').trim(),value=parts[2].normalize('NFC').trim();
+  if(!value)continue;
+  if(!groups.has(key))groups.set(key,new Map());
+  const values=groups.get(key);
+  if(!values.has(value))values.set(value,[]);
+  values.get(value).push(index);
+ }
+ return {status:'review_only',basis:'different_explicit_values_not_verified_contradiction',
+  groups:[...groups.values()].filter(values=>values.size>1).map(values=>({alternatives:[...values.values()]}))};
+}
