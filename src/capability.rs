@@ -83,23 +83,32 @@ pub struct RevocationSet {
     events: Vec<RevocationEvent>,
 }
 impl RevocationSet {
-    pub fn revoke(&mut self, grant_id: impl Into<String>) {
-        self.revoke_with_provenance(grant_id, "legacy:unspecified");
+    /// Reject invalid entries before changing the live set or its replay history.
+    pub fn revoke(&mut self, grant_id: impl Into<String>) -> Result<(), RevocationReplayError> {
+        self.revoke_with_provenance(grant_id, "legacy:unspecified")
     }
 
     pub fn revoke_with_provenance(
         &mut self,
         grant_id: impl Into<String>,
         provenance_id: impl Into<String>,
-    ) {
+    ) -> Result<(), RevocationReplayError> {
         let grant_id = grant_id.into();
+        let provenance_id = provenance_id.into();
+        if grant_id.is_empty() {
+            return Err(RevocationReplayError::EmptyGrantId);
+        }
+        if provenance_id.is_empty() {
+            return Err(RevocationReplayError::EmptyProvenance);
+        }
         let event = RevocationEvent {
             sequence: self.events.len() as u64,
             grant_id: grant_id.clone(),
-            provenance_id: provenance_id.into(),
+            provenance_id,
         };
         self.revoked.insert(grant_id);
         self.events.push(event);
+        Ok(())
     }
 
     pub fn is_revoked(&self, grant_id: &str) -> bool {
@@ -306,7 +315,7 @@ mod tests {
     fn revocation_is_monotonic() {
         let g = grant();
         let mut r = RevocationSet::default();
-        r.revoke("g-1");
+        r.revoke("g-1").unwrap();
         assert_eq!(
             g.validate(Authority::User, "worker", &action(), 15, &r),
             Err(CapabilityDenial::Revoked)
@@ -404,10 +413,29 @@ mod tests {
     }
 
     #[test]
+    fn invalid_revocations_do_not_mutate_replayable_state() {
+        let mut r = RevocationSet::default();
+        r.revoke_with_provenance("g-1", "human:p1").unwrap();
+        let before = r.snapshot();
+        assert_eq!(r.revoke(""), Err(RevocationReplayError::EmptyGrantId));
+        assert_eq!(
+            r.revoke_with_provenance("g-2", ""),
+            Err(RevocationReplayError::EmptyProvenance)
+        );
+        assert_eq!(r.snapshot(), before);
+        assert_eq!(r.epoch(), 1);
+        assert!(!r.is_revoked("g-2"));
+        assert_eq!(RevocationSet::from_snapshot(r.snapshot()).unwrap(), r);
+        r.revoke_with_provenance("g-2", "human:p2").unwrap();
+        assert_eq!(r.epoch(), 2);
+        assert_eq!(RevocationSet::from_snapshot(r.snapshot()).unwrap(), r);
+    }
+
+    #[test]
     fn revocation_replay_reconstructs_state() {
         let mut r = RevocationSet::default();
-        r.revoke_with_provenance("g-1", "human:p1");
-        r.revoke_with_provenance("g-2", "human:p2");
+        r.revoke_with_provenance("g-1", "human:p1").unwrap();
+        r.revoke_with_provenance("g-2", "human:p2").unwrap();
         let restored = RevocationSet::from_snapshot(r.snapshot()).unwrap();
         assert!(restored.is_revoked("g-1"));
         assert!(restored.is_revoked("g-2"));
@@ -416,8 +444,8 @@ mod tests {
     #[test]
     fn repeated_revocation_remains_revoked_and_observable() {
         let mut r = RevocationSet::default();
-        r.revoke_with_provenance("g-1", "human:p1");
-        r.revoke_with_provenance("g-1", "human:p2");
+        r.revoke_with_provenance("g-1", "human:p1").unwrap();
+        r.revoke_with_provenance("g-1", "human:p2").unwrap();
         assert!(r.is_revoked("g-1"));
         assert_eq!(r.events().len(), 2);
     }
@@ -425,8 +453,8 @@ mod tests {
     fn revocation_epoch_is_reconstructed_from_valid_history() {
         let mut r = RevocationSet::default();
         assert_eq!(r.epoch(), 0);
-        r.revoke_with_provenance("g-1", "human:p1");
-        r.revoke_with_provenance("g-2", "human:p2");
+        r.revoke_with_provenance("g-1", "human:p1").unwrap();
+        r.revoke_with_provenance("g-2", "human:p2").unwrap();
         assert_eq!(r.epoch(), 2);
         let restored = RevocationSet::from_snapshot(r.snapshot()).unwrap();
         assert_eq!(restored.epoch(), 2);
