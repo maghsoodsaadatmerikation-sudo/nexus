@@ -33,6 +33,7 @@ import studio_peer_review
 import studio_manuscript_revision
 import studio_journal_review
 import studio_anonymization
+import studio_document_privacy
 import studio_bibliography
 import studio_statistics
 import studio_regression
@@ -140,6 +141,7 @@ studio_peer_review.register(app)
 studio_manuscript_revision.register(app)
 studio_journal_review.register(app)
 studio_anonymization.register(app)
+studio_document_privacy.register(app)
 studio_bibliography.register(app)
 studio_statistics.register(app)
 studio_regression.register(app)
