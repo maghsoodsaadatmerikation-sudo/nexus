@@ -110,3 +110,28 @@ CSV analysis. It checks no automatic provider submission, non-persistent
 source selection, visible reviewed content, untrusted provenance and
 hand-off cancellation. The static installable Studio bundle and service
 worker use the exact deterministic updated HTML digest.
+
+## Fenced JavaScript chat-to-editor handoff (24 November 2026)
+
+When a user explicitly types `Run JavaScript:` or `/code` followed by a
+fenced `javascript` or `js` code block, the focused chat proposes the local
+Code desk. Nothing copies or executes while the proposal is shown. Selecting
+**Open Code** copies only the literal code body to an **empty** code editor;
+existing code, separate input and unsent chat text are preserved. The tool's
+existing **Run this exact code and input locally once** checkbox remains
+unchecked. A user must inspect and approve it independently before any worker
+runs. Descriptions such as "create a script" are not translated to code.
+
+Each proposed tool now shows its actual trust boundary: public query to source
+providers after approval; local sandbox after code consent; connected account
+catalog and operation-specific review; or separate confirmation for other
+local tools. The same disclosure appears for steps in the review-only /plan
+checklist. Labels are bilingual and purely inert, not permissions. Changing
+the unsent request discards a stale proposal. Lock, project switch and
+previous workflow cancellation rules are unchanged. No model call, provider
+credential, file write, scheduler or autonomous tool execution is added.
+
+Regression in `scripts/test-studio-browser.py` covers discovery, boundary
+text, consent absence, exact code prefill, preservation of an existing draft,
+and stale-request cancellation with zero network calls. Production provider,
+paid model, public deployment and real Android hardware remain out of scope.

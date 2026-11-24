@@ -52,6 +52,30 @@ window.addEventListener('load',async()=>{
   assert(compose.textContent==='Review Research','explicit-natural-search-is-reviewable-in-model-mode');
   compose.click();
   assert(!offer.hidden&&$('request-review').hidden&&network===0,'explicit-natural-search-does-not-send-model-request');
+  const exactCode='Run JavaScript:\n```javascript\nreturn 7 * 6;\n```';
+  fill('message',exactCode);
+  assert(compose.textContent==='Review Code','explicit-fenced-js-is-discovered-as-code');
+  compose.click();
+  assert(!offer.hidden&&offer.textContent.includes('separate exact-code consent')&&
+   !$('code').value&&!$('code-consent').checked&&network===0,
+   'code-offer-discloses-sandbox-and-does-not-copy-or-execute');
+  offer.querySelector('button').click();
+  assert(NexusStudioFocus.active()==='code-card'&&$('code').value==='return 7 * 6;'&&
+   !$('code-consent').checked&&$('message').value===exactCode&&network===0,
+   'opening-fenced-js-only-fills-empty-local-editor-without-execution');
+  $('code-card').querySelector('.studio-return-to-message').click();
+  fill('code','return "already here";');
+  $('code-consent').checked=true;
+  fill('message','/code\n```js\nreturn 2;\n```');
+  compose.click();offer.querySelector('button').click();
+  assert($('code').value==='return "already here";'&&!$('code-consent').checked&&network===0,
+   'code-handoff-never-overwrites-existing-editor');
+  $('code-card').querySelector('.studio-return-to-message').click();
+  fill('code','');
+  fill('message','Run JavaScript:\n```javascript\nreturn 11;\n```');
+  compose.click();fill('message','Changed before approval');
+  assert(offer.hidden&&!$('code').value&&network===0,
+   'editing-a-proposed-code-request-revokes-the-unopened-handoff');
   change('studio-compose-mode','guide');
   fill('message','تحليل فايل CSV');
   assert(compose.textContent==='Review Data analysis','persian-intent-shows-tool-before-submit');
