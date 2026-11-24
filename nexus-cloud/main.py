@@ -36,6 +36,7 @@ import studio_anonymization
 import studio_document_privacy
 import studio_document_extraction
 import studio_document_search
+import studio_document_evidence
 import studio_bibliography
 import studio_statistics
 import studio_regression
@@ -146,6 +147,7 @@ studio_anonymization.register(app)
 studio_document_privacy.register(app)
 studio_document_extraction.register(app)
 studio_document_search.register(app)
+studio_document_evidence.register(app)
 studio_bibliography.register(app)
 studio_statistics.register(app)
 studio_regression.register(app)
