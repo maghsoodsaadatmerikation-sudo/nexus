@@ -1,0 +1,35 @@
+import {evaluateWorkflowOutcome} from '../web/studio-workflow-outcome.mjs';
+function testOutcome(evaluate){
+ let checks=0;const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('fixture mismatch '+checks)};
+ const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('expected rejection '+checks)};
+ const on={enabled:true},scope={project_id:'p1',run_id:'r1',plan_sha256:'a'.repeat(64)};
+ const criteria=[{id:'tests',required:true,evidence_kind:'automated_check'},{id:'approval',required:true,evidence_kind:'human_review'},{id:'optional',required:false,evidence_kind:'independent_witness'}];
+ const obs=(criterion_id,evidence_id,kind,result,extra={})=>({...scope,criterion_id,evidence_id,kind,result,...extra});
+ const good=[obs('tests','e1','automated_check','pass'),obs('approval','e2','human_review','pass')];
+ const x=evaluate(scope,criteria,good,on);
+ eq(x.assessment,'required_reports_present');eq(x.completion_verified,false);eq(x.execution_authorized,false);
+ eq(x.items.map(i=>i.disposition),['reported_pass','reported_pass','missing_required_evidence_kind']);
+ eq(evaluate(scope,criteria,[],on).assessment,'review_incomplete');
+ eq(evaluate(scope,criteria,[obs('tests','e1','self_report','pass')],on).items[0],{criterion_id:'tests',required:true,disposition:'missing_required_evidence_kind',eligible_count:0,excluded_count:1});
+ eq(evaluate(scope,criteria,[...good,obs('tests','e3','automated_check','fail')],on).items[0].disposition,'conflicting_reports');
+ eq(evaluate(scope,criteria,[...good,obs('tests','e3','automated_check','fail')],on).assessment,'review_incomplete');
+ eq(evaluate(scope,criteria,[obs('tests','e1','automated_check','fail')],on).assessment,'reported_required_failure');
+ eq(evaluate(scope,criteria,[...good,obs('approval','e3','human_review','inconclusive')],on).items[1].disposition,'requires_reconciliation');
+ eq(evaluate(scope,criteria,[obs('tests','e1','automated_check','inconclusive')],on).items[0].disposition,'inconclusive');
+ eq(evaluate(scope,criteria,[...good,obs('optional','e3','independent_witness','fail')],on).assessment,'required_reports_present');
+ eq(evaluate(null,null,null).status,'off');eq(evaluate(null,null,null,{...on,isolated:true}).status,'isolated');
+ eq(JSON.stringify(x).includes(scope.plan_sha256),false);eq(JSON.stringify(x).includes('e1'),false);
+ reject(()=>evaluate(scope,criteria,[obs('tests','e1','automated_check','pass',{run_id:'r2'})],on),'scope-mismatch');
+ reject(()=>evaluate(scope,criteria,[obs('tests','e1','automated_check','pass',{project_id:'p2'})],on),'scope-mismatch');
+ reject(()=>evaluate(scope,criteria,[obs('tests','e1','automated_check','pass',{plan_sha256:'b'.repeat(64)})],on),'scope-mismatch');
+ reject(()=>evaluate(scope,criteria,[good[0],good[0]],on),'duplicate-evidence');
+ reject(()=>evaluate(scope,criteria,[obs('ghost','e1','automated_check','pass')],on),'invalid-observation');
+ reject(()=>evaluate(scope,criteria,[obs('tests','e1','automated_check','done')],on),'invalid-observation');
+ reject(()=>evaluate(scope,[criteria[0],criteria[0]],[],on),'invalid-criterion');
+ reject(()=>evaluate(scope,[criteria[2]],[],on),'missing-required-criteria');
+ reject(()=>evaluate({...scope,plan_sha256:'bad'},criteria,[],on),'invalid-scope');
+ reject(()=>evaluate(scope,criteria,Array(61).fill(good[0]),on),'invalid-outcome-input');
+ reject(()=>evaluate(scope,criteria,good,{enabled:1}),'invalid-options');
+ eq(good.length,2);return checks;
+}
+console.log('WORKFLOW OUTCOME: PASS ('+testOutcome(evaluateWorkflowOutcome)+' checks)');
