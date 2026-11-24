@@ -34,6 +34,7 @@ import studio_statistics
 import studio_regression
 import studio_bayesian
 import studio_meta_analysis
+import studio_sensitivity
 import studio_creative
 import studio_analysis_export
 import studio_analysis_batch
@@ -135,6 +136,7 @@ studio_statistics.register(app)
 studio_regression.register(app)
 studio_bayesian.register(app)
 studio_meta_analysis.register(app)
+studio_sensitivity.register(app)
 studio_creative.register(app)
 studio_analysis_export.register(app)
 if studio_origin := os.getenv("NEXUS_STUDIO_ORIGIN", "").strip():
