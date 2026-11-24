@@ -86,6 +86,8 @@ def validate_module_graph(shell: str, web: Path, modules: tuple[Module, ...] = M
         path = PurePosixPath(item.filename)
         if (path.is_absolute() or ".." in path.parts or "." in path.parts or
                 not item.filename or "\\" in item.filename or
+                path.as_posix() != item.filename or path.suffix != ".js" or
+                item.marker == "/*STUDIO_THEME*/" or
                 not MARKER_RE.fullmatch(item.marker)):
             raise ValueError("invalid Studio module source path or marker")
     expected = set(markers) | {"/*STUDIO_THEME*/"}
@@ -96,13 +98,28 @@ def validate_module_graph(shell: str, web: Path, modules: tuple[Module, ...] = M
     if locations != sorted(locations):
         raise ValueError("Studio module slots are out of reviewed loading order")
 
+    if web.is_symlink() or not web.is_dir():
+        raise ValueError("Studio source directory must be a real directory")
     seen_providers: set[str] = set()
     approved_providers = set(providers)
+    seen_sources: set[tuple[int, int]] = set()
     for item in modules:
-        file = web / item.filename
+        file = web
+        for component in PurePosixPath(item.filename).parts:
+            file = file / component
+            if file.is_symlink():
+                raise ValueError("symlinked Studio module source: " + item.filename)
         if not file.is_file() or not file.resolve().is_relative_to(web.resolve()):
             raise ValueError("missing or escaped Studio module source: " + item.filename)
+        stat = file.stat()
+        identity = (stat.st_dev, stat.st_ino)
+        if stat.st_ino and identity in seen_sources:
+            raise ValueError("aliased Studio module source: " + item.filename)
+        if stat.st_ino:
+            seen_sources.add(identity)
         source = file.read_text(encoding="utf-8")
+        if MARKER_RE.search(source):
+            raise ValueError("reserved Studio template marker inside module: " + item.filename)
         exported = set(EXPORT_RE.findall(source))
         expected_exported = {item.provides} if item.provides else set()
         if exported != expected_exported:
