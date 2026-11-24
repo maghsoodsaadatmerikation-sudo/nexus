@@ -359,6 +359,17 @@ def answer_utf16_units(content: str) -> int:
     return len(content.encode("utf-16-le")) // 2
 
 
+def text_only_message_fields(message: dict) -> bool:
+    """Reject even falsey malformed action fields; null/empty list are compatible."""
+    return (
+        isinstance(message, dict)
+        and message.get("role") in (None, "assistant")
+        and message.get("tool_calls") in (None, [])
+        and message.get("function_call") is None
+        and message.get("refusal") in (None, "")
+    )
+
+
 def accepted_buffered_answer(raw: bytes) -> tuple[str, bool]:
     """Apply the same text-only reply contract used by the public Studio endpoint.
 
@@ -367,17 +378,20 @@ def accepted_buffered_answer(raw: bytes) -> tuple[str, bool]:
     """
     try:
         output = json.loads(raw)
+        if not isinstance(output, dict) or output.get("error") is not None:
+            raise ValueError("invalid provider envelope")
         choices = output["choices"]
         if not isinstance(choices, list) or len(choices) != 1:
             raise ValueError("ambiguous model choices")
         choice = choices[0]
+        if not isinstance(choice, dict) or type(choice.get("index", 0)) is not int or choice.get("index", 0) != 0:
+            raise ValueError("invalid model choice index")
         message = choice["message"]
         content = message["content"]
         finish_reason = choice.get("finish_reason")
         if (not isinstance(content, str) or not content.strip()
             or answer_utf16_units(content) > 24000
-            or message.get("role") not in {None, "assistant"}
-            or message.get("tool_calls") or message.get("function_call")
+            or not text_only_message_fields(message)
             or finish_reason not in {"stop", "length"}):
             raise ValueError("invalid text-only answer")
         # JSON may contain escaped lone surrogates, which cannot be sent as UTF-8.
@@ -478,16 +492,18 @@ async def response_frames(request, endpoint, headers, payload, *, receipt=None):
                                    truncated=finish == "length", authority="none",
                                    **(receipt or {}))
                 return
-            choices = json.loads(raw.decode("utf-8"))["choices"]
+            envelope = json.loads(raw.decode("utf-8"))
+            if not isinstance(envelope, dict) or envelope.get("error") is not None:
+                raise ValueError("invalid provider stream envelope")
+            choices = envelope["choices"]
             if choices == []:
                 continue
             if not isinstance(choices, list) or len(choices) != 1 or finish is not None:
                 raise ValueError("invalid stream choice")
             choice = choices[0]
             delta = choice["delta"]
-            if (choice.get("index") != 0 or not isinstance(delta, dict)
-                or delta.get("tool_calls") or delta.get("function_call")
-                or delta.get("role") not in {None, "assistant"}):
+            if (type(choice.get("index")) is not int or choice["index"] != 0
+                or not text_only_message_fields(delta)):
                 raise ValueError("non-text stream delta")
             finish = choice.get("finish_reason")
             content = delta.get("content")
