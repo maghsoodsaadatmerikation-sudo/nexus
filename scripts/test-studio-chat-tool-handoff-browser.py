@@ -332,6 +332,15 @@ window.addEventListener('load',async()=>{
    const finished=JSON.parse(await reportBlob.text());
    assert(finished.complete===true&&finished.outcome_review.unobserved===1&&
     finished.outcome_review.verified===false,'completed-review-export-remains-unverified');
+   assert(receiptWorkflow.querySelector('[data-central-restart]').disabled,'unassessed-criterion-blocks-round-comparison');
+   const secondCriterion=receiptWorkflow.querySelector('[data-central-criterion="1"]');
+   secondCriterion.value='Text reviewed';secondCriterion.dispatchEvent(new Event('input',{bubbles:true}));
+   const secondVerdict=receiptWorkflow.querySelector('[data-central-verdict="1"]');
+   secondVerdict.value='pass';secondVerdict.dispatchEvent(new Event('change',{bubbles:true}));
+   assert(!receiptWorkflow.querySelector('[data-central-restart]').disabled,'fully-assessed-round-can-be-restarted');
+   receiptWorkflow.querySelector('[data-central-restart]').click();
+   assert(receiptWorkflow.querySelector('[data-central-verdict="0"]').value===''&&receiptWorkflow.querySelector('[data-central-verdict="0"]').disabled&&!receiptWorkflow.textContent.includes('Local UI reported success'),'restart-clears-receipts-and-verdicts');
+   assert(receiptWorkflow.querySelector('[data-central-criterion="0"]').value==='Returns 42','restart-keeps-reviewed-criteria');
   }finally{
    URL.createObjectURL=oldCreateURL;HTMLAnchorElement.prototype.click=oldAnchorClick;
   }

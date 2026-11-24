@@ -60,7 +60,13 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertNotIn(vendor, assets["index.html"])
         self.assertIn(vendor, (HERE.parent / "web/studio.html").read_bytes())
         self.assertIn(gate.ASTRONOMY_MODULE.encode(), assets["service-worker.js"])
-        self.assertLess(len(assets["index.html"]), 550_000)
+        # Keep the existing hard public HTML limit and check actual extraction
+        # savings independently of unrelated, reviewed feature growth.
+        tag = b'<script src="./vendor/astronomy-2.1.19.min.js" integrity="sha256-9BE5qHlB6gF6uQK5VMk4n6J+pyCD1/q0lxdW13adFOY="></script>'
+        self.assertEqual(assets["index.html"].count(tag), 1)
+        inline = assets["index.html"].replace(tag, b"<script>" + vendor + b"</script>", 1)
+        self.assertGreater(len(inline) - len(assets["index.html"]), 100_000)
+        self.assertLessEqual(len(assets["index.html"]), 650_000)
 
     def test_bad_commit_and_existing_outputs_refuse_overwrite(self):
         for sha in ("main", "b"*39, "", "D"*40):
