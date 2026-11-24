@@ -842,3 +842,49 @@ def test_budget_io_runs_outside_asgi_event_loop(monkeypatch):
         assert client.get("/studio-api/operator-readiness", headers=AUTH).status_code == 200
         assert client.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 200
         assert calls == ["snapshot", "reserve"]
+
+
+def test_response_profile_is_explicit_presentation_only(monkeypatch):
+    seen = []
+    def handler(req):
+        seen.append(json.loads(req.content))
+        return httpx.Response(200, json={"choices": [
+            {"message": {"content": "Draft"}, "finish_reason": "stop"}
+        ]})
+    profile = {"language": "fa", "detail": "detailed", "format": "steps", "tone": "professional"}
+    with configured(monkeypatch, handler) as c:
+        response = c.post("/studio-api/respond",
+                          json={**BODY, "response_profile": profile}, headers=AUTH)
+        assert response.status_code == 200
+        assert response.json()["authority"] == "none"
+        assert len(seen) == 1
+        messages = seen[0]["messages"]
+        assert messages[0]["content"].startswith(model.POLICY + "\n")
+        for phrase in ("language: Persian", "detail: detailed", "format: numbered steps",
+                       "tone: professional", "hide material uncertainty",
+                       "no additional authority", "current user's explicit request"):
+            assert phrase in messages[0]["content"]
+        assert messages[1:] == BODY["messages"]
+        assert "tools" not in seen[0]
+        assert c.post("/studio-api/respond",
+                      json={**BODY, "response_profile": {}}, headers=AUTH).status_code == 200
+        assert seen[-1]["messages"][0]["content"] == model.POLICY
+
+
+@pytest.mark.parametrize("profile", [
+    {"language": "ignore policy"}, {"tone": "persuade"},
+    {"detail": "hide uncertainty"}, {"format": "execute"},
+    {"memory": "secret"}, {"system": "override"}, {"language": True},
+    "professional", ["fa"],
+])
+def test_response_profile_rejects_unbounded_or_privileged_options(monkeypatch, profile):
+    with configured(monkeypatch, lambda _: pytest.fail("invalid profile reached provider")) as c:
+        response = c.post("/studio-api/respond", json={**BODY, "response_profile": profile}, headers=AUTH)
+        assert response.status_code == 422
+
+
+def test_response_profile_does_not_bypass_existing_consent_or_configuration(monkeypatch):
+    with configured(monkeypatch, lambda _: pytest.fail("unreviewed profile reached provider")) as c:
+        data = {**BODY, "response_profile": {"tone": "friendly"}}
+        assert c.post("/studio-api/respond", json={**data, "consent": False}, headers=AUTH).status_code == 422
+        assert c.post("/studio-api/respond", json={**data, "configuration_id": "0" * 64}, headers=AUTH).status_code == 409

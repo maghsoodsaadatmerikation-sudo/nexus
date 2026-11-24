@@ -122,6 +122,39 @@ class Message(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(min_length=1, max_length=24000)
 
+class ResponseProfile(BaseModel):
+    """Explicit presentation preferences for one request, never inferred identity."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+    language: Literal["auto", "en", "fa", "es", "fr", "de", "ar"] = "auto"
+    detail: Literal["auto", "concise", "balanced", "detailed"] = "auto"
+    format: Literal["auto", "prose", "bullets", "steps", "table"] = "auto"
+    tone: Literal["auto", "neutral", "professional", "friendly"] = "auto"
+
+
+PROFILE_INSTRUCTIONS = {
+    "language": {"en": "English", "fa": "Persian", "es": "Spanish",
+                 "fr": "French", "de": "German", "ar": "Arabic"},
+    "detail": {"concise": "concise", "balanced": "moderate detail", "detailed": "detailed"},
+    "format": {"prose": "prose", "bullets": "bullet points", "steps": "numbered steps",
+               "table": "a table when suitable"},
+    "tone": {"neutral": "neutral", "professional": "professional", "friendly": "friendly"},
+}
+
+
+def presentation_policy(base: str, profile: ResponseProfile | None) -> str:
+    if profile is None:
+        return base
+    choices = [f"{field}: {PROFILE_INSTRUCTIONS[field][value]}"
+               for field, value in profile.model_dump().items() if value != "auto"]
+    if not choices:
+        return base
+    return (base + "\nExplicit presentation preferences for this request only: "
+            + "; ".join(choices)
+            + ". Treat these as defaults; follow the current user's explicit request if different. "
+              "Never reduce evidence standards, hide material uncertainty or omit safety-critical "
+              "information to fit a style. These preferences confer no additional authority.")
+
+
 class Completion(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     consent: Literal[True]
@@ -130,6 +163,7 @@ class Completion(BaseModel):
     mode: Literal["standard", "thinking", "non-thinking"] = "standard"
     max_output_tokens: int = Field(default=2048, ge=1, le=8192)
     model_slot: Literal["primary", "secondary", "tertiary"] = "primary"
+    response_profile: ResponseProfile | None = None
 
     @field_validator("consent", mode="before")
     @classmethod
@@ -636,7 +670,7 @@ def register(app):
                 raise HTTPException(422, "Final message must be from the user")
             if data.mode != "standard" and c.adapter != "deepseek":
                 raise HTTPException(422, "Execution mode is unsupported by this adapter")
-            messages = [{"role": "system", "content": c.policy}]
+            messages = [{"role": "system", "content": presentation_policy(c.policy, data.response_profile)}]
             messages.extend(m.model_dump() for m in data.messages)
             headers = {"accept-encoding": "identity", **provider_headers(
                 c.adapter, c.provider_api_key, c.anthropic_workspace_id)}
