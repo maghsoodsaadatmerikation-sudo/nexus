@@ -215,3 +215,66 @@ def test_quota_is_isolated_per_lifespan_and_not_persistent(monkeypatch):
     with configured(monkeypatch) as second:
         monkeypatch.setenv('NEXUS_VISION_MAX_REQUESTS_PER_PROCESS', '1')
         assert second.get('/studio-api/vision-status').json()['configured'] is True
+
+
+def test_vision_plan_binds_image_prompt_profile_and_key_without_provider_call(monkeypatch):
+    seen = []
+    def handler(req):
+        seen.append(json.loads(req.content))
+        return httpx.Response(200, json={
+            'choices': [{'message': {'content': 'Reviewed image draft'}, 'finish_reason': 'stop'}]})
+    with configured(monkeypatch, handler) as c:
+        data = vision_body()
+        data['response_profile'] = {'language': 'fa'}
+        preview = {k: v for k, v in data.items() if k != 'consent'}
+        assert c.post('/studio-api/vision-plan', json=preview).status_code == 401
+        response = c.post('/studio-api/vision-plan', json=preview, headers=AUTH)
+        assert response.status_code == 200
+        plan = response.json()
+        assert plan['image_bytes'] == len(png())
+        assert plan['vision_attempts_remaining'] == 20
+        assert not plan['provider_contact_attempted'] and not plan['budget_reserved']
+        assert data['image_base64'] not in response.text and data['prompt'] not in response.text
+        assert 'provider-secret' not in response.text and not seen
+        data['request_review_id'] = plan['request_review_id']
+        for changes in ({'prompt': 'Different question'}, {'max_output_tokens': 20},
+                        {'response_profile': {'language': 'en'}},
+                        {'image_base64': base64.b64encode(png(2, 1)).decode()}):
+            assert c.post('/studio-api/vision', json={**data, **changes}, headers=AUTH).status_code == 409
+        assert not seen
+        assert c.post('/studio-api/vision', json=data, headers=AUTH).status_code == 200
+        assert 'language: Persian' in seen[0]['messages'][0]['content']
+        monkeypatch.setenv('NEXUS_MODEL_API_KEY', 'rotated-key')
+        assert c.post('/studio-api/vision', json=data, headers=AUTH).status_code == 409
+        assert len(seen) == 1
+
+
+def test_vision_credential_snapshot_survives_mid_request_rotation(monkeypatch):
+    seen = []
+    def handler(req):
+        seen.append((str(req.url), req.headers['authorization']))
+        return httpx.Response(200, json={
+            'choices': [{'message': {'content': 'Draft'}, 'finish_reason': 'stop'}]})
+    with configured(monkeypatch, handler) as c:
+        original = studio_vision.read_bounded_body
+        data = vision_body()
+        async def rotate(*args, **kwargs):
+            result = await original(*args, **kwargs)
+            monkeypatch.setenv('NEXUS_MODEL_URL', 'https://other.example/v1/chat/completions')
+            monkeypatch.setenv('NEXUS_MODEL_API_KEY', 'different-key')
+            return result
+        monkeypatch.setattr(studio_vision, 'read_bounded_body', rotate)
+        assert c.post('/studio-api/vision', json=data, headers=AUTH).status_code == 200
+        assert seen == [('https://provider.example/v1/chat/completions', 'Bearer provider-secret')]
+
+
+@pytest.mark.parametrize('choices', [
+    [{'message': {'content': 'One'}, 'finish_reason': 'stop'},
+     {'message': {'content': 'Two'}, 'finish_reason': 'stop'}],
+    [{'message': {'role': 'tool', 'content': 'Wrong role'}, 'finish_reason': 'stop'}],
+    [{'message': {'content': '🌙' * 12001}, 'finish_reason': 'stop'}],
+])
+def test_vision_rejects_ambiguous_roles_and_oversized_browser_text(monkeypatch, choices):
+    with configured(monkeypatch, lambda _: httpx.Response(
+            200, content=json.dumps({'choices': choices}, ensure_ascii=False).encode('utf-8'))) as c:
+        assert c.post('/studio-api/vision', json=vision_body(), headers=AUTH).status_code == 502
