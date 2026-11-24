@@ -73,3 +73,40 @@ export function createMemoryEditReview(){
  function invalidate(){pending=null;}
  return Object.freeze({stage,approve,cancel,invalidate});
 }
+
+// Explicit human-authored structured preference only. No inference from ordinary chat.
+// Returned operations are transient review candidates; never log or automatically apply.
+export function reviewPreference(notes,message,{enabled=false,isolated=false,origin='unknown'}={}){
+ if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
+ if(isolated||!enabled)return {status:isolated?'isolated':'off'};
+ // Origin must come from the trusted host, not from message text.
+ if(origin!=='human')return {status:'ignored-origin'};
+ if(typeof message!=='string'||message.length>24000)throw Error('invalid-message');
+ const parse=s=>{
+  const m=/^\[preference\] ([\p{L}\p{N}][\p{L}\p{M}\p{N} _.-]{0,79}) = ([^\r\n]+)$/u.exec(s);
+  if(!m||!m[2].trim())return null;
+  return {key:m[1].normalize('NFC').trim(),value:m[2].normalize('NFC').trim()};
+ };
+ const marked=message.trim();
+ if(!marked.startsWith('[preference]'))return {status:'no-explicit-preference'};
+ if(marked.length>500)return {status:'invalid-preference'};
+ const candidate=parse(marked);
+ if(!candidate)return {status:'invalid-preference'};
+ const note='[preference] '+candidate.key+' = '+candidate.value;
+ if(note.length>500)return {status:'invalid-preference'};
+ if(!Array.isArray(notes)||notes.length>30)throw Error('invalid-memory-list');
+ const matches=[];
+ for(let index=0;index<notes.length;index++){
+  const old=notes[index];
+  if(typeof old!=='string'||!old.trim()||old.length>500)throw Error('invalid-memory-note');
+  const p=parse(old);
+  if(p?.key===candidate.key)matches.push({index,value:p.value});
+ }
+ if(matches.length>1)return {status:'ambiguous',indices:matches.map(m=>m.index)};
+ if(matches.length===1){
+  if(matches[0].value===candidate.value)return {status:'unchanged',index:matches[0].index};
+  return {status:'review-replacement',operation:{kind:'replace',index:matches[0].index,value:note}};
+ }
+ if(notes.length===30)return {status:'capacity'};
+ return {status:'review-addition',operation:{kind:'add',value:note}};
+}
