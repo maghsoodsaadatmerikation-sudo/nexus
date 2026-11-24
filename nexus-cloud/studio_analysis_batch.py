@@ -45,7 +45,7 @@ class ApprovedBatch(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     batch: Batch
     review_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    consent: Literal[True]
+    consent: bool
 
 
 def preview(batch: Batch) -> dict:
