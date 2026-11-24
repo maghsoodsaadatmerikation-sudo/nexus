@@ -74,6 +74,48 @@ def review_plan(plan: Plan) -> dict:
     }
 
 
+class ProgressReview(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    plan: Plan
+    plan_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    acknowledged: list[str] = Field(default_factory=list, max_length=12)
+    cancelled: bool = False
+
+
+def review_progress(progress: ProgressReview) -> dict:
+    """Project supplied acknowledgments, not actual execution or authority."""
+    reviewed = review_plan(progress.plan)
+    if progress.plan_sha256 != reviewed["plan_sha256"]:
+        raise ValueError("Stale plan identity")
+    steps = {s.id: s for s in progress.plan.steps}
+    acknowledged = set(progress.acknowledged)
+    if len(acknowledged) != len(progress.acknowledged) or not acknowledged <= steps.keys():
+        raise ValueError("Invalid acknowledgments")
+    # Acknowledgment must be dependency-closed; the caller cannot skip prerequisites.
+    if any(not set(steps[s].depends_on) <= acknowledged for s in acknowledged):
+        raise ValueError("Missing prerequisite acknowledgment")
+    order = reviewed["review_order"]
+    ready = [] if progress.cancelled else [
+        s for s in order if s not in acknowledged
+        and set(steps[s].depends_on) <= acknowledged
+    ]
+    complete = len(acknowledged) == len(steps)
+    return {
+        "schema_version": 1,
+        "plan_sha256": reviewed["plan_sha256"],
+        "status": "cancelled" if progress.cancelled else (
+            "all_acknowledged" if complete else "review_pending"
+        ),
+        "acknowledged": [s for s in order if s in acknowledged],
+        "ready_for_review": ready,
+        "blocked": [s for s in order if s not in acknowledged and s not in ready],
+        "acknowledged_count": len(acknowledged),
+        "total_steps": len(steps),
+        "evidence": "caller_reported_only",
+        "execution_authorized": False,
+    }
+
+
 def register(app):
     @app.post("/studio/api/workflow/review")
     async def workflow_review(request: Request):
@@ -89,4 +131,20 @@ def register(app):
         except (ValidationError, ValueError):
             # Never reflect arbitrary user content in an error.
             raise HTTPException(422, "Invalid workflow proposal", headers=NO_STORE) from None
+        return JSONResponse(result, headers=NO_STORE)
+
+
+    @app.post("/studio/api/workflow/progress")
+    async def workflow_progress(request: Request):
+        operator_auth(request)
+        body = await read_bounded_body(
+            request, max_bytes=32768, timeout_seconds=10.0,
+            too_large_detail="Workflow progress too large",
+            timeout_detail="Workflow progress timed out", timeout_status=408,
+        )
+        try:
+            progress = ProgressReview.model_validate_json(body)
+            result = review_progress(progress)
+        except (ValidationError, ValueError):
+            raise HTTPException(422, "Invalid workflow progress", headers=NO_STORE) from None
         return JSONResponse(result, headers=NO_STORE)
