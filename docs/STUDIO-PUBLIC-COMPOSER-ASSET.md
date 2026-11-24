@@ -1,0 +1,3 @@
+# Public composer asset separation
+
+The public index exceeded the existing 550,000-byte release regression limit after the document panel was added. Extract the unchanged composer script as an explicitly reviewed, same-origin SRI-pinned asset; keep the standalone HTML fully self-contained. Include the new script in the service-worker integrity inventory, release candidate, public observer, phone-local kit and generated asset maintenance. Current public inventory is 19 files; the immutable historical fallback inventory stays unchanged at 17. No increase in the HTML size limit, no release authorization, and no model-provider call. Exact-head CI must confirm the new package and browser behavior.

@@ -47,7 +47,7 @@ class StudioLocalTests(unittest.TestCase):
         self.assertTrue(kit.verify(self.zip, exact_commit=COMMIT))
         with zipfile.ZipFile(self.zip) as archive:
             names = archive.namelist()
-            self.assertEqual(len(names), 22)
+            self.assertEqual(len(names), 23)
             self.assertIn(kit.BUNDLE + '/vendor/astronomy-2.1.19.min.js', names)
             self.assertEqual(
                 set(names),
@@ -55,7 +55,7 @@ class StudioLocalTests(unittest.TestCase):
                     "run-local.py", "README.txt", "source-manifest.json")})
             receipt = json.loads(archive.read(kit.BUNDLE + "/source-manifest.json"))
             self.assertEqual(receipt["source_commit"], COMMIT)
-            self.assertEqual(len(receipt["assets"]), 19)
+            self.assertEqual(len(receipt["assets"]), 20)
             check = archive.read(kit.BUNDLE + "/" + kit.CHECK_NAME)
             self.assertIn(receipt["assets"]["index.html"]["sha256"].encode(), check)
             self.assertIn(receipt["assets"]["service-worker.js"]["sha256"].encode(), check)
@@ -146,7 +146,7 @@ class StudioLocalTests(unittest.TestCase):
         for name in ("/", "/index.html", "/manifest.json", "/service-worker.js",
                      "/device/device-ui.js", "/device/model-manifest.json",
                      "/icons/nexus-192.png", "/device-check.html",
-                     "/vendor/astronomy-2.1.19.min.js"):
+                     "/vendor/astronomy-2.1.19.min.js", "/studio-composer-ui.js"):
             with self.subTest(name=name):
                 url = f"http://127.0.0.1:{port}{name}"
                 with urllib.request.urlopen(url, timeout=3) as response:

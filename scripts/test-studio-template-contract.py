@@ -44,6 +44,16 @@ class TemplateContractTests(unittest.TestCase):
         )
         self.assertEqual(compiled, (ROOT / "public/studio/index.html").read_bytes())
 
+    def test_public_composer_is_hash_bound_and_standalone_preserved(self):
+        import hashlib
+        composer = (ROOT / "web/studio-composer-ui.js").read_bytes()
+        integrity = base64.b64encode(hashlib.sha256(composer).digest())
+        public = (ROOT / "public/studio/index.html").read_bytes()
+        self.assertIn(b'<script src="./studio-composer-ui.js" integrity="sha256-' + integrity + b'"></script>', public)
+        self.assertNotIn(composer, public)
+        self.assertEqual(composer, (ROOT / "public/studio/studio-composer-ui.js").read_bytes())
+        self.assertIn(composer, (ROOT / "web/studio.html").read_bytes())
+
     def test_public_shell_fails_closed_if_integration_anchor_is_missing_or_duplicated(self):
         source = (ROOT / "web/studio.html").read_text()
         panel = (ROOT / "web/device/device-panel.html").read_text()

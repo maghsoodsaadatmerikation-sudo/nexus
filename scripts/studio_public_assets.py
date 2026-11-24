@@ -37,7 +37,8 @@ LEGACY_FILES = (
 )
 ASTRONOMY_MODULE = "vendor/astronomy-2.1.19.min.js"
 HISTORICAL_LIVE_FILES = LEGACY_FILES + PDF_FILES
-FILES = HISTORICAL_LIVE_FILES + (ASTRONOMY_MODULE,)
+COMPOSER_MODULE = "studio-composer-ui.js"
+FILES = HISTORICAL_LIVE_FILES + (ASTRONOMY_MODULE, COMPOSER_MODULE)
 
 def asset_limit(name):
     if name == 'pdf/pdf.worker.min.mjs':
