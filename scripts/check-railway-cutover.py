@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import re
+import stat
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -38,18 +40,29 @@ def unique_object(pairs):
 
 
 def read_snapshot(path):
-    if path.is_symlink() or not path.is_file():
-        raise InvalidInput("missing_or_linked_input")
-    if path.stat().st_size > MAX_BYTES:
-        raise InvalidInput("input_too_large")
+    # Inspect and read one descriptor, not a repeatedly resolved pathname.
+    # Nonblocking open also prevents a FIFO from stalling preflight.
+    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
     try:
-        raw = path.read_bytes()
+        fd = os.open(path, flags)
+    except OSError as exc:
+        raise InvalidInput("missing_or_linked_input") from exc
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise InvalidInput("missing_or_linked_input")
+        if info.st_size > MAX_BYTES:
+            raise InvalidInput("input_too_large")
+        with os.fdopen(fd, "rb", closefd=False) as stream:
+            raw = stream.read(MAX_BYTES + 1)
         if len(raw) > MAX_BYTES:
             raise InvalidInput("input_too_large")
         value = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_object,
                            parse_constant=lambda _: (_ for _ in ()).throw(InvalidInput("nonfinite_number")))
-    except (UnicodeError, json.JSONDecodeError, OSError) as exc:
+    except (UnicodeError, json.JSONDecodeError, OSError, RecursionError) as exc:
         raise InvalidInput("invalid_json") from exc
+    finally:
+        os.close(fd)
     if not isinstance(value, dict) or value.get("schema") != SCHEMA:
         raise InvalidInput("unexpected_schema")
     return value
