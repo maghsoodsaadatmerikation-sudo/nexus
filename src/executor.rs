@@ -124,6 +124,21 @@ mod delegated_freshness_tests {
     }
 
     #[test]
+    fn invalid_revocation_cannot_poison_authorized_execution() {
+        let mut revocations = RevocationSet::default();
+        let request = authorize(&revocations);
+        let before = revocations.snapshot();
+        assert!(revocations.revoke("").is_err());
+        assert!(revocations.revoke_with_provenance("g-fresh", "").is_err());
+        assert_eq!(revocations.snapshot(), before);
+        let restored = RevocationSet::from_snapshot(revocations.snapshot()).unwrap();
+        let receipt = Executor::new()
+            .execute_delegated(request, &restored)
+            .expect("invalid revocation must not alter authorization state");
+        assert_eq!(receipt.request_id(), "r-fresh");
+    }
+
+    #[test]
     fn revocation_after_authorization_rejects_stale_request() {
         let mut revocations = RevocationSet::default();
         let request = authorize(&revocations);
