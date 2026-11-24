@@ -21,6 +21,7 @@ class SourceFallbackTests(unittest.TestCase):
         self.root = Path(temp.name)
         self.zip_path = self.root / "old-live-source.zip"
         self.report_path = self.root / "old-live-public-witness.json"
+        # Synthetic bytes projected onto the pinned historical inventory only.
         assets = fallback.gate.source_assets()
         self.assets = {name: assets[name] for name in fallback.FILES}
         self.fetch = lambda name: self.assets[name]
@@ -198,6 +199,7 @@ class SourceFallbackTests(unittest.TestCase):
     def test_public_only_allowlist(self):
         self.assertEqual(len(fallback.FILES), 17)
         self.assertEqual(len(set(fallback.FILES)), 17)
+        self.assertNotIn('vendor/astronomy-2.1.19.min.js', fallback.FILES)
         self.assertEqual(fallback.SERVICE, "srv-dbrjurc9v7es73cqe0v0")
         self.assertEqual(fallback.LIVE_COMMIT, "826c91e2053f716b9aa7e40713f3c568e5272eba")
         self.assertEqual(fallback.LIVE_DEPLOY, "dep-dc0j4sh7lnhs738r3r00")

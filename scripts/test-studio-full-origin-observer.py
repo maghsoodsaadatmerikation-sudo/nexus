@@ -38,7 +38,7 @@ class CompleteObservationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.assets = observer.gate.source_assets()
-        assert len(cls.assets) == len(observer.FILES) == 17
+        assert len(cls.assets) == len(observer.FILES) == 18
 
     def inspect(self, fetch=None):
         return observer.inspect_assets(
@@ -46,16 +46,17 @@ class CompleteObservationTests(unittest.TestCase):
             fetch=fetch or (lambda name: self.assets[name]),
         )
 
-    def test_all_seventeen_source_assets_are_accounted_for_but_never_authorize_deployment(self):
+    def test_all_eighteen_source_assets_are_accounted_for_but_never_authorize_deployment(self):
         result = self.inspect()
         self.assertEqual(result["schema"], observer.SCHEMA)
         self.assertEqual(result["status"], "SOURCE_MATCH_ONLY")
-        self.assertEqual(result["reviewed_public_files"], 17)
-        self.assertEqual(result["observed_public_files"], 17)
+        self.assertEqual(result["reviewed_public_files"], 18)
+        self.assertEqual(result["observed_public_files"], 18)
         self.assertEqual({x["path"] for x in result["assets"]}, set(observer.FILES))
         self.assertTrue(all(x["status"] == "MATCH" for x in result["assets"]))
         self.assertIn("pdf/pdf.worker.min.mjs", {x["path"] for x in result["assets"]})
         self.assertIn("pdf/LICENSE-pdfjs.txt", {x["path"] for x in result["assets"]})
+        self.assertIn("vendor/astronomy-2.1.19.min.js", {x["path"] for x in result["assets"]})
         self.assertFalse(result["source_manifest_verified"])
         self.assertTrue(result["read_only"])
         for field in (
@@ -74,7 +75,14 @@ class CompleteObservationTests(unittest.TestCase):
         self.assertEqual(result["status"], "PUBLIC_SOURCE_DRIFT")
         self.assertEqual([x for x in result["assets"] if x["status"] == "DRIFT"],
                          [{"path": "pdf/pdf.worker.min.mjs", "status": "DRIFT"}])
-        self.assertEqual(result["observed_public_files"], 17)
+        self.assertEqual(result["observed_public_files"], 18)
+
+    def test_new_astronomy_asset_drift_blocks_complete_source_claim(self):
+        name = "vendor/astronomy-2.1.19.min.js"
+        result = self.inspect(lambda path: b"tampered" if path == name else self.assets[path])
+        self.assertEqual(result["status"], "PUBLIC_SOURCE_DRIFT")
+        self.assertEqual([x for x in result["assets"] if x["status"] == "DRIFT"],
+                         [{"path": name, "status": "DRIFT"}])
 
     def test_unreachable_pdf_module_blocks_complete_source_claim(self):
         def missing(name):
@@ -142,13 +150,13 @@ class CompleteObservationTests(unittest.TestCase):
             self.assertEqual(calls, list(observer.FILES))
             with self.assertRaises(ValueError):
                 observer.observe_verified(archive, manifest, "b" * 40, fetch=synthetic)
-            self.assertEqual(len(calls), 17)
+            self.assertEqual(len(calls), 18)
             tampered = json.loads(manifest.read_text())
             tampered["assets"]["pdf/pdf.worker.min.mjs"]["sha256"] = "b" * 64
             manifest.write_text(json.dumps(tampered))
             with self.assertRaises(ValueError):
                 observer.observe_verified(archive, manifest, COMMIT, fetch=synthetic)
-            self.assertEqual(len(calls), 17)
+            self.assertEqual(len(calls), 18)
 
     def test_complete_observer_workflow_is_readonly_and_reports_drift_not_go(self):
         workflow = (HERE.parent / ".github/workflows/studio-static-source-release.yml").read_text()

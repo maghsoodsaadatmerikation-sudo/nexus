@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Source-locked Studio release decision: read-only, permanently fail-safe HOLD.
 
-Consumes the exact source ZIP/manifest and the complete 17-asset fixed-origin
+Consumes the exact source ZIP/manifest and the complete current-inventory fixed-origin
 observation from the same reviewed commit. Reports actionable blockers without
 ever authorizing Render, Railway, model billing or public deployment.
 """
@@ -69,7 +69,7 @@ def load_observation(path):
 
 
 def evaluate(*, manifest, observation, source_commit):
-    """Every outcome is a non-release HOLD, including a 17/17 source MATCH.
+    """Every outcome is a non-release HOLD, including a complete source MATCH.
 
     Revalidates all evidence fields independently: no unknown upstream fields
     can reclassify a drift, invent a release PASS or smuggle sensitive contents

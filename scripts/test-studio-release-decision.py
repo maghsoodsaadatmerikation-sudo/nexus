@@ -51,11 +51,11 @@ class StudioDecisionTests(unittest.TestCase):
             source_commit=COMMIT,
         )
 
-    def test_all_17_match_still_holds_provider_identity_rollback_and_owner_approval(self):
+    def test_all_18_match_still_holds_provider_identity_rollback_and_owner_approval(self):
         record = self.evaluate(self.baseline)
         self.assertEqual(record["status"], "HOLD_PROVIDER_RECOVERY_AND_OWNER_EVIDENCE")
         self.assertEqual(record["public_source_status"], "SOURCE_MATCH_ONLY")
-        self.assertEqual(record["checked_paths"], 17)
+        self.assertEqual(record["checked_paths"], 18)
         self.assertEqual(record["problems"], [])
         self.assertIn("CURRENT_RENDER_DEPLOY_ID_NOT_INDEPENDENTLY_VERIFIED", record["blockers"])
         self.assertIn("RENDER_ROLLBACK_ARTIFACT_NOT_CONFIRMED", record["blockers"])
@@ -99,6 +99,15 @@ class StudioDecisionTests(unittest.TestCase):
         self.assertEqual(record["problems"], [
             {"path": "pdf/pdf.worker.min.mjs", "result": "UNREACHABLE"}])
         self.assertNotIn("private fixture exception", json.dumps(record))
+
+    def test_legacy_only_observation_cannot_authorize_current_candidate(self):
+        obj = copy.deepcopy(self.baseline)
+        name = "vendor/astronomy-2.1.19.min.js"
+        obj["assets"] = [asset for asset in obj["assets"] if asset["path"] != name]
+        obj["observed_public_files"] = 17
+        obj["reviewed_public_files"] = 17
+        self.assertEqual(len(obj["assets"]), 17)
+        self.assert_blocked(obj)
 
     def test_icon_pixel_match_is_allowed_but_cannot_release(self):
         obs = copy.deepcopy(self.baseline)

@@ -18,7 +18,7 @@ import sys
 import tempfile
 import zipfile
 from png_pixels import pixel_digest
-from studio_public_assets import FILES, asset_limit, check_public_tree
+from studio_public_assets import HISTORICAL_LIVE_FILES as FILES, asset_limit, check_historical_live_tree
 
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "studio-static-release-gate.py"
@@ -56,7 +56,7 @@ def check_old_root(root):
     source = root / "public/studio"
     # Refuse private/unlisted files and any symlinks; allow the separate
     # PDF worker's bounded 1.3MB maximum.
-    reviewed_paths = check_public_tree(source)
+    reviewed_paths = check_historical_live_tree(source)
     assets = {name: reviewed_paths[name].read_bytes() for name in FILES}
     if b"const EXPECTED_SHA256='" + sha(assets["index.html"]).encode() + b"'" not in \
             assets["service-worker.js"]:

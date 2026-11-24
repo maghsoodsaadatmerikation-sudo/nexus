@@ -36,7 +36,7 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertEqual(self.manifest_file.read_bytes(), second_manifest.read_bytes())
         self.assertEqual(manifest["schema"], gate.SCHEMA)
         self.assertEqual(manifest["source_commit"], COMMIT)
-        self.assertEqual(manifest["content_count"], 17)
+        self.assertEqual(manifest["content_count"], 18)
         self.assertEqual(manifest["readiness"], "REVIEW_CANDIDATE_ONLY")
         for name in ("contains_private_data", "contains_provider_secrets",
                      "production_promotion_authorized", "render_deploy_performed",
@@ -45,12 +45,22 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertEqual(manifest["authority"], "none")
         with zipfile.ZipFile(self.archive) as zipped:
             members = zipped.namelist()
-            self.assertEqual(len(members), 17)
+            self.assertEqual(len(members), 18)
             self.assertEqual(
                 set(members), {gate.BUNDLE + "/" + name for name in gate.FILES})
             self.assertNotIn(gate.BUNDLE + "/device-check.html", members)
             self.assertNotIn(gate.BUNDLE + "/nexus-stage-d-private-capture.cms", members)
             self.assertTrue(all(x.compress_type == zipfile.ZIP_STORED for x in zipped.infolist()))
+
+    def test_public_astronomy_module_is_pinned_and_standalone_preserved(self):
+        assets = gate.source_assets()
+        vendor = assets[gate.ASTRONOMY_MODULE]
+        self.assertEqual(gate.sha(vendor), "f41139a87941ea017ab902b954c9389fa27ea72083d7fab4971756d7769d14e6")
+        self.assertIn(b'<script src="./vendor/astronomy-2.1.19.min.js" integrity="sha256-9BE5qHlB6gF6uQK5VMk4n6J+pyCD1/q0lxdW13adFOY="></script>', assets["index.html"])
+        self.assertNotIn(vendor, assets["index.html"])
+        self.assertIn(vendor, (HERE.parent / "web/studio.html").read_bytes())
+        self.assertIn(gate.ASTRONOMY_MODULE.encode(), assets["service-worker.js"])
+        self.assertLess(len(assets["index.html"]), 550_000)
 
     def test_bad_commit_and_existing_outputs_refuse_overwrite(self):
         for sha in ("main", "b"*39, "", "D"*40):
@@ -112,7 +122,7 @@ class ReleaseGateTests(unittest.TestCase):
         assets = gate.source_assets()
         result = gate.observe_public(manifest, lambda name: assets[name])
         self.assertEqual(result["status"], "SOURCE_MATCH_ONLY")
-        self.assertEqual(result["observed_asset_count"], 9)
+        self.assertEqual(result["observed_asset_count"], 10)
         self.assertTrue(all(x["status"] == "MATCH" for x in result["assets"]))
         for key in ("production_promotion_authorized", "render_deploy_performed",
                     "actual_deploy_identified", "real_browser_offline_verified"):
