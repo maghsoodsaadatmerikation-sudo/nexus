@@ -18,6 +18,7 @@ import studio_vision
 import studio_analysis_audit
 import studio_analysis_batch
 import studio_workflow
+import studio_workflow_revision
 from transport_bounds import read_bounded_body
 
 
@@ -93,6 +94,7 @@ studio_model.register(app)
 studio_vision.register(app)
 studio_connections.register(app)
 studio_workflow.register(app)
+studio_workflow_revision.register(app)
 studio_analysis_batch.register(app)
 studio_analysis_audit.register(app)
 if studio_origin := os.getenv("NEXUS_STUDIO_ORIGIN", "").strip():
