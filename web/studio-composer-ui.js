@@ -280,6 +280,158 @@ document.addEventListener('nexus-studio-state',()=>{
 $('language').addEventListener('change',()=>queueMicrotask(()=>{adaptiveRefresh();adaptiveRender()}));
 adaptiveRefresh();
 
+/* Explicit document retrieval in chat. Full files go only to the reviewed gateway. */
+const docPanel=document.createElement('section');docPanel.id='studio-document-workflow';docPanel.hidden=true;docPanel.className='studio-compose';
+const docOpen=document.createElement('button');docOpen.id='studio-document-open';docOpen.type='button';docOpen.className='secondary';
+docOpen.dataset.en='Ask documents';docOpen.dataset.fa='پرسش از اسناد';docOpen.setAttribute('aria-controls',docPanel.id);docOpen.setAttribute('aria-expanded','false');
+suggestions.append(docOpen);adaptive.after(docPanel);
+const docLabels=[];
+function docLabel(el,en,fa){docLabels.push(()=>{el.textContent=words(en,fa)});return el}
+const docTitle=docLabel(document.createElement('h3'),'Find evidence in documents','یافتن شواهد در اسناد');
+const docNotice=docLabel(document.createElement('p'),'Select up to 3 TXT or DOCX files (2 MiB total). This sends entire selected files to your configured Studio gateway only after you approve. It does not send conversation history or call a language model. Results are exact extracted excerpts, not a synthesized answer.','حداکثر ۳ فایل متنی یا Word (مجموعاً ۲ مگابایت) انتخاب کنید. فقط پس از تأیید شما، تمام فایل‌های منتخب به درگاه تنظیم‌شدهٔ نکسوس ارسال می‌شوند. سابقهٔ گفتگو ارسال نمی‌شود و مدل زبانی فراخوانی نمی‌شود. نتیجه قطعهٔ متن استخراج‌شده است، نه پاسخ ترکیبی.');
+docNotice.className='help';
+const docFiles=document.createElement('input');docFiles.id='studio-document-files';docFiles.type='file';docFiles.multiple=true;docFiles.accept='.txt,.docx';
+const docFileLabel=document.createElement('label');docFileLabel.htmlFor=docFiles.id;docFileLabel.append(docLabel(document.createElement('span'),'Documents','اسناد'),docFiles);
+const docQuery=document.createElement('input');docQuery.id='studio-document-query';docQuery.maxLength=250;docQuery.dir='auto';
+const docQueryLabel=document.createElement('label');docQueryLabel.htmlFor=docQuery.id;docQueryLabel.append(docLabel(document.createElement('span'),'Search words (1–16 distinct words)','واژه‌های جست‌وجو (۱ تا ۱۶ واژهٔ متفاوت)'),docQuery);
+const docMatch=document.createElement('select');docMatch.id='studio-document-match';
+for(const [v,en,fa] of [['all','All words','همهٔ واژه‌ها'],['any','Any word','هر یک از واژه‌ها']]){const opt=document.createElement('option');opt.value=v;docMatch.append(docLabel(opt,en,fa))}
+const docMatchLabel=document.createElement('label');docMatchLabel.htmlFor=docMatch.id;docMatchLabel.append(docLabel(document.createElement('span'),'Match','تطبیق'),docMatch);
+const docTables=document.createElement('input');docTables.type='checkbox';docTables.id='studio-document-tables';
+const docTableLabel=document.createElement('label');docTableLabel.className='inline';docTableLabel.append(docTables,docLabel(document.createElement('span'),'Include direct Word table cells','شامل سلول‌های مستقیم جدول Word'));
+const docActions=document.createElement('div');docActions.className='row';
+function docButton(id,en,fa){const b=docLabel(document.createElement('button'),en,fa);b.id=id;b.type='button';return b}
+const docReview=docButton('studio-document-review','Review files on gateway','بازبینی فایل‌ها در درگاه');
+const docRun=docButton('studio-document-run','Approve retrieval','تأیید بازیابی');docRun.hidden=true;
+const docClose=docButton('studio-document-close','Discard files and results','کنارگذاشتن فایل‌ها و نتایج');docClose.className='secondary';
+docActions.append(docReview,docRun,docClose);
+const docStatus=document.createElement('p');docStatus.id='studio-document-status';docStatus.className='help';docStatus.setAttribute('role','status');
+const docResults=document.createElement('div');docResults.id='studio-document-results';
+docPanel.append(docTitle,docNotice,docFileLabel,docQueryLabel,docMatchLabel,docTableLabel,docActions,docStatus,docResults);
+let docEpoch=0,docAbort=null,docState=null,docScope=null;
+const docHash=s=>typeof s==='string'&&/^[a-f0-9]{64}$/.test(s);
+function docRefresh(){
+ docLabels.forEach(fn=>fn());
+ docReview.disabled=Boolean(docAbort)||!docFiles.files.length||!docQuery.value.trim();
+ docRun.disabled=Boolean(docAbort)||!docState;docRun.hidden=!docState;
+}
+function docReset(close=false){
+ docEpoch++;docAbort?.abort();docAbort=null;docState=null;docResults.replaceChildren();docStatus.textContent='';
+ if(close){docFiles.value='';docQuery.value='';docTables.checked=false;docMatch.value='all';docScope=null;docPanel.hidden=true;docOpen.setAttribute('aria-expanded','false')}
+ docRefresh();
+}
+function docCurrent(epoch){return epoch===docEpoch&&!docPanel.hidden&&docScope===workflowScope()&&!adaptivePrivate()}
+function docDestination(){
+ if(!$('gateway').value.trim())throw Error('gateway');
+ const origin=adaptiveOrigin(),token=$('gateway-token').value.trim();
+ if(token.length<32)throw Error('token');
+ return {origin,token};
+}
+function docError(){docStatus.textContent=words('Document request failed or changed. Review again.','درخواست سند ناموفق بود یا تغییر کرد؛ دوباره بازبینی کنید.')}
+async function docPost(path,body,destination,controller){
+ const response=await fetch(destination.origin+path,{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',redirect:'error',referrerPolicy:'no-referrer',
+  headers:{'content-type':'application/json','authorization':'Bearer '+destination.token},body:JSON.stringify(body),signal:controller.signal});
+ if(!response.ok||!response.body)throw Error('request');
+ const reader=response.body.getReader(),decoder=new TextDecoder('utf-8',{fatal:true});let total=0,raw='';
+ try{while(true){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>262144)throw Error('response-size');raw+=decoder.decode(value,{stream:true})}raw+=decoder.decode()}
+ finally{await reader.cancel().catch(()=>{});reader.releaseLock()}
+ const out=JSON.parse(raw);
+ if(out.execution_authorized!==false||out.provider_contact_attempted!==false||out.provider_disclosure_authorized!==false)throw Error('authority');
+ return out;
+}
+function docBase64(bytes){
+ let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+ return btoa(binary);
+}
+function docReviewValid(out,plan){
+ return out.status==='review_only'&&docHash(out.review_sha256)&&docHash(out.search_review_sha256)&&Array.isArray(out.documents)&&
+  out.documents.length===plan.documents.length&&out.documents.every((d,i)=>d.document_id===plan.documents[i].id&&docHash(d.input_sha256)&&docHash(d.extraction_review_sha256)&&Number.isInteger(d.block_count)&&d.block_count>0);
+}
+docOpen.onclick=()=>{
+ if(!docPanel.hidden){docReset(true);return}
+ if(adaptivePrivate())return;
+ docScope=workflowScope();docPanel.hidden=false;docOpen.setAttribute('aria-expanded','true');docRefresh();docFiles.focus();
+};
+docClose.onclick=()=>docReset(true);
+docFiles.addEventListener('change',()=>docReset());
+for(const f of [docQuery,docMatch,docTables,$('gateway'),$('gateway-token')])f.addEventListener('input',()=>docReset());
+document.addEventListener('nexus-studio-private-clear',()=>docReset(true));
+document.addEventListener('nexus-studio-state',()=>{if(!docPanel.hidden&&(docScope!==workflowScope()||adaptivePrivate()))docReset(true)});
+$('language').addEventListener('change',()=>queueMicrotask(docRefresh));
+docReview.onclick=async()=>{
+ if(docAbort||docPanel.hidden||adaptivePrivate()||docScope!==workflowScope())return;
+ const files=Array.from(docFiles.files),query=docQuery.value.trim(),match=docMatch.value,tables=docTables.checked;
+ docReset();
+ let destination;
+ try{destination=docDestination()}catch{docStatus.textContent=words('Configure a Studio gateway and access token first.','ابتدا درگاه نکسوس و توکن دسترسی را تنظیم کنید.');return}
+ if(!query||files.length<1||files.length>3||files.some(f=>!/\.(txt|docx)$/i.test(f.name)||f.size===0)||files.reduce((n,f)=>n+f.size,0)>2097152||
+    files.reduce((n,f)=>n+4*Math.ceil(f.size/3),0)>2796204){
+  docStatus.textContent=words('Choose 1–3 supported files within the total size limit.','۱ تا ۳ فایل پشتیبانی‌شده در محدودهٔ حجم مجاز انتخاب کنید.');return;
+ }
+ if(!confirm(words('Send the entire selected files and search words to '+destination.origin+' for review? No model call.','تمام فایل‌های منتخب و واژه‌های جست‌وجو برای بازبینی به '+destination.origin+' ارسال شوند؟ مدل فراخوانی نمی‌شود.')))return;
+ const epoch=++docEpoch,controller=new AbortController();docAbort=controller;docRefresh();
+ const timer=setTimeout(()=>controller.abort(),20000);
+ try{
+  const documents=[];
+  for(const [i,f] of files.entries()){
+   const format=f.name.toLowerCase().endsWith('.docx')?'docx':'txt';
+   const bytes=new Uint8Array(await f.arrayBuffer());if(!docCurrent(epoch)||controller.signal.aborted)return;
+   if(bytes.length!==f.size)throw Error('file-size');
+   documents.push({id:'doc-'+(i+1),extraction:{format,content_base64:docBase64(bytes),include_table_cells:format==='docx'&&tables}});
+  }
+  const plan={documents,query,match,limit:8};
+  const out=await docPost('/studio/api/documents/workflow/review',plan,destination,controller);
+  if(!docCurrent(epoch)||controller.signal.aborted)return;
+  if(!docReviewValid(out,plan))throw Error('invalid-review');
+  docState={plan,review:out,origin:destination.origin,names:files.map(f=>f.name)};
+  docStatus.textContent=words('Review ready. Approve separately to retrieve excerpts.','بازبینی آماده است. برای بازیابی قطعات متن جداگانه تأیید کنید.');
+  for(const [i,d] of out.documents.entries()){
+   const line=document.createElement('p');line.textContent=docState.names[i]+' · '+d.block_count+' '+words('blocks','بلوک');
+   const flags=Object.keys(d.skipped_counts||{}).length+Object.keys(d.package_privacy_findings||{}).filter(k=>d.package_privacy_findings[k]>0).length;
+   if(flags)line.textContent+=' · '+words('Omissions/privacy indicators require review','نشانه‌های حذف یا حریم خصوصی نیازمند بررسی‌اند');
+   docResults.append(line);
+  }
+ }catch{if(docCurrent(epoch))docError()}
+ finally{clearTimeout(timer);if(epoch===docEpoch){docAbort=null;docRefresh()}}
+};
+docRun.onclick=async()=>{
+ if(docAbort||!docState||!docCurrent(docEpoch))return;
+ const state=docState;let destination;
+ try{destination=docDestination()}catch{docReset();docError();return}
+ if(destination.origin!==state.origin){docReset();docError();return}
+ if(!confirm(words('Resend these same files to retrieve exact excerpts from '+destination.origin+'?','همین فایل‌ها برای بازیابی قطعات دقیق متن به '+destination.origin+' دوباره ارسال شوند؟')))return;
+ const epoch=++docEpoch,controller=new AbortController();docAbort=controller;docRefresh();
+ const timer=setTimeout(()=>controller.abort(),20000);
+ try{
+  const out=await docPost('/studio/api/documents/workflow/run',{plan:state.plan,review_sha256:state.review.review_sha256,consent:true},destination,controller);
+  if(!docCurrent(epoch)||controller.signal.aborted)return;
+  const bundle=out.evidence;
+  if(out.review_sha256!==state.review.review_sha256||out.semantic_verification!==false||bundle?.model_called!==false||
+     bundle.search_review_sha256!==state.review.search_review_sha256||!docHash(bundle.evidence_sha256)||!Array.isArray(bundle.sources)||
+     bundle.sources.length>8||bundle.source_count!==bundle.sources.length||
+     out.status!==(bundle.sources.length?'extractive_evidence_available':'no_lexical_match'))throw Error('result');
+  const fragment=document.createDocumentFragment();
+  for(const row of bundle.sources){
+   const index=state.review.documents.findIndex(d=>d.document_id===row.document_id&&d.input_sha256===row.input_sha256);
+   if(index<0||typeof row.excerpt!=='string'||row.excerpt.length<1||row.excerpt.length>800||
+      typeof row.evidence_id!=='string'||!/^e-[a-f0-9]{64}$/.test(row.evidence_id)||!docHash(row.block_sha256)||!docHash(row.excerpt_sha256)||
+      !Number.isInteger(row.block_index)||row.block_index<0||row.block_index>=state.review.documents[index].block_count||
+      !Number.isInteger(row.excerpt_start)||row.excerpt_start<0||!Number.isInteger(row.excerpt_end)||
+      row.excerpt_end-row.excerpt_start!==Array.from(row.excerpt).length||row.content_trust!=='untrusted_document_text')throw Error('source');
+   const article=document.createElement('article'),heading=document.createElement('strong'),body=document.createElement('p');
+   heading.textContent=state.names[index]+' · '+words('Block','بلوک')+' '+(row.block_index+1)+' · '+row.excerpt_start+'–'+row.excerpt_end;
+   body.dir='auto';body.style.whiteSpace='pre-wrap';body.textContent=row.excerpt;
+   article.append(heading,body);fragment.append(article);
+  }
+  docResults.replaceChildren(fragment);
+  docStatus.textContent=bundle.sources.length?words('Exact excerpts; relevance and truth are not verified.','قطعات دقیق متن؛ ارتباط و صحت آن‌ها تأیید نشده است.'):words('No lexical match. This does not prove absence.','تطابق واژگانی یافت نشد؛ این به معنای نبود اطلاعات نیست.');
+  if(bundle.truncated===true)docStatus.textContent+=' '+words('More matching blocks exist.','بلوک‌های منطبق بیشتری وجود دارد.');
+  docState=null;docFiles.value='';
+ }catch{if(docCurrent(epoch)){docState=null;docResults.replaceChildren();docError()}}
+ finally{clearTimeout(timer);if(epoch===docEpoch){docAbort=null;docRefresh()}}
+};
+docRefresh();
+
 function showDirectory(){
  closeDirectory();directory.hidden=false;
  directoryToggle.setAttribute('aria-expanded','true');
