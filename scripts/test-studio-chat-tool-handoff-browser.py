@@ -278,6 +278,10 @@ window.addEventListener('load',async()=>{
   receiptWorkflow.querySelector('[data-central-review]').click();
   await wait(()=>receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Central review:'));
   assert(receiptWorkflow.querySelector('[data-central-result]').textContent.includes('no action authorized')&&!$('code-consent').checked,'central-review-no-execution-authority');
+  const criterion=receiptWorkflow.querySelector('[data-central-criterion="0"]');
+  assert(criterion&&receiptWorkflow.querySelector('[data-central-verdict="0"]').disabled,'cannot-assess-unopened-step');
+  criterion.value='Returns 42';criterion.dispatchEvent(new Event('input',{bubbles:true}));
+  assert(!receiptWorkflow.querySelector('[data-central-result]').textContent,'criteria-edit-invalidates-review');
   assert(!receiptWorkflow.textContent.includes('Local UI reported success'),
    'new-plan-has-no-invented-tool-result');
   receiptWorkflow.querySelector('li button').click();
@@ -290,6 +294,11 @@ window.addEventListener('load',async()=>{
    'running-local-action-cannot-be-acknowledged-before-outcome');
   await wait(()=>$('code-result').textContent.includes('42'));
   await wait(()=>receiptWorkflow.textContent.includes('Local UI reported success'));
+  const verdict=receiptWorkflow.querySelector('[data-central-verdict="0"]');
+  assert(!verdict.disabled&&verdict.value==='','local-success-is-not-human-assessment');
+  verdict.value='pass';verdict.dispatchEvent(new Event('change',{bubbles:true}));
+  receiptWorkflow.querySelector('[data-central-review]').click();
+  await wait(()=>receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Human-reported pass / fail: 1/0'));
   assert(receiptWorkflow.textContent.includes('not independent proof'),
    'local-worker-success-is-labelled-tab-observed-not-attested');
   assert(receiptWorkflow.querySelector('li button')&&
