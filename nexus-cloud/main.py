@@ -41,6 +41,7 @@ import studio_document_generation
 import studio_document_critique
 import studio_document_consensus
 import studio_document_metacognition
+import studio_document_workflow
 import studio_adaptive_route
 import studio_bibliography
 import studio_statistics
@@ -157,6 +158,7 @@ studio_document_generation.register(app)
 studio_document_critique.register(app)
 studio_document_consensus.register(app)
 studio_document_metacognition.register(app)
+studio_document_workflow.register(app)
 studio_adaptive_route.register(app)
 studio_bibliography.register(app)
 studio_statistics.register(app)

@@ -49,7 +49,10 @@ class AuditRequest(BaseModel):
 
 
 def build(request: EvidenceRequest):
-    retrieved = search(request.search)
+    return build_from_retrieved(search(request.search))
+
+
+def build_from_retrieved(retrieved):
     rows = []
     for hit in retrieved["hits"]:
         origin = {key: hit[key] for key in (
@@ -64,8 +67,12 @@ def build(request: EvidenceRequest):
 
 
 def evidence(request: EvidenceRequest):
-    retrieved, rows, sha = build(request)
-    visible = [row if request.include_excerpts else
+    return render_evidence(search(request.search), include_excerpts=request.include_excerpts)
+
+
+def render_evidence(retrieved, *, include_excerpts):
+    retrieved, rows, sha = build_from_retrieved(retrieved)
+    visible = [row if include_excerpts else
                {k: v for k, v in row.items() if k != "excerpt"} for row in rows]
     return {
         "schema_version": 1, "evidence_sha256": sha,
@@ -74,7 +81,7 @@ def evidence(request: EvidenceRequest):
         "sources": visible, "source_count": len(rows),
         "matching_block_count": retrieved["matching_block_count"],
         "truncated": retrieved["truncated"],
-        "excerpts_included": request.include_excerpts,
+        "excerpts_included": include_excerpts,
         "answer_kind": "verbatim_excerpts_only",
         "limitations": [
             "Excerpts reproduce parsed source text, not a synthesized answer.",

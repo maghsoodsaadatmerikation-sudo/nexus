@@ -54,7 +54,7 @@ def normalized(value):
         str.maketrans({"ي": "ی", "ك": "ک", "ى": "ی"}))
 
 
-def prepare(plan):
+def prepare(plan, *, inspected=None):
     clean(plan.query, 250)
     terms = list(dict.fromkeys(normalized(m.group()) for m in WORD.finditer(plan.query)))
     if not 1 <= len(terms) <= 16:
@@ -66,8 +66,10 @@ def prepare(plan):
     checked, documents = [], []
     total_chars = 0
     seen = set()
-    for document in plan.documents:
-        review, blocks = inspect(document.extraction)
+    if inspected is not None and len(inspected) != len(plan.documents):
+        raise ValueError("Invalid internal extraction inventory")
+    for index, document in enumerate(plan.documents):
+        review, blocks = (inspect(document.extraction) if inspected is None else inspected[index])
         if review["review_sha256"] != document.extraction_review_sha256:
             raise ValueError("Stale extraction review")
         if review["input_sha256"] in seen:
@@ -127,7 +129,12 @@ def candidates(text, terms, mode):
 
 
 def run(approved):
-    reviewed, terms, documents = prepare(approved.plan)
+    return run_prepared(approved, prepare(approved.plan))
+
+
+def run_prepared(approved, prepared):
+    """Internal server-owned prepared data only; never accept from the wire."""
+    reviewed, terms, documents = prepared
     if approved.consent is not True or approved.review_sha256 != reviewed["review_sha256"]:
         raise ValueError("Changed or unapproved search")
     results = []
