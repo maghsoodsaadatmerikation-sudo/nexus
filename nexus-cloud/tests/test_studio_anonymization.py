@@ -113,3 +113,10 @@ def test_endpoint_auth_and_bounds(monkeypatch):
     assert response.headers["cache-control"] == "no-store"
     assert client.post(url+"run", json={**data, "consent": "true"}, headers=headers).status_code == 422
     assert client.post(url+"run", content=b"x"*1048577, headers=headers).status_code == 413
+
+
+def test_email_at_end_of_sentence():
+    p = RedactionPlan.model_validate({
+        "parts": [{"id": "discussion", "text": "Contact author@example.org. Next sentence."}],
+    })
+    assert run(approved(p))["parts"][0]["text"] == "Contact [REDACTED]. Next sentence."

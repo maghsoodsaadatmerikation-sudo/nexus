@@ -23,7 +23,7 @@ MAX_MATCHES = 2000
 PATTERNS = {
     "email_pattern": re.compile(
         r"(?<![\w.+-])[A-Za-z0-9.!#$%&'*+/=?^_{}~-]{1,64}"
-        r"@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){1,5}(?![\w.-])"),
+        r"@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){1,5}(?![\w-]|\.[A-Za-z0-9-])"),
     "orcid_pattern": re.compile(
         r"(?<!\w)(?:https?://orcid\.org/)?[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X](?!\w)",
         re.IGNORECASE),
