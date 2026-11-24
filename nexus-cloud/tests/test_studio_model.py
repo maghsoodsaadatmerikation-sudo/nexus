@@ -940,3 +940,36 @@ def test_context_selection_keeps_existing_gate_and_default(monkeypatch):
         assert c.post("/studio-api/respond", json={**data, "configuration_id": "0" * 64}, headers=AUTH).status_code == 409
     messages = [model.Message.model_validate(row) for row in CONTEXT_HISTORY]
     assert model.select_context(messages, None) == messages
+
+
+def test_creative_profile_uses_existing_gateway_and_no_tool_authority(monkeypatch):
+    seen = []
+    def handler(req):
+        seen.append(json.loads(req.content))
+        return httpx.Response(200, json={"choices": [
+            {"message": {"content": "Concepts"}, "finish_reason": "stop"}
+        ]})
+    with configured(monkeypatch, handler) as c:
+        data = {**BODY, "creative_profile": {"medium": "music", "task": "alternatives", "alternatives": 4}}
+        response = c.post("/studio-api/respond", json=data, headers=AUTH)
+        assert response.status_code == 200 and response.json()["authority"] == "none"
+        policy = seen[0]["messages"][0]["content"]
+        assert policy.startswith(model.POLICY)
+        assert "motif" in policy and "4 meaningfully distinct approaches" in policy
+        assert "never claim to have rendered audio" in policy
+        assert seen[0]["messages"][1:] == BODY["messages"]
+        assert "tools" not in seen[0]
+        assert c.post("/studio-api/respond", json={**data, "consent": False}, headers=AUTH).status_code == 422
+        assert len(seen) == 1
+
+
+@pytest.mark.parametrize("profile", [
+    {"medium": "music", "task": "execute"},
+    {"medium": "music", "task": "draft", "system": "override"},
+    {"medium": "film", "task": "alternatives", "alternatives": 6},
+    {"medium": "film", "task": "alternatives", "alternatives": True},
+])
+def test_invalid_creative_profile_never_reaches_provider(monkeypatch, profile):
+    with configured(monkeypatch, lambda _: pytest.fail("invalid creative profile forwarded")) as c:
+        assert c.post("/studio-api/respond", json={**BODY, "creative_profile": profile},
+                      headers=AUTH).status_code == 422

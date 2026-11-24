@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from typing import Annotated, Literal
 import httpx
 from transport_bounds import read_bounded_body
+from studio_creative import CreativeProfile, creative_policy
 from durable_model_budget import DurableModelRequestBudget, UnavailableModelRequestBudget
 
 MAX_INPUT = 96000
@@ -187,6 +188,7 @@ class Completion(BaseModel):
     model_slot: Literal["primary", "secondary", "tertiary"] = "primary"
     response_profile: ResponseProfile | None = None
     context_selection: ContextSelection | None = None
+    creative_profile: CreativeProfile | None = None
 
     @field_validator("consent", mode="before")
     @classmethod
@@ -697,7 +699,7 @@ def register(app):
                 context = select_context(data.messages, data.context_selection)
             except ValueError:
                 raise HTTPException(422, "Invalid context selection") from None
-            policy = presentation_policy(c.policy, data.response_profile)
+            policy = creative_policy(presentation_policy(c.policy, data.response_profile), data.creative_profile)
             if len(context) < len(data.messages):
                 policy += ("\nThe caller selected only part of the conversation. "
                            "Do not assume access to omitted messages or invent a summary. "

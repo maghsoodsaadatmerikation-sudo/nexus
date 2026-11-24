@@ -26,6 +26,7 @@ import studio_research_perspectives
 import studio_research_critique
 import studio_research_memory
 import studio_research_improvement
+import studio_creative
 import studio_analysis_export
 import studio_analysis_batch
 import studio_workflow
@@ -118,6 +119,7 @@ studio_research_perspectives.register(app)
 studio_research_critique.register(app)
 studio_research_memory.register(app)
 studio_research_improvement.register(app)
+studio_creative.register(app)
 studio_analysis_export.register(app)
 if studio_origin := os.getenv("NEXUS_STUDIO_ORIGIN", "").strip():
     app.add_middleware(CORSMiddleware, allow_origins=[studio_origin],
