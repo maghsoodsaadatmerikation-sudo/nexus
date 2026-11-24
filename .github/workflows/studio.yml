@@ -43,6 +43,7 @@ jobs:
           node --check web/studio-tasks.js
           node --check web/studio-tasks-ui.js
           node scripts/test-studio-tasks.mjs
+          node scripts/test-studio-workflow-revision.mjs
           node --check web/studio-lab.js
           node --check web/studio-lab-ui.js
           node --check web/studio-astrology.js
