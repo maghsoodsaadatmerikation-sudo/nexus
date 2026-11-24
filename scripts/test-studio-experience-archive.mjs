@@ -40,7 +40,7 @@ const data=S.state({schema:S.SCHEMA,projects:[p]});
 await vault.create(pass);await vault.save(data);
 assert(!store.raw.includes('synthetic_fix'));
 assert.deepEqual((await S.decrypt(store.raw,pass)).data,data);
-vault.lock();await vault.unlock(pass);assert.deepEqual(vault.data,data);
+vault.lock();assert.deepEqual(await vault.unlock(pass),data);
 const t=S.append(S.thread('Synthetic'),'user','Review task','human');
 for(const isolated of [false,true]){const context=S.context(p,{...t,isolated},{memory:true,sources:true,skyTone:false});assert(!JSON.stringify(context).includes('synthetic_fix'))}
 const removed=S.copy(data);removed.projects[0].experiences=[];
