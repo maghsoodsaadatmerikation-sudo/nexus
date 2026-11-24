@@ -1,0 +1,24 @@
+name: Blind human evaluation tooling
+on:
+  pull_request:
+    paths:
+      - 'scripts/blind-human-eval.py'
+      - 'scripts/test-blind-human-eval.py'
+      - '.github/workflows/blind-human-eval.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/blind-human-eval.py'
+      - 'scripts/test-blind-human-eval.py'
+      - '.github/workflows/blind-human-eval.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - run: python3 scripts/test-blind-human-eval.py
