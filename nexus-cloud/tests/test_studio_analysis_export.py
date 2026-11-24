@@ -2,6 +2,8 @@ import csv
 import hashlib
 import io
 import json
+import zipfile
+from xml.etree import ElementTree as ET
 
 import pytest
 from fastapi import FastAPI
@@ -59,7 +61,7 @@ def test_endpoint_auth_consent_digest_and_download_headers(monkeypatch):
     headers = {"Authorization": "Bearer " + token}
     url = "/studio/api/analysis-batch/export"
     assert client.post(url, json=request_data()).status_code == 401
-    for fmt in ("json", "csv", "html"):
+    for fmt in ("json", "csv", "html", "xlsx", "docx"):
         response = client.post(url, json=request_data(fmt), headers=headers)
         assert response.status_code == 200
         assert response.headers["cache-control"] == "no-store"
@@ -75,3 +77,35 @@ def test_endpoint_auth_consent_digest_and_download_headers(monkeypatch):
     assert client.post(url, content=b"x" * 65537, headers=headers).status_code == 413
     monkeypatch.setattr(exports, "audit", lambda request: {"status": "mismatch"})
     assert client.post(url, json=request_data(), headers=headers).status_code == 409
+
+
+@pytest.mark.parametrize("fmt,required", [
+    ("xlsx", "xl/worksheets/sheet1.xml"),
+    ("docx", "word/document.xml"),
+])
+def test_office_packages_are_deterministic_and_static(fmt, required):
+    req = exports.ExportRequest.model_validate(request_data(fmt))
+    data, media = exports.build_export(req)
+    assert data == exports.build_export(req)[0]
+    assert media.startswith("application/vnd.openxmlformats-officedocument.")
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        assert archive.testzip() is None
+        assert required in archive.namelist()
+        assert "[Content_Types].xml" in archive.namelist()
+        for name in archive.namelist():
+            raw = archive.read(name)
+            ET.fromstring(raw)
+            assert b"HYPERLINK" not in raw and b"secret" not in raw
+            assert b'TargetMode="External"' not in raw
+            assert b"vbaProject" not in raw
+        assert b"source_step" in archive.read(required)
+        assert b"numeric.from_metrics" in archive.read(required)
+        if fmt == "xlsx":
+            ns = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+            sheet = ET.fromstring(archive.read(required))
+            assert sheet.find(".//s:f", ns) is None
+            assert sheet.find(".//s:c/s:v", ns) is not None
+            assert b"review_sha256" in archive.read("xl/worksheets/sheet2.xml")
+        else:
+            assert b"Review SHA-256" in archive.read(required)
+            assert b"w:tblHeader" in archive.read(required)

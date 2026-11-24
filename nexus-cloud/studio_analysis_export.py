@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from studio_analysis_audit import AuditRequest, audit
 from studio_analysis_batch import ApprovedBatch, run
+from studio_office_report import docx, xlsx
 from studio_connections import operator_auth
 from transport_bounds import read_bounded_body
 
@@ -24,7 +25,7 @@ MAX_EXPORT = 128 * 1024
 class ExportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     approved: ApprovedBatch
-    format: Literal["json", "csv", "html"]
+    format: Literal["json", "csv", "html", "xlsx", "docx"]
     export_consent: bool
 
 
@@ -73,6 +74,14 @@ def build_export(request: ExportRequest):
             writer.writerow((report["review_sha256"], "consistent", *row))
         data = stream.getvalue().encode("utf-8")
         media = "text/csv; charset=utf-8"
+    elif request.format in ("xlsx", "docx"):
+        rows = list(report_rows(computed))
+        if request.format == "xlsx":
+            data = xlsx(report["review_sha256"], COLUMNS, rows)
+            media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        else:
+            data = docx(report["review_sha256"], COLUMNS, rows)
+            media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     else:
         def cell(value):
             return html.escape(str(value), quote=True)
