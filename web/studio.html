@@ -4097,6 +4097,7 @@ function openReviewedSurface(result,message){
  }else window.NexusStudioFocus?.openPanel(panel);
  return true;
 }
+function workflowAction(p){return p==='started'?'wait':p==='succeeded'?'verify':p?'reconcile':'inspect'}
 function workflowOutcomes(){
  const counts={succeeded:0,incomplete:0,running:0,unobserved:0,verified:false};
  for(const {observed} of workflowState.steps)counts[observed==='succeeded'?'succeeded':observed==='started'?'running':observed?'incomplete':'unobserved']++;
@@ -4112,7 +4113,7 @@ function workflowReport(){
   steps:workflowState.steps.map(step=>({
    command:step.result.route[0],request:step.line,
    opened:step.opened===true,acknowledged_by_user:step.acknowledged===true,
-   local_ui_outcome:step.observed||null
+   local_ui_outcome:step.observed||null,next_review:workflowAction(step.observed)
   }))
  };
 }
@@ -4131,6 +4132,7 @@ function showWorkflow(){
   span.textContent=step.line+' · '+(i<workflowState.index?
    words('confirmed by you','به تأیید شما'):
    i===workflowState.index?words('current','گام فعلی'):words('not started','شروع‌نشده'));
+  if(step.opened)span.textContent+=' · '+words('Review: '+workflowAction(step.observed),'بازبینی: '+({wait:'انتظار',verify:'راستی‌آزمایی',reconcile:'رفع نقص',inspect:'بررسی'})[workflowAction(step.observed)]);
   item.append(span);
   const boundary=document.createElement('small');boundary.className='help';
   boundary.textContent=' · '+toolBoundary(step.result.route[0]);
