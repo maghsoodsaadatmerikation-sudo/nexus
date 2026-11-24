@@ -30,6 +30,7 @@ import studio_research_synthesis
 import studio_research_export
 import studio_academic
 import studio_peer_review
+import studio_manuscript_revision
 import studio_bibliography
 import studio_statistics
 import studio_regression
@@ -134,6 +135,7 @@ studio_research_synthesis.register(app)
 studio_research_export.register(app)
 studio_academic.register(app)
 studio_peer_review.register(app)
+studio_manuscript_revision.register(app)
 studio_bibliography.register(app)
 studio_statistics.register(app)
 studio_regression.register(app)
