@@ -248,7 +248,11 @@ function context(p,t,{memory=false,sources=false,relatedChats=false,historyDays,
  if(packed)messages.unshift({role:'user',content:packed.value});
  const shownHits=packed?.included.has('sources')?hits:[];
  const shownAttachments=packed?.included.has('attachments')?extracts:[];
- return {messages,recalled_chats:packed?.included.has('related-chats')?recalled.map(({title,thread,turn})=>({title,thread,turn})):[],study:packed?.included.has('study')===true,omitted_messages,optional_context_truncated:packed?.omitted===true,presentation: presentation?{mode:presentation.mode,at:presentation.at,engine:presentation.engine}:null,retrieval_truncated:hits.truncated===true&&shownHits.length>0,citations:shownHits.map(({source_id,name,line,offset})=>({source_id,name,line,offset})),attachments_supplied:shownAttachments.map(({source_id,name,line,offset,partial,kind})=>({source_id,name,line,offset,partial,kind})),attachments_truncated:shownAttachments.some(e=>e.partial)};
+ const memoryCount=memory&&!t.isolated?p.memories.length:0;
+ const memoryIncluded=packed?.included.has('memory')===true;
+ const memoryReview={status:t.isolated?'isolated':!memory?'off':!memoryCount?'empty':memoryIncluded?'included':'omitted_budget',
+  requested_count:memoryCount,included_count:memoryIncluded?memoryCount:0};
+ return {messages,memory_review:memoryReview,recalled_chats:packed?.included.has('related-chats')?recalled.map(({title,thread,turn})=>({title,thread,turn})):[],study:packed?.included.has('study')===true,omitted_messages,optional_context_truncated:packed?.omitted===true,presentation: presentation?{mode:presentation.mode,at:presentation.at,engine:presentation.engine}:null,retrieval_truncated:hits.truncated===true&&shownHits.length>0,citations:shownHits.map(({source_id,name,line,offset})=>({source_id,name,line,offset})),attachments_supplied:shownAttachments.map(({source_id,name,line,offset,partial,kind})=>({source_id,name,line,offset,partial,kind})),attachments_truncated:shownAttachments.some(e=>e.partial)};
 }
 function inspectSecrets(messages){
  if(!Array.isArray(messages)||messages.length>64)throw Error('privacy-input');
