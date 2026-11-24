@@ -165,7 +165,7 @@ def select_route(request, slot):
     return route
 
 
-async def dispatch(request, route, payload, selected):
+async def dispatch(request, route, payload, selected, *, validator=validate_answer):
     try:
         request.app.state.model_limiter.acquire_nowait()
     except anyio.WouldBlock:
@@ -196,7 +196,7 @@ async def dispatch(request, route, payload, selected):
                                   else model.accepted_buffered_answer(bytes(raw)))
             if truncated:
                 raise ValueError("Truncated answer")
-            return validate_answer(content, selected)
+            return validator(content, selected)
         except (ValueError, ValidationError, RecursionError, UnicodeError):
             # Never expose raw invalid model output, nor retry or route elsewhere.
             raise HTTPException(502, "Model answer failed citation or format checks", headers=NO_STORE) from None
