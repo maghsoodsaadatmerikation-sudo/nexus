@@ -1,4 +1,4 @@
-import {evaluateWorkflowOutcome,reviewOutcomeRevision,reviewCorrectionExperience,createExperienceEditReview} from '../web/studio-workflow-outcome.mjs';
+import {evaluateWorkflowOutcome,reviewOutcomeRevision,reviewCorrectionExperience,createExperienceEditReview,reviewExperienceRecall} from '../web/studio-workflow-outcome.mjs';
 function testOutcome(evaluate){
  let checks=0;const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('fixture mismatch '+checks)};
  const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('expected rejection '+checks)};
@@ -179,3 +179,43 @@ function testExperienceLifecycle(create){
  return checks;
 }
 console.log('WORKFLOW EXPERIENCE LIFECYCLE: PASS ('+testExperienceLifecycle(createExperienceEditReview)+' checks)');
+
+function testExperienceRecall(review){
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('recall fixture '+checks)};
+ const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('recall rejection '+checks)};
+ const scope={project_id:'p',workflow_id:'w'},criteria=[{id:'test',required:true,evidence_kind:'automated_check'},{id:'other',required:false,evidence_kind:'human_review'}];
+ const run=(id,values)=>{const s={...scope,run_id:id,plan_sha256:'a'.repeat(64)};return {scope:s,observations:values.map((result,i)=>({...s,criterion_id:criteria[i].id,evidence_id:id+'-e'+i,kind:criteria[i].evidence_kind,result}))}};
+ const pair=(n,code='fix-a',b=['fail','pass'],a=['pass','pass'])=>({correction_code:code,before:run('b'+n,b),after:run('a'+n,a)});
+ const attempts=[pair(1),pair(2),pair(3,'fix-b',['pass','fail']),pair(4,'fix-b',['pass','fail'])];
+ const entry=(correction_code,criterion_id,status='active',supporting_pair_count=2)=>({correction_code,criterion_id,status,supporting_pair_count});
+ const snap={...scope,revision:2,entries:[entry('fix-b','other'),entry('fix-a','test')]};
+ const req={...scope,revision:2,criterion_ids:['other','test']},on={enabled:true};
+ const r=review(snap,req,criteria,attempts,on);
+ eq(r.matches.map(x=>x.criterion_id),['test','other']);eq(r.withheld_count,0);eq(r.truncated,false);
+ eq(r.automatic_application,false);eq(r.execution_authorized,false);eq(r.completion_verified,false);
+ eq(review(snap,req,criteria,attempts,{...on,limit:1}).truncated,true);
+ eq(review(snap,{...req,criterion_ids:['other']},criteria,attempts,on).matches.map(x=>x.correction_code),['fix-b']);
+ const revoked={...snap,entries:[entry('fix-a','test','revoked'),entry('fix-b','other')]};
+ eq(review(revoked,req,criteria,attempts,on).matches.map(x=>x.correction_code),['fix-b']);
+ eq(review({...snap,entries:[]},req,criteria,attempts,on).matches,[]);
+ const stale=review(snap,req,criteria,[...attempts,pair(5)],on);
+ eq(stale.matches.map(x=>x.correction_code),['fix-b']);eq(stale.withheld_count,1);
+ const contradicted=review(snap,req,criteria,[...attempts,pair(5,'fix-a',['fail','pass'],['fail','pass'])],on);
+ eq(contradicted.matches.map(x=>x.correction_code),['fix-b']);eq(contradicted.withheld_count,1);
+ eq(review(snap,req,criteria,[],on).status,'no_current_evidence');
+ eq(review(snap,req,criteria,[pair(1)],on).matches,[]);
+ eq(review(null,null,null,null).status,'off');eq(review(null,null,null,null,{...on,isolated:true}).status,'isolated');
+ reject(()=>review(snap,{...req,revision:1},criteria,attempts,on),'scope-mismatch');
+ reject(()=>review(snap,{...req,workflow_id:'foreign'},criteria,attempts,on),'scope-mismatch');
+ reject(()=>review(snap,{...req,project_id:'foreign'},criteria,attempts,on),'scope-mismatch');
+ reject(()=>review(snap,{...req,criterion_ids:['missing']},criteria,attempts,on),'invalid-recall-criteria');
+ reject(()=>review(snap,{...req,criterion_ids:['test','test']},criteria,attempts,on),'invalid-recall-criteria');
+ reject(()=>review({...snap,entries:[...snap.entries,snap.entries[0]]},req,criteria,attempts,on),'duplicate-experience-entry');
+ reject(()=>review(snap,req,[criteria[0],criteria[0]],attempts,on),'invalid-criterion');
+ reject(()=>review(snap,req,criteria,[...attempts,attempts[0]],on),'reused-experience-run');
+ reject(()=>review(snap,req,criteria,attempts,{...on,limit:0}),'invalid-options');
+ eq(JSON.stringify(r).includes('b1-e0'),false);eq(snap.entries[0].correction_code,'fix-b');
+ return checks;
+}
+console.log('WORKFLOW EXPERIENCE RECALL: PASS ('+testExperienceRecall(reviewExperienceRecall)+' checks)');

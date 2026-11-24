@@ -113,23 +113,26 @@ export function reviewCorrectionExperience(scope,criteria,attempts,{enabled=fals
  return {status:'review_only',basis:'repeated_supplied_failure_to_pass_associations_not_causal_evidence',candidates,summaries,...boundary};
 }
 
-// A serializable snapshot proposal, not a storage engine. Host owns authenticated
-// human consent, monotonic revision/CAS, encryption, deletion and invalidation.
-// Do not persist tickets, raw observations or untrusted instructions.
-export function createExperienceEditReview(){
- let pending=null;
- const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
- const key=(c,k)=>c+'|'+k;
- function read(snapshot){
+const experienceId=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
+function readExperienceSnapshot(snapshot){
+ const id=experienceId;
   if(!snapshot||!id(snapshot.project_id)||!id(snapshot.workflow_id)||!Number.isSafeInteger(snapshot.revision)||snapshot.revision<0||snapshot.revision>=Number.MAX_SAFE_INTEGER||!Array.isArray(snapshot.entries)||snapshot.entries.length>30)throw Error('invalid-experience-snapshot');
   const seen=new Set(),entries=snapshot.entries.map(e=>{
    if(!e||!id(e.correction_code)||!id(e.criterion_id)||!['active','revoked'].includes(e.status)||!Number.isInteger(e.supporting_pair_count)||e.supporting_pair_count<2||e.supporting_pair_count>12)throw Error('invalid-experience-entry');
-   const k=key(e.correction_code,e.criterion_id);
+   const k=e.correction_code+'|'+e.criterion_id;
    if(seen.has(k))throw Error('duplicate-experience-entry');seen.add(k);
    return {correction_code:e.correction_code,criterion_id:e.criterion_id,status:e.status,supporting_pair_count:e.supporting_pair_count};
   });
   return {project_id:snapshot.project_id,workflow_id:snapshot.workflow_id,revision:snapshot.revision,entries};
  }
+
+// A serializable snapshot proposal, not a storage engine. Host owns authenticated
+// human consent, monotonic revision/CAS, encryption, deletion and invalidation.
+// Do not persist tickets, raw observations or untrusted instructions.
+export function createExperienceEditReview(){
+ let pending=null;
+ const id=experienceId;
+ const read=readExperienceSnapshot;
  function stage(snapshot,operation,{enabled=false,isolated=false,criteria,attempts}={}){
   pending=null;
   if(enabled!==true||isolated!==false)throw Error('experience-edit-disabled');
@@ -164,4 +167,39 @@ export function createExperienceEditReview(){
  }
  function invalidate(){pending=null}
  return Object.freeze({stage,approve,invalidate});
+}
+
+// Explicit, local recall for review only. The host must supply the current
+// authenticated snapshot and full relevant evidence set, not selected successes.
+// Exact criterion IDs are not proof that criterion semantics are unchanged.
+export function reviewExperienceRecall(snapshot,request,criteria,attempts,{enabled=false,isolated=false,limit=5}={}){
+ if(typeof enabled!=='boolean'||typeof isolated!=='boolean'||!Number.isInteger(limit)||limit<1||limit>10)throw Error('invalid-options');
+ const boundary={automatic_application:false,execution_authorized:false,completion_verified:false};
+ if(isolated||!enabled)return {status:isolated?'isolated':'off',matches:[],...boundary};
+ const current=readExperienceSnapshot(snapshot);
+ if(!request||request.project_id!==current.project_id||request.workflow_id!==current.workflow_id||request.revision!==current.revision)throw Error('recall-scope-mismatch');
+ const wanted=request.criterion_ids;
+ if(!Array.isArray(wanted)||wanted.length<1||wanted.length>30||wanted.some(x=>!experienceId(x))||new Set(wanted).size!==wanted.length)throw Error('invalid-recall-criteria');
+ if(!Array.isArray(criteria)||criteria.length<1||criteria.length>30)throw Error('invalid-recall-criteria');
+ const catalog=new Map();
+ for(const c of criteria){
+  if(!c||!experienceId(c.id)||catalog.has(c.id)||typeof c.required!=='boolean'||!['automated_check','human_review','independent_witness'].includes(c.evidence_kind))throw Error('invalid-criterion');
+  catalog.set(c.id,c.required);
+ }
+ if(!criteria.some(c=>c.required)||wanted.some(x=>!catalog.has(x)))throw Error('invalid-recall-criteria');
+ if(!Array.isArray(attempts)||attempts.length>12)throw Error('invalid-experience-input');
+ if(!attempts.length)return {status:'no_current_evidence',matches:[],...boundary};
+ const evidence=reviewCorrectionExperience(current,criteria,attempts,{enabled:true});
+ const fresh=new Map(evidence.candidates.map(c=>[c.correction_code+'|'+c.criterion_id,c.supporting_pair_count]));
+ const requested=new Set(wanted),matches=[];
+ let withheld=0;
+ for(const e of current.entries){
+  if(e.status!=='active'||!requested.has(e.criterion_id))continue;
+  // Changed support requires explicit refresh rather than silent acceptance.
+  if(fresh.get(e.correction_code+'|'+e.criterion_id)!==e.supporting_pair_count){withheld++;continue}
+  matches.push({correction_code:e.correction_code,criterion_id:e.criterion_id,required:catalog.get(e.criterion_id),supporting_pair_count:e.supporting_pair_count,review_required:true});
+ }
+ const cmp=(a,b)=>a<b?-1:a>b?1:0;
+ matches.sort((a,b)=>Number(b.required)-Number(a.required)||b.supporting_pair_count-a.supporting_pair_count||cmp(a.criterion_id,b.criterion_id)||cmp(a.correction_code,b.correction_code));
+ return {status:'review_only',basis:'exact_requested_criteria_and_recomputed_reported_support_not_verified_provenance',matches:matches.slice(0,limit),withheld_count:withheld,truncated:matches.length>limit,...boundary};
 }
