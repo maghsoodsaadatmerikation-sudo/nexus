@@ -13,13 +13,15 @@ export function evaluateWorkflowOutcome(scope,criteria,observations,{enabled=fal
   byId.set(c.id,c);
  }
  if(!criteria.some(c=>c.required))throw Error('missing-required-criteria');
- const grouped=new Map();
+ // Each observation ID is unique within a run; separate criterion-specific receipts are required.
+ const grouped=new Map(),seenEvidence=new Set();
  for(const o of observations){
   if(!o||o.project_id!==scope.project_id||o.run_id!==scope.run_id||o.plan_sha256!==scope.plan_sha256)throw Error('observation-scope-mismatch');
   if(!byId.has(o.criterion_id)||!id(o.evidence_id)||!['pass','fail','inconclusive'].includes(o.result)||!['automated_check','human_review','independent_witness','self_report'].includes(o.kind))throw Error('invalid-observation');
   if(!grouped.has(o.criterion_id))grouped.set(o.criterion_id,new Map());
   const g=grouped.get(o.criterion_id);
-  if(g.has(o.evidence_id))throw Error('duplicate-evidence');
+  if(seenEvidence.has(o.evidence_id))throw Error('duplicate-evidence');
+  seenEvidence.add(o.evidence_id);
   g.set(o.evidence_id,o);
  }
  const items=[];
@@ -38,5 +40,8 @@ export function evaluateWorkflowOutcome(scope,criteria,observations,{enabled=fal
  }
  const required=items.filter(c=>c.required);
  const assessment=required.some(c=>c.disposition==='reported_failure')?'reported_required_failure':required.every(c=>c.disposition==='reported_pass')?'required_reports_present':'review_incomplete';
- return {status:'review_only',basis:'supplied_evidence_metadata_not_authenticity_or_outcome_proof',assessment,completion_verified:false,execution_authorized:false,items};
+ const actionByDisposition={reported_failure:'review_failure',conflicting_reports:'reconcile_reports',requires_reconciliation:'reconcile_reports',inconclusive:'request_conclusive_evidence',missing_required_evidence_kind:'request_matching_evidence'};
+ // Stable ordering: required criteria first; never request an automatic retry or action.
+ const review_actions=[...required,...items.filter(c=>!c.required)].filter(c=>c.disposition!=='reported_pass').map(c=>({criterion_id:c.criterion_id,required:c.required,evidence_kind:byId.get(c.criterion_id).evidence_kind,action:actionByDisposition[c.disposition]}));
+ return {review_actions,status:'review_only',basis:'supplied_evidence_metadata_not_authenticity_or_outcome_proof',assessment,completion_verified:false,execution_authorized:false,items};
 }
