@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only complete 17-asset public Studio source observation.
+"""Read-only complete current-inventory public Studio source observation.
 
 Unlike the legacy nine-asset pre-promotion observer this also checks the
 reviewed PDF worker, PDF modules and license files. The report is only source
