@@ -2,6 +2,7 @@
 """Adversarial regressions for Studio's explicit module dependency boundaries."""
 from dataclasses import replace
 from pathlib import Path
+import os
 import sys
 import tempfile
 import unittest
@@ -57,6 +58,47 @@ class StudioModuleGraphTests(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 validate_module_graph(shell, web, (ui, core))
+
+    def test_noncanonical_and_aliased_module_sources_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            web = Path(tmp)
+            (web / "vendor").mkdir()
+            (web / "vendor" / "one.js").write_text("const one=1;")
+            shell = "/*STUDIO_THEME*//*STUDIO_ONE*//*STUDIO_TWO*/"
+            first = Module("/*STUDIO_ONE*/", "vendor/one.js")
+            second = Module("/*STUDIO_TWO*/", "two.js")
+            (web / "two.js").write_text("const two=2;")
+            self.assertEqual(validate_module_graph(shell, web, (first, second)),
+                             (first, second))
+            for invalid in ("vendor//one.js", "vendor/./one.js", "./two.js", "two.txt"):
+                with self.subTest(path=invalid), self.assertRaises(ValueError):
+                    validate_module_graph(shell, web, (first, replace(second, filename=invalid)))
+            (web / "two.js").unlink()
+            (web / "two.js").symlink_to(web / "vendor" / "one.js")
+            with self.assertRaisesRegex(ValueError, "symlinked"):
+                validate_module_graph(shell, web, (first, second))
+            (web / "two.js").unlink()
+            os.link(web / "vendor" / "one.js", web / "two.js")
+            with self.assertRaisesRegex(ValueError, "aliased"):
+                validate_module_graph(shell, web, (first, second))
+            (web / "two.js").unlink()
+            (web / "alias").symlink_to(web / "vendor", target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "symlinked"):
+                validate_module_graph(shell, web,
+                                      (first, replace(second, filename="alias/one.js")))
+
+    def test_module_cannot_reintroduce_reserved_template_marker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            web = Path(tmp)
+            module = Module("/*STUDIO_ONE*/", "one.js")
+            shell = "/*STUDIO_THEME*//*STUDIO_ONE*/"
+            (web / "one.js").write_text("const one=1; /*STUDIO_ONE*/")
+            with self.assertRaisesRegex(ValueError, "reserved Studio template marker"):
+                validate_module_graph(shell, web, (module,))
+            (web / "one.js").write_text("const one=1;")
+            with self.assertRaisesRegex(ValueError, "invalid Studio module"):
+                validate_module_graph("/*STUDIO_THEME*/", web,
+                                      (replace(module, marker="/*STUDIO_THEME*/"),))
 
     def test_global_provider_ownership_and_new_cross_feature_coupling_are_guarded(self):
         with tempfile.TemporaryDirectory() as tmp:
