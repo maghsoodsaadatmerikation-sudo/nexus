@@ -4,6 +4,7 @@ import copy
 import datetime as dt
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -156,6 +157,31 @@ class CutoverTests(unittest.TestCase):
             target.symlink_to(path)
             with self.assertRaises(cutover.InvalidInput):
                 cutover.read_snapshot(target)
+
+    def test_fifo_and_hardlink_inputs_fail_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            fifo = root / "fifo"
+            os.mkfifo(fifo)
+            cmd = [sys.executable, str(SCRIPT), "--input", str(fifo),
+                   "--expected-project-id", P, "--expected-service-id", S,
+                   "--expected-volume-id", V, "--expected-commit", C,
+                   "--expected-digest", D, "--expected-origin", O]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["technical_preflight"], "BLOCKED")
+            path = root / "snapshot"
+            path.write_text(json.dumps(fixture()))
+            os.link(path, root / "other")
+            with self.assertRaises(cutover.InvalidInput):
+                cutover.read_snapshot(path)
+
+    def test_deeply_nested_json_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "snapshot"
+            path.write_text("[" * 10000 + "0" + "]" * 10000)
+            with self.assertRaises(cutover.InvalidInput):
+                cutover.read_snapshot(path)
 
     def test_cli_reports_blocked_without_emitting_secret_like_provider_values(self):
         data = fixture()
