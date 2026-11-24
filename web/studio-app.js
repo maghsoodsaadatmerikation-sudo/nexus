@@ -323,16 +323,17 @@ function mutate(fn,{undoable=false,afterCommit}={}){
 }
 function projectIn(v){return v.projects.find(x=>x.id===projectId)}
 function option(value,label){const o=el('option',label);o.value=value;return o}
-function stageMemoryNote(note,remove=false){
+function stageMemoryNote(note,remove=false,replacement=null){
  if(busy||!p()||chat()?.temporary||chat()?.isolated||chat()?.archived||profileDirty||
     branchBase!==undefined||attachmentLoading||chatAttachments.length||$('attach-document').checked||
     window.NexusStudioVision?.hasTransientWork?.()===true||
     typeof note!=='string'||!note.trim()||note.length>500||/[\r\n]/.test(note)||
-    typeof remove!=='boolean'||(!remove&&p().memories.length>=30)||p().memories.some(m=>/[\r\n]/.test(m))||
+    typeof remove!=='boolean'||(replacement!==null&&(remove||typeof replacement!=='string'||!replacement.trim()||replacement.length>500||/[\r\n]/.test(replacement)))||(!remove&&replacement===null&&p().memories.length>=30)||p().memories.some(m=>/[\r\n]/.test(m))||
     $('memories').value!==p().memories.join('\n')||$('instructions').value!==p().instructions)return false;
  const matches=p().memories.filter(m=>m===note.trim());
- if(remove&&matches.length!==1)return false;
- $('memories').value=(remove?p().memories.filter(m=>m!==note.trim()):[...p().memories,note.trim()]).join('\n');
+ if((remove||replacement!==null)&&matches.length!==1)return false;
+ if(replacement!==null&&p().memories.includes(replacement.trim()))return false;
+ $('memories').value=(remove?p().memories.filter(m=>m!==note.trim()):replacement!==null?p().memories.map(m=>m===note.trim()?replacement.trim():m):[...p().memories,note.trim()]).join('\n');
  profileDirty=true;$('message').value='';stop();return true;
 }
 function fillProfile(){$('instructions').value=p()?.instructions||'';$('memories').value=p()?.memories.join('\n')||''}
