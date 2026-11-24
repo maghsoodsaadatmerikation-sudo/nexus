@@ -343,7 +343,7 @@ function renderMessage(n){
  item.append(heading);
  const body=el('div',n.origin==='model'?'':n.text);
  body.className='body';body.dir='auto';
- if(n.origin==='model')NexusReplyFormat.render(body,n.text);
+ if(n.origin==='model')NexusReplyFormat.render(body,n.text,{codeActions:true});
  item.append(body);
  if(n.role==='user'){
   if(n.attached_files?.length)item.append(el('small',t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' · '+t('chatFilesNotSaved')));
