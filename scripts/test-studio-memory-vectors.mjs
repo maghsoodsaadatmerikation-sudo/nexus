@@ -1,0 +1,37 @@
+import {rankMemoryVectors} from '../web/studio-memory-vectors.mjs';
+function runTests(rankMemoryVectors){
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('fixture mismatch '+checks)};
+ const reject=(fn,msg)=>{checks++;let err;try{fn()}catch(e){err=e}if(!err||!String(err.message).includes(msg))throw Error('expected rejection '+checks)};
+ const vec=(index,vector,model_id='fixture-v1')=>({index,vector,model_id});
+ const query={model_id:'fixture-v1',vector:[1,0]};
+ const on={enabled:true};
+ const rows=Object.freeze([vec(4,[0,1]),vec(2,[1,1]),vec(3,[-1,0]),vec(0,[2,0]),vec(1,[1,0])]);
+ const result=rankMemoryVectors(rows,query,on);
+ eq(result.matches,[{index:0,similarity:1},{index:1,similarity:1},{index:2,similarity:0.707107}]);
+ eq(result.truncated,false);
+ eq(rankMemoryVectors(rows,query,{...on,limit:2}).truncated,true);
+ eq(rankMemoryVectors(rows,query,{...on,minimumSimilarity:0.9}).matches.map(x=>x.index),[0,1]);
+ eq(rankMemoryVectors(rows,query,{...on,minimumSimilarity:0}).matches.map(x=>x.index),[0,1,2,4]);
+ eq(rankMemoryVectors(null,null).status,'off');
+ eq(rankMemoryVectors(null,null,{enabled:true,isolated:true}).status,'isolated');
+ eq(rankMemoryVectors([vec(0,[Number.MAX_VALUE,0])],{...query,vector:[Number.MIN_VALUE,0]},on).matches,[{index:0,similarity:1}]);
+ eq(rankMemoryVectors([],query,on).matches,[]);
+ eq(JSON.stringify(result).includes('fixture-v1'),false);
+ eq(rows[0].vector,[0,1]);
+ reject(()=>rankMemoryVectors([vec(0,[1,0],'other')],query,on),'model-mismatch');
+ reject(()=>rankMemoryVectors([vec(0,[1,0,1])],query,on),'dimension-mismatch');
+ reject(()=>rankMemoryVectors([vec(0,[0,0])],query,on),'zero-vector');
+ reject(()=>rankMemoryVectors([vec(0,[NaN,0])],query,on),'invalid-vector-coordinate');
+ reject(()=>rankMemoryVectors([vec(0,[Infinity,0])],query,on),'invalid-vector-coordinate');
+ reject(()=>rankMemoryVectors([vec(0,[,1])],query,on),'invalid-vector-coordinate');
+ reject(()=>rankMemoryVectors([vec(0,['1',0])],query,on),'invalid-vector-coordinate');
+ reject(()=>rankMemoryVectors([vec(0,[1,0]),vec(0,[1,0])],query,on),'invalid-vector-index');
+ reject(()=>rankMemoryVectors([vec(30,[1,0])],query,on),'invalid-vector-index');
+ reject(()=>rankMemoryVectors(Array(31).fill(vec(0,[1,0])),query,on),'invalid-vector-input');
+ reject(()=>rankMemoryVectors(rows,{...query,vector:Array(1025).fill(1)},on),'invalid-vector-input');
+ reject(()=>rankMemoryVectors(rows,query,{...on,minimumSimilarity:1.1}),'invalid-options');
+ reject(()=>rankMemoryVectors(rows,query,{...on,limit:11}),'invalid-options');
+ return checks;
+}
+console.log('MEMORY VECTOR RANKING: PASS ('+runTests(rankMemoryVectors)+' checks)');
