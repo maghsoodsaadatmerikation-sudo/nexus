@@ -1,0 +1,36 @@
+import {fuseMemoryRankings} from '../web/studio-memory-hybrid.mjs';
+function runTests(fuse){
+ let checks=0;const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('fixture mismatch '+checks)};
+ const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('expected rejection '+checks)};
+ const scope={project_id:'project-a',revision:7,note_count:5},on={enabled:true};
+ const list=(indices,extra={})=>({...scope,status:'review_only',truncated:false,matches:indices.map(index=>({index})),...extra});
+ const lexical=list([0,1,2]),vector=list([2,3,1]);
+ const result=fuse(scope,lexical,vector,on);
+ eq(result.matches.map(x=>x.index),[2,1,0,3]);
+ eq(result.matches[0],{index:2,lexical_rank:3,vector_rank:1,score:167832});
+ eq(result.mode,'hybrid');eq(result.vector_status,'supplied');
+ eq(fuse(scope,lexical,null,on).matches.map(x=>x.index),[0,1,2]);
+ eq(fuse(scope,lexical,null,on).mode,'lexical_only');
+ eq(fuse(scope,lexical,null,on).vector_status,'not_supplied');
+ eq(fuse(scope,lexical,list([]),on).mode,'hybrid');
+ eq(fuse(null,null,null).status,'off');
+ eq(fuse(null,null,null,{enabled:true,isolated:true}).status,'isolated');
+ eq(fuse(scope,lexical,vector,{...on,limit:1}).truncated,true);
+ eq(fuse(scope,list([0],{truncated:true}),null,on).truncated,true);
+ eq(fuse(scope,list([]),list([]),on).matches,[]);
+ eq(fuse(scope,list([1]),list([0]),on).matches.map(x=>x.index),[0,1]);
+ eq(JSON.stringify(result).includes('project-a'),false);
+ eq(lexical.matches,[{index:0},{index:1},{index:2}]);
+ reject(()=>fuse(scope,lexical,list([0],{project_id:'project-b'}),on),'scope-mismatch');
+ reject(()=>fuse(scope,lexical,list([0],{revision:6}),on),'scope-mismatch');
+ reject(()=>fuse(scope,lexical,list([0],{note_count:4}),on),'scope-mismatch');
+ reject(()=>fuse(scope,list([0,0]),null,on),'invalid-ranking-index');
+ reject(()=>fuse(scope,list([5]),null,on),'invalid-ranking-index');
+ reject(()=>fuse(scope,list([0],{status:'off'}),null,on),'invalid-ranking');
+ reject(()=>fuse(scope,list([0],{truncated:'yes'}),null,on),'invalid-ranking');
+ reject(()=>fuse(scope,list(Array(11).fill(0)),null,on),'invalid-ranking');
+ reject(()=>fuse({...scope,revision:-1},lexical,null,on),'invalid-scope');
+ reject(()=>fuse(scope,lexical,vector,{...on,limit:11}),'invalid-options');
+ return checks;
+}
+console.log('MEMORY HYBRID RANKING: PASS ('+runTests(fuseMemoryRankings)+' checks)');
