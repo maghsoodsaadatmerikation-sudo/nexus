@@ -41,3 +41,29 @@ export function reviewWorkflowRecovery(steps,observations,{enabled=false,isolate
  }
  return {status:'review_only',basis:'supplied_statuses_not_verified_execution_evidence',execution_authorized:false,items};
 }
+
+// Review recurring failure codes across explicitly scoped, distinct reported runs.
+// Caller must authenticate reports, criteria identity and code vocabulary. No causal inference,
+// model training, persistence or automatic application. Failure codes must be nonsensitive.
+export function reviewWorkflowLessons(scope,runs,{enabled=false,isolated=false}={}){
+ if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
+ if(isolated||!enabled)return {status:isolated?'isolated':'off',candidates:[],automatic_learning:false};
+ const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
+ const hash=s=>typeof s==='string'&&/^[a-f0-9]{64}$/.test(s);
+ if(!scope||!id(scope.project_id)||!id(scope.workflow_id)||!hash(scope.criteria_sha256)||!Array.isArray(runs)||runs.length>30)throw Error('invalid-learning-input');
+ const seen=new Set(),groups=new Map();
+ for(const run of runs){
+  if(!run||run.project_id!==scope.project_id||run.workflow_id!==scope.workflow_id||run.criteria_sha256!==scope.criteria_sha256)throw Error('learning-scope-mismatch');
+  if(!id(run.run_id)||seen.has(run.run_id)||!hash(run.plan_sha256)||!['reported_pass','reported_failure','inconclusive'].includes(run.outcome)||!Array.isArray(run.failure_codes)||run.failure_codes.length>12||run.failure_codes.some(c=>!id(c))||new Set(run.failure_codes).size!==run.failure_codes.length)throw Error('invalid-run');
+  seen.add(run.run_id);
+  if(run.outcome==='reported_pass'&&run.failure_codes.length)throw Error('inconsistent-run');
+  if(run.outcome!=='reported_failure')continue;
+  for(const code of run.failure_codes){
+   if(!groups.has(code))groups.set(code,[]);
+   groups.get(code).push(run.run_id);
+  }
+ }
+ const candidates=[...groups].filter(([,ids])=>ids.length>=2).map(([code,ids])=>({kind:'recurring_reported_failure',code,distinct_run_count:ids.length}));
+ candidates.sort((a,b)=>b.distinct_run_count-a.distinct_run_count||(a.code<b.code?-1:a.code>b.code?1:0));
+ return {status:'review_only',basis:'repeated_supplied_failure_reports_not_verified_causality',candidates,review_required:true,automatic_learning:false,execution_authorized:false};
+}
