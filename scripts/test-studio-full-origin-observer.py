@@ -38,7 +38,7 @@ class CompleteObservationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.assets = observer.gate.source_assets()
-        assert len(cls.assets) == len(observer.FILES) == 18
+        assert len(cls.assets) == len(observer.FILES) == 19
 
     def inspect(self, fetch=None):
         return observer.inspect_assets(
@@ -50,8 +50,8 @@ class CompleteObservationTests(unittest.TestCase):
         result = self.inspect()
         self.assertEqual(result["schema"], observer.SCHEMA)
         self.assertEqual(result["status"], "SOURCE_MATCH_ONLY")
-        self.assertEqual(result["reviewed_public_files"], 18)
-        self.assertEqual(result["observed_public_files"], 18)
+        self.assertEqual(result["reviewed_public_files"], 19)
+        self.assertEqual(result["observed_public_files"], 19)
         self.assertEqual({x["path"] for x in result["assets"]}, set(observer.FILES))
         self.assertTrue(all(x["status"] == "MATCH" for x in result["assets"]))
         self.assertIn("pdf/pdf.worker.min.mjs", {x["path"] for x in result["assets"]})
@@ -75,7 +75,7 @@ class CompleteObservationTests(unittest.TestCase):
         self.assertEqual(result["status"], "PUBLIC_SOURCE_DRIFT")
         self.assertEqual([x for x in result["assets"] if x["status"] == "DRIFT"],
                          [{"path": "pdf/pdf.worker.min.mjs", "status": "DRIFT"}])
-        self.assertEqual(result["observed_public_files"], 18)
+        self.assertEqual(result["observed_public_files"], 19)
 
     def test_new_astronomy_asset_drift_blocks_complete_source_claim(self):
         name = "vendor/astronomy-2.1.19.min.js"
@@ -150,13 +150,13 @@ class CompleteObservationTests(unittest.TestCase):
             self.assertEqual(calls, list(observer.FILES))
             with self.assertRaises(ValueError):
                 observer.observe_verified(archive, manifest, "b" * 40, fetch=synthetic)
-            self.assertEqual(len(calls), 18)
+            self.assertEqual(len(calls), 19)
             tampered = json.loads(manifest.read_text())
             tampered["assets"]["pdf/pdf.worker.min.mjs"]["sha256"] = "b" * 64
             manifest.write_text(json.dumps(tampered))
             with self.assertRaises(ValueError):
                 observer.observe_verified(archive, manifest, COMMIT, fetch=synthetic)
-            self.assertEqual(len(calls), 18)
+            self.assertEqual(len(calls), 19)
 
     def test_complete_observer_workflow_is_readonly_and_reports_drift_not_go(self):
         workflow = (HERE.parent / ".github/workflows/studio-static-source-release.yml").read_text()

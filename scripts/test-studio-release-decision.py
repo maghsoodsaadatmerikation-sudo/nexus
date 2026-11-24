@@ -55,7 +55,7 @@ class StudioDecisionTests(unittest.TestCase):
         record = self.evaluate(self.baseline)
         self.assertEqual(record["status"], "HOLD_PROVIDER_RECOVERY_AND_OWNER_EVIDENCE")
         self.assertEqual(record["public_source_status"], "SOURCE_MATCH_ONLY")
-        self.assertEqual(record["checked_paths"], 18)
+        self.assertEqual(record["checked_paths"], 19)
         self.assertEqual(record["problems"], [])
         self.assertIn("CURRENT_RENDER_DEPLOY_ID_NOT_INDEPENDENTLY_VERIFIED", record["blockers"])
         self.assertIn("RENDER_ROLLBACK_ARTIFACT_NOT_CONFIRMED", record["blockers"])
@@ -104,9 +104,9 @@ class StudioDecisionTests(unittest.TestCase):
         obj = copy.deepcopy(self.baseline)
         name = "vendor/astronomy-2.1.19.min.js"
         obj["assets"] = [asset for asset in obj["assets"] if asset["path"] != name]
-        obj["observed_public_files"] = 17
-        obj["reviewed_public_files"] = 17
-        self.assertEqual(len(obj["assets"]), 17)
+        obj["observed_public_files"] = 18
+        obj["reviewed_public_files"] = 18
+        self.assertEqual(len(obj["assets"]), 18)
         self.assert_blocked(obj)
 
     def test_icon_pixel_match_is_allowed_but_cannot_release(self):

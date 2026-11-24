@@ -15,7 +15,46 @@ from fastapi.middleware.cors import CORSMiddleware
 import studio_connections
 import studio_model
 import studio_vision
+import studio_analysis_audit
+import studio_research_evidence
+import studio_research_citations
+import studio_research_reasoning
+import studio_research_graph
+import studio_research_conflicts
+import studio_research_uncertainty
+import studio_research_perspectives
+import studio_research_critique
+import studio_research_memory
+import studio_research_improvement
+import studio_research_synthesis
+import studio_research_export
+import studio_academic
+import studio_peer_review
+import studio_manuscript_revision
+import studio_journal_review
+import studio_anonymization
+import studio_document_privacy
+import studio_document_extraction
+import studio_document_search
+import studio_document_evidence
+import studio_document_generation
+import studio_document_critique
+import studio_document_consensus
+import studio_document_metacognition
+import studio_document_workflow
+import studio_adaptive_route
+import studio_bibliography
+import studio_statistics
+import studio_regression
+import studio_bayesian
+import studio_meta_analysis
+import studio_sensitivity
+import studio_regression_diagnostics
+import studio_creative
+import studio_analysis_export
+import studio_analysis_batch
 import studio_workflow
+import studio_workflow_revision
 from transport_bounds import read_bounded_body
 
 
@@ -91,6 +130,45 @@ studio_model.register(app)
 studio_vision.register(app)
 studio_connections.register(app)
 studio_workflow.register(app)
+studio_workflow_revision.register(app)
+studio_analysis_batch.register(app)
+studio_analysis_audit.register(app)
+studio_research_evidence.register(app)
+studio_research_citations.register(app)
+studio_research_reasoning.register(app)
+studio_research_graph.register(app)
+studio_research_conflicts.register(app)
+studio_research_uncertainty.register(app)
+studio_research_perspectives.register(app)
+studio_research_critique.register(app)
+studio_research_memory.register(app)
+studio_research_improvement.register(app)
+studio_research_synthesis.register(app)
+studio_research_export.register(app)
+studio_academic.register(app)
+studio_peer_review.register(app)
+studio_manuscript_revision.register(app)
+studio_journal_review.register(app)
+studio_anonymization.register(app)
+studio_document_privacy.register(app)
+studio_document_extraction.register(app)
+studio_document_search.register(app)
+studio_document_evidence.register(app)
+studio_document_generation.register(app)
+studio_document_critique.register(app)
+studio_document_consensus.register(app)
+studio_document_metacognition.register(app)
+studio_document_workflow.register(app)
+studio_adaptive_route.register(app)
+studio_bibliography.register(app)
+studio_statistics.register(app)
+studio_regression.register(app)
+studio_bayesian.register(app)
+studio_meta_analysis.register(app)
+studio_sensitivity.register(app)
+studio_regression_diagnostics.register(app)
+studio_creative.register(app)
+studio_analysis_export.register(app)
 if studio_origin := os.getenv("NEXUS_STUDIO_ORIGIN", "").strip():
     app.add_middleware(CORSMiddleware, allow_origins=[studio_origin],
                        allow_methods=["GET", "POST"],

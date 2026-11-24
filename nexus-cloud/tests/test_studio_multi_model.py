@@ -355,3 +355,114 @@ def test_other_provider_failures_do_not_leak_raw_response(monkeypatch, status):
         assert response.headers.get("Retry-After") is None
         assert "private-provider-data" not in response.text
         assert client.app.state.model_budget.snapshot()["attempted"] == 1
+
+
+def test_model_plan_is_offline_and_exact_review_binds_dispatch(monkeypatch):
+    calls = []
+    def handler(req):
+        calls.append(json.loads(req.content))
+        if str(req.url) == model.ANTHROPIC_MESSAGES:
+            return httpx.Response(200, json=claude_answer("Secondary draft"))
+        return httpx.Response(200, json=chat_answer("Primary draft"))
+    with configured(monkeypatch, handler) as c:
+        set_secondary(monkeypatch)
+        context = {"messages": [{"role": "user", "content": "Private old question"},
+                                {"role": "assistant", "content": "Private old answer"},
+                                {"role": "user", "content": "Reviewed question"}],
+                   "context_selection": {"indices": [2]},
+                   "response_profile": {"language": "fa"}}
+        response = c.post("/studio-api/model-plan",
+                          json={**context, "slots": ["primary", "secondary"]}, headers=AUTH)
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        plan = response.json()
+        assert plan["planned_provider_attempts"] == 2
+        assert not plan["provider_contact_attempted"] and not plan["budget_reserved"]
+        assert not calls and c.app.state.model_budget.snapshot()["attempted"] == 0
+        assert "Private old" not in response.text and "Reviewed question" not in response.text
+        assert SECRET_PRIMARY not in response.text and SECRET_CLAUDE not in response.text
+        assert len({route["request_review_id"] for route in plan["routes"]}) == 2
+        for route in plan["routes"]:
+            assert route["included_message_count"] == 1 and route["omitted_message_count"] == 2
+            data = {**context, "consent": True, "model_slot": route["slot"],
+                    "configuration_id": route["configuration_id"],
+                    "request_review_id": route["request_review_id"]}
+            assert c.post("/studio-api/respond", json={**data, "max_output_tokens": 64},
+                          headers=AUTH).status_code == 409
+            assert c.post("/studio-api/respond", json={**data, "consent": False},
+                          headers=AUTH).status_code == 422
+            assert c.post("/studio-api/respond", json=data, headers=AUTH).status_code == 200
+        assert len(calls) == 2 and c.app.state.model_budget.snapshot()["attempted"] == 2
+        assert all("Private old" not in json.dumps(payload) for payload in calls)
+
+
+def test_model_plan_rejects_unsupported_routes_and_credential_rotation(monkeypatch):
+    with configured(monkeypatch, lambda _: pytest.fail("unexpected provider call")) as c:
+        set_secondary(monkeypatch)
+        data = {"messages": [{"role": "user", "content": "Question"}], "slots": ["primary"]}
+        assert c.post("/studio-api/model-plan", json=data).status_code == 401
+        for changes in ({"slots": ["primary", "primary"]}, {"slots": ["tertiary"]},
+                        {"mode": "thinking"}, {"slots": ["secondary"], "stream": True},
+                        {"context_selection": {"indices": [1]}}, {"slots": []}):
+            assert c.post("/studio-api/model-plan", json={**data, **changes}, headers=AUTH).status_code == 422
+        route = c.post("/studio-api/model-plan", json=data, headers=AUTH).json()["routes"][0]
+        monkeypatch.setenv("NEXUS_MODEL_API_KEY", "rotated-key")
+        body = {"messages": data["messages"], "consent": True,
+                "configuration_id": route["configuration_id"],
+                "request_review_id": route["request_review_id"]}
+        assert c.post("/studio-api/respond", json=body, headers=AUTH).status_code == 409
+        assert c.app.state.model_budget.snapshot()["attempted"] == 0
+        assert c.post("/studio-api/model-plan", content=b"x" * 96001,
+                      headers={**AUTH, "content-type": "application/json"}).status_code == 413
+
+
+def test_reviewed_buffered_models_can_compare_exact_response_digests(monkeypatch):
+    calls = []
+    def handler(req):
+        calls.append(req)
+        if str(req.url) == model.ANTHROPIC_MESSAGES:
+            return httpx.Response(200, json=claude_answer("Same answer"))
+        return httpx.Response(200, json=chat_answer("Same answer"))
+    with configured(monkeypatch, handler) as c:
+        set_secondary(monkeypatch)
+        context = {"messages": [{"role": "user", "content": "Fictional comparison"}]}
+        preview = c.post("/studio-api/model-plan",
+                         json={**context, "slots": ["primary", "secondary"]}, headers=AUTH).json()
+        receipts = []
+        for route in preview["routes"]:
+            data = {**context, "consent": True, "model_slot": route["slot"],
+                    "configuration_id": route["configuration_id"],
+                    "request_review_id": route["request_review_id"]}
+            response = c.post("/studio-api/respond", json=data, headers=AUTH)
+            assert response.status_code == 200
+            receipts.append(response.json()["comparison_receipt"])
+        response = c.post("/studio-api/model-comparison", json={"receipts": receipts}, headers=AUTH)
+        assert response.status_code == 200
+        report = response.json()
+        assert report["comparisons"][0]["status"] == "exact_text_match"
+        assert not report["truth_verified"] and not report["semantic_agreement_verified"]
+        assert "Same answer" not in response.text and len(calls) == 2
+        assert c.post("/studio-api/model-comparison", json={"receipts": receipts}).status_code == 401
+        tampered = [dict(row) for row in receipts]
+        tampered[0]["text_sha256"] = "0" * 64
+        assert c.post("/studio-api/model-comparison", json={"receipts": tampered}, headers=AUTH).status_code == 422
+        assert c.post("/studio-api/model-comparison", json={"receipts": [receipts[0]] * 2}, headers=AUTH).status_code == 422
+        assert c.app.state.model_budget.snapshot()["attempted"] == 2
+
+
+def test_comparison_distinguishes_different_text_truncation_and_context():
+    def row(slot, context, text, truncated=False):
+        data = {"model_slot": slot, "configuration_id": "a" * 64,
+                "request_review_id": "b" * 64, "context_id": context,
+                "text_sha256": text, "truncated": truncated}
+        return {**data, "signature": model.comparison_tag(TOKEN, b"nexus-comparison-reply-v1", data)}
+    first = row("primary", "c" * 64, "d" * 64)
+    second = row("secondary", "c" * 64, "e" * 64)
+    third = row("tertiary", "c" * 64, "d" * 64, True)
+    request = model.ComparisonRequest.model_validate({"receipts": [first, second, third]})
+    report = model.compare_receipts(request, TOKEN)
+    assert [p["status"] for p in report["comparisons"]] == [
+        "different_text", "incomplete_response", "incomplete_response"]
+    with pytest.raises(ValueError, match="contexts"):
+        model.compare_receipts(model.ComparisonRequest.model_validate({
+            "receipts": [first, row("secondary", "f" * 64, "e" * 64)]}), TOKEN)

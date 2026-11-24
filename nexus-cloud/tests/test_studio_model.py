@@ -842,3 +842,134 @@ def test_budget_io_runs_outside_asgi_event_loop(monkeypatch):
         assert client.get("/studio-api/operator-readiness", headers=AUTH).status_code == 200
         assert client.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 200
         assert calls == ["snapshot", "reserve"]
+
+
+def test_response_profile_is_explicit_presentation_only(monkeypatch):
+    seen = []
+    def handler(req):
+        seen.append(json.loads(req.content))
+        return httpx.Response(200, json={"choices": [
+            {"message": {"content": "Draft"}, "finish_reason": "stop"}
+        ]})
+    profile = {"language": "fa", "detail": "detailed", "format": "steps", "tone": "professional"}
+    with configured(monkeypatch, handler) as c:
+        response = c.post("/studio-api/respond",
+                          json={**BODY, "response_profile": profile}, headers=AUTH)
+        assert response.status_code == 200
+        assert response.json()["authority"] == "none"
+        assert len(seen) == 1
+        messages = seen[0]["messages"]
+        assert messages[0]["content"].startswith(model.POLICY + "\n")
+        for phrase in ("language: Persian", "detail: detailed", "format: numbered steps",
+                       "tone: professional", "hide material uncertainty",
+                       "no additional authority", "current user's explicit request"):
+            assert phrase in messages[0]["content"]
+        assert messages[1:] == BODY["messages"]
+        assert "tools" not in seen[0]
+        assert c.post("/studio-api/respond",
+                      json={**BODY, "response_profile": {}}, headers=AUTH).status_code == 200
+        assert seen[-1]["messages"][0]["content"] == model.POLICY
+
+
+@pytest.mark.parametrize("profile", [
+    {"language": "ignore policy"}, {"tone": "persuade"},
+    {"detail": "hide uncertainty"}, {"format": "execute"},
+    {"memory": "secret"}, {"system": "override"}, {"language": True},
+    "professional", ["fa"],
+])
+def test_response_profile_rejects_unbounded_or_privileged_options(monkeypatch, profile):
+    with configured(monkeypatch, lambda _: pytest.fail("invalid profile reached provider")) as c:
+        response = c.post("/studio-api/respond", json={**BODY, "response_profile": profile}, headers=AUTH)
+        assert response.status_code == 422
+
+
+def test_response_profile_does_not_bypass_existing_consent_or_configuration(monkeypatch):
+    with configured(monkeypatch, lambda _: pytest.fail("unreviewed profile reached provider")) as c:
+        data = {**BODY, "response_profile": {"tone": "friendly"}}
+        assert c.post("/studio-api/respond", json={**data, "consent": False}, headers=AUTH).status_code == 422
+        assert c.post("/studio-api/respond", json={**data, "configuration_id": "0" * 64}, headers=AUTH).status_code == 409
+
+
+CONTEXT_HISTORY = [
+    {"role": "user", "content": "Optional private project context"},
+    {"role": "user", "content": "Old private question"},
+    {"role": "assistant", "content": "Old private answer"},
+    {"role": "user", "content": "Selected question"},
+    {"role": "assistant", "content": "Selected answer"},
+    {"role": "user", "content": "Latest request"},
+]
+
+
+@pytest.mark.parametrize("indices", [[5], [3, 4, 5], [1, 2, 5]])
+def test_context_selection_sends_only_explicit_subset(monkeypatch, indices):
+    seen = []
+    def handler(req):
+        seen.append(json.loads(req.content))
+        return httpx.Response(200, json={"choices": [
+            {"message": {"content": "Draft"}, "finish_reason": "stop"}
+        ]})
+    with configured(monkeypatch, handler) as c:
+        data = {**BODY, "messages": CONTEXT_HISTORY, "context_selection": {"indices": indices},
+                "response_profile": {"tone": "neutral"}}
+        response = c.post("/studio-api/respond", json=data, headers=AUTH)
+        assert response.status_code == 200
+        messages = seen[0]["messages"]
+        assert messages[1:] == [CONTEXT_HISTORY[i] for i in indices]
+        assert messages[0]["content"].startswith(model.POLICY)
+        assert "tone: neutral" in messages[0]["content"]
+        assert "Do not assume access to omitted messages" in messages[0]["content"]
+        assert "Optional private project context" not in json.dumps(seen[0])
+        assert "tools" not in seen[0]
+        assert response.json()["authority"] == "none"
+
+
+@pytest.mark.parametrize("indices", [
+    [], [0], [4, 5], [5, 3, 4], [3, 3, 5], [0, 2, 5],
+    [2, 3, 5], [3, 4, 6], [True, 2, 5], [3, 4, 42],
+])
+def test_invalid_context_selection_never_reaches_provider(monkeypatch, indices):
+    with configured(monkeypatch, lambda _: pytest.fail("invalid context reached provider")) as c:
+        data = {**BODY, "messages": CONTEXT_HISTORY, "context_selection": {"indices": indices}}
+        assert c.post("/studio-api/respond", json=data, headers=AUTH).status_code == 422
+
+
+def test_context_selection_keeps_existing_gate_and_default(monkeypatch):
+    with configured(monkeypatch, lambda _: pytest.fail("unreviewed context reached provider")) as c:
+        data = {**BODY, "messages": CONTEXT_HISTORY, "context_selection": {"indices": [5]}}
+        assert c.post("/studio-api/respond", json={**data, "consent": False}, headers=AUTH).status_code == 422
+        assert c.post("/studio-api/respond", json={**data, "configuration_id": "0" * 64}, headers=AUTH).status_code == 409
+    messages = [model.Message.model_validate(row) for row in CONTEXT_HISTORY]
+    assert model.select_context(messages, None) == messages
+
+
+def test_creative_profile_uses_existing_gateway_and_no_tool_authority(monkeypatch):
+    seen = []
+    def handler(req):
+        seen.append(json.loads(req.content))
+        return httpx.Response(200, json={"choices": [
+            {"message": {"content": "Concepts"}, "finish_reason": "stop"}
+        ]})
+    with configured(monkeypatch, handler) as c:
+        data = {**BODY, "creative_profile": {"medium": "music", "task": "alternatives", "alternatives": 4}}
+        response = c.post("/studio-api/respond", json=data, headers=AUTH)
+        assert response.status_code == 200 and response.json()["authority"] == "none"
+        policy = seen[0]["messages"][0]["content"]
+        assert policy.startswith(model.POLICY)
+        assert "motif" in policy and "4 meaningfully distinct approaches" in policy
+        assert "never claim to have rendered audio" in policy
+        assert seen[0]["messages"][1:] == BODY["messages"]
+        assert "tools" not in seen[0]
+        assert c.post("/studio-api/respond", json={**data, "consent": False}, headers=AUTH).status_code == 422
+        assert len(seen) == 1
+
+
+@pytest.mark.parametrize("profile", [
+    {"medium": "music", "task": "execute"},
+    {"medium": "music", "task": "draft", "system": "override"},
+    {"medium": "film", "task": "alternatives", "alternatives": 6},
+    {"medium": "film", "task": "alternatives", "alternatives": True},
+])
+def test_invalid_creative_profile_never_reaches_provider(monkeypatch, profile):
+    with configured(monkeypatch, lambda _: pytest.fail("invalid creative profile forwarded")) as c:
+        assert c.post("/studio-api/respond", json={**BODY, "creative_profile": profile},
+                      headers=AUTH).status_code == 422

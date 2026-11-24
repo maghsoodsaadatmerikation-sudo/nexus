@@ -36,7 +36,7 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertEqual(self.manifest_file.read_bytes(), second_manifest.read_bytes())
         self.assertEqual(manifest["schema"], gate.SCHEMA)
         self.assertEqual(manifest["source_commit"], COMMIT)
-        self.assertEqual(manifest["content_count"], 18)
+        self.assertEqual(manifest["content_count"], 19)
         self.assertEqual(manifest["readiness"], "REVIEW_CANDIDATE_ONLY")
         for name in ("contains_private_data", "contains_provider_secrets",
                      "production_promotion_authorized", "render_deploy_performed",
@@ -45,7 +45,7 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertEqual(manifest["authority"], "none")
         with zipfile.ZipFile(self.archive) as zipped:
             members = zipped.namelist()
-            self.assertEqual(len(members), 18)
+            self.assertEqual(len(members), 19)
             self.assertEqual(
                 set(members), {gate.BUNDLE + "/" + name for name in gate.FILES})
             self.assertNotIn(gate.BUNDLE + "/device-check.html", members)
@@ -60,6 +60,12 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertNotIn(vendor, assets["index.html"])
         self.assertIn(vendor, (HERE.parent / "web/studio.html").read_bytes())
         self.assertIn(gate.ASTRONOMY_MODULE.encode(), assets["service-worker.js"])
+        composer = assets[gate.COMPOSER_MODULE]
+        self.assertEqual(composer, (HERE.parent / "web" / gate.COMPOSER_MODULE).read_bytes())
+        self.assertIn(composer, (HERE.parent / "web/studio.html").read_bytes())
+        self.assertNotIn(composer, assets["index.html"])
+        self.assertIn(gate.COMPOSER_MODULE.encode(), assets["service-worker.js"])
+        self.assertIn(b'<script src="./studio-composer-ui.js" integrity="sha256-', assets["index.html"])
         self.assertLess(len(assets["index.html"]), 550_000)
 
     def test_bad_commit_and_existing_outputs_refuse_overwrite(self):
@@ -122,7 +128,7 @@ class ReleaseGateTests(unittest.TestCase):
         assets = gate.source_assets()
         result = gate.observe_public(manifest, lambda name: assets[name])
         self.assertEqual(result["status"], "SOURCE_MATCH_ONLY")
-        self.assertEqual(result["observed_asset_count"], 10)
+        self.assertEqual(result["observed_asset_count"], 11)
         self.assertTrue(all(x["status"] == "MATCH" for x in result["assets"]))
         for key in ("production_promotion_authorized", "render_deploy_performed",
                     "actual_deploy_identified", "real_browser_offline_verified"):

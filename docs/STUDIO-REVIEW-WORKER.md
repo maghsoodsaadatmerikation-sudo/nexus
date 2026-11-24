@@ -1,0 +1,7 @@
+# Single-tick internal review worker
+
+An operator may explicitly run one bounded queue claim with the Python module studio_review_worker, using --queue, --checkpoints and --manifest paths. The manifest is a local JSON mapping from job IDs to the original Plan objects, at most 32 entries and 64 KiB. Job IDs must match workflow checkpoint IDs. Existing operator-local queue/checkpoint creation is still a prerequisite. Run from nexus-cloud with the project environment. No daemon or auto-start is installed.
+
+The worker validates the exact plan digest and reads an existing checkpoint without mutating its acknowledgments. It finishes the fenced lease as reviewed, failed, or retry; transient SQLite operational errors consume the queue's bounded retry budget. A missing, changed or cancelled checkpoint is not successfully reviewed. A lost lease produces no success claim. The output contains only a small status projection and no token or plan prose.
+
+The reviewed state means a snapshot of internal metadata validated at read time; a later checkpoint change or cancellation may occur independently. It does not prove execution, human approval, successful external operations or source quality. Queue cancellation and checkpoint cancellation are not one atomic transaction; no external effect is attempted. No model calls, network, shell dispatch, API routes, scheduling daemon, tenant identity, encrypted storage or deployment are added. The operator must secure all local files and clock inputs. CI must verify the regression cases.

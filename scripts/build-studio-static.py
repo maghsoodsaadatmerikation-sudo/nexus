@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 from studio_template_contract import replace_exact
-from studio_public_assets import ASTRONOMY_MODULE, PDF_MODULES, check_public_tree
+from studio_public_assets import ASTRONOMY_MODULE, COMPOSER_MODULE, PDF_MODULES, check_public_tree
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_ORIGIN = "https://nexus-studio-merikation.onrender.com"
@@ -40,11 +40,11 @@ PANEL = '''<details id="studio-install-card">
 PRIVACY = '''<section class="card" id="studio-privacy">
 <div class="studio-en"><h2>NEXUS Studio privacy policy</h2>
 <p>Studio runs in your browser, including when you install it. It requires no Studio account. Chats, drafts, source files, audio and analysis stay on your device during local use. Saving a project creates an encrypted archive in your browser profile. Exporting a backup or other file creates a copy at the location you choose.</p>
-<p>The website host receives connection and request information, such as your IP address, when you load the site. If you request public research, the selected provider receives the approved query. If you approve an online model request, the configured gateway and its model provider process the reviewed content under their own policies. An optional on-device model download contacts its file host, then performs inference on your device. Browser speech and operating-system features are subject to your device and provider settings.</p>
+<p>The website host receives connection and request information, such as your IP address, when you load the site. If you request public research, the selected provider receives the approved query. If you approve an online model request, the configured gateway and its model provider process the reviewed content under their own policies. If you approve a work-plan review, your entered goal and settings are sent to the configured Studio gateway, without a model call; progress acknowledgments are also sent when requested. An optional on-device model download contacts its file host, then performs inference on your device. Browser speech and operating-system features are subject to your device and provider settings.</p>
 <p>Use Private archive to erase the browser archive. Remove offline copy clears app code, and the device model panel can remove its downloaded model. You can also clear this site’s data in browser settings. Delete any exported copies separately. For privacy and security questions, email <a href="mailto:maryamnajafi4991@gmail.com">Maryam Najafi</a> and omit private data.</p></div>
 <div class="studio-fa" lang="fa" dir="rtl"><h2>سیاست حریم خصوصی نکسوس استودیو</h2>
 <p>استودیو در مرورگر اجرا می‌شود، حتی وقتی آن را نصب می‌کنی. برای استفاده به حساب نکسوس نیاز نداری. در استفادهٔ محلی، گفتگوها، پیش‌نویس‌ها، فایل‌ها، صدا و تحلیل روی دستگاه می‌مانند. ذخیرهٔ پروژه یک آرشیو رمزگذاری‌شده در پروفایل مرورگر می‌سازد. با خروجی گرفتن، یک کپی در محل انتخابی خودت ایجاد می‌شود.</p>
-<p>با باز کردن سایت، میزبان اطلاعات اتصال و درخواست، مانند IP، را دریافت می‌کند. در پژوهش عمومی، ارائه‌دهندهٔ انتخابی عبارت تأییدشده را دریافت می‌کند. اگر درخواست مدل آنلاین را تأیید کنی، درگاه انتخابی و ارائه‌دهندهٔ مدل محتوای بازبینی‌شده را طبق سیاست خود پردازش می‌کنند. مدل اختیاری روی دستگاه ابتدا از میزبان فایل دانلود می‌شود و سپس روی دستگاه اجرا می‌شود. امکانات گفتاری مرورگر تابع تنظیمات دستگاه و ارائه‌دهنده‌اند.</p>
+<p>با باز کردن سایت، میزبان اطلاعات اتصال و درخواست، مانند IP، را دریافت می‌کند. در پژوهش عمومی، ارائه‌دهندهٔ انتخابی عبارت تأییدشده را دریافت می‌کند. اگر درخواست مدل آنلاین را تأیید کنی، درگاه انتخابی و ارائه‌دهندهٔ مدل محتوای بازبینی‌شده را طبق سیاست خود پردازش می‌کنند. اگر بازبینی برنامهٔ کار را تأیید کنی، هدف و تنظیمات به درگاه نکسوس ارسال می‌شوند، بدون فراخوانی مدل؛ علامت‌های بازبینی نیز با درخواست تو ارسال می‌شوند. مدل اختیاری روی دستگاه ابتدا از میزبان فایل دانلود می‌شود و سپس روی دستگاه اجرا می‌شود. امکانات گفتاری مرورگر تابع تنظیمات دستگاه و ارائه‌دهنده‌اند.</p>
 <p>از بخش آرشیو خصوصی می‌توانی آرشیو مرورگر را پاک کنی. حذف نسخهٔ آفلاین، کد برنامه را پاک می‌کند. پنل مدل روی دستگاه امکان حذف فایل مدل را دارد. داده‌های سایت را می‌توانی از تنظیمات مرورگر هم پاک کنی. فایل‌های خروجی را جداگانه حذف کن. برای پرسش‌های حریم خصوصی و امنیت به <a href="mailto:maryamnajafi4991@gmail.com">مریم نجفی</a> ایمیل بزن و اطلاعات خصوصی را حذف کن.</p></div>
 </section>'''
 BOOTSTRAP = r'''
@@ -133,6 +133,10 @@ def render_public_shell(source: str, device_panel: str) -> bytes:
     integrity=base64.b64encode(digest).decode('ascii')
     source=replace_exact(source, '<script>'+astronomy.decode('utf-8')+'</script>',
                          f'<script src="./{ASTRONOMY_MODULE}" integrity="sha256-{integrity}"></script>')
+    composer=(ROOT/'web'/COMPOSER_MODULE).read_bytes()
+    composer_integrity=base64.b64encode(hashlib.sha256(composer).digest()).decode('ascii')
+    source=replace_exact(source, '<script>'+composer.decode('utf-8')+'</script>',
+                         f'<script src="./{COMPOSER_MODULE}" integrity="sha256-{composer_integrity}"></script>')
     source=replace_exact(source, "script-src 'unsafe-inline'", "script-src 'self' blob: 'unsafe-inline' 'wasm-unsafe-eval'")
     # Enable the public device worker in the page policy. The lab's srcdoc
     # keeps its independent opaque-origin, blob-only worker policy.
@@ -166,11 +170,13 @@ def artifacts():
         code.append({'path':name,'bytes':len(content),'sha256':hashlib.sha256(content).hexdigest(),'kind':'javascript'})
     astronomy=(ROOT/'web'/ASTRONOMY_MODULE).read_bytes()
     code.append({'path':ASTRONOMY_MODULE,'bytes':len(astronomy),'sha256':hashlib.sha256(astronomy).hexdigest(),'kind':'javascript'})
+    composer=(ROOT/'web'/COMPOSER_MODULE).read_bytes()
+    code.append({'path':COMPOSER_MODULE,'bytes':len(composer),'sha256':hashlib.sha256(composer).hexdigest(),'kind':'javascript'})
     worker=replace_exact(WORKER, '__DIGEST__', hashlib.sha256(html).hexdigest())
     worker=replace_exact(worker, '__INDEX_BYTES__', str(len(html)))
     worker=replace_exact(worker, '__CODE_ASSETS__', json.dumps(code,separators=(',',':')))
     worker=replace_exact(worker, '__PACKAGE_ID__', hashlib.sha256(html+json.dumps(code,sort_keys=True).encode()).hexdigest()[:16])
-    return {'index.html':html, ASTRONOMY_MODULE:astronomy, 'service-worker.js':worker.encode(), 'manifest.json':(json.dumps(manifest,indent=2)+'\n').encode(), **{f'icons/nexus-{size}.png':(ROOT/f'public/icons/nexus-{size}.png').read_bytes() for size in (192,512)}}
+    return {'index.html':html, ASTRONOMY_MODULE:astronomy, COMPOSER_MODULE:composer, 'service-worker.js':worker.encode(), 'manifest.json':(json.dumps(manifest,indent=2)+'\n').encode(), **{f'icons/nexus-{size}.png':(ROOT/f'public/icons/nexus-{size}.png').read_bytes() for size in (192,512)}}
 
 
 def main():

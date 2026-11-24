@@ -1,0 +1,7 @@
+# Internal review-job queue
+
+The optional local SQLite library schedules **review-only** jobs by trusted UTC epoch seconds, binds submissions to a plan digest, and supports idempotent job creation, atomic leasing, bounded retries (1–5 attempts), exponential retry delay, terminal cancellation, and restart recovery. Expired leases are reclaimed only for internal review work; old lease tokens cannot finish a reclaimed or cancelled job. The result is a queue status, not verified review evidence or permission to act. All projections return execution_authorized=false.
+
+No public endpoint, actual worker loop, automatic scheduling service, notification, model request, tool call or external side effect is added. The operator must supply a trusted clock, validated plan identity, a private local database directory, file permissions, access controls, storage quotas and lifecycle. Per-job rollback checks do not establish an independently trusted global clock. SQLite lease fencing only protects this database, not arbitrary external providers. Do not use automatic replay for non-idempotent external actions. No encryption, multi-tenant isolation, or production crash/power-loss proof is provided.
+
+Regression cases cover due ordering, identical/conflicting submissions, restart and lease expiry, stale lease fencing, retry delay and exhaustion, cancellation, clock rollback, invalid budgets and concurrent claims. Exact-head CI is required before merging.

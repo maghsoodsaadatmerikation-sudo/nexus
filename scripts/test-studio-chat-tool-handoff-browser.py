@@ -595,6 +595,87 @@ window.addEventListener('load',async()=>{
   $('lock').click();
   assert(!$('reminder-title').value&&!$('reminder-start').value,'lock-clears-reminder-form');
 
+
+  // Planning is explicitly invoked from chat and never executes a provider operation.
+  $('nexus-zen-home').click();
+  const oldFetch=window.fetch;
+  let adaptiveCalls=0;
+  window.fetch=async(url,options={})=>{
+   if(String(url).endsWith('/studio/api/workflow/adaptive/review')){
+    adaptiveCalls++;
+    const input=JSON.parse(options.body);
+    assert(input.goal==='Fictional work goal'&&input.privacy==='studio_only','adaptive-sends-only-reviewed-goal');
+    assert(!('messages'in input)&&!('files'in input),'adaptive-no-chat-or-file-context');
+    return Response.json({request:input,route_sha256:'a'.repeat(64),execution_authorized:false,automatic_dispatch:false,
+     workflow:{plan:{steps:[{id:'extract',description:'Review extraction',depends_on:[]},{id:'final_review',description:'Human review',depends_on:['extract']}]}},
+     handoffs:[{step_id:'extract',boundary:'studio',model_slot:null,automatic_dispatch:false},{step_id:'final_review',boundary:'human',model_slot:null,automatic_dispatch:false}],blockers:[]});
+   }
+   if(String(url).endsWith('/studio/api/workflow/adaptive/progress')){
+    adaptiveCalls++;const input=JSON.parse(options.body);
+    return Response.json({route_sha256:input.route_sha256,execution_authorized:false,automatic_dispatch:false,
+     requested_task_completion_verified:false,progress:{evidence:'caller_reported_only',acknowledged:input.acknowledged}});
+   }
+   return oldFetch(url,options);
+  };
+  fill('gateway-token','test-adaptive-access-token-01234567890123456789');
+  $('studio-adaptive-open').click();
+  fill('studio-adaptive-goal','Fictional work goal');
+  fill('studio-adaptive-privacy','device_only');
+  $('studio-adaptive-review').click();
+  assert(adaptiveCalls===0,'adaptive-device-only-no-network');
+  fill('studio-adaptive-privacy','studio_only');
+  $('studio-adaptive-review').click();
+  await wait(()=>$('studio-adaptive-steps').querySelector('button'));
+  assert(adaptiveCalls===1,'adaptive-explicit-plan-review');
+  $('studio-adaptive-steps').querySelector('button').click();
+  await wait(()=>$('studio-adaptive-steps').textContent.includes('Acknowledged, not verified'));
+  assert(adaptiveCalls===2,'adaptive-acknowledgment-not-execution');
+  $('studio-adaptive-close').click();
+  assert($('studio-adaptive').hidden&&!$('studio-adaptive-goal').value,'adaptive-discard-clears-goal');
+  window.fetch=oldFetch;
+
+  let docCalls=0,docReviewBody=null;
+  window.fetch=async(url,options={})=>{
+   const path=String(url);
+   if(path.endsWith('/studio/api/documents/workflow/review')){
+    docCalls++;docReviewBody=JSON.parse(options.body);
+    assert(docReviewBody.documents.length===1&&atob(docReviewBody.documents[0].extraction.content_base64)==='Synthetic evidence','document-review-selected-file-only');
+    assert(!('messages'in docReviewBody)&&!('history'in docReviewBody)&&!options.body.includes('private-name.txt'),'document-review-no-history-or-filename');
+    return Response.json({status:'review_only',review_sha256:'a'.repeat(64),search_review_sha256:'b'.repeat(64),
+     provider_contact_attempted:false,provider_disclosure_authorized:false,execution_authorized:false,
+     documents:[{document_id:'doc-1',input_sha256:'c'.repeat(64),extraction_review_sha256:'d'.repeat(64),block_count:1,skipped_counts:{},package_privacy_findings:{}}]});
+   }
+   if(path.endsWith('/studio/api/documents/workflow/run')){
+    docCalls++;const data=JSON.parse(options.body);
+    assert(data.consent===true&&data.review_sha256==='a'.repeat(64)&&JSON.stringify(data.plan)===JSON.stringify(docReviewBody),'document-run-exact-reviewed-plan');
+    return Response.json({status:'extractive_evidence_available',review_sha256:'a'.repeat(64),semantic_verification:false,
+     provider_contact_attempted:false,provider_disclosure_authorized:false,execution_authorized:false,
+     evidence:{model_called:false,search_review_sha256:'b'.repeat(64),evidence_sha256:'e'.repeat(64),source_count:1,truncated:false,
+      sources:[{document_id:'doc-1',input_sha256:'c'.repeat(64),evidence_id:'e-'+'f'.repeat(64),block_index:0,block_sha256:'1'.repeat(64),excerpt_sha256:'2'.repeat(64),excerpt_start:0,excerpt_end:18,excerpt:'Synthetic evidence',content_trust:'untrusted_document_text'}]}});
+   }
+   return oldFetch(url,options);
+  };
+  $('studio-document-open').click();
+  file('studio-document-files','private-name.txt','Synthetic evidence');
+  fill('studio-document-query','evidence');
+  window.confirm=()=>false;$('studio-document-review').click();
+  assert(docCalls===0,'document-declined-upload-no-network');
+  window.confirm=()=>true;$('studio-document-review').click();
+  await wait(()=>!$('studio-document-run').hidden&&!$('studio-document-run').disabled);
+  assert(docCalls===1&&!$('studio-document-results').textContent.includes('Synthetic evidence'),'document-review-no-excerpts');
+  fill('studio-document-query','changed');
+  assert($('studio-document-run').hidden,'document-edit-invalidates-review');
+  fill('studio-document-query','evidence');$('studio-document-review').click();
+  await wait(()=>!$('studio-document-run').hidden&&!$('studio-document-run').disabled);
+  window.confirm=()=>false;$('studio-document-run').click();
+  assert(docCalls===2,'document-declined-retrieval-no-network');
+  window.confirm=()=>true;$('studio-document-run').click();
+  await wait(()=>$('studio-document-results').textContent.includes('Synthetic evidence'));
+  assert(docCalls===3&&$('studio-document-results').textContent.includes('private-name.txt')&&$('studio-document-run').hidden,'document-local-filename-and-reviewed-excerpt');
+  $('studio-document-close').click();
+  assert($('studio-document-workflow').hidden&&!$('studio-document-files').files.length&&!$('studio-document-results').textContent,'document-discard-clears-files-and-results');
+  window.fetch=oldFetch;
+
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,real_model_tested:false});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
 });
