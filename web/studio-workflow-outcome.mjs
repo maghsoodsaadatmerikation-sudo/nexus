@@ -74,3 +74,41 @@ export function reviewOutcomeRevision(before,after,criteria,{enabled=false,isola
   lost_count:lost.length,gained_count:gained.length,unresolved_count:unresolved.length,
   review_actions:next.review_actions,completion_verified:false,execution_authorized:false};
 }
+
+// Conservative, ephemeral experience candidates; correction codes are caller-declared
+// nonsensitive labels, not instructions. Repeated associations are not causal evidence.
+export function reviewCorrectionExperience(scope,criteria,attempts,{enabled=false,isolated=false}={}){
+ if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
+ const boundary={automatic_learning:false,completion_verified:false,execution_authorized:false};
+ if(isolated||!enabled)return {status:isolated?'isolated':'off',candidates:[],...boundary};
+ const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
+ if(!scope||!id(scope.project_id)||!id(scope.workflow_id)||!Array.isArray(attempts)||attempts.length<1||attempts.length>12)throw Error('invalid-experience-input');
+ const groups=new Map(),runs=new Set(),receipts=new Set();
+ for(const attempt of attempts){
+  if(!attempt||!id(attempt.correction_code))throw Error('invalid-correction-code');
+  const {before,after}=attempt;
+  for(const r of [before,after]){
+   if(r?.scope?.project_id!==scope.project_id||r.scope.workflow_id!==scope.workflow_id)throw Error('experience-scope-mismatch');
+   if(runs.has(r.scope.run_id))throw Error('reused-experience-run');
+   runs.add(r.scope.run_id);
+  }
+  const result=reviewOutcomeRevision(before,after,criteria,{enabled:true});
+  for(const r of [before,after])for(const o of r.observations){
+   if(receipts.has(o.evidence_id))throw Error('reused-experience-evidence');
+   receipts.add(o.evidence_id);
+  }
+  if(!groups.has(attempt.correction_code))groups.set(attempt.correction_code,{total:0,non_supporting:0,regressions:0,counts:new Map()});
+  const g=groups.get(attempt.correction_code);g.total++;
+  if(result.lost_count)g.regressions++;
+  const gains=result.changes.filter(c=>c.before==='reported_failure'&&c.after==='reported_pass');
+  if(result.assessment!=='all_criteria_reported_pass'||!gains.length){g.non_supporting++;continue}
+  for(const c of gains)g.counts.set(c.criterion_id,(g.counts.get(c.criterion_id)||0)+1);
+ }
+ const candidates=[],summaries=[];
+ for(const [code,g] of groups){
+  summaries.push({correction_code:code,attempt_count:g.total,non_supporting_count:g.non_supporting,regression_count:g.regressions});
+  if(g.total<2||g.non_supporting||g.regressions)continue;
+  for(const [criterion,count] of g.counts)if(count===g.total)candidates.push({correction_code:code,criterion_id:criterion,supporting_pair_count:count,review_required:true});
+ }
+ return {status:'review_only',basis:'repeated_supplied_failure_to_pass_associations_not_causal_evidence',candidates,summaries,...boundary};
+}
