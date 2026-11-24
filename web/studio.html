@@ -2538,6 +2538,16 @@ function mutate(fn,{undoable=false,afterCommit}={}){
 }
 function projectIn(v){return v.projects.find(x=>x.id===projectId)}
 function option(value,label){const o=el('option',label);o.value=value;return o}
+function stageMemoryNote(note){
+ if(busy||!p()||chat()?.temporary||chat()?.isolated||chat()?.archived||profileDirty||
+    branchBase!==undefined||attachmentLoading||chatAttachments.length||$('attach-document').checked||
+    window.NexusStudioVision?.hasTransientWork?.()===true||
+    typeof note!=='string'||!note.trim()||note.length>500||/[\r\n]/.test(note)||
+    p().memories.length>=30||p().memories.some(m=>/[\r\n]/.test(m))||
+    $('memories').value!==p().memories.join('\n')||$('instructions').value!==p().instructions)return false;
+ $('memories').value=[...p().memories,note.trim()].join('\n');
+ profileDirty=true;$('message').value='';stop();return true;
+}
 function fillProfile(){$('instructions').value=p()?.instructions||'';$('memories').value=p()?.memories.join('\n')||''}
 function fillDoc(){$('editor').value=doc()?.versions.at(-1)?.text||'';renderVersions()}
 function renderVersions(){const d=doc();$('versions').replaceChildren(...(d?.versions||[]).map((v,i)=>option(v.id,(i+1)+' · '+v.at)));$('versions').value=d?.versions.at(-1)?.id||'';$('version-diff').textContent=''}
@@ -3198,7 +3208,7 @@ function selectModelSlot(slot){
  $('model-status').textContent=t('configured')+': '+choice.model+' · '+choice.provider_host;
  controls();return true;
 }
-window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,openConversation,selection:()=>({projectId,threadId,head:chat()?.head||null,revision,branchBase}),appendVisionResult,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),attachmentLoading,archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),modelAvailability,availableModelOptions,selectModelSlot,revokeModelReview:()=>stop(),resetModel:()=>{stop();modelChoices=[];selectedModelSlot='primary';modelInfo=null;modelReadiness=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
+window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,openConversation,selection:()=>({projectId,threadId,head:chat()?.head||null,revision,branchBase}),appendVisionResult,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),attachmentLoading,archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),modelAvailability,availableModelOptions,stageMemoryNote,selectModelSlot,revokeModelReview:()=>stop(),resetModel:()=>{stop();modelChoices=[];selectedModelSlot='primary';modelInfo=null;modelReadiness=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
 for(const id of ['gateway','gateway-token'])$(id).addEventListener('input',()=>{modelReadiness=null});
@@ -4261,6 +4271,10 @@ function offerTool(message,result){
 }
 
 let running=false,temporaryModel=false,lastModelChoices='';
+function memoryCommand(value){
+ const match=/^(?:\/remember(?:\s+|$)|به خاطر بسپار\s*[:：]\s*)/i.exec(value.trim());
+ return match?value.trim().slice(match[0].length).trim():null;
+}
 function refresh(){
  const state=window.NexusStudioUI.uiStatus();
  if(!state)return;
@@ -4277,7 +4291,7 @@ function refresh(){
  const privateChat=/^\/temporary$/i.test($('message').value.trim());
  const tool=suggestion($('message').value);
  const planning=isWorkflowRequest($('message').value);
- send.textContent=planning?words('Review workflow','بازبینی گردش‌کار'):privateChat?words('Start temporary chat','شروع گفتگوی موقت'):tool?words('Review '+tool.route[2],'بازبینی '+tool.route[3]):model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
+ send.textContent=memoryCommand($('message').value)!==null?words('Review memory note','بازبینی یادداشت حافظه'):planning?words('Review workflow','بازبینی گردش‌کار'):privateChat?words('Start temporary chat','شروع گفتگوی موقت'):tool?words('Review '+tool.route[2],'بازبینی '+tool.route[3]):model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
  send.disabled=!ready||!$('message').value.trim();
  send.setAttribute('aria-label',send.textContent);
  select.disabled=state.busy;
@@ -4348,6 +4362,15 @@ function run({routeTools=true}={}){
  if(running||!state||state.busy||state.attachmentLoading||(state.threadReady&&state.archived)||
     !$('message').value.trim())return;
  const message=$('message').value;
+ const note=memoryCommand(message);
+ if(note!==null){
+  clearOffer();closeDirectory();
+  if(window.NexusStudioUI.stageMemoryNote?.(note)){
+   window.NexusStudioFocus?.openPanel('profile-card');
+   $('status').textContent=words('Memory draft only. Review and Apply preferences; save separately.','فقط پیش‌نویس حافظه است. بازبینی و اعمال ترجیحات؛ ذخیره جداگانه.');
+  }else $('status').textContent=words('Memory draft unavailable. Select a regular project, finish existing drafts, and use one line (1–500 characters).','پیش‌نویس حافظه ممکن نیست. پروژه عادی را انتخاب کن، پیش‌نویس‌های قبلی را تکمیل کن و یک خط (۱ تا ۵۰۰ نویسه) بنویس.');
+  refresh();return;
+ }
  if(isWorkflowRequest(message)){reviewWorkflow(message);return}
  if(/^\/temporary$/i.test(message.trim())){
   if(window.NexusStudioUI.startConversation(true,{isolated:true}))$('message').focus();

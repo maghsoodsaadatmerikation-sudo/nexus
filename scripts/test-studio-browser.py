@@ -151,6 +151,19 @@ window.addEventListener('load',async()=>{
   $('archived').checked=true;$('archived').dispatchEvent(new Event('change'));assert($('history').children.length===1,'include-archived-search');$('archive-thread').click();
   fill('instructions','CUSTOM PREFERENCE');fill('memories','REVIEWED SECRET MEMORY');$('apply-profile').click();
   assert(current().memories[0]==='REVIEWED SECRET MEMORY','explicit-project-memory');
+  const memoryNetwork=network;
+  fill('message','/remember Synthetic note');
+  assert(compose.textContent==='Review memory note','memory-command-visible');
+  compose.click();
+  assert(current().memories.length===1&&$('memories').value.endsWith('Synthetic note')&&
+   !$('message').value&&NexusStudioUI.uiStatus().unsavedForms&&network===memoryNetwork,
+   'memory-command-stages-only-no-commit-or-network');
+  fill('message','/remember Another note');compose.click();
+  assert($('message').value==='/remember Another note'&&!$('memories').value.includes('Another note'),
+   'memory-command-does-not-overwrite-existing-draft');
+  fill('message','');$('apply-profile').click();
+  assert(current().memories[1]==='Synthetic note'&&network===memoryNetwork,'memory-apply-remains-explicit');
+  fill('memories','REVIEWED SECRET MEMORY');$('apply-profile').click();
   const transfer=new DataTransfer();transfer.items.add(new File(['The orchard has green trees.\nA source is not a verified fact.'],'notes.txt',{type:'text/plain'}));$('source-file').files=transfer.files;$('source-file').dispatchEvent(new Event('change'));
   await wait(()=>current().sources.length===1);fill('source-query','orchard');$('search-sources').click();assert($('source-results').textContent.includes('notes.txt:1'),'local-source-name-and-line');
   fill('document-title','PRIVATE DOC');$('new-document').click();fill('editor','version one');$('save-version').click();fill('editor','version two');$('save-version').click();assert(current().documents[0].versions.length===2,'append-only-document-versions');
