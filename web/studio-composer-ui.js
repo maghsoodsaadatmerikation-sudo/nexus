@@ -92,6 +92,194 @@ directoryToggle.onclick=()=>{
  else closeDirectory();
 };
 directoryClose.onclick=()=>{closeDirectory();directoryToggle.focus()};
+
+/* Explicit adaptive planning from chat; never dispatch a workflow operation. */
+const adaptive=document.createElement('section');adaptive.id='studio-adaptive';adaptive.hidden=true;adaptive.className='studio-compose';
+const adaptiveButton=document.createElement('button');adaptiveButton.id='studio-adaptive-open';adaptiveButton.type='button';adaptiveButton.className='secondary';
+adaptiveButton.dataset.en='Plan work';adaptiveButton.dataset.fa='برنامه‌ریزی کار';adaptiveButton.setAttribute('aria-controls',adaptive.id);
+suggestions.append(adaptiveButton);directory.after(adaptive);
+const adaptiveLabels=[];
+function adaptiveLabel(element,en,fa){adaptiveLabels.push(()=>{element.textContent=words(en,fa)});return element}
+function adaptiveSelect(id,values,en,fa){
+ const label=document.createElement('label'),title=document.createElement('span'),field=document.createElement('select');
+ field.id=id;label.htmlFor=id;adaptiveLabel(title,en,fa);
+ for(const [value,a,b] of values){const opt=document.createElement('option');opt.value=value;adaptiveLabel(opt,a,b);field.append(opt)}
+ label.append(title,field);adaptive.append(label);return field;
+}
+const adaptiveTitle=adaptiveLabel(document.createElement('h3'),'Reviewed work plan','برنامهٔ کار قابل بازبینی');
+const adaptiveNotice=adaptiveLabel(document.createElement('p'),
+ 'Planning sends only your entered goal and settings to the configured Studio gateway, not files or conversation history. No operation or model call runs. Steps are review reminders, not proof of execution.',
+ 'برنامه‌ریزی فقط هدف واردشده و تنظیمات را به درگاه نکسوس می‌فرستد، نه فایل‌ها یا سابقهٔ گفتگو. هیچ عملیات یا فراخوانی مدل انجام نمی‌شود. گام‌ها یادآور بازبینی‌اند، نه مدرک اجرا.');
+adaptiveNotice.className='help';adaptive.append(adaptiveTitle,adaptiveNotice);
+const adaptiveGoal=document.createElement('textarea');adaptiveGoal.id='studio-adaptive-goal';adaptiveGoal.maxLength=1000;adaptiveGoal.dir='auto';
+const goalLabel=document.createElement('label');goalLabel.htmlFor=adaptiveGoal.id;
+goalLabel.append(adaptiveLabel(document.createElement('span'),'Goal (do not include private data)','هدف (اطلاعات خصوصی وارد نکنید)'),adaptiveGoal);adaptive.append(goalLabel);
+const adaptiveTask=adaptiveSelect('studio-adaptive-task',[
+ ['document_answer','Answer from documents','پاسخ بر اساس اسناد'],['document_privacy','DOCX privacy review','حریم خصوصی Word'],
+ ['manuscript_review','Manuscript review','بازبینی مقاله'],['research_synthesis','Research synthesis','ترکیب پژوهش'],
+ ['paired_statistics','Paired statistics','آمار زوجی'],['general_chat','General chat','گفتگوی عمومی']
+],'Task','نوع کار');
+const adaptivePrivacy=adaptiveSelect('studio-adaptive-privacy',[
+ ['studio_only','Studio gateway only','فقط درگاه نکسوس'],['device_only','Device only — no network','فقط دستگاه — بدون شبکه'],
+ ['provider_allowed','Provider steps may be proposed','پیشنهاد مراحل مدل خارجی مجاز باشد']
+],'Privacy','حریم خصوصی');
+const adaptiveQuality=adaptiveSelect('studio-adaptive-quality',[
+ ['extractive','Exact excerpts','قطعات دقیق متن'],['draft','Model draft','پیش‌نویس مدل'],
+ ['critique','Draft and critique','پیش‌نویس و نقد'],['comparative','Compare two critiques','مقایسهٔ دو نقد']
+],'Depth','عمق پردازش');
+const adaptiveCount=adaptiveSelect('studio-adaptive-count',[['1','1','۱'],['2','2','۲'],['3','3','۳']],'Document count','تعداد اسناد');
+const adaptiveSlot=adaptiveSelect('studio-adaptive-slot',[
+ ['primary','Primary','اصلی'],['secondary','Secondary','دوم'],['tertiary','Tertiary','سوم']
+],'Preferred model slot','مسیر مدل ترجیحی');
+const adaptiveActions=document.createElement('div');adaptiveActions.className='row';
+const adaptiveReview=adaptiveLabel(document.createElement('button'),'Review plan on gateway','بازبینی برنامه در درگاه');
+adaptiveReview.id='studio-adaptive-review';adaptiveReview.type='button';
+const adaptiveClose=adaptiveLabel(document.createElement('button'),'Discard plan','کنارگذاشتن برنامه');
+adaptiveClose.id='studio-adaptive-close';adaptiveClose.type='button';adaptiveClose.className='secondary';
+adaptiveActions.append(adaptiveReview,adaptiveClose);
+const adaptiveStatus=document.createElement('p');adaptiveStatus.id='studio-adaptive-status';adaptiveStatus.setAttribute('role','status');adaptiveStatus.className='help';
+const adaptiveList=document.createElement('div');adaptiveList.id='studio-adaptive-steps';
+adaptive.append(adaptiveActions,adaptiveStatus,adaptiveList);
+let adaptiveState=null,adaptiveAbort=null,adaptiveEpoch=0,adaptiveScope=null;
+const adaptiveFields=[adaptiveGoal,adaptiveTask,adaptivePrivacy,adaptiveQuality,adaptiveCount,adaptiveSlot];
+function adaptiveReset(close=false){
+ adaptiveEpoch++;adaptiveAbort?.abort();adaptiveAbort=null;adaptiveState=null;
+ adaptiveList.replaceChildren();adaptiveStatus.textContent='';
+ if(close){adaptive.hidden=true;adaptiveGoal.value='';adaptiveScope=null;adaptiveButton.setAttribute('aria-expanded','false')}
+ adaptiveRefresh();
+}
+function adaptiveRefresh(){
+ adaptiveLabels.forEach(fn=>fn());
+ const documentTask=adaptiveTask.value==='document_answer'||adaptiveTask.value==='document_privacy';
+ adaptiveCount.parentElement.hidden=!documentTask;
+ adaptiveCount.disabled=adaptiveTask.value==='document_privacy'||Boolean(adaptiveAbort);
+ if(adaptiveTask.value==='document_privacy')adaptiveCount.value='1';
+ adaptiveQuality.parentElement.hidden=adaptiveTask.value!=='document_answer';
+ if(adaptiveTask.value!=='document_answer')adaptiveQuality.value='extractive';
+ adaptiveSlot.parentElement.hidden=adaptivePrivacy.value!=='provider_allowed';
+ adaptiveReview.disabled=Boolean(adaptiveAbort)||!adaptiveGoal.value.trim();
+}
+function adaptiveInput(){
+ return {task:adaptiveTask.value,goal:adaptiveGoal.value.trim(),privacy:adaptivePrivacy.value,
+  quality:adaptiveTask.value==='document_answer'?adaptiveQuality.value:'extractive',
+  preferred_slot:adaptiveSlot.value,
+  document_count:['document_answer','document_privacy'].includes(adaptiveTask.value)?Number(adaptiveCount.value):0};
+}
+function adaptiveOrigin(){
+ const raw=$('gateway').value.trim(),u=new URL(raw||location.origin);
+ if((u.protocol!=='https:'&&!(u.protocol==='http:'&&['127.0.0.1','[::1]'].includes(u.hostname)))||
+    u.username||u.password||u.search||u.hash||!['','/'].includes(u.pathname))throw Error('gateway');
+ return u.origin;
+}
+function adaptivePrivate(){
+ const scope=window.NexusStudioUI.selection?.()||{};
+ if(!scope.threadId)return false;
+ const project=window.NexusStudioUI.snapshot().projects.find(p=>p.id===scope.projectId);
+ return Boolean(project?.threads.find(t=>t.id===scope.threadId)?.isolated);
+}
+async function adaptiveRequest(path,body,origin,token){
+ const epoch=++adaptiveEpoch,controller=new AbortController();adaptiveAbort=controller;adaptiveRefresh();
+ const timeout=setTimeout(()=>controller.abort(),15000);
+ try{
+  const response=await fetch(origin+path,{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',
+   redirect:'error',referrerPolicy:'no-referrer',headers:{'content-type':'application/json','authorization':'Bearer '+token},
+   body:JSON.stringify(body),signal:controller.signal});
+  if(!response.ok)throw Error('review-failed');
+  const raw=await response.text();if(raw.length>64000)throw Error('oversize');
+  const result=JSON.parse(raw);
+  if(epoch!==adaptiveEpoch||adaptive.hidden||adaptiveScope!==workflowScope()||adaptivePrivate())return null;
+  if(result.execution_authorized!==false||result.automatic_dispatch!==false)throw Error('invalid-authority');
+  return result;
+ }catch{
+  if(epoch===adaptiveEpoch)adaptiveStatus.textContent=words('Review unavailable or changed. Review the plan again.','بازبینی در دسترس نیست یا تغییر کرده است؛ برنامه را دوباره بازبینی کنید.');
+  return null;
+ }finally{
+  clearTimeout(timeout);if(epoch===adaptiveEpoch){adaptiveAbort=null;adaptiveRefresh()}
+ }
+}
+function adaptiveRender(){
+ adaptiveList.replaceChildren();if(!adaptiveState)return;
+ const {plan,acknowledged}=adaptiveState;
+ const list=document.createElement('ol');
+ for(const step of plan.workflow.plan.steps){
+  const li=document.createElement('li'),handoff=plan.handoffs.find(h=>h.step_id===step.id);
+  const detail=document.createElement('span');
+  detail.textContent=step.description+' · '+(handoff.model_slot||handoff.boundary);
+  li.append(detail);
+  if(acknowledged.includes(step.id))li.append(document.createTextNode(' · '+words('Acknowledged, not verified','بازبینی اعلام شده، نه اجرای تأییدشده')));
+  else if(step.depends_on.every(id=>acknowledged.includes(id))){
+   const button=document.createElement('button');button.type='button';button.className='secondary';
+   button.textContent=words('Mark reviewed','علامت بازبینی');
+   button.onclick=()=>adaptiveAdvance(step.id);li.append(button);
+  }
+  list.append(li);
+ }
+ adaptiveList.append(list);
+ if(plan.blockers.length){
+  const p=document.createElement('p');p.textContent=words('Requested route blocked: ','مسیر درخواستی مسدود است: ')+plan.blockers.join(', ');adaptiveList.append(p);
+ }
+ if(acknowledged.length===plan.workflow.plan.steps.length){
+  const p=document.createElement('p');p.textContent=words('All reminders acknowledged; task execution is not verified.','همهٔ یادآورها بازبینی شدند؛ اجرای کار تأیید نشده است.');adaptiveList.append(p);
+ }
+}
+function validAdaptivePlan(out,input){
+ const steps=out?.workflow?.plan?.steps,hs=out?.handoffs;
+ if(!/^[a-f0-9]{64}$/.test(out?.route_sha256)||JSON.stringify(out.request)!==JSON.stringify(input)||
+    !Array.isArray(steps)||!steps.length||steps.length>12||!Array.isArray(hs)||hs.length!==steps.length||
+    !Array.isArray(out.blockers)||out.blockers.some(b=>typeof b!=='string')||
+    new Set(steps.map(s=>s.id)).size!==steps.length)return false;
+ return steps.every((s,i)=>typeof s.id==='string'&&typeof s.description==='string'&&Array.isArray(s.depends_on)&&
+  s.depends_on.every(id=>steps.slice(0,i).some(previous=>previous.id===id))&&
+  hs[i]?.step_id===s.id&&hs[i].automatic_dispatch===false&&['studio','provider','human'].includes(hs[i].boundary)&&
+  (input.privacy==='provider_allowed'||hs[i].boundary!=='provider'));
+}
+adaptiveButton.onclick=()=>{
+ if(!adaptive.hidden){adaptiveReset(true);return}
+ if(adaptivePrivate())return;
+ adaptive.hidden=false;adaptiveScope=workflowScope();adaptiveButton.setAttribute('aria-expanded','true');
+ adaptiveGoal.value='';adaptiveRefresh();adaptiveGoal.focus();
+};
+adaptiveClose.onclick=()=>adaptiveReset(true);
+adaptiveFields.forEach(field=>field.addEventListener('input',()=>adaptiveReset()));
+for(const id of ['gateway','gateway-token'])$(id).addEventListener('input',()=>adaptiveReset());
+adaptiveReview.onclick=async()=>{
+ if(adaptiveAbort||adaptivePrivate()||adaptiveScope!==workflowScope())return;
+ const input=adaptiveInput();adaptiveReset();
+ if(!input.goal)return;
+ if(input.privacy==='device_only'){
+  adaptiveStatus.textContent=words('Device-only selected. No data sent; use local tools.','فقط دستگاه انتخاب شد. داده‌ای ارسال نشد؛ از ابزارهای محلی استفاده کنید.');return;
+ }
+ let origin;try{origin=adaptiveOrigin()}catch{adaptiveStatus.textContent=words('Configure a valid gateway.','درگاه معتبر تنظیم کنید.');return}
+ const token=$('gateway-token').value.trim();
+ if(token.length<32){adaptiveStatus.textContent=words('Enter the Studio gateway access token in model settings.','توکن دسترسی درگاه را در تنظیمات مدل وارد کنید.');return}
+ if(!confirm(words('Send this goal and settings to '+origin+' for planning only?','فقط برای برنامه‌ریزی، هدف و تنظیمات به '+origin+' ارسال شود؟')))return;
+ const out=await adaptiveRequest('/studio/api/workflow/adaptive/review',input,origin,token);
+ if(!out)return;
+ if(!validAdaptivePlan(out,input)){adaptiveStatus.textContent=words('Invalid plan response.','پاسخ برنامه نامعتبر است.');return}
+ adaptiveState={plan:out,input,origin,acknowledged:[]};adaptiveStatus.textContent=words('Review reminders only. No operations have run.','فقط یادآور بازبینی؛ هیچ عملیاتی اجرا نشده است.');adaptiveRender();
+};
+async function adaptiveAdvance(id){
+ if(adaptiveAbort||!adaptiveState||adaptivePrivate()||adaptiveScope!==workflowScope())return;
+ const state=adaptiveState,step=state.plan.workflow.plan.steps.find(s=>s.id===id);
+ if(!step||state.acknowledged.includes(id)||!step.depends_on.every(d=>state.acknowledged.includes(d)))return;
+ const acknowledged=[...state.acknowledged,id];
+ const token=$('gateway-token').value.trim();if(token.length<32||adaptiveOrigin()!==state.origin){adaptiveReset();return}
+ const out=await adaptiveRequest('/studio/api/workflow/adaptive/progress',
+  {request:state.input,route_sha256:state.plan.route_sha256,acknowledged,cancelled:false},state.origin,token);
+ if(!out)return;
+ if(out.route_sha256!==state.plan.route_sha256||out.requested_task_completion_verified!==false||
+    out.progress?.evidence!=='caller_reported_only'||JSON.stringify(out.progress.acknowledged)!==JSON.stringify(acknowledged)){
+  adaptiveReset();adaptiveStatus.textContent=words('Progress response invalid; review again.','پاسخ پیشرفت نامعتبر است؛ دوباره بازبینی کنید.');return;
+ }
+ state.acknowledged=acknowledged;adaptiveRender();
+}
+document.addEventListener('nexus-studio-private-clear',()=>adaptiveReset(true));
+document.addEventListener('nexus-studio-state',()=>{
+ if(!adaptive.hidden&&(adaptiveScope!==workflowScope()||adaptivePrivate()))adaptiveReset(true);
+});
+$('language').addEventListener('change',()=>queueMicrotask(()=>{adaptiveRefresh();adaptiveRender()}));
+adaptiveRefresh();
+
 function showDirectory(){
  closeDirectory();directory.hidden=false;
  directoryToggle.setAttribute('aria-expanded','true');

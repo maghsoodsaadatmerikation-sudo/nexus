@@ -595,6 +595,45 @@ window.addEventListener('load',async()=>{
   $('lock').click();
   assert(!$('reminder-title').value&&!$('reminder-start').value,'lock-clears-reminder-form');
 
+
+  // Planning is explicitly invoked from chat and never executes a provider operation.
+  $('nexus-zen-home').click();
+  const oldFetch=window.fetch;
+  let adaptiveCalls=0;
+  window.fetch=async(url,options={})=>{
+   if(String(url).endsWith('/studio/api/workflow/adaptive/review')){
+    adaptiveCalls++;
+    const input=JSON.parse(options.body);
+    assert(input.goal==='Fictional work goal'&&input.privacy==='studio_only','adaptive-sends-only-reviewed-goal');
+    assert(!('messages'in input)&&!('files'in input),'adaptive-no-chat-or-file-context');
+    return Response.json({request:input,route_sha256:'a'.repeat(64),execution_authorized:false,automatic_dispatch:false,
+     workflow:{plan:{steps:[{id:'extract',description:'Review extraction',depends_on:[]},{id:'final_review',description:'Human review',depends_on:['extract']}]}},
+     handoffs:[{step_id:'extract',boundary:'studio',model_slot:null,automatic_dispatch:false},{step_id:'final_review',boundary:'human',model_slot:null,automatic_dispatch:false}],blockers:[]});
+   }
+   if(String(url).endsWith('/studio/api/workflow/adaptive/progress')){
+    adaptiveCalls++;const input=JSON.parse(options.body);
+    return Response.json({route_sha256:input.route_sha256,execution_authorized:false,automatic_dispatch:false,
+     requested_task_completion_verified:false,progress:{evidence:'caller_reported_only',acknowledged:input.acknowledged}});
+   }
+   return oldFetch(url,options);
+  };
+  fill('gateway-token','test-adaptive-access-token-01234567890123456789');
+  $('studio-adaptive-open').click();
+  fill('studio-adaptive-goal','Fictional work goal');
+  fill('studio-adaptive-privacy','device_only');
+  $('studio-adaptive-review').click();
+  assert(adaptiveCalls===0,'adaptive-device-only-no-network');
+  fill('studio-adaptive-privacy','studio_only');
+  $('studio-adaptive-review').click();
+  await wait(()=>$('studio-adaptive-steps').querySelector('button'));
+  assert(adaptiveCalls===1,'adaptive-explicit-plan-review');
+  $('studio-adaptive-steps').querySelector('button').click();
+  await wait(()=>$('studio-adaptive-steps').textContent.includes('Acknowledged, not verified'));
+  assert(adaptiveCalls===2,'adaptive-acknowledgment-not-execution');
+  $('studio-adaptive-close').click();
+  assert($('studio-adaptive').hidden&&!$('studio-adaptive-goal').value,'adaptive-discard-clears-goal');
+  window.fetch=oldFetch;
+
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,real_model_tested:false});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
 });
