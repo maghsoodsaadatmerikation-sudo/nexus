@@ -112,3 +112,56 @@ export function reviewCorrectionExperience(scope,criteria,attempts,{enabled=fals
  }
  return {status:'review_only',basis:'repeated_supplied_failure_to_pass_associations_not_causal_evidence',candidates,summaries,...boundary};
 }
+
+// A serializable snapshot proposal, not a storage engine. Host owns authenticated
+// human consent, monotonic revision/CAS, encryption, deletion and invalidation.
+// Do not persist tickets, raw observations or untrusted instructions.
+export function createExperienceEditReview(){
+ let pending=null;
+ const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
+ const key=(c,k)=>c+'|'+k;
+ function read(snapshot){
+  if(!snapshot||!id(snapshot.project_id)||!id(snapshot.workflow_id)||!Number.isSafeInteger(snapshot.revision)||snapshot.revision<0||snapshot.revision>=Number.MAX_SAFE_INTEGER||!Array.isArray(snapshot.entries)||snapshot.entries.length>30)throw Error('invalid-experience-snapshot');
+  const seen=new Set(),entries=snapshot.entries.map(e=>{
+   if(!e||!id(e.correction_code)||!id(e.criterion_id)||!['active','revoked'].includes(e.status)||!Number.isInteger(e.supporting_pair_count)||e.supporting_pair_count<2||e.supporting_pair_count>12)throw Error('invalid-experience-entry');
+   const k=key(e.correction_code,e.criterion_id);
+   if(seen.has(k))throw Error('duplicate-experience-entry');seen.add(k);
+   return {correction_code:e.correction_code,criterion_id:e.criterion_id,status:e.status,supporting_pair_count:e.supporting_pair_count};
+  });
+  return {project_id:snapshot.project_id,workflow_id:snapshot.workflow_id,revision:snapshot.revision,entries};
+ }
+ function stage(snapshot,operation,{enabled=false,isolated=false,criteria,attempts}={}){
+  pending=null;
+  if(enabled!==true||isolated!==false)throw Error('experience-edit-disabled');
+  const current=read(snapshot);
+  if(!operation||!['accept','refresh','revoke','delete'].includes(operation.kind)||!id(operation.correction_code)||!id(operation.criterion_id))throw Error('invalid-experience-operation');
+  const {kind,correction_code,criterion_id}=operation;
+  const index=current.entries.findIndex(e=>e.correction_code===correction_code&&e.criterion_id===criterion_id);
+  const entries=current.entries.map(e=>({...e}));
+  if(kind==='accept'||kind==='refresh'){
+   if(kind==='accept'&&index!==-1)throw Error('experience-already-present');
+   if(kind==='refresh'&&index===-1)throw Error('experience-not-found');
+   const result=reviewCorrectionExperience(current,criteria,attempts,{enabled:true});
+   const match=result.candidates.find(c=>c.correction_code===correction_code&&c.criterion_id===criterion_id);
+   if(!match)throw Error('experience-not-supported');
+   const record={correction_code,criterion_id,status:'active',supporting_pair_count:match.supporting_pair_count};
+   if(index===-1){if(entries.length>=30)throw Error('experience-capacity');entries.push(record)}else entries[index]=record;
+  }else{
+   if(index===-1)throw Error('experience-not-found');
+   if(kind==='delete')entries.splice(index,1);
+   else {if(entries[index].status==='revoked')throw Error('experience-already-revoked');entries[index].status='revoked'}
+  }
+  const ticket=Object.freeze(Object.create(null));
+  pending={ticket,expected:JSON.stringify(current),next:{...current,revision:current.revision+1,entries}};
+  return Object.freeze({ticket,kind,correction_code,criterion_id,project_id:current.project_id,workflow_id:current.workflow_id,revision:current.revision,review_required:true});
+ }
+ function approve(ticket,snapshot,{approved=false,enabled=false,isolated=false}={}){
+  if(!pending||pending.ticket!==ticket)throw Error('inactive-experience-review');
+  const p=pending;pending=null;
+  if(approved!==true||enabled!==true||isolated!==false)throw Error('experience-edit-not-approved');
+  if(JSON.stringify(read(snapshot))!==p.expected)throw Error('stale-experience-review');
+  return p.next;
+ }
+ function invalidate(){pending=null}
+ return Object.freeze({stage,approve,invalidate});
+}
