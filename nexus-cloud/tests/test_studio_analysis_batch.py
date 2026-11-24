@@ -97,3 +97,84 @@ def test_endpoint_consent_auth_and_bounds(monkeypatch):
         bad = {**request, "consent": consent}
         assert client.post(base + "/run", json=bad, headers=headers).status_code == 422
     assert client.post(base + "/review", content=b"x" * 65537, headers=headers).status_code == 413
+
+
+def chained_payload():
+    data = payload()
+    data["plan"]["steps"].extend([
+        {"id": "combined", "tool": "analysis", "description": "Combine metrics",
+         "depends_on": ["text", "numbers"]},
+        {"id": "final", "tool": "analysis", "description": "Summarize combined count",
+         "depends_on": ["combined"]},
+    ])
+    data["operations"].extend([
+        {"step_id": "combined", "operation": "numeric.from_metrics", "references": [
+            {"step_id": "text", "metric": "characters"},
+            {"step_id": "numbers", "metric": "sum"},
+        ]},
+        {"step_id": "final", "operation": "numeric.from_metrics", "references": [
+            {"step_id": "combined", "metric": "sum"},
+        ]},
+    ])
+    return data
+
+
+def test_chained_metrics_and_provenance():
+    data = chained_payload()
+    review = preview(Batch.model_validate(data))
+    assert review["review_order"] == ["text", "numbers", "combined", "final"]
+    assert review["operations"][2]["input"]["references"] == data["operations"][2]["references"]
+    results = run(ApprovedBatch.model_validate(approved(data)))["results"]
+    assert results[2]["metrics"]["sum"] == 23
+    assert results[2]["input_provenance"] == [
+        {"step_id": "text", "metric": "characters", "value": 11},
+        {"step_id": "numbers", "metric": "sum", "value": 12},
+    ]
+    assert results[3]["metrics"]["sum"] == 23
+
+
+@pytest.mark.parametrize("step,metric", [
+    ("missing", "sum"), ("final", "sum"), ("text", "sum"),
+    ("combined", "sum"), ("numbers", "mean"),
+])
+def test_reject_incompatible_or_non_dependency_reference(step, metric):
+    data = chained_payload()
+    data["operations"][2]["references"][0] = {"step_id": step, "metric": metric}
+    with pytest.raises(ValueError):
+        preview(Batch.model_validate(data))
+
+
+def test_transitive_reference_is_not_a_direct_dependency():
+    data = chained_payload()
+    data["operations"][3]["references"][0] = {"step_id": "text", "metric": "characters"}
+    with pytest.raises(ValueError):
+        preview(Batch.model_validate(data))
+
+
+def test_reference_change_invalidates_review():
+    data = approved(chained_payload())
+    data["batch"]["operations"][2]["references"][0]["metric"] = "lines"
+    with pytest.raises(ValueError):
+        run(ApprovedBatch.model_validate(data))
+
+
+def test_derived_value_bound_fails_closed():
+    data = chained_payload()
+    data["operations"][0]["values"] = [10**12, 10**12]
+    with pytest.raises(ValueError, match="Referenced metric exceeds"):
+        run(ApprovedBatch.model_validate(approved(data)))
+
+
+def test_chained_api_rejects_oversized_derived_value(monkeypatch):
+    token = "test-token-" + "x" * 40
+    monkeypatch.setenv("NEXUS_STUDIO_TOKEN", token)
+    app = FastAPI()
+    register(app)
+    client = TestClient(app)
+    headers = {"Authorization": "Bearer " + token}
+    data = chained_payload()
+    data["operations"][0]["values"] = [10**12, 10**12]
+    response = client.post("/studio/api/analysis-batch/run", json=approved(data), headers=headers)
+    assert response.status_code == 422
+    assert response.headers["cache-control"] == "no-store"
+    assert "results" not in response.json()

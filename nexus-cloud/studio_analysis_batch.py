@@ -32,7 +32,47 @@ class NumericSummary(BaseModel):
     values: list[BoundedInteger] = Field(min_length=1, max_length=1000)
 
 
-Operation = Annotated[TextMetrics | NumericSummary, Field(discriminator="operation")]
+class MetricReference(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    step_id: StepId
+    metric: Literal["characters", "utf8_bytes", "whitespace_tokens", "lines",
+                    "count", "sum", "min", "max"]
+
+
+class NumericFromMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    step_id: StepId
+    operation: Literal["numeric.from_metrics"]
+    references: list[MetricReference] = Field(min_length=1, max_length=32)
+
+
+Operation = Annotated[
+    TextMetrics | NumericSummary | NumericFromMetrics, Field(discriminator="operation")
+]
+
+INTEGER_METRICS = {
+    "text.metrics": frozenset({"characters", "utf8_bytes", "whitespace_tokens", "lines"}),
+    "numeric.summary": frozenset({"count", "sum", "min", "max"}),
+    "numeric.from_metrics": frozenset({"count", "sum", "min", "max"}),
+}
+
+
+def operation_input(op: Operation) -> dict:
+    if isinstance(op, TextMetrics):
+        return {"text": op.text}
+    if isinstance(op, NumericSummary):
+        return {"values": op.values}
+    return {"references": [ref.model_dump() for ref in op.references]}
+
+
+def summarize(values: list[int]) -> dict:
+    values = sorted(values)
+    count = len(values)
+    middle = count // 2
+    median = (values[middle] if count % 2
+              else (values[middle - 1] + values[middle]) / 2)
+    return {"count": count, "sum": sum(values), "min": values[0],
+            "max": values[-1], "mean": sum(values) / count, "median": median}
 
 
 class Batch(BaseModel):
@@ -55,21 +95,25 @@ def preview(batch: Batch) -> dict:
     if (len(set(supplied)) != len(supplied) or set(supplied) != expected
             or any(step.tool != "analysis" for step in batch.plan.steps)):
         raise ValueError("Only fully specified analysis plans are supported")
+    ops = {op.step_id: op for op in batch.operations}
+    dependencies = {step.id: set(step.depends_on) for step in batch.plan.steps}
     for op in batch.operations:
+        if isinstance(op, NumericFromMetrics):
+            for ref in op.references:
+                if (ref.step_id not in dependencies[op.step_id]
+                        or ref.metric not in INTEGER_METRICS[ops[ref.step_id].operation]):
+                    raise ValueError("Metric reference must name a compatible direct dependency")
         if isinstance(op, TextMetrics) and any(0xD800 <= ord(c) <= 0xDFFF for c in op.text):
             raise ValueError("Invalid Unicode")
     canonical = json.dumps(batch.model_dump(), sort_keys=True, ensure_ascii=True,
                            separators=(",", ":")).encode("ascii")
     digest = hashlib.sha256(b"nexus-analysis-batch-v1\x00" + canonical).hexdigest()
-    ops = {op.step_id: op for op in batch.operations}
     return {
         "schema_version": 1, "review_sha256": digest,
         "plan_sha256": plan["plan_sha256"], "review_order": plan["review_order"],
         "operations": [
             {"step_id": step_id, "operation": ops[step_id].operation,
-             "input": ({"text": ops[step_id].text}
-                       if isinstance(ops[step_id], TextMetrics)
-                       else {"values": ops[step_id].values})}
+             "input": operation_input(ops[step_id])}
             for step_id in plan["review_order"]
         ],
         "status": "review_only", "external_execution_authorized": False,
@@ -82,21 +126,29 @@ def run(approved: ApprovedBatch) -> dict:
         raise ValueError("Changed or unapproved analysis batch")
     ops = {op.step_id: op for op in approved.batch.operations}
     results = []
+    by_step = {}
     for step_id in reviewed["review_order"]:
         op = ops[step_id]
         if isinstance(op, TextMetrics):
             metrics = {"characters": len(op.text), "utf8_bytes": len(op.text.encode("utf-8")),
                        "whitespace_tokens": len(op.text.split()),
                        "lines": len(op.text.splitlines())}
+        elif isinstance(op, NumericSummary):
+            metrics = summarize(op.values)
         else:
-            values = sorted(op.values)
-            count = len(values)
-            middle = count // 2
-            median = (values[middle] if count % 2
-                      else (values[middle - 1] + values[middle]) / 2)
-            metrics = {"count": count, "sum": sum(values), "min": values[0],
-                       "max": values[-1], "mean": sum(values) / count, "median": median}
-        results.append({"step_id": step_id, "operation": op.operation, "metrics": metrics})
+            values = [by_step[ref.step_id][ref.metric] for ref in op.references]
+            if any(type(value) is not int or not -10**12 <= value <= 10**12
+                   for value in values):
+                raise ValueError("Referenced metric exceeds input bounds")
+            metrics = summarize(values)
+        by_step[step_id] = metrics
+        result = {"step_id": step_id, "operation": op.operation, "metrics": metrics}
+        if isinstance(op, NumericFromMetrics):
+            result["input_provenance"] = [
+                {"step_id": ref.step_id, "metric": ref.metric, "value": value}
+                for ref, value in zip(op.references, values)
+            ]
+        results.append(result)
     return {
         "schema_version": 1, "review_sha256": reviewed["review_sha256"],
         "status": "computed", "results": results,
