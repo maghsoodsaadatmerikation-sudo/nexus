@@ -16,6 +16,7 @@ from studio_analysis_audit import AuditRequest, audit
 from studio_analysis_batch import ApprovedBatch, run
 from studio_office_report import docx, xlsx
 from studio_paged_report import pdf, pptx
+from studio_analysis_chart import chart_svg
 from studio_connections import operator_auth
 from transport_bounds import read_bounded_body
 
@@ -26,7 +27,9 @@ MAX_EXPORT = 128 * 1024
 class ExportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     approved: ApprovedBatch
-    format: Literal["json", "csv", "html", "xlsx", "docx", "pdf", "pptx"]
+    format: Literal["json", "csv", "html", "xlsx", "docx", "pdf", "pptx", "svg"]
+    chart_metric: Literal["characters", "utf8_bytes", "whitespace_tokens", "lines",
+                          "count", "sum", "min", "max", "mean", "median"] | None = None
     export_consent: bool
 
 
@@ -49,6 +52,8 @@ COLUMNS = ("step_id", "operation", "kind", "metric", "value", "source_step", "so
 def build_export(request: ExportRequest):
     if request.export_consent is not True:
         raise ValueError("Explicit export consent required")
+    if (request.format == "svg") != (request.chart_metric is not None):
+        raise ValueError("Select a chart metric only for SVG")
     computed = run(request.approved)
     checked = audit(AuditRequest(approved=request.approved, candidate=computed))
     if checked["status"] != "consistent":
@@ -91,6 +96,9 @@ def build_export(request: ExportRequest):
         else:
             data = pptx(report["review_sha256"], rows)
             media = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    elif request.format == "svg":
+        data = chart_svg(computed, request.chart_metric)
+        media = "image/svg+xml"
     else:
         def cell(value):
             return html.escape(str(value), quote=True)

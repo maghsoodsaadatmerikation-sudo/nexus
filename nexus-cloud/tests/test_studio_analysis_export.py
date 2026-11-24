@@ -146,3 +146,64 @@ def test_pptx_package_contains_all_rows_and_no_active_content():
         combined = b"".join(archive.read(name) for name in slides)
         assert b"numeric.from_metrics" in combined
         assert b"input text.characters" in combined
+
+
+def chart_request(metric="sum"):
+    data = request_data("svg")
+    data["chart_metric"] = metric
+    return data
+
+
+def test_svg_explicit_metric_and_static_content():
+    req = exports.ExportRequest.model_validate(chart_request())
+    data, media = exports.build_export(req)
+    assert media == "image/svg+xml"
+    assert data == exports.build_export(req)[0]
+    root = ET.fromstring(data)
+    ns = {"s": "http://www.w3.org/2000/svg"}
+    assert root.find("s:title", ns).text == "sum by analysis step"
+    assert b"HYPERLINK" not in data and b"secret" not in data
+    assert b"<script" not in data and b"foreignObject" not in data
+    assert b"Review SHA-256" in data
+    assert b">numbers<" in data and b">combined<" in data
+    assert b">text<" not in data
+
+
+def test_svg_negative_and_zero_values():
+    from studio_analysis_chart import chart_svg
+    result = {"review_sha256": "a" * 64, "results": [
+        {"step_id": "negative", "metrics": {"sum": -5}},
+        {"step_id": "zero", "metrics": {"sum": 0}},
+        {"step_id": "positive", "metrics": {"sum": 5}},
+    ]}
+    root = ET.fromstring(chart_svg(result, "sum"))
+    ns = {"s": "http://www.w3.org/2000/svg"}
+    bars = root.findall("s:rect", ns)[1:]
+    assert [float(bar.attrib["width"]) for bar in bars] == [320, 0, 320]
+    assert [float(bar.attrib["x"]) for bar in bars] == [260, 580, 580]
+    result["results"] = [{"step_id": "zero", "metrics": {"sum": 0}}]
+    assert ET.fromstring(chart_svg(result, "sum")).find("s:rect", ns) is not None
+    with pytest.raises(ValueError):
+        chart_svg(result, "characters")
+
+
+def test_svg_requires_metric_and_consent_and_validates_download(monkeypatch):
+    token = "test-token-" + "x" * 40
+    monkeypatch.setenv("NEXUS_STUDIO_TOKEN", token)
+    app = FastAPI()
+    exports.register(app)
+    client = TestClient(app)
+    headers = {"Authorization": "Bearer " + token}
+    url = "/studio/api/analysis-batch/export"
+    data = chart_request()
+    assert client.post(url, json=data).status_code == 401
+    response = client.post(url, json=data, headers=headers)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/svg+xml"
+    assert response.headers["content-disposition"] == 'attachment; filename="nexus-analysis.svg"'
+    assert response.headers["x-nexus-content-sha256"] == hashlib.sha256(response.content).hexdigest()
+    for bad in (request_data("svg"), {**data, "format": "json"},
+                {**data, "chart_metric": "unknown"}, {**data, "export_consent": False}):
+        assert client.post(url, json=bad, headers=headers).status_code == 422
+    monkeypatch.setattr(exports, "audit", lambda request: {"status": "mismatch"})
+    assert client.post(url, json=data, headers=headers).status_code == 409
