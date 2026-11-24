@@ -4,16 +4,16 @@
 
 function inline(parent, text) {
  const doc = parent.ownerDocument;
- const tokens = /(<[^<>\n]*>)|\\([\\*`\[\]|])|(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|(!?)\[([^\[\]\n]{1,500})\]\(([^\s()<>]{1,2048})\)/g;
+ const tokens = /(<[^<>\n]*>)|\\([\\*`\[\]|])|(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|(~~[^~\n]+~~)|(!?)\[([^\[\]\n]{1,500})\]\(([^\s()<>]{1,2048})\)/g;
  let offset = 0;
  for (const match of text.matchAll(tokens)) {
   parent.append(text.slice(offset, match.index));
-  const [original, tag, escaped, code, bold, emphasis, image, label, destination] = match;
+  const [original, tag, escaped, code, bold, emphasis, strike, image, label, destination] = match;
   let node = null;
-  if (code || bold || emphasis) {
-   node = doc.createElement(code ? 'code' : bold ? 'strong' : 'em');
-   const value = code || bold || emphasis;
-   const delimiter = bold ? 2 : 1;
+  if (code || bold || emphasis || strike) {
+   node = doc.createElement(code ? 'code' : bold ? 'strong' : strike ? 'del' : 'em');
+   const value = code || bold || emphasis || strike;
+   const delimiter = bold || strike ? 2 : 1;
    node.textContent = value.slice(delimiter, -delimiter);
   } else if (!tag && !escaped && image === '') {
    try {
@@ -37,6 +37,7 @@ const fence = /^ {0,3}(`{3,}|~{3,})([^\n]*)$/;
 const heading = /^ {0,3}(#{1,6})\s+(.+)$/;
 const item = /^ {0,3}([-+*]|\d{1,9}[.)])\s+(.+)$/;
 const quote = /^ {0,3}> ?(.*)$/;
+const thematic = /^ {0,3}(?:(?:\*\s*){3,}|(?:-\s*){3,}|(?:_\s*){3,})$/;
 
 function cells(line) {
  if (!line?.includes('|')) return [];
@@ -50,7 +51,7 @@ function tableWidth(lines, row) {
   rule.every(cell => /^:?-{3,}:?$/.test(cell)) ? width : 0;
 }
 
-function render(container, text) {
+function render(container, text, {codeActions = false} = {}) {
  const doc = container.ownerDocument;
  const lines = text.split(/\r\n?|\n/);
  if (lines.length > 800) {
@@ -83,7 +84,27 @@ function render(container, text) {
    pre.tabIndex = 0;
    const code = doc.createElement('code');
    code.textContent = content.join('\n');
+   const language = opened[2].trim();
+   if (/^[a-z0-9_-]{1,32}$/i.test(language)) code.dataset.language = language.toLowerCase();
    pre.append(code);
+   if (codeActions) {
+    const fa = doc.documentElement.lang === 'fa';
+    const copy = doc.createElement('button');
+    copy.type = 'button';
+    copy.className = 'reply-copy-code';
+    copy.textContent = fa ? 'کپی کد' : 'Copy code';
+    copy.setAttribute('aria-label', copy.textContent);
+    copy.addEventListener('click', async () => {
+     try {
+      if (!navigator.clipboard?.writeText) throw Error('clipboard-unavailable');
+      await navigator.clipboard.writeText(code.textContent);
+      copy.textContent = fa ? 'کپی شد' : 'Copied';
+     } catch {
+      copy.textContent = fa ? 'کپی در دسترس نیست' : 'Copy unavailable';
+     }
+    });
+    pre.append(copy);
+   }
    container.append(pre);
    continue;
   }
@@ -93,6 +114,7 @@ function render(container, text) {
    row++;
    continue;
   }
+  if (thematic.test(line)) { container.append(doc.createElement('hr')); row++; continue; }
   const entry = item.exec(line);
   if (entry) {
    const ordered = /\d/.test(entry[1]);
@@ -100,7 +122,16 @@ function render(container, text) {
    if (ordered) list.start = Number.parseInt(entry[1], 10);
    for (let next = entry; next && /\d/.test(next[1]) === ordered; next = item.exec(lines[row] || '')) {
     const li = doc.createElement('li');
-    inline(li, next[2]);
+    const task = !ordered && /^\[([ xX])\] (.*)$/.exec(next[2]);
+    if (task) {
+     const state = doc.createElement('input');
+     state.type = 'checkbox';
+     state.disabled = true;
+     state.checked = task[1].toLowerCase() === 'x';
+     state.setAttribute('aria-label', state.checked ? 'Completed task' : 'Pending task');
+     li.append(state, ' ');
+     inline(li, task[2]);
+    } else inline(li, next[2]);
     list.append(li);
     row++;
    }
@@ -138,7 +169,7 @@ function render(container, text) {
   }
   const paragraph = [line];
   for (row++; lines[row]?.trim() && !fence.test(lines[row]) && !heading.test(lines[row]) &&
-    !item.test(lines[row]) && !quote.test(lines[row]) && !tableWidth(lines, row); row++) {
+    !item.test(lines[row]) && !quote.test(lines[row]) && !thematic.test(lines[row]) && !tableWidth(lines, row); row++) {
    paragraph.push(lines[row]);
   }
   append('p', paragraph.join('\n'));
@@ -154,6 +185,8 @@ const exportStyle = `
  h1 {font-size: 1.5rem;}
  ul, ol {padding-inline-start: 1.5rem;}
  blockquote {margin-inline: 0; padding-inline-start: .75rem; border-inline-start: 3px solid;}
+ hr {border: 0; border-block-start: 1px solid; opacity: .4;}
+ li input[type=checkbox] {margin-inline-end: .35rem;}
  pre, .reply-table {overflow: auto;}
  pre {direction: ltr; text-align: left; white-space: pre; border: 1px solid; border-radius: .5rem; padding: .75rem;}
  pre:focus-visible, .reply-table:focus-visible {outline: 2px solid; outline-offset: 2px;}
