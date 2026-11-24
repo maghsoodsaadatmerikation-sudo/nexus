@@ -458,6 +458,11 @@ function offerTool(message,result){
 
 let running=false,temporaryModel=false,lastModelChoices='';
 function memoryCommand(value){
+ const edit=/^(?:\/replace-memory(?:\s+|$)|اصلاح حافظه\s*[:：]\s*)/i.exec(value.trim());
+ if(edit){
+  const parts=value.trim().slice(edit[0].length).split('=>');
+  return {edit:true,remove:false,note:parts.length===2?parts[0].trim():'',replacement:parts.length===2?parts[1].trim():''};
+ }
  const remove=/^(?:\/forget(?:\s+|$)|فراموش کن\s*[:：]\s*)/i.exec(value.trim());
  const match=remove||/^(?:\/remember(?:\s+|$)|به خاطر بسپار\s*[:：]\s*)/i.exec(value.trim());
  return match?{remove:!!remove,note:value.trim().slice(match[0].length).trim()}:null;
@@ -479,7 +484,7 @@ function refresh(){
  const tool=suggestion($('message').value);
  const planning=isWorkflowRequest($('message').value);
  const memory=memoryCommand($('message').value);
- send.textContent=memory?memory.remove?words('Review memory removal','بازبینی حذف یادداشت'):words('Review memory note','بازبینی یادداشت حافظه'):planning?words('Review workflow','بازبینی گردش‌کار'):privateChat?words('Start temporary chat','شروع گفتگوی موقت'):tool?words('Review '+tool.route[2],'بازبینی '+tool.route[3]):model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
+ send.textContent=memory?memory.edit?words('Review memory correction','بازبینی اصلاح حافظه'):memory.remove?words('Review memory removal','بازبینی حذف یادداشت'):words('Review memory note','بازبینی یادداشت حافظه'):planning?words('Review workflow','بازبینی گردش‌کار'):privateChat?words('Start temporary chat','شروع گفتگوی موقت'):tool?words('Review '+tool.route[2],'بازبینی '+tool.route[3]):model?words('Review before sending','بازبینی پیش از ارسال'):words('Use local guide','استفاده از راهنمای محلی');
  send.disabled=!ready||!$('message').value.trim();
  send.setAttribute('aria-label',send.textContent);
  select.disabled=state.busy;
@@ -553,10 +558,10 @@ function run({routeTools=true}={}){
  const note=memoryCommand(message);
  if(note!==null){
   clearOffer();closeDirectory();
-  if(window.NexusStudioUI.stageMemoryNote?.(note.note,note.remove)){
+  if(window.NexusStudioUI.stageMemoryNote?.(note.note,note.remove,note.replacement??null)){
    window.NexusStudioFocus?.openPanel('profile-card');
    $('status').textContent=words('Memory draft only. Review and Apply preferences; save separately.','فقط پیش‌نویس حافظه است. بازبینی و اعمال ترجیحات؛ ذخیره جداگانه.');
-  }else $('status').textContent=note.remove?words('Removal unavailable. Use one exact, unique saved note in a regular project with no pending draft.','حذف ممکن نیست. متن دقیق یک یادداشت یکتا را در پروژه عادی و بدون پیش‌نویس وارد کن.'):words('Memory draft unavailable. Select a regular project, finish existing drafts, and use one line (1–500 characters).','پیش‌نویس حافظه ممکن نیست. پروژه عادی را انتخاب کن، پیش‌نویس‌های قبلی را تکمیل کن و یک خط (۱ تا ۵۰۰ نویسه) بنویس.');
+  }else $('status').textContent=note.edit?words('Use /replace-memory exact old note => new note. One unique match is required.','اصلاح حافظه: متن دقیق قدیمی => متن جدید. یک تطابق یکتا لازم است.'):note.remove?words('Removal unavailable. Use one exact, unique saved note in a regular project with no pending draft.','حذف ممکن نیست. متن دقیق یک یادداشت یکتا را در پروژه عادی و بدون پیش‌نویس وارد کن.'):words('Memory draft unavailable. Select a regular project, finish existing drafts, and use one line (1–500 characters).','پیش‌نویس حافظه ممکن نیست. پروژه عادی را انتخاب کن، پیش‌نویس‌های قبلی را تکمیل کن و یک خط (۱ تا ۵۰۰ نویسه) بنویس.');
   refresh();return;
  }
  if(isWorkflowRequest(message)){reviewWorkflow(message);return}

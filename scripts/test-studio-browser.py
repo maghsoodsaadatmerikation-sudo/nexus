@@ -163,6 +163,19 @@ window.addEventListener('load',async()=>{
    'memory-command-does-not-overwrite-existing-draft');
   fill('message','');$('apply-profile').click();
   assert(current().memories[1]==='Synthetic note'&&network===memoryNetwork,'memory-apply-remains-explicit');
+  fill('message','/replace-memory Synthetic note => Changed => Ambiguous');compose.click();
+  assert(current().memories[1]==='Synthetic note'&&$('message').value.includes('Ambiguous'),'memory-edit-rejects-multiple-delimiters');
+  fill('message','/replace-memory Synthetic note => REVIEWED SECRET MEMORY');compose.click();
+  assert(current().memories[1]==='Synthetic note'&&$('message').value.includes('=>'),'memory-edit-rejects-duplicate-target');
+  fill('message','/replace-memory Synthetic note => Updated note');
+  assert(compose.textContent==='Review memory correction','memory-edit-command-visible');
+  compose.click();
+  assert(current().memories[1]==='Synthetic note'&&$('memories').value.endsWith('Updated note')&&
+   !$('message').value&&NexusStudioUI.uiStatus().unsavedForms&&network===memoryNetwork,'memory-edit-draft-only');
+  $('apply-profile').click();
+  assert(current().memories.length===2&&current().memories[1]==='Updated note'&&network===memoryNetwork,'memory-edit-explicit-apply');
+  fill('message','/replace-memory Updated note => Synthetic note');compose.click();$('apply-profile').click();
+  assert(current().memories[1]==='Synthetic note','memory-edit-preserves-order');
   fill('message','/forget Synthetic');compose.click();
   assert($('message').value==='/forget Synthetic'&&current().memories.length===2,'memory-removal-rejects-partial-match');
   fill('message','/forget Synthetic note');
