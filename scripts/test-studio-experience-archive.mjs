@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import '../web/studio-core.js';
+import {createArchiveExperienceReview} from '../web/studio-experience-archive-edit.mjs';
 const S=globalThis.NexusStudio;
 function testArchive(S){
  let checks=0;
@@ -32,6 +33,58 @@ function testArchive(S){
 }
 
 const checks=testArchive(S);
+function testArchiveEdit(S){
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('archive edit fixture '+checks)};
+ const reject=(fn,msg)=>{checks++;let error;try{fn()}catch(e){error=e}if(!error||!String(error.message).includes(msg))throw Error('archive edit rejection '+checks+' '+error)};
+ const p={id:'p1',title:'Test',instructions:'',memories:[],threads:[{id:'t1',title:'Review',nodes:[],head:null}],sources:[],documents:[]};
+ const data=S.state({schema:S.SCHEMA,projects:[p]});
+ const session={enabled:true,vaultUnlocked:true,busy:false,isolated:false,projectId:'p1',threadId:'t1',revision:4};
+ const criteria=[{id:'s1',required:true,evidence_kind:'human_review'}];
+ const run=(name,result)=>{const scope={project_id:'p1',workflow_id:'w1',run_id:name,plan_sha256:'a'.repeat(64)};return {scope,observations:[{...scope,criterion_id:'s1',evidence_id:name+'-e',kind:'human_review',result}]}};
+ const attempts=[1,2].map(n=>({correction_code:'fix',before:run('before'+n,'fail'),after:run('after'+n,'pass')}));
+ const accept={kind:'accept',criterion_id:'s1',correction_code:'fix'},options={criteria,attempts};
+ const adapter=createArchiveExperienceReview(S.state);
+ const stage=(value=data,sess=session,op=accept,opts=options)=>adapter.stage(value,sess,'w1',op,opts);
+ const approval={approved:true};
+ const original=JSON.stringify(data);
+ const proposal=stage();
+ eq(proposal.storage_authorized,false);eq(proposal.review_required,true);
+ eq(JSON.stringify(data),original);
+ const result=adapter.approve(proposal.ticket,data,session,approval);
+ eq(result.status,'proposed_state');eq(result.storage_authorized,false);eq(result.execution_authorized,false);eq(result.automatic_application,false);
+ eq(result.state.projects[0].experiences,[{project_id:'p1',workflow_id:'w1',revision:1,entries:[{correction_code:'fix',criterion_id:'s1',status:'active',supporting_pair_count:2}]}]);
+ eq(JSON.stringify(data),original);
+ reject(()=>adapter.approve(proposal.ticket,data,session,approval),'inactive-archive-review');
+ const revoke=stage(result.state,session,{...accept,kind:'revoke'},{});
+ const revoked=adapter.approve(revoke.ticket,result.state,session,approval).state;
+ eq(revoked.projects[0].experiences[0].entries[0].status,'revoked');
+ eq(revoked.projects[0].experiences[0].revision,2);
+ const removal=stage(revoked,session,{...accept,kind:'delete'},{});
+ const removed=adapter.approve(removal.ticket,revoked,session,approval).state;
+ eq(removed.projects[0].experiences[0].entries,[]);eq(removed.projects[0].experiences[0].revision,3);
+ const refresh=stage(revoked,session,{...accept,kind:'refresh'},options);
+ eq(adapter.approve(refresh.ticket,revoked,session,approval).state.projects[0].experiences[0].entries[0].status,'active');
+ for(const change of [{enabled:false},{vaultUnlocked:false},{busy:true},{isolated:true}])reject(()=>stage(data,{...session,...change}),'archive-review-unavailable');
+ reject(()=>stage(data,{...session,threadId:'other'}),'archive-review-scope');
+ for(const flag of ['temporary','archived','isolated']){const altered=S.copy(data);altered.projects[0].threads[0][flag]=true;reject(()=>stage(altered),'archive-review-scope')}
+ reject(()=>stage(data,session,accept,{criteria,attempts:[attempts[0]]}),'experience-not-supported');
+ const foreign=JSON.parse(JSON.stringify(attempts));foreign[0].before.observations[0].workflow_id='foreign';
+ reject(()=>stage(data,session,accept,{criteria,attempts:foreign}),'archive-evidence-scope');
+ const denied=stage();reject(()=>adapter.approve(denied.ticket,data,session),'archive-review-not-approved');
+ reject(()=>adapter.approve(denied.ticket,data,session,approval),'inactive-archive-review');
+ const stale=stage();reject(()=>adapter.approve(stale.ticket,data,{...session,revision:5},approval),'stale-archive-review');
+ const appeared=stage();reject(()=>adapter.approve(appeared.ticket,result.state,session,approval),'stale-archive-review');
+ const cleared=stage();adapter.invalidate();reject(()=>adapter.approve(cleared.ticket,data,session,approval),'inactive-archive-review');
+ const older=stage();const newer=stage();reject(()=>adapter.approve(older.ticket,data,session,approval),'inactive-archive-review');
+ eq(adapter.approve(newer.ticket,data,session,approval).state.projects[0].experiences[0].revision,1);
+ const changed=stage(result.state,session,{...accept,kind:'revoke'},{});
+ reject(()=>adapter.approve(changed.ticket,revoked,session,approval),'stale-experience-review');
+ eq(JSON.stringify(result).includes('before1-e'),false);
+ return checks;
+}
+console.log('EXPERIENCE ARCHIVE EDIT: PASS ('+testArchiveEdit(S)+' checks)');
+
 // Use the existing real WebCrypto vault rather than a second key or store.
 class Store{raw=null;async read(){return this.raw}async commit(expected,raw,guard){if(!guard())throw Error('locked');if((this.raw?JSON.parse(this.raw).revision:null)!==expected)throw Error('conflict');this.raw=raw}}
 const store=new Store(),vault=new S.Vault(store),pass='synthetic archive experience passphrase';
