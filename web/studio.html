@@ -1449,7 +1449,7 @@ function context(p,t,{memory=false,sources=false,relatedChats=false,historyDays,
  const memoryIncluded=packed?.included.has('memory')===true;
  const memoryReview={status:t.isolated?'isolated':!memory?'off':!memoryCount?'empty':memoryIncluded?'included':'omitted_budget',
   requested_count:memoryCount,included_count:memoryIncluded?memoryCount:0};
- return {messages,memory_review:memoryReview,recalled_chats:packed?.included.has('related-chats')?recalled.map(({title,thread,turn})=>({title,thread,turn})):[],study:packed?.included.has('study')===true,omitted_messages,optional_context_truncated:packed?.omitted===true,presentation: presentation?{mode:presentation.mode,at:presentation.at,engine:presentation.engine}:null,retrieval_truncated:hits.truncated===true&&shownHits.length>0,citations:shownHits.map(({source_id,name,line,offset},i)=>({ref:'S'+(i+1),source_id,name,line,offset})),attachments_supplied:shownAttachments.map(({source_id,name,line,offset,partial,kind},i)=>({ref:'A'+(i+1),source_id,name,line,offset,partial,kind})),attachments_truncated:shownAttachments.some(e=>e.partial)};
+ return {messages,evidence_passages:t.isolated?[]:[...shownHits.map(({source_id,line,offset,text},i)=>({ref:'S'+(i+1),source_id,line,offset,text,partial:true,kind:'project_source'})),...shownAttachments.map(({source_id,line,offset,text,partial,kind},i)=>({ref:'A'+(i+1),source_id,line,offset,text,partial,kind}))],memory_review:memoryReview,recalled_chats:packed?.included.has('related-chats')?recalled.map(({title,thread,turn})=>({title,thread,turn})):[],study:packed?.included.has('study')===true,omitted_messages,optional_context_truncated:packed?.omitted===true,presentation: presentation?{mode:presentation.mode,at:presentation.at,engine:presentation.engine}:null,retrieval_truncated:hits.truncated===true&&shownHits.length>0,citations:shownHits.map(({source_id,name,line,offset},i)=>({ref:'S'+(i+1),source_id,name,line,offset})),attachments_supplied:shownAttachments.map(({source_id,name,line,offset,partial,kind},i)=>({ref:'A'+(i+1),source_id,name,line,offset,partial,kind})),attachments_truncated:shownAttachments.some(e=>e.partial)};
 }
 function inspectSecrets(messages){
  if(!Array.isArray(messages)||messages.length>64)throw Error('privacy-input');
@@ -2590,6 +2590,7 @@ function clearModelReview(){
  $('model-stream-preview').hidden=true;$('model-stream-text').textContent='';
 }
 function stop({refresh=true}={}){
+ $('messages')?.querySelector('[data-evidence-review]')?.remove();
  languageImport++;toolLifecycle('cancel');revision++;controller?.abort();controller=null;busy=false;
  clearModelReview();window.NexusSpeechPlayback?.stop();if(refresh)controls();
 }
@@ -2602,582 +2603,582 @@ const experienceImportEngine=(()=>{
  
 
 function critiqueWorkflow(plan,{enabled=false,isolated=false}={}){
- if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
- if(isolated||!enabled)return {status:isolated?'isolated':'off',execution_authorized:false};
- const id=s=>typeof s==='string'&&/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(s);
- const label=s=>typeof s==='string'&&s.length<=500&&s.trim().length>0;
- if(!plan||!label(plan.goal)||!Array.isArray(plan.steps)||plan.steps.length<1||plan.steps.length>12)throw Error('invalid-plan');
- const allowed=['local_read','local_compute','network_read','external_write','destructive','spending','human_review','unknown'];
- const graph=new Map();
- for(const step of plan.steps){
-  if(!step||!id(step.id)||graph.has(step.id)||!Array.isArray(step.needs)||step.needs.length>11||step.needs.some(x=>!id(x))||new Set(step.needs).size!==step.needs.length||!allowed.includes(step.effect))throw Error('invalid-step');
-  for(const key of ['success_criteria','recovery','target'])if(step[key]!==undefined&&!label(step[key]))throw Error('invalid-step-field');
-  graph.set(step.id,step);
- }
- for(const s of graph.values())for(const d of s.needs)if(!graph.has(d))throw Error('unknown-dependency');
- const order=[],active=new Set(),seen=new Set();
- function visit(x){if(active.has(x))throw Error('cyclic-plan');if(seen.has(x))return;active.add(x);for(const d of graph.get(x).needs)visit(d);active.delete(x);seen.add(x);order.push(x)}
- for(const x of graph.keys())visit(x);
- const findings=[];
- const add=(step,code,level)=>findings.push({step,code,level});
- for(const x of order){
-  const s=graph.get(x);
-  if(!s.success_criteria)add(x,'missing_success_criteria','review');
-  if(s.effect==='unknown')add(x,'undeclared_effect','blocking_review');
-  if(['network_read','external_write','destructive','spending'].includes(s.effect)){
-   add(x,'separate_exact_action_review_required','blocking_review');
-   if(!s.target)add(x,'missing_target','blocking_review');
-  }
-  if(['external_write','destructive','spending'].includes(s.effect)&&!s.recovery)add(x,'missing_recovery_plan','blocking_review');
-  if(s.effect==='human_review')add(x,'human_decision_required','blocking_review');
- }
- const terminal=order.filter(x=>!plan.steps.some(s=>s.needs.includes(x)));
- return {status:'review_only',basis:'declared_effects_and_plan_structure_not_verified_safety',execution_authorized:false,
-  review_order:order,terminal_steps:terminal,findings,blocking_review_count:findings.filter(f=>f.level==='blocking_review').length};
+if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
+if(isolated||!enabled)return {status:isolated?'isolated':'off',execution_authorized:false};
+const id=s=>typeof s==='string'&&/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(s);
+const label=s=>typeof s==='string'&&s.length<=500&&s.trim().length>0;
+if(!plan||!label(plan.goal)||!Array.isArray(plan.steps)||plan.steps.length<1||plan.steps.length>12)throw Error('invalid-plan');
+const allowed=['local_read','local_compute','network_read','external_write','destructive','spending','human_review','unknown'];
+const graph=new Map();
+for(const step of plan.steps){
+if(!step||!id(step.id)||graph.has(step.id)||!Array.isArray(step.needs)||step.needs.length>11||step.needs.some(x=>!id(x))||new Set(step.needs).size!==step.needs.length||!allowed.includes(step.effect))throw Error('invalid-step');
+for(const key of ['success_criteria','recovery','target'])if(step[key]!==undefined&&!label(step[key]))throw Error('invalid-step-field');
+graph.set(step.id,step);
+}
+for(const s of graph.values())for(const d of s.needs)if(!graph.has(d))throw Error('unknown-dependency');
+const order=[],active=new Set(),seen=new Set();
+function visit(x){if(active.has(x))throw Error('cyclic-plan');if(seen.has(x))return;active.add(x);for(const d of graph.get(x).needs)visit(d);active.delete(x);seen.add(x);order.push(x)}
+for(const x of graph.keys())visit(x);
+const findings=[];
+const add=(step,code,level)=>findings.push({step,code,level});
+for(const x of order){
+const s=graph.get(x);
+if(!s.success_criteria)add(x,'missing_success_criteria','review');
+if(s.effect==='unknown')add(x,'undeclared_effect','blocking_review');
+if(['network_read','external_write','destructive','spending'].includes(s.effect)){
+add(x,'separate_exact_action_review_required','blocking_review');
+if(!s.target)add(x,'missing_target','blocking_review');
+}
+if(['external_write','destructive','spending'].includes(s.effect)&&!s.recovery)add(x,'missing_recovery_plan','blocking_review');
+if(s.effect==='human_review')add(x,'human_decision_required','blocking_review');
+}
+const terminal=order.filter(x=>!plan.steps.some(s=>s.needs.includes(x)));
+return {status:'review_only',basis:'declared_effects_and_plan_structure_not_verified_safety',execution_authorized:false,
+review_order:order,terminal_steps:terminal,findings,blocking_review_count:findings.filter(f=>f.level==='blocking_review').length};
 }
 
 
 
 function reviewWorkflowRecovery(steps,observations,{enabled=false,isolated=false}={}){
- if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
- if(isolated||!enabled)return {status:isolated?'isolated':'off',execution_authorized:false};
- const validId=s=>typeof s==='string'&&/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(s);
- if(!Array.isArray(steps)||steps.length<1||steps.length>12||!Array.isArray(observations)||observations.length>12)throw Error('invalid-recovery-input');
- const graph=new Map();
- for(const s of steps){
-  if(!s||!validId(s.id)||graph.has(s.id)||!Array.isArray(s.needs)||s.needs.length>11||s.needs.some(d=>!validId(d))||new Set(s.needs).size!==s.needs.length)throw Error('invalid-step');
-  graph.set(s.id,[...s.needs]);
- }
- for(const deps of graph.values())for(const d of deps)if(!graph.has(d))throw Error('unknown-dependency');
- const order=[],visited=new Set(),visiting=new Set();
- function visit(id){
-  if(visiting.has(id))throw Error('cyclic-dependency');
-  if(visited.has(id))return;
-  visiting.add(id);for(const d of graph.get(id))visit(d);
-  visiting.delete(id);visited.add(id);order.push(id);
- }
- for(const id of graph.keys())visit(id);
- const states=new Map();
- for(const o of observations){
-  if(!o||!graph.has(o.id)||states.has(o.id)||!['queued','running','succeeded','failed','cancelled','blocked'].includes(o.status))throw Error('invalid-observation');
-  states.set(o.id,o.status);
- }
+if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
+if(isolated||!enabled)return {status:isolated?'isolated':'off',execution_authorized:false};
+const validId=s=>typeof s==='string'&&/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(s);
+if(!Array.isArray(steps)||steps.length<1||steps.length>12||!Array.isArray(observations)||observations.length>12)throw Error('invalid-recovery-input');
+const graph=new Map();
+for(const s of steps){
+if(!s||!validId(s.id)||graph.has(s.id)||!Array.isArray(s.needs)||s.needs.length>11||s.needs.some(d=>!validId(d))||new Set(s.needs).size!==s.needs.length)throw Error('invalid-step');
+graph.set(s.id,[...s.needs]);
+}
+for(const deps of graph.values())for(const d of deps)if(!graph.has(d))throw Error('unknown-dependency');
+const order=[],visited=new Set(),visiting=new Set();
+function visit(id){
+if(visiting.has(id))throw Error('cyclic-dependency');
+if(visited.has(id))return;
+visiting.add(id);for(const d of graph.get(id))visit(d);
+visiting.delete(id);visited.add(id);order.push(id);
+}
+for(const id of graph.keys())visit(id);
+const states=new Map();
+for(const o of observations){
+if(!o||!graph.has(o.id)||states.has(o.id)||!['queued','running','succeeded','failed','cancelled','blocked'].includes(o.status))throw Error('invalid-observation');
+states.set(o.id,o.status);
+}
 
- const state=id=>states.get(id)||'unknown';
- const items=[],effective=new Map();
- for(const id of order){
-  const observed=state(id),deps=graph.get(id),unresolved=deps.filter(d=>effective.get(d)!=='reported_success');
-  let disposition;
-  if(observed==='succeeded')disposition=unresolved.length?'inconsistent_observation':'reported_success';
-  else if(observed==='running'||observed==='unknown')disposition='reconcile_before_action';
-  else if(observed==='failed'||observed==='cancelled')disposition='review_retry';
-  else if(unresolved.length)disposition='wait_for_dependencies';
-  else if(observed==='blocked')disposition='review_blocked_state';
-  else disposition='review_next_step';
-  effective.set(id,disposition);
-  items.push({id,observed,disposition,unresolved_dependencies:unresolved});
- }
- return {status:'review_only',basis:'supplied_statuses_not_verified_execution_evidence',execution_authorized:false,items};
+const state=id=>states.get(id)||'unknown';
+const items=[],effective=new Map();
+for(const id of order){
+const observed=state(id),deps=graph.get(id),unresolved=deps.filter(d=>effective.get(d)!=='reported_success');
+let disposition;
+if(observed==='succeeded')disposition=unresolved.length?'inconsistent_observation':'reported_success';
+else if(observed==='running'||observed==='unknown')disposition='reconcile_before_action';
+else if(observed==='failed'||observed==='cancelled')disposition='review_retry';
+else if(unresolved.length)disposition='wait_for_dependencies';
+else if(observed==='blocked')disposition='review_blocked_state';
+else disposition='review_next_step';
+effective.set(id,disposition);
+items.push({id,observed,disposition,unresolved_dependencies:unresolved});
+}
+return {status:'review_only',basis:'supplied_statuses_not_verified_execution_evidence',execution_authorized:false,items};
 }
 
 
 
 
 function reviewWorkflowLessons(scope,runs,{enabled=false,isolated=false}={}){
- if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
- if(isolated||!enabled)return {status:isolated?'isolated':'off',candidates:[],automatic_learning:false};
- const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
- const hash=s=>typeof s==='string'&&/^[a-f0-9]{64}$/.test(s);
- if(!scope||!id(scope.project_id)||!id(scope.workflow_id)||!hash(scope.criteria_sha256)||!Array.isArray(runs)||runs.length>30)throw Error('invalid-learning-input');
- const seen=new Set(),groups=new Map();
- for(const run of runs){
-  if(!run||run.project_id!==scope.project_id||run.workflow_id!==scope.workflow_id||run.criteria_sha256!==scope.criteria_sha256)throw Error('learning-scope-mismatch');
-  if(!id(run.run_id)||seen.has(run.run_id)||!hash(run.plan_sha256)||!['reported_pass','reported_failure','inconclusive'].includes(run.outcome)||!Array.isArray(run.failure_codes)||run.failure_codes.length>12||run.failure_codes.some(c=>!id(c))||new Set(run.failure_codes).size!==run.failure_codes.length)throw Error('invalid-run');
-  seen.add(run.run_id);
-  if(run.outcome==='reported_pass'&&run.failure_codes.length)throw Error('inconsistent-run');
-  if(run.outcome!=='reported_failure')continue;
-  for(const code of run.failure_codes){
-   if(!groups.has(code))groups.set(code,[]);
-   groups.get(code).push(run.run_id);
-  }
- }
- const candidates=[...groups].filter(([,ids])=>ids.length>=2).map(([code,ids])=>({kind:'recurring_reported_failure',code,distinct_run_count:ids.length}));
- candidates.sort((a,b)=>b.distinct_run_count-a.distinct_run_count||(a.code<b.code?-1:a.code>b.code?1:0));
- return {status:'review_only',basis:'repeated_supplied_failure_reports_not_verified_causality',candidates,review_required:true,automatic_learning:false,execution_authorized:false};
+if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
+if(isolated||!enabled)return {status:isolated?'isolated':'off',candidates:[],automatic_learning:false};
+const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
+const hash=s=>typeof s==='string'&&/^[a-f0-9]{64}$/.test(s);
+if(!scope||!id(scope.project_id)||!id(scope.workflow_id)||!hash(scope.criteria_sha256)||!Array.isArray(runs)||runs.length>30)throw Error('invalid-learning-input');
+const seen=new Set(),groups=new Map();
+for(const run of runs){
+if(!run||run.project_id!==scope.project_id||run.workflow_id!==scope.workflow_id||run.criteria_sha256!==scope.criteria_sha256)throw Error('learning-scope-mismatch');
+if(!id(run.run_id)||seen.has(run.run_id)||!hash(run.plan_sha256)||!['reported_pass','reported_failure','inconclusive'].includes(run.outcome)||!Array.isArray(run.failure_codes)||run.failure_codes.length>12||run.failure_codes.some(c=>!id(c))||new Set(run.failure_codes).size!==run.failure_codes.length)throw Error('invalid-run');
+seen.add(run.run_id);
+if(run.outcome==='reported_pass'&&run.failure_codes.length)throw Error('inconsistent-run');
+if(run.outcome!=='reported_failure')continue;
+for(const code of run.failure_codes){
+if(!groups.has(code))groups.set(code,[]);
+groups.get(code).push(run.run_id);
+}
+}
+const candidates=[...groups].filter(([,ids])=>ids.length>=2).map(([code,ids])=>({kind:'recurring_reported_failure',code,distinct_run_count:ids.length}));
+candidates.sort((a,b)=>b.distinct_run_count-a.distinct_run_count||(a.code<b.code?-1:a.code>b.code?1:0));
+return {status:'review_only',basis:'repeated_supplied_failure_reports_not_verified_causality',candidates,review_required:true,automatic_learning:false,execution_authorized:false};
 }
 
 
 
 
 function evaluateWorkflowOutcome(scope,criteria,observations,{enabled=false,isolated=false}={}){
- if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
- if(isolated||!enabled)return {status:isolated?'isolated':'off',completion_verified:false,execution_authorized:false};
- const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
- if(!scope||!id(scope.project_id)||!id(scope.run_id)||(scope.workflow_id!==undefined&&!id(scope.workflow_id))||typeof scope.plan_sha256!=='string'||!/^[a-f0-9]{64}$/.test(scope.plan_sha256))throw Error('invalid-scope');
- if(!Array.isArray(criteria)||criteria.length<1||criteria.length>30||!Array.isArray(observations)||observations.length>60)throw Error('invalid-outcome-input');
- const byId=new Map();
- for(const c of criteria){
-  if(!c||!id(c.id)||byId.has(c.id)||typeof c.required!=='boolean'||!['automated_check','human_review','independent_witness'].includes(c.evidence_kind))throw Error('invalid-criterion');
-  byId.set(c.id,c);
- }
- if(!criteria.some(c=>c.required))throw Error('missing-required-criteria');
+if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
+if(isolated||!enabled)return {status:isolated?'isolated':'off',completion_verified:false,execution_authorized:false};
+const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
+if(!scope||!id(scope.project_id)||!id(scope.run_id)||(scope.workflow_id!==undefined&&!id(scope.workflow_id))||typeof scope.plan_sha256!=='string'||!/^[a-f0-9]{64}$/.test(scope.plan_sha256))throw Error('invalid-scope');
+if(!Array.isArray(criteria)||criteria.length<1||criteria.length>30||!Array.isArray(observations)||observations.length>60)throw Error('invalid-outcome-input');
+const byId=new Map();
+for(const c of criteria){
+if(!c||!id(c.id)||byId.has(c.id)||typeof c.required!=='boolean'||!['automated_check','human_review','independent_witness'].includes(c.evidence_kind))throw Error('invalid-criterion');
+byId.set(c.id,c);
+}
+if(!criteria.some(c=>c.required))throw Error('missing-required-criteria');
 
- const grouped=new Map(),seenEvidence=new Set();
- for(const o of observations){
+const grouped=new Map(),seenEvidence=new Set();
+for(const o of observations){
 
 
-  if(!o||o.project_id!==scope.project_id||o.workflow_id!==scope.workflow_id||o.run_id!==scope.run_id||o.plan_sha256!==scope.plan_sha256)throw Error('observation-scope-mismatch');
-  if(!byId.has(o.criterion_id)||!id(o.evidence_id)||!['pass','fail','inconclusive'].includes(o.result)||!['automated_check','human_review','independent_witness','self_report'].includes(o.kind))throw Error('invalid-observation');
-  if(!grouped.has(o.criterion_id))grouped.set(o.criterion_id,new Map());
-  const g=grouped.get(o.criterion_id);
-  if(seenEvidence.has(o.evidence_id))throw Error('duplicate-evidence');
-  seenEvidence.add(o.evidence_id);
-  g.set(o.evidence_id,o);
- }
- const items=[];
- for(const c of criteria){
-  const all=[...(grouped.get(c.id)?.values()??[])];
-  const eligible=all.filter(o=>o.kind===c.evidence_kind);
-  const pass=eligible.some(o=>o.result==='pass'),fail=eligible.some(o=>o.result==='fail'),uncertain=eligible.some(o=>o.result==='inconclusive');
-  let disposition;
-  if(pass&&fail)disposition='conflicting_reports';
-  else if(fail)disposition='reported_failure';
-  else if(pass&&uncertain)disposition='requires_reconciliation';
-  else if(pass)disposition='reported_pass';
-  else if(eligible.length)disposition='inconclusive';
-  else disposition='missing_required_evidence_kind';
-  items.push({criterion_id:c.id,required:c.required,disposition,eligible_count:eligible.length,excluded_count:all.length-eligible.length});
- }
- const required=items.filter(c=>c.required);
- const assessment=required.some(c=>c.disposition==='reported_failure')?'reported_required_failure':required.every(c=>c.disposition==='reported_pass')?'required_reports_present':'review_incomplete';
- const actionByDisposition={reported_failure:'review_failure',conflicting_reports:'reconcile_reports',requires_reconciliation:'reconcile_reports',inconclusive:'request_conclusive_evidence',missing_required_evidence_kind:'request_matching_evidence'};
+if(!o||o.project_id!==scope.project_id||o.workflow_id!==scope.workflow_id||o.run_id!==scope.run_id||o.plan_sha256!==scope.plan_sha256)throw Error('observation-scope-mismatch');
+if(!byId.has(o.criterion_id)||!id(o.evidence_id)||!['pass','fail','inconclusive'].includes(o.result)||!['automated_check','human_review','independent_witness','self_report'].includes(o.kind))throw Error('invalid-observation');
+if(!grouped.has(o.criterion_id))grouped.set(o.criterion_id,new Map());
+const g=grouped.get(o.criterion_id);
+if(seenEvidence.has(o.evidence_id))throw Error('duplicate-evidence');
+seenEvidence.add(o.evidence_id);
+g.set(o.evidence_id,o);
+}
+const items=[];
+for(const c of criteria){
+const all=[...(grouped.get(c.id)?.values()??[])];
+const eligible=all.filter(o=>o.kind===c.evidence_kind);
+const pass=eligible.some(o=>o.result==='pass'),fail=eligible.some(o=>o.result==='fail'),uncertain=eligible.some(o=>o.result==='inconclusive');
+let disposition;
+if(pass&&fail)disposition='conflicting_reports';
+else if(fail)disposition='reported_failure';
+else if(pass&&uncertain)disposition='requires_reconciliation';
+else if(pass)disposition='reported_pass';
+else if(eligible.length)disposition='inconclusive';
+else disposition='missing_required_evidence_kind';
+items.push({criterion_id:c.id,required:c.required,disposition,eligible_count:eligible.length,excluded_count:all.length-eligible.length});
+}
+const required=items.filter(c=>c.required);
+const assessment=required.some(c=>c.disposition==='reported_failure')?'reported_required_failure':required.every(c=>c.disposition==='reported_pass')?'required_reports_present':'review_incomplete';
+const actionByDisposition={reported_failure:'review_failure',conflicting_reports:'reconcile_reports',requires_reconciliation:'reconcile_reports',inconclusive:'request_conclusive_evidence',missing_required_evidence_kind:'request_matching_evidence'};
 
- const review_actions=[...required,...items.filter(c=>!c.required)].filter(c=>c.disposition!=='reported_pass').map(c=>({criterion_id:c.criterion_id,required:c.required,evidence_kind:byId.get(c.criterion_id).evidence_kind,action:actionByDisposition[c.disposition]}));
- return {review_actions,status:'review_only',basis:'supplied_evidence_metadata_not_authenticity_or_outcome_proof',assessment,completion_verified:false,execution_authorized:false,items};
+const review_actions=[...required,...items.filter(c=>!c.required)].filter(c=>c.disposition!=='reported_pass').map(c=>({criterion_id:c.criterion_id,required:c.required,evidence_kind:byId.get(c.criterion_id).evidence_kind,action:actionByDisposition[c.disposition]}));
+return {review_actions,status:'review_only',basis:'supplied_evidence_metadata_not_authenticity_or_outcome_proof',assessment,completion_verified:false,execution_authorized:false,items};
 }
 
 
 
 
 function reviewOutcomeRevision(before,after,criteria,{enabled=false,isolated=false}={}){
- if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
- if(isolated||!enabled)return {status:isolated?'isolated':'off',completion_verified:false,execution_authorized:false};
- const validId=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
- const a=before?.scope,b=after?.scope;
- if(!a||!b||!validId(a.workflow_id)||a.workflow_id!==b.workflow_id||a.project_id!==b.project_id||a.run_id===b.run_id)throw Error('comparison-scope-mismatch');
- const old=evaluateWorkflowOutcome(a,criteria,before.observations,{enabled:true});
- const next=evaluateWorkflowOutcome(b,criteria,after.observations,{enabled:true});
- const priorIds=new Set(before.observations.map(o=>o.evidence_id));
- if(after.observations.some(o=>priorIds.has(o.evidence_id)))throw Error('reused-run-evidence');
- const changes=old.items.map((p,i)=>{
-  const n=next.items[i],was=p.disposition,is=n.disposition;
-  const transition=was===is?'unchanged':was==='reported_pass'?'reported_pass_lost':is==='reported_pass'?'reported_pass_gained':'unresolved_change';
-  return {criterion_id:p.criterion_id,required:p.required,before:was,after:is,transition};
- });
- const lost=changes.filter(c=>c.transition==='reported_pass_lost');
- const gained=changes.filter(c=>c.transition==='reported_pass_gained');
- const unresolved=changes.filter(c=>c.after!=='reported_pass');
- const assessment=lost.some(c=>c.required)?'required_pass_lost':lost.length?'optional_pass_lost':
-  unresolved.some(c=>c.required)?'required_review_incomplete':unresolved.length?'optional_review_incomplete':'all_criteria_reported_pass';
- return {status:'review_only',basis:'distinct_declared_runs_shared_criteria_not_verified_comparability',assessment,
-  plan_changed:a.plan_sha256!==b.plan_sha256,changes,
-  lost_count:lost.length,gained_count:gained.length,unresolved_count:unresolved.length,
-  review_actions:next.review_actions,completion_verified:false,execution_authorized:false};
+if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
+if(isolated||!enabled)return {status:isolated?'isolated':'off',completion_verified:false,execution_authorized:false};
+const validId=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
+const a=before?.scope,b=after?.scope;
+if(!a||!b||!validId(a.workflow_id)||a.workflow_id!==b.workflow_id||a.project_id!==b.project_id||a.run_id===b.run_id)throw Error('comparison-scope-mismatch');
+const old=evaluateWorkflowOutcome(a,criteria,before.observations,{enabled:true});
+const next=evaluateWorkflowOutcome(b,criteria,after.observations,{enabled:true});
+const priorIds=new Set(before.observations.map(o=>o.evidence_id));
+if(after.observations.some(o=>priorIds.has(o.evidence_id)))throw Error('reused-run-evidence');
+const changes=old.items.map((p,i)=>{
+const n=next.items[i],was=p.disposition,is=n.disposition;
+const transition=was===is?'unchanged':was==='reported_pass'?'reported_pass_lost':is==='reported_pass'?'reported_pass_gained':'unresolved_change';
+return {criterion_id:p.criterion_id,required:p.required,before:was,after:is,transition};
+});
+const lost=changes.filter(c=>c.transition==='reported_pass_lost');
+const gained=changes.filter(c=>c.transition==='reported_pass_gained');
+const unresolved=changes.filter(c=>c.after!=='reported_pass');
+const assessment=lost.some(c=>c.required)?'required_pass_lost':lost.length?'optional_pass_lost':
+unresolved.some(c=>c.required)?'required_review_incomplete':unresolved.length?'optional_review_incomplete':'all_criteria_reported_pass';
+return {status:'review_only',basis:'distinct_declared_runs_shared_criteria_not_verified_comparability',assessment,
+plan_changed:a.plan_sha256!==b.plan_sha256,changes,
+lost_count:lost.length,gained_count:gained.length,unresolved_count:unresolved.length,
+review_actions:next.review_actions,completion_verified:false,execution_authorized:false};
 }
 
 
 
 function reviewCorrectionExperience(scope,criteria,attempts,{enabled=false,isolated=false}={}){
- if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
- const boundary={automatic_learning:false,completion_verified:false,execution_authorized:false};
- if(isolated||!enabled)return {status:isolated?'isolated':'off',candidates:[],...boundary};
- const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
- if(!scope||!id(scope.project_id)||!id(scope.workflow_id)||!Array.isArray(attempts)||attempts.length<1||attempts.length>12)throw Error('invalid-experience-input');
- const groups=new Map(),runs=new Set(),receipts=new Set();
- for(const attempt of attempts){
-  if(!attempt||!id(attempt.correction_code))throw Error('invalid-correction-code');
-  const {before,after}=attempt;
-  for(const r of [before,after]){
-   if(r?.scope?.project_id!==scope.project_id||r.scope.workflow_id!==scope.workflow_id)throw Error('experience-scope-mismatch');
-   if(runs.has(r.scope.run_id))throw Error('reused-experience-run');
-   runs.add(r.scope.run_id);
-  }
-  const result=reviewOutcomeRevision(before,after,criteria,{enabled:true});
-  for(const r of [before,after])for(const o of r.observations){
-   if(receipts.has(o.evidence_id))throw Error('reused-experience-evidence');
-   receipts.add(o.evidence_id);
-  }
-  if(!groups.has(attempt.correction_code))groups.set(attempt.correction_code,{total:0,non_supporting:0,regressions:0,counts:new Map()});
-  const g=groups.get(attempt.correction_code);g.total++;
-  if(result.lost_count)g.regressions++;
-  const gains=result.changes.filter(c=>c.before==='reported_failure'&&c.after==='reported_pass');
-  if(result.assessment!=='all_criteria_reported_pass'||!gains.length){g.non_supporting++;continue}
-  for(const c of gains)g.counts.set(c.criterion_id,(g.counts.get(c.criterion_id)||0)+1);
- }
- const candidates=[],summaries=[];
- for(const [code,g] of groups){
-  summaries.push({correction_code:code,attempt_count:g.total,non_supporting_count:g.non_supporting,regression_count:g.regressions});
-  if(g.total<2||g.non_supporting||g.regressions)continue;
-  for(const [criterion,count] of g.counts)if(count===g.total)candidates.push({correction_code:code,criterion_id:criterion,supporting_pair_count:count,review_required:true});
- }
- return {status:'review_only',basis:'repeated_supplied_failure_to_pass_associations_not_causal_evidence',candidates,summaries,...boundary};
+if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
+const boundary={automatic_learning:false,completion_verified:false,execution_authorized:false};
+if(isolated||!enabled)return {status:isolated?'isolated':'off',candidates:[],...boundary};
+const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
+if(!scope||!id(scope.project_id)||!id(scope.workflow_id)||!Array.isArray(attempts)||attempts.length<1||attempts.length>12)throw Error('invalid-experience-input');
+const groups=new Map(),runs=new Set(),receipts=new Set();
+for(const attempt of attempts){
+if(!attempt||!id(attempt.correction_code))throw Error('invalid-correction-code');
+const {before,after}=attempt;
+for(const r of [before,after]){
+if(r?.scope?.project_id!==scope.project_id||r.scope.workflow_id!==scope.workflow_id)throw Error('experience-scope-mismatch');
+if(runs.has(r.scope.run_id))throw Error('reused-experience-run');
+runs.add(r.scope.run_id);
+}
+const result=reviewOutcomeRevision(before,after,criteria,{enabled:true});
+for(const r of [before,after])for(const o of r.observations){
+if(receipts.has(o.evidence_id))throw Error('reused-experience-evidence');
+receipts.add(o.evidence_id);
+}
+if(!groups.has(attempt.correction_code))groups.set(attempt.correction_code,{total:0,non_supporting:0,regressions:0,counts:new Map()});
+const g=groups.get(attempt.correction_code);g.total++;
+if(result.lost_count)g.regressions++;
+const gains=result.changes.filter(c=>c.before==='reported_failure'&&c.after==='reported_pass');
+if(result.assessment!=='all_criteria_reported_pass'||!gains.length){g.non_supporting++;continue}
+for(const c of gains)g.counts.set(c.criterion_id,(g.counts.get(c.criterion_id)||0)+1);
+}
+const candidates=[],summaries=[];
+for(const [code,g] of groups){
+summaries.push({correction_code:code,attempt_count:g.total,non_supporting_count:g.non_supporting,regression_count:g.regressions});
+if(g.total<2||g.non_supporting||g.regressions)continue;
+for(const [criterion,count] of g.counts)if(count===g.total)candidates.push({correction_code:code,criterion_id:criterion,supporting_pair_count:count,review_required:true});
+}
+return {status:'review_only',basis:'repeated_supplied_failure_to_pass_associations_not_causal_evidence',candidates,summaries,...boundary};
 }
 
 const experienceId=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
 function readExperienceSnapshot(snapshot){
- const id=experienceId;
-  if(!snapshot||!id(snapshot.project_id)||!id(snapshot.workflow_id)||!Number.isSafeInteger(snapshot.revision)||snapshot.revision<0||snapshot.revision>=Number.MAX_SAFE_INTEGER||!Array.isArray(snapshot.entries)||snapshot.entries.length>30)throw Error('invalid-experience-snapshot');
-  const seen=new Set(),entries=snapshot.entries.map(e=>{
-   if(!e||!id(e.correction_code)||!id(e.criterion_id)||!['active','revoked'].includes(e.status)||!Number.isInteger(e.supporting_pair_count)||e.supporting_pair_count<2||e.supporting_pair_count>12)throw Error('invalid-experience-entry');
-   const k=e.correction_code+'|'+e.criterion_id;
-   if(seen.has(k))throw Error('duplicate-experience-entry');seen.add(k);
-   return {correction_code:e.correction_code,criterion_id:e.criterion_id,status:e.status,supporting_pair_count:e.supporting_pair_count};
-  });
-  return {project_id:snapshot.project_id,workflow_id:snapshot.workflow_id,revision:snapshot.revision,entries};
- }
+const id=experienceId;
+if(!snapshot||!id(snapshot.project_id)||!id(snapshot.workflow_id)||!Number.isSafeInteger(snapshot.revision)||snapshot.revision<0||snapshot.revision>=Number.MAX_SAFE_INTEGER||!Array.isArray(snapshot.entries)||snapshot.entries.length>30)throw Error('invalid-experience-snapshot');
+const seen=new Set(),entries=snapshot.entries.map(e=>{
+if(!e||!id(e.correction_code)||!id(e.criterion_id)||!['active','revoked'].includes(e.status)||!Number.isInteger(e.supporting_pair_count)||e.supporting_pair_count<2||e.supporting_pair_count>12)throw Error('invalid-experience-entry');
+const k=e.correction_code+'|'+e.criterion_id;
+if(seen.has(k))throw Error('duplicate-experience-entry');seen.add(k);
+return {correction_code:e.correction_code,criterion_id:e.criterion_id,status:e.status,supporting_pair_count:e.supporting_pair_count};
+});
+return {project_id:snapshot.project_id,workflow_id:snapshot.workflow_id,revision:snapshot.revision,entries};
+}
 
 
 
 
 function createExperienceEditReview(){
- let pending=null;
- const id=experienceId;
- const read=readExperienceSnapshot;
- function stage(snapshot,operation,{enabled=false,isolated=false,criteria,attempts}={}){
-  pending=null;
-  if(enabled!==true||isolated!==false)throw Error('experience-edit-disabled');
-  const current=read(snapshot);
-  if(!operation||!['accept','refresh','revoke','delete'].includes(operation.kind)||!id(operation.correction_code)||!id(operation.criterion_id))throw Error('invalid-experience-operation');
-  const {kind,correction_code,criterion_id}=operation;
-  const index=current.entries.findIndex(e=>e.correction_code===correction_code&&e.criterion_id===criterion_id);
-  const entries=current.entries.map(e=>({...e}));
-  if(kind==='accept'||kind==='refresh'){
-   if(kind==='accept'&&index!==-1)throw Error('experience-already-present');
-   if(kind==='refresh'&&index===-1)throw Error('experience-not-found');
-   const result=reviewCorrectionExperience(current,criteria,attempts,{enabled:true});
-   const match=result.candidates.find(c=>c.correction_code===correction_code&&c.criterion_id===criterion_id);
-   if(!match)throw Error('experience-not-supported');
-   const record={correction_code,criterion_id,status:'active',supporting_pair_count:match.supporting_pair_count};
-   if(index===-1){if(entries.length>=30)throw Error('experience-capacity');entries.push(record)}else entries[index]=record;
-  }else{
-   if(index===-1)throw Error('experience-not-found');
-   if(kind==='delete')entries.splice(index,1);
-   else {if(entries[index].status==='revoked')throw Error('experience-already-revoked');entries[index].status='revoked'}
-  }
-  const ticket=Object.freeze(Object.create(null));
-  pending={ticket,expected:JSON.stringify(current),next:{...current,revision:current.revision+1,entries}};
-  return Object.freeze({ticket,kind,correction_code,criterion_id,project_id:current.project_id,workflow_id:current.workflow_id,revision:current.revision,review_required:true});
- }
- function approve(ticket,snapshot,{approved=false,enabled=false,isolated=false}={}){
-  if(!pending||pending.ticket!==ticket)throw Error('inactive-experience-review');
-  const p=pending;pending=null;
-  if(approved!==true||enabled!==true||isolated!==false)throw Error('experience-edit-not-approved');
-  if(JSON.stringify(read(snapshot))!==p.expected)throw Error('stale-experience-review');
-  return p.next;
- }
- function invalidate(){pending=null}
- return Object.freeze({stage,approve,invalidate});
+let pending=null;
+const id=experienceId;
+const read=readExperienceSnapshot;
+function stage(snapshot,operation,{enabled=false,isolated=false,criteria,attempts}={}){
+pending=null;
+if(enabled!==true||isolated!==false)throw Error('experience-edit-disabled');
+const current=read(snapshot);
+if(!operation||!['accept','refresh','revoke','delete'].includes(operation.kind)||!id(operation.correction_code)||!id(operation.criterion_id))throw Error('invalid-experience-operation');
+const {kind,correction_code,criterion_id}=operation;
+const index=current.entries.findIndex(e=>e.correction_code===correction_code&&e.criterion_id===criterion_id);
+const entries=current.entries.map(e=>({...e}));
+if(kind==='accept'||kind==='refresh'){
+if(kind==='accept'&&index!==-1)throw Error('experience-already-present');
+if(kind==='refresh'&&index===-1)throw Error('experience-not-found');
+const result=reviewCorrectionExperience(current,criteria,attempts,{enabled:true});
+const match=result.candidates.find(c=>c.correction_code===correction_code&&c.criterion_id===criterion_id);
+if(!match)throw Error('experience-not-supported');
+const record={correction_code,criterion_id,status:'active',supporting_pair_count:match.supporting_pair_count};
+if(index===-1){if(entries.length>=30)throw Error('experience-capacity');entries.push(record)}else entries[index]=record;
+}else{
+if(index===-1)throw Error('experience-not-found');
+if(kind==='delete')entries.splice(index,1);
+else {if(entries[index].status==='revoked')throw Error('experience-already-revoked');entries[index].status='revoked'}
+}
+const ticket=Object.freeze(Object.create(null));
+pending={ticket,expected:JSON.stringify(current),next:{...current,revision:current.revision+1,entries}};
+return Object.freeze({ticket,kind,correction_code,criterion_id,project_id:current.project_id,workflow_id:current.workflow_id,revision:current.revision,review_required:true});
+}
+function approve(ticket,snapshot,{approved=false,enabled=false,isolated=false}={}){
+if(!pending||pending.ticket!==ticket)throw Error('inactive-experience-review');
+const p=pending;pending=null;
+if(approved!==true||enabled!==true||isolated!==false)throw Error('experience-edit-not-approved');
+if(JSON.stringify(read(snapshot))!==p.expected)throw Error('stale-experience-review');
+return p.next;
+}
+function invalidate(){pending=null}
+return Object.freeze({stage,approve,invalidate});
 }
 
 
 
 
 function reviewExperienceRecall(snapshot,request,criteria,attempts,{enabled=false,isolated=false,limit=5}={}){
- if(typeof enabled!=='boolean'||typeof isolated!=='boolean'||!Number.isInteger(limit)||limit<1||limit>10)throw Error('invalid-options');
- const boundary={automatic_application:false,execution_authorized:false,completion_verified:false};
- if(isolated||!enabled)return {status:isolated?'isolated':'off',matches:[],...boundary};
- const current=readExperienceSnapshot(snapshot);
- if(!request||request.project_id!==current.project_id||request.workflow_id!==current.workflow_id||request.revision!==current.revision)throw Error('recall-scope-mismatch');
- const wanted=request.criterion_ids;
- if(!Array.isArray(wanted)||wanted.length<1||wanted.length>30||wanted.some(x=>!experienceId(x))||new Set(wanted).size!==wanted.length)throw Error('invalid-recall-criteria');
- if(!Array.isArray(criteria)||criteria.length<1||criteria.length>30)throw Error('invalid-recall-criteria');
- const catalog=new Map();
- for(const c of criteria){
-  if(!c||!experienceId(c.id)||catalog.has(c.id)||typeof c.required!=='boolean'||!['automated_check','human_review','independent_witness'].includes(c.evidence_kind))throw Error('invalid-criterion');
-  catalog.set(c.id,c.required);
- }
- if(!criteria.some(c=>c.required)||wanted.some(x=>!catalog.has(x)))throw Error('invalid-recall-criteria');
- if(!Array.isArray(attempts)||attempts.length>12)throw Error('invalid-experience-input');
- if(!attempts.length)return {status:'no_current_evidence',matches:[],...boundary};
- const evidence=reviewCorrectionExperience(current,criteria,attempts,{enabled:true});
- const fresh=new Map(evidence.candidates.map(c=>[c.correction_code+'|'+c.criterion_id,c.supporting_pair_count]));
- const requested=new Set(wanted),matches=[];
- let withheld=0;
- for(const e of current.entries){
-  if(e.status!=='active'||!requested.has(e.criterion_id))continue;
+if(typeof enabled!=='boolean'||typeof isolated!=='boolean'||!Number.isInteger(limit)||limit<1||limit>10)throw Error('invalid-options');
+const boundary={automatic_application:false,execution_authorized:false,completion_verified:false};
+if(isolated||!enabled)return {status:isolated?'isolated':'off',matches:[],...boundary};
+const current=readExperienceSnapshot(snapshot);
+if(!request||request.project_id!==current.project_id||request.workflow_id!==current.workflow_id||request.revision!==current.revision)throw Error('recall-scope-mismatch');
+const wanted=request.criterion_ids;
+if(!Array.isArray(wanted)||wanted.length<1||wanted.length>30||wanted.some(x=>!experienceId(x))||new Set(wanted).size!==wanted.length)throw Error('invalid-recall-criteria');
+if(!Array.isArray(criteria)||criteria.length<1||criteria.length>30)throw Error('invalid-recall-criteria');
+const catalog=new Map();
+for(const c of criteria){
+if(!c||!experienceId(c.id)||catalog.has(c.id)||typeof c.required!=='boolean'||!['automated_check','human_review','independent_witness'].includes(c.evidence_kind))throw Error('invalid-criterion');
+catalog.set(c.id,c.required);
+}
+if(!criteria.some(c=>c.required)||wanted.some(x=>!catalog.has(x)))throw Error('invalid-recall-criteria');
+if(!Array.isArray(attempts)||attempts.length>12)throw Error('invalid-experience-input');
+if(!attempts.length)return {status:'no_current_evidence',matches:[],...boundary};
+const evidence=reviewCorrectionExperience(current,criteria,attempts,{enabled:true});
+const fresh=new Map(evidence.candidates.map(c=>[c.correction_code+'|'+c.criterion_id,c.supporting_pair_count]));
+const requested=new Set(wanted),matches=[];
+let withheld=0;
+for(const e of current.entries){
+if(e.status!=='active'||!requested.has(e.criterion_id))continue;
 
-  if(fresh.get(e.correction_code+'|'+e.criterion_id)!==e.supporting_pair_count){withheld++;continue}
-  matches.push({correction_code:e.correction_code,criterion_id:e.criterion_id,required:catalog.get(e.criterion_id),supporting_pair_count:e.supporting_pair_count,review_required:true});
- }
- const cmp=(a,b)=>a<b?-1:a>b?1:0;
- matches.sort((a,b)=>Number(b.required)-Number(a.required)||b.supporting_pair_count-a.supporting_pair_count||cmp(a.criterion_id,b.criterion_id)||cmp(a.correction_code,b.correction_code));
- return {status:'review_only',basis:'exact_requested_criteria_and_recomputed_reported_support_not_verified_provenance',matches:matches.slice(0,limit),withheld_count:withheld,truncated:matches.length>limit,...boundary};
+if(fresh.get(e.correction_code+'|'+e.criterion_id)!==e.supporting_pair_count){withheld++;continue}
+matches.push({correction_code:e.correction_code,criterion_id:e.criterion_id,required:catalog.get(e.criterion_id),supporting_pair_count:e.supporting_pair_count,review_required:true});
+}
+const cmp=(a,b)=>a<b?-1:a>b?1:0;
+matches.sort((a,b)=>Number(b.required)-Number(a.required)||b.supporting_pair_count-a.supporting_pair_count||cmp(a.criterion_id,b.criterion_id)||cmp(a.correction_code,b.correction_code));
+return {status:'review_only',basis:'exact_requested_criteria_and_recomputed_reported_support_not_verified_provenance',matches:matches.slice(0,limit),withheld_count:withheld,truncated:matches.length>limit,...boundary};
 }
 
 
 
 
 function reviewAssistantWorkflow(input,{enabled=false,isolated=false,experienceEnabled=false}={}){
- if([enabled,isolated,experienceEnabled].some(v=>typeof v!=='boolean'))throw Error('invalid-options');
- const boundary={execution_authorized:false,completion_verified:false,automatic_application:false};
- if(isolated||!enabled)return {status:isolated?'isolated':'off',...boundary};
- const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
- const scope=input?.scope;
- if(!scope||!id(scope.project_id)||!id(scope.workflow_id)||!id(scope.run_id)||typeof scope.plan_sha256!=='string'||!/^[a-f0-9]{64}$/.test(scope.plan_sha256))throw Error('invalid-review-scope');
- const on={enabled:true};
- const critique=critiqueWorkflow(input.plan,on);
- if(!Array.isArray(input.step_observations)||input.step_observations.length>12)throw Error('invalid-step-observations');
- for(const o of input.step_observations){
-  if(!o||['project_id','workflow_id','run_id','plan_sha256'].some(k=>o[k]!==scope[k]))throw Error('step-scope-mismatch');
- }
- const recovery=reviewWorkflowRecovery(input.plan.steps,input.step_observations,on);
- const outcome=evaluateWorkflowOutcome(scope,input.criteria,input.evidence,on);
- const revision=input.prior_run===undefined?null:reviewOutcomeRevision(input.prior_run,{scope,observations:input.evidence},input.criteria,on);
- const unresolved=recovery.items.filter(i=>i.disposition!=='reported_success');
- const failed=outcome.items.filter(i=>i.disposition==='reported_failure').map(i=>i.criterion_id);
+if([enabled,isolated,experienceEnabled].some(v=>typeof v!=='boolean'))throw Error('invalid-options');
+const boundary={execution_authorized:false,completion_verified:false,automatic_application:false};
+if(isolated||!enabled)return {status:isolated?'isolated':'off',...boundary};
+const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
+const scope=input?.scope;
+if(!scope||!id(scope.project_id)||!id(scope.workflow_id)||!id(scope.run_id)||typeof scope.plan_sha256!=='string'||!/^[a-f0-9]{64}$/.test(scope.plan_sha256))throw Error('invalid-review-scope');
+const on={enabled:true};
+const critique=critiqueWorkflow(input.plan,on);
+if(!Array.isArray(input.step_observations)||input.step_observations.length>12)throw Error('invalid-step-observations');
+for(const o of input.step_observations){
+if(!o||['project_id','workflow_id','run_id','plan_sha256'].some(k=>o[k]!==scope[k]))throw Error('step-scope-mismatch');
+}
+const recovery=reviewWorkflowRecovery(input.plan.steps,input.step_observations,on);
+const outcome=evaluateWorkflowOutcome(scope,input.criteria,input.evidence,on);
+const revision=input.prior_run===undefined?null:reviewOutcomeRevision(input.prior_run,{scope,observations:input.evidence},input.criteria,on);
+const unresolved=recovery.items.filter(i=>i.disposition!=='reported_success');
+const failed=outcome.items.filter(i=>i.disposition==='reported_failure').map(i=>i.criterion_id);
 
 
 
- const reconciliation=outcome.items.filter(i=>i.required&&['conflicting_reports','requires_reconciliation'].includes(i.disposition)).map(i=>i.criterion_id);
+const reconciliation=outcome.items.filter(i=>i.required&&['conflicting_reports','requires_reconciliation'].includes(i.disposition)).map(i=>i.criterion_id);
 
 
- let experience={status:'off',matches:[]};
- if(experienceEnabled){
-  if(reconciliation.length)experience={status:'withheld_pending_reconciliation',matches:[]};
-  else if(!failed.length)experience={status:'no_reported_failure',matches:[]};
-  else if(input.experience===undefined)experience={status:'no_snapshot',matches:[]};
-  else {
-   const e=input.experience;
-   experience=reviewExperienceRecall(e.snapshot,{project_id:scope.project_id,workflow_id:scope.workflow_id,revision:e.revision,criterion_ids:failed},input.criteria,e.attempts,on);
+let experience={status:'off',matches:[]};
+if(experienceEnabled){
+if(reconciliation.length)experience={status:'withheld_pending_reconciliation',matches:[]};
+else if(!failed.length)experience={status:'no_reported_failure',matches:[]};
+else if(input.experience===undefined)experience={status:'no_snapshot',matches:[]};
+else {
+const e=input.experience;
+experience=reviewExperienceRecall(e.snapshot,{project_id:scope.project_id,workflow_id:scope.workflow_id,revision:e.revision,criterion_ids:failed},input.criteria,e.attempts,on);
 
 
-   const currentReceipts=new Set(input.evidence.map(o=>o.evidence_id));
-   for(const attempt of e.attempts)for(const run of [attempt.before,attempt.after]){
-    if(run.scope.run_id===scope.run_id)throw Error('current-run-in-experience');
-    if(run.observations.some(o=>currentReceipts.has(o.evidence_id)))throw Error('current-evidence-in-experience');
-   }
-  }
- }
- const priority=critique.blocking_review_count?'review_plan_boundaries':
-  unresolved.some(i=>['inconsistent_observation','reconcile_before_action'].includes(i.disposition))?'reconcile_execution_status':
-  reconciliation.length?'review_outcome_evidence':
-  revision?.lost_count?'review_lost_criteria':
-  unresolved.length?'review_unfinished_steps':
-  critique.findings.length?'review_plan_findings':
-  outcome.review_actions.length?'review_outcome_evidence':'manual_final_review';
- const comparison=input.correction_comparison===undefined?{}:{correction_comparison:
-  !experienceEnabled?{status:'off',options:[]}:
-  critique.blocking_review_count||unresolved.length||reconciliation.length?{status:'withheld_pending_review',options:[]}:
-  experience.status!=='review_only'?{status:'no_recalled_support',options:[]}:
-  compareRecalledCorrections(experience,input.correction_comparison)};
- const scenarios=input.correction_scenarios===undefined?{}:{correction_scenarios:
-  !experienceEnabled?{status:'off',options:[]}:
-  comparison.correction_comparison?.status!=='review_only'?{status:'withheld_pending_comparison',options:[]}:
-  reviewCorrectionScenarios(comparison.correction_comparison,input.correction_comparison,input.correction_scenarios)};
- const patterns=input.failure_history===undefined?{}:{failure_patterns:
-  !experienceEnabled?{status:'off',patterns:[]}:
-  reviewFailurePatterns(scope,input.criteria,input.evidence,outcome,input.failure_history)};
- const adaptive=input.adaptive_plan===undefined?{}:{adaptive_plan:
-  !experienceEnabled?{status:'off',findings:[]}:
-  patterns.failure_patterns?.status!=='review_only'?{status:'withheld_pending_history',findings:[]}:
-  reviewAdaptivePlan(scope,input.criteria,patterns.failure_patterns,input.adaptive_plan)};
- return {status:'review_only',priority,critique,recovery,outcome,revision,experience,...comparison,...scenarios,...patterns,...adaptive,...boundary};
+const currentReceipts=new Set(input.evidence.map(o=>o.evidence_id));
+for(const attempt of e.attempts)for(const run of [attempt.before,attempt.after]){
+if(run.scope.run_id===scope.run_id)throw Error('current-run-in-experience');
+if(run.observations.some(o=>currentReceipts.has(o.evidence_id)))throw Error('current-evidence-in-experience');
+}
+}
+}
+const priority=critique.blocking_review_count?'review_plan_boundaries':
+unresolved.some(i=>['inconsistent_observation','reconcile_before_action'].includes(i.disposition))?'reconcile_execution_status':
+reconciliation.length?'review_outcome_evidence':
+revision?.lost_count?'review_lost_criteria':
+unresolved.length?'review_unfinished_steps':
+critique.findings.length?'review_plan_findings':
+outcome.review_actions.length?'review_outcome_evidence':'manual_final_review';
+const comparison=input.correction_comparison===undefined?{}:{correction_comparison:
+!experienceEnabled?{status:'off',options:[]}:
+critique.blocking_review_count||unresolved.length||reconciliation.length?{status:'withheld_pending_review',options:[]}:
+experience.status!=='review_only'?{status:'no_recalled_support',options:[]}:
+compareRecalledCorrections(experience,input.correction_comparison)};
+const scenarios=input.correction_scenarios===undefined?{}:{correction_scenarios:
+!experienceEnabled?{status:'off',options:[]}:
+comparison.correction_comparison?.status!=='review_only'?{status:'withheld_pending_comparison',options:[]}:
+reviewCorrectionScenarios(comparison.correction_comparison,input.correction_comparison,input.correction_scenarios)};
+const patterns=input.failure_history===undefined?{}:{failure_patterns:
+!experienceEnabled?{status:'off',patterns:[]}:
+reviewFailurePatterns(scope,input.criteria,input.evidence,outcome,input.failure_history)};
+const adaptive=input.adaptive_plan===undefined?{}:{adaptive_plan:
+!experienceEnabled?{status:'off',findings:[]}:
+patterns.failure_patterns?.status!=='review_only'?{status:'withheld_pending_history',findings:[]}:
+reviewAdaptivePlan(scope,input.criteria,patterns.failure_patterns,input.adaptive_plan)};
+return {status:'review_only',priority,critique,recovery,outcome,revision,experience,...comparison,...scenarios,...patterns,...adaptive,...boundary};
 }
 
 
 
 
 function compareRecalledCorrections(experience,request){
- const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
- const bounded=(v,max)=>Number.isSafeInteger(v)&&v>=0&&v<=max;
- const money=v=>bounded(v,100000000),minutes=v=>bounded(v,525600);
- const risks=['low','medium','high'];
- if(!request||!id(request.criterion_id)||!money(request.max_cost_usd_cents)||!minutes(request.max_effort_minutes)||!Array.isArray(request.options)||request.options.length<1||request.options.length>10)throw Error('invalid-correction-comparison');
- const supported=new Map(experience.matches.filter(m=>m.criterion_id===request.criterion_id).map(m=>[m.correction_code,m]));
- const seen=new Set(),rows=[];
- for(const o of request.options){
-  if(!o||!id(o.correction_code)||seen.has(o.correction_code)||!(o.cost_usd_cents===null||money(o.cost_usd_cents))||!(o.effort_minutes===null||minutes(o.effort_minutes))||!(o.risk===null||risks.includes(o.risk))||!(o.reversible===null||typeof o.reversible==='boolean'))throw Error('invalid-correction-option');
-  seen.add(o.correction_code);
-  const match=supported.get(o.correction_code);
-  const status=!match?'no_recalled_support':
-   [o.cost_usd_cents,o.effort_minutes,o.risk,o.reversible].includes(null)?'missing_estimates':
-   o.cost_usd_cents>request.max_cost_usd_cents||o.effort_minutes>request.max_effort_minutes?'outside_limits':'eligible';
-  rows.push({correction_code:o.correction_code,cost_usd_cents:o.cost_usd_cents,effort_minutes:o.effort_minutes,risk:o.risk,reversible:o.reversible,supporting_pair_count:match?.supporting_pair_count??0,status});
- }
- const dimensions=o=>[o.cost_usd_cents,o.effort_minutes,risks.indexOf(o.risk),Number(!o.reversible)];
- const eligible=rows.filter(o=>o.status==='eligible');
- for(const o of eligible){
-  const a=dimensions(o);
-  o.status=eligible.some(other=>{
-   const b=dimensions(other);
-   return b.every((v,i)=>v<=a[i])&&b.some((v,i)=>v<a[i]);
-  })?'dominated_estimates':'tradeoff_candidate';
- }
- return {status:'review_only',basis:'supplied_estimates_for_recalled_options_not_verified_cost_risk_or_success',criterion_id:request.criterion_id,options:rows,recall_truncated:experience.truncated,automatic_selection:false,execution_authorized:false};
+const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
+const bounded=(v,max)=>Number.isSafeInteger(v)&&v>=0&&v<=max;
+const money=v=>bounded(v,100000000),minutes=v=>bounded(v,525600);
+const risks=['low','medium','high'];
+if(!request||!id(request.criterion_id)||!money(request.max_cost_usd_cents)||!minutes(request.max_effort_minutes)||!Array.isArray(request.options)||request.options.length<1||request.options.length>10)throw Error('invalid-correction-comparison');
+const supported=new Map(experience.matches.filter(m=>m.criterion_id===request.criterion_id).map(m=>[m.correction_code,m]));
+const seen=new Set(),rows=[];
+for(const o of request.options){
+if(!o||!id(o.correction_code)||seen.has(o.correction_code)||!(o.cost_usd_cents===null||money(o.cost_usd_cents))||!(o.effort_minutes===null||minutes(o.effort_minutes))||!(o.risk===null||risks.includes(o.risk))||!(o.reversible===null||typeof o.reversible==='boolean'))throw Error('invalid-correction-option');
+seen.add(o.correction_code);
+const match=supported.get(o.correction_code);
+const status=!match?'no_recalled_support':
+[o.cost_usd_cents,o.effort_minutes,o.risk,o.reversible].includes(null)?'missing_estimates':
+o.cost_usd_cents>request.max_cost_usd_cents||o.effort_minutes>request.max_effort_minutes?'outside_limits':'eligible';
+rows.push({correction_code:o.correction_code,cost_usd_cents:o.cost_usd_cents,effort_minutes:o.effort_minutes,risk:o.risk,reversible:o.reversible,supporting_pair_count:match?.supporting_pair_count??0,status});
+}
+const dimensions=o=>[o.cost_usd_cents,o.effort_minutes,risks.indexOf(o.risk),Number(!o.reversible)];
+const eligible=rows.filter(o=>o.status==='eligible');
+for(const o of eligible){
+const a=dimensions(o);
+o.status=eligible.some(other=>{
+const b=dimensions(other);
+return b.every((v,i)=>v<=a[i])&&b.some((v,i)=>v<a[i]);
+})?'dominated_estimates':'tradeoff_candidate';
+}
+return {status:'review_only',basis:'supplied_estimates_for_recalled_options_not_verified_cost_risk_or_success',criterion_id:request.criterion_id,options:rows,recall_truncated:experience.truncated,automatic_selection:false,execution_authorized:false};
 }
 
 
 
 function reviewCorrectionScenarios(comparison,limits,request){
- const valid=(v,max)=>Number.isSafeInteger(v)&&v>=0&&v<=max;
- const money=v=>valid(v,100000000),minutes=v=>valid(v,525600);
- const range=(v,check,base)=>v&&check(v.best)&&check(v.expected)&&check(v.worst)&&v.best<=v.expected&&v.expected<=v.worst&&v.expected===base;
- const label=s=>typeof s==='string'&&s.trim().length>0&&s.length<=300;
- if(!request||request.criterion_id!==comparison.criterion_id||!Array.isArray(request.options)||request.options.length<1||request.options.length>10)throw Error('invalid-scenario-request');
- const known=new Map(comparison.options.map(o=>[o.correction_code,o])),seen=new Set(),options=[];
- for(const o of request.options){
-  const row=known.get(o?.correction_code);
-  if(!row||seen.has(o.correction_code))throw Error('invalid-scenario-option');
-  seen.add(o.correction_code);
-  if(!['tradeoff_candidate','dominated_estimates'].includes(row.status)){
-   options.push({correction_code:row.correction_code,status:'not_eligible_for_scenario_review'});
-   continue;
-  }
-  if(!range(o.cost_usd_cents,money,row.cost_usd_cents)||!range(o.effort_minutes,minutes,row.effort_minutes))throw Error('invalid-scenario-range');
-  const rollback=o.rollback;
-  if(rollback!==null&&(!rollback||!money(rollback.cost_usd_cents)||!minutes(rollback.effort_minutes)||!label(rollback.trigger)||!label(rollback.restore_check)))throw Error('invalid-rollback-contingency');
-  if(!row.reversible&&rollback!==null)throw Error('inconsistent-rollback-claim');
-  const baseWorst={cost_usd_cents:o.cost_usd_cents.worst,effort_minutes:o.effort_minutes.worst};
-  const total=rollback?{cost_usd_cents:baseWorst.cost_usd_cents+rollback.cost_usd_cents,effort_minutes:baseWorst.effort_minutes+rollback.effort_minutes}:null;
-  const exceeds=v=>v.cost_usd_cents>limits.max_cost_usd_cents||v.effort_minutes>limits.max_effort_minutes;
-  const status=exceeds(baseWorst)?'worst_case_outside_limits':!row.reversible?'irreversible_review_required':!rollback?'rollback_details_missing':exceeds(total)?'rollback_reserve_outside_limits':'within_declared_limits_review_required';
-  options.push({correction_code:row.correction_code,status,worst_case:baseWorst,worst_with_rollback:total,rollback_declared:rollback!==null});
- }
- return {status:'review_only',basis:'caller_supplied_ranges_and_contingency_not_validated_predictions_or_restore_proof',criterion_id:comparison.criterion_id,options,automatic_selection:false,rollback_verified:false,execution_authorized:false};
+const valid=(v,max)=>Number.isSafeInteger(v)&&v>=0&&v<=max;
+const money=v=>valid(v,100000000),minutes=v=>valid(v,525600);
+const range=(v,check,base)=>v&&check(v.best)&&check(v.expected)&&check(v.worst)&&v.best<=v.expected&&v.expected<=v.worst&&v.expected===base;
+const label=s=>typeof s==='string'&&s.trim().length>0&&s.length<=300;
+if(!request||request.criterion_id!==comparison.criterion_id||!Array.isArray(request.options)||request.options.length<1||request.options.length>10)throw Error('invalid-scenario-request');
+const known=new Map(comparison.options.map(o=>[o.correction_code,o])),seen=new Set(),options=[];
+for(const o of request.options){
+const row=known.get(o?.correction_code);
+if(!row||seen.has(o.correction_code))throw Error('invalid-scenario-option');
+seen.add(o.correction_code);
+if(!['tradeoff_candidate','dominated_estimates'].includes(row.status)){
+options.push({correction_code:row.correction_code,status:'not_eligible_for_scenario_review'});
+continue;
+}
+if(!range(o.cost_usd_cents,money,row.cost_usd_cents)||!range(o.effort_minutes,minutes,row.effort_minutes))throw Error('invalid-scenario-range');
+const rollback=o.rollback;
+if(rollback!==null&&(!rollback||!money(rollback.cost_usd_cents)||!minutes(rollback.effort_minutes)||!label(rollback.trigger)||!label(rollback.restore_check)))throw Error('invalid-rollback-contingency');
+if(!row.reversible&&rollback!==null)throw Error('inconsistent-rollback-claim');
+const baseWorst={cost_usd_cents:o.cost_usd_cents.worst,effort_minutes:o.effort_minutes.worst};
+const total=rollback?{cost_usd_cents:baseWorst.cost_usd_cents+rollback.cost_usd_cents,effort_minutes:baseWorst.effort_minutes+rollback.effort_minutes}:null;
+const exceeds=v=>v.cost_usd_cents>limits.max_cost_usd_cents||v.effort_minutes>limits.max_effort_minutes;
+const status=exceeds(baseWorst)?'worst_case_outside_limits':!row.reversible?'irreversible_review_required':!rollback?'rollback_details_missing':exceeds(total)?'rollback_reserve_outside_limits':'within_declared_limits_review_required';
+options.push({correction_code:row.correction_code,status,worst_case:baseWorst,worst_with_rollback:total,rollback_declared:rollback!==null});
+}
+return {status:'review_only',basis:'caller_supplied_ranges_and_contingency_not_validated_predictions_or_restore_proof',criterion_id:comparison.criterion_id,options,automatic_selection:false,rollback_verified:false,execution_authorized:false};
 }
 
 
 
 function reviewFailurePatterns(scope,criteria,evidence,outcome,history){
- if(!Array.isArray(history)||history.length>30)throw Error('invalid-failure-history');
- const runs=new Set([scope.run_id]),receipts=new Set(evidence.map(o=>o.evidence_id));
- const counts=new Map(criteria.map(c=>[c.id,{pass:0,fail:0,unresolved:0}]));
- for(const run of history){
-  const s=run?.scope;
-  if(!s||s.project_id!==scope.project_id||s.workflow_id!==scope.workflow_id)throw Error('failure-history-scope-mismatch');
-  if(runs.has(s.run_id))throw Error('reused-failure-history-run');
-  const assessment=evaluateWorkflowOutcome(s,criteria,run.observations,{enabled:true});
-  runs.add(s.run_id);
-  for(const o of run.observations){
-   if(receipts.has(o.evidence_id))throw Error('reused-failure-history-evidence');
-   receipts.add(o.evidence_id);
-  }
-  for(const item of assessment.items){
-   const c=counts.get(item.criterion_id);
-   if(item.disposition==='reported_pass')c.pass++;
-   else if(item.disposition==='reported_failure')c.fail++;
-   else c.unresolved++;
-  }
- }
- const patterns=outcome.items.map(item=>{
-  const c=counts.get(item.criterion_id);
-  const status=item.disposition!=='reported_failure'?'no_current_reported_failure':
-   c.fail>=2?'repeated_reported_failure':
-   c.fail===1?'one_prior_reported_failure':
-   c.pass===history.length&&history.length?'no_failure_in_supplied_history':'insufficient_history';
-  return {criterion_id:item.criterion_id,required:item.required,current_disposition:item.disposition,
-   historical_reported_pass:c.pass,historical_reported_failure:c.fail,historical_unresolved:c.unresolved,status};
- });
- return {status:'review_only',basis:'distinct_supplied_reports_not_verified_prevalence_or_causality',historical_run_count:history.length,patterns,automatic_learning:false,execution_authorized:false};
+if(!Array.isArray(history)||history.length>30)throw Error('invalid-failure-history');
+const runs=new Set([scope.run_id]),receipts=new Set(evidence.map(o=>o.evidence_id));
+const counts=new Map(criteria.map(c=>[c.id,{pass:0,fail:0,unresolved:0}]));
+for(const run of history){
+const s=run?.scope;
+if(!s||s.project_id!==scope.project_id||s.workflow_id!==scope.workflow_id)throw Error('failure-history-scope-mismatch');
+if(runs.has(s.run_id))throw Error('reused-failure-history-run');
+const assessment=evaluateWorkflowOutcome(s,criteria,run.observations,{enabled:true});
+runs.add(s.run_id);
+for(const o of run.observations){
+if(receipts.has(o.evidence_id))throw Error('reused-failure-history-evidence');
+receipts.add(o.evidence_id);
+}
+for(const item of assessment.items){
+const c=counts.get(item.criterion_id);
+if(item.disposition==='reported_pass')c.pass++;
+else if(item.disposition==='reported_failure')c.fail++;
+else c.unresolved++;
+}
+}
+const patterns=outcome.items.map(item=>{
+const c=counts.get(item.criterion_id);
+const status=item.disposition!=='reported_failure'?'no_current_reported_failure':
+c.fail>=2?'repeated_reported_failure':
+c.fail===1?'one_prior_reported_failure':
+c.pass===history.length&&history.length?'no_failure_in_supplied_history':'insufficient_history';
+return {criterion_id:item.criterion_id,required:item.required,current_disposition:item.disposition,
+historical_reported_pass:c.pass,historical_reported_failure:c.fail,historical_unresolved:c.unresolved,status};
+});
+return {status:'review_only',basis:'distinct_supplied_reports_not_verified_prevalence_or_causality',historical_run_count:history.length,patterns,automatic_learning:false,execution_authorized:false};
 }
 
 
 
 function reviewAdaptivePlan(scope,criteria,history,request){
- const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
- const next=request?.scope;
- if(!next||next.project_id!==scope.project_id||next.workflow_id!==scope.workflow_id||!id(next.run_id)||next.run_id===scope.run_id||typeof next.plan_sha256!=='string'||!/^[a-f0-9]{64}$/.test(next.plan_sha256))throw Error('adaptive-plan-scope-mismatch');
- const critique=critiqueWorkflow(request.plan,{enabled:true});
- if(!Array.isArray(request.checkpoints)||request.checkpoints.length>30)throw Error('invalid-adaptive-checkpoints');
- const steps=new Map(request.plan.steps.map(s=>[s.id,s])),catalog=new Set(criteria.map(c=>c.id)),mappings=new Map();
- for(const entry of request.checkpoints){
-  if(!entry||!catalog.has(entry.criterion_id)||mappings.has(entry.criterion_id)||!steps.has(entry.check_step_id)||!Array.isArray(entry.protected_step_ids)||entry.protected_step_ids.length<1||entry.protected_step_ids.length>11||new Set(entry.protected_step_ids).size!==entry.protected_step_ids.length||entry.protected_step_ids.some(x=>!steps.has(x)||x===entry.check_step_id))throw Error('invalid-adaptive-checkpoint');
-  mappings.set(entry.criterion_id,entry);
- }
- function ancestors(step){
-  const seen=new Set(),pending=[...steps.get(step).needs];
-  while(pending.length){const x=pending.pop();if(seen.has(x))continue;seen.add(x);pending.push(...steps.get(x).needs)}
-  return seen;
- }
- const findings=[];
- for(const pattern of history.patterns){
-  if(pattern.historical_reported_failure<2)continue;
-  const mapping=mappings.get(pattern.criterion_id);
-  if(!mapping){findings.push({criterion_id:pattern.criterion_id,required:pattern.required,status:'checkpoint_missing'});continue}
-  const check=steps.get(mapping.check_step_id);
-  const unprotected=mapping.protected_step_ids.filter(x=>!ancestors(x).has(check.id));
-  const status=!['local_compute','human_review'].includes(check.effect)||!check.success_criteria?'checkpoint_needs_review':unprotected.length?'dependency_missing':'declared_checkpoint_present';
-  findings.push({criterion_id:pattern.criterion_id,required:pattern.required,status,check_step_id:check.id,unprotected_step_ids:unprotected});
- }
- return {status:'review_only',basis:'declared_future_plan_dependencies_and_reported_history_not_verified_prevention',plan_critique:critique,findings,review_required:critique.findings.length>0||findings.some(f=>f.status!=='declared_checkpoint_present'),automatic_application:false,execution_authorized:false};
+const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
+const next=request?.scope;
+if(!next||next.project_id!==scope.project_id||next.workflow_id!==scope.workflow_id||!id(next.run_id)||next.run_id===scope.run_id||typeof next.plan_sha256!=='string'||!/^[a-f0-9]{64}$/.test(next.plan_sha256))throw Error('adaptive-plan-scope-mismatch');
+const critique=critiqueWorkflow(request.plan,{enabled:true});
+if(!Array.isArray(request.checkpoints)||request.checkpoints.length>30)throw Error('invalid-adaptive-checkpoints');
+const steps=new Map(request.plan.steps.map(s=>[s.id,s])),catalog=new Set(criteria.map(c=>c.id)),mappings=new Map();
+for(const entry of request.checkpoints){
+if(!entry||!catalog.has(entry.criterion_id)||mappings.has(entry.criterion_id)||!steps.has(entry.check_step_id)||!Array.isArray(entry.protected_step_ids)||entry.protected_step_ids.length<1||entry.protected_step_ids.length>11||new Set(entry.protected_step_ids).size!==entry.protected_step_ids.length||entry.protected_step_ids.some(x=>!steps.has(x)||x===entry.check_step_id))throw Error('invalid-adaptive-checkpoint');
+mappings.set(entry.criterion_id,entry);
+}
+function ancestors(step){
+const seen=new Set(),pending=[...steps.get(step).needs];
+while(pending.length){const x=pending.pop();if(seen.has(x))continue;seen.add(x);pending.push(...steps.get(x).needs)}
+return seen;
+}
+const findings=[];
+for(const pattern of history.patterns){
+if(pattern.historical_reported_failure<2)continue;
+const mapping=mappings.get(pattern.criterion_id);
+if(!mapping){findings.push({criterion_id:pattern.criterion_id,required:pattern.required,status:'checkpoint_missing'});continue}
+const check=steps.get(mapping.check_step_id);
+const unprotected=mapping.protected_step_ids.filter(x=>!ancestors(x).has(check.id));
+const status=!['local_compute','human_review'].includes(check.effect)||!check.success_criteria?'checkpoint_needs_review':unprotected.length?'dependency_missing':'declared_checkpoint_present';
+findings.push({criterion_id:pattern.criterion_id,required:pattern.required,status,check_step_id:check.id,unprotected_step_ids:unprotected});
+}
+return {status:'review_only',basis:'declared_future_plan_dependencies_and_reported_history_not_verified_prevention',plan_critique:critique,findings,review_required:critique.findings.length>0||findings.some(f=>f.status!=='declared_checkpoint_present'),automatic_application:false,execution_authorized:false};
 }
 
 
 
 
 function createArchiveExperienceReview(validateState){
- if(typeof validateState!=='function')throw Error('invalid-state-validator');
- const engine=createExperienceEditReview();
- let pending=null;
- const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
- function invalidate(){pending=null;engine.invalidate()}
- function read(value,session,workflow){
-  if(!session||session.enabled!==true||session.vaultUnlocked!==true||session.busy!==false||session.isolated!==false||
-     !id(session.projectId)||!id(session.threadId)||!Number.isSafeInteger(session.revision)||session.revision<0||!id(workflow))throw Error('archive-review-unavailable');
-  const data=validateState(value),project=data.projects.find(p=>p.id===session.projectId),thread=project?.threads.find(t=>t.id===session.threadId);
-  if(!thread||thread.temporary||thread.isolated||thread.archived)throw Error('archive-review-scope');
-  const snapshot=project.experiences?.find(s=>s.workflow_id===workflow);
-  return {data,project,exists:!!snapshot,snapshot:snapshot||{project_id:project.id,workflow_id:workflow,revision:0,entries:[]}};
- }
- const binding=s=>JSON.stringify([s.projectId,s.threadId,s.revision]);
- function stage(value,session,workflow,operation,{criteria,attempts}={}){
-  invalidate();
-  const current=read(value,session,workflow);
-  if(!current.exists&&(current.project.experiences||[]).length>=12)throw Error('archive-experience-capacity');
+if(typeof validateState!=='function')throw Error('invalid-state-validator');
+const engine=createExperienceEditReview();
+let pending=null;
+const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
+function invalidate(){pending=null;engine.invalidate()}
+function read(value,session,workflow){
+if(!session||session.enabled!==true||session.vaultUnlocked!==true||session.busy!==false||session.isolated!==false||
+!id(session.projectId)||!id(session.threadId)||!Number.isSafeInteger(session.revision)||session.revision<0||!id(workflow))throw Error('archive-review-unavailable');
+const data=validateState(value),project=data.projects.find(p=>p.id===session.projectId),thread=project?.threads.find(t=>t.id===session.threadId);
+if(!thread||thread.temporary||thread.isolated||thread.archived)throw Error('archive-review-scope');
+const snapshot=project.experiences?.find(s=>s.workflow_id===workflow);
+return {data,project,exists:!!snapshot,snapshot:snapshot||{project_id:project.id,workflow_id:workflow,revision:0,entries:[]}};
+}
+const binding=s=>JSON.stringify([s.projectId,s.threadId,s.revision]);
+function stage(value,session,workflow,operation,{criteria,attempts}={}){
+invalidate();
+const current=read(value,session,workflow);
+if(!current.exists&&(current.project.experiences||[]).length>=12)throw Error('archive-experience-capacity');
 
-  if(['accept','refresh'].includes(operation?.kind)){
-   if(!Array.isArray(attempts)||attempts.length<1||attempts.length>12)throw Error('invalid-experience-input');
-   for(const a of attempts)for(const run of [a?.before,a?.after]){
-    if(!run||run.scope?.project_id!==session.projectId||run.scope?.workflow_id!==workflow||!Array.isArray(run.observations)||
-       run.observations.length>60||run.observations.some(o=>o?.workflow_id!==workflow))throw Error('archive-evidence-scope');
-   }
-  }
-  const review=engine.stage(current.snapshot,operation,{enabled:true,criteria,attempts});
-  const ticket=Object.freeze(Object.create(null));
-  pending={ticket,inner:review.ticket,session:binding(session),workflow,exists:current.exists};
-  const {ticket:discard,...summary}=review;
-  return Object.freeze({...summary,ticket,storage_authorized:false});
- }
- function approve(ticket,value,session,{approved=false}={}){
-  if(!pending||pending.ticket!==ticket)throw Error('inactive-archive-review');
-  const review=pending;pending=null;
-  try{
-   if(approved!==true)throw Error('archive-review-not-approved');
-   const current=read(value,session,review.workflow);
-   if(binding(session)!==review.session||current.exists!==review.exists)throw Error('stale-archive-review');
-   const snapshot=engine.approve(review.inner,current.snapshot,{enabled:true,approved:true});
-   const list=(current.project.experiences||[]).filter(s=>s.workflow_id!==review.workflow);
+if(['accept','refresh'].includes(operation?.kind)){
+if(!Array.isArray(attempts)||attempts.length<1||attempts.length>12)throw Error('invalid-experience-input');
+for(const a of attempts)for(const run of [a?.before,a?.after]){
+if(!run||run.scope?.project_id!==session.projectId||run.scope?.workflow_id!==workflow||!Array.isArray(run.observations)||
+run.observations.length>60||run.observations.some(o=>o?.workflow_id!==workflow))throw Error('archive-evidence-scope');
+}
+}
+const review=engine.stage(current.snapshot,operation,{enabled:true,criteria,attempts});
+const ticket=Object.freeze(Object.create(null));
+pending={ticket,inner:review.ticket,session:binding(session),workflow,exists:current.exists};
+const {ticket:discard,...summary}=review;
+return Object.freeze({...summary,ticket,storage_authorized:false});
+}
+function approve(ticket,value,session,{approved=false}={}){
+if(!pending||pending.ticket!==ticket)throw Error('inactive-archive-review');
+const review=pending;pending=null;
+try{
+if(approved!==true)throw Error('archive-review-not-approved');
+const current=read(value,session,review.workflow);
+if(binding(session)!==review.session||current.exists!==review.exists)throw Error('stale-archive-review');
+const snapshot=engine.approve(review.inner,current.snapshot,{enabled:true,approved:true});
+const list=(current.project.experiences||[]).filter(s=>s.workflow_id!==review.workflow);
 
-   current.project.experiences=[...list,snapshot];
-   const next=validateState(current.data);
-   return {status:'proposed_state',state:next,storage_authorized:false,execution_authorized:false,automatic_application:false};
-  }finally{engine.invalidate()}
- }
- return Object.freeze({stage,approve,invalidate});
+current.project.experiences=[...list,snapshot];
+const next=validateState(current.data);
+return {status:'proposed_state',state:next,storage_authorized:false,execution_authorized:false,automatic_application:false};
+}finally{engine.invalidate()}
+}
+return Object.freeze({stage,approve,invalidate});
 }
 
 
 
 function stageImportedExperience(adapter,value,session,raw){
- adapter.invalidate();
- if(typeof raw!=='string'||raw.length>65536)throw Error('invalid-experience-import');
- const report=JSON.parse(raw);
- const exact=(x,keys)=>x&&typeof x==='object'&&!Array.isArray(x)&&Object.keys(x).sort().join('|')===keys;
- if(!exact(report,'attempts|criteria|operation|schema|workflow_id')||report.schema!=='nexus.experience-review.v1'||
- !exact(report.operation,'correction_code|criterion_id|kind')||!['accept','refresh'].includes(report.operation.kind)||
- !Array.isArray(report.criteria)||report.criteria.length<1||report.criteria.length>30||
- !Array.isArray(report.attempts)||report.attempts.length<2||report.attempts.length>12)throw Error('invalid-experience-import');
- return adapter.stage(value,session,report.workflow_id,report.operation,{criteria:report.criteria,attempts:report.attempts});
+adapter.invalidate();
+if(typeof raw!=='string'||raw.length>65536)throw Error('invalid-experience-import');
+const report=JSON.parse(raw);
+const exact=(x,keys)=>x&&typeof x==='object'&&!Array.isArray(x)&&Object.keys(x).sort().join('|')===keys;
+if(!exact(report,'attempts|criteria|operation|schema|workflow_id')||report.schema!=='nexus.experience-review.v1'||
+!exact(report.operation,'correction_code|criterion_id|kind')||!['accept','refresh'].includes(report.operation.kind)||
+!Array.isArray(report.criteria)||report.criteria.length<1||report.criteria.length>30||
+!Array.isArray(report.attempts)||report.attempts.length<2||report.attempts.length>12)throw Error('invalid-experience-import');
+return adapter.stage(value,session,report.workflow_id,report.operation,{criteria:report.criteria,attempts:report.attempts});
 }
 
 
@@ -3185,91 +3186,91 @@ function stageImportedExperience(adapter,value,session,raw){
 
 
 function buildChatExperienceReport(rounds,request,{enabled=false,isolated=false}={}){
- if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
- if(!enabled||isolated)return {status:isolated?'isolated':'off',report:null};
- const id=x=>typeof x==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(x);
- const hash=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
- if(!request||request.same_correction_reported!==true||request.complete_relevant_history_reported!==true||
-    !id(request.project_id)||!hash(request.plan_sha256)||!id(request.session_id)||request.session_id.length>48||
-    !id(request.correction_code)||!id(request.criterion_id)||!['accept','refresh'].includes(request.kind))throw Error('invalid-report-request');
- if(!Array.isArray(rounds)||rounds.length<4||rounds.length>24||rounds.length%2)throw Error('incomplete-paired-history');
+if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
+if(!enabled||isolated)return {status:isolated?'isolated':'off',report:null};
+const id=x=>typeof x==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(x);
+const hash=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
+if(!request||request.same_correction_reported!==true||request.complete_relevant_history_reported!==true||
+!id(request.project_id)||!hash(request.plan_sha256)||!id(request.session_id)||request.session_id.length>48||
+!id(request.correction_code)||!id(request.criterion_id)||!['accept','refresh'].includes(request.kind))throw Error('invalid-report-request');
+if(!Array.isArray(rounds)||rounds.length<4||rounds.length>24||rounds.length%2)throw Error('incomplete-paired-history');
 
- const first=rounds[0]?.steps;
- if(!Array.isArray(first)||first.length<2||first.length>6)throw Error('invalid-report-round');
- const signature=steps=>JSON.stringify(steps.map(s=>[s.command,s.criterion.trim()]));
- const valid=steps=>Array.isArray(steps)&&steps.length===first.length&&steps.every(s=>s&&id(s.command)&&typeof s.criterion==='string'&&s.criterion.trim().length>0&&s.criterion.trim().length<=260&&s.opened===true&&s.acknowledged===true&&s.observed!=='started'&&['pass','fail','inconclusive'].includes(s.verdict));
- if(!valid(first))throw Error('invalid-report-round');
- const expected=signature(first);
- const workflow_id='wf-'+request.plan_sha256;
- const criteria=first.map((_,i)=>({id:'s'+(i+1),required:true,evidence_kind:'human_review'}));
- if(!criteria.some(c=>c.id===request.criterion_id))throw Error('invalid-report-criterion');
- const runs=rounds.map((round,i)=>{
-  if(!round||round.round!==i+1||!valid(round.steps)||signature(round.steps)!==expected)throw Error('incomplete-or-incomparable-history');
-  const scope={project_id:request.project_id,workflow_id,run_id:request.session_id+'-r'+round.round,plan_sha256:request.plan_sha256};
-  return {scope,observations:round.steps.map((s,j)=>({...scope,criterion_id:criteria[j].id,evidence_id:scope.run_id+'-h'+(j+1),kind:'human_review',result:s.verdict}))};
- });
- const attempts=[];
- for(let i=0;i<runs.length;i+=2)attempts.push({correction_code:request.correction_code,before:runs[i],after:runs[i+1]});
- const result=reviewCorrectionExperience({project_id:request.project_id,workflow_id},criteria,attempts,{enabled:true});
- const match=result.candidates.find(c=>c.criterion_id===request.criterion_id&&c.correction_code===request.correction_code);
- if(!match)return {status:'insufficient_reported_support',report:null,completion_verified:false,execution_authorized:false};
- const report={schema:'nexus.experience-review.v1',workflow_id,operation:{kind:request.kind,criterion_id:request.criterion_id,correction_code:request.correction_code},criteria,attempts};
- return {status:'review_only',report,supporting_pair_count:match.supporting_pair_count,completion_verified:false,execution_authorized:false,automatic_application:false};
+const first=rounds[0]?.steps;
+if(!Array.isArray(first)||first.length<2||first.length>6)throw Error('invalid-report-round');
+const signature=steps=>JSON.stringify(steps.map(s=>[s.command,s.criterion.trim()]));
+const valid=steps=>Array.isArray(steps)&&steps.length===first.length&&steps.every(s=>s&&id(s.command)&&typeof s.criterion==='string'&&s.criterion.trim().length>0&&s.criterion.trim().length<=260&&s.opened===true&&s.acknowledged===true&&s.observed!=='started'&&['pass','fail','inconclusive'].includes(s.verdict));
+if(!valid(first))throw Error('invalid-report-round');
+const expected=signature(first);
+const workflow_id='wf-'+request.plan_sha256;
+const criteria=first.map((_,i)=>({id:'s'+(i+1),required:true,evidence_kind:'human_review'}));
+if(!criteria.some(c=>c.id===request.criterion_id))throw Error('invalid-report-criterion');
+const runs=rounds.map((round,i)=>{
+if(!round||round.round!==i+1||!valid(round.steps)||signature(round.steps)!==expected)throw Error('incomplete-or-incomparable-history');
+const scope={project_id:request.project_id,workflow_id,run_id:request.session_id+'-r'+round.round,plan_sha256:request.plan_sha256};
+return {scope,observations:round.steps.map((s,j)=>({...scope,criterion_id:criteria[j].id,evidence_id:scope.run_id+'-h'+(j+1),kind:'human_review',result:s.verdict}))};
+});
+const attempts=[];
+for(let i=0;i<runs.length;i+=2)attempts.push({correction_code:request.correction_code,before:runs[i],after:runs[i+1]});
+const result=reviewCorrectionExperience({project_id:request.project_id,workflow_id},criteria,attempts,{enabled:true});
+const match=result.candidates.find(c=>c.criterion_id===request.criterion_id&&c.correction_code===request.correction_code);
+if(!match)return {status:'insufficient_reported_support',report:null,completion_verified:false,execution_authorized:false};
+const report={schema:'nexus.experience-review.v1',workflow_id,operation:{kind:request.kind,criterion_id:request.criterion_id,correction_code:request.correction_code},criteria,attempts};
+return {status:'review_only',report,supporting_pair_count:match.supporting_pair_count,completion_verified:false,execution_authorized:false,automatic_application:false};
 }
 
 
 
 
 function reviewArchivedExperience(validateState,value,session,request,{enabled=false,isolated=false}={}){
- const boundary={automatic_application:false,execution_authorized:false,completion_verified:false,storage_authorized:false,model_context_authorized:false};
- const result=status=>({status,matches:[],...boundary});
- if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
- if(isolated||!enabled)return result(isolated?'isolated':'off');
- const id=x=>typeof x==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(x);
- if(typeof validateState!=='function'||!session||session.enabled!==true||session.vaultUnlocked!==true||session.busy!==false||session.isolated!==false||!id(session.projectId)||!id(session.threadId)||!Number.isSafeInteger(session.revision)||session.revision<0)throw Error('archive-recall-unavailable');
- const scope=request?.scope;
- if(!scope||scope.project_id!==session.projectId||!id(scope.workflow_id)||request.threadId!==session.threadId||request.sessionRevision!==session.revision||!Number.isSafeInteger(request.snapshotRevision)||request.snapshotRevision<0)throw Error('archive-recall-scope');
- const data=validateState(value),project=data.projects.find(p=>p.id===session.projectId),thread=project?.threads.find(t=>t.id===session.threadId);
- if(!thread||thread.temporary||thread.isolated||thread.archived)throw Error('archive-recall-scope');
- const snapshot=project.experiences?.find(s=>s.workflow_id===scope.workflow_id);
- if(!snapshot)return result('no_snapshot');
- if(snapshot.revision!==request.snapshotRevision)throw Error('stale-archive-recall');
- const assessment=evaluateWorkflowOutcome(scope,request.criteria,request.observations,{enabled:true});
- if(assessment.items.some(i=>i.required&&['conflicting_reports','requires_reconciliation'].includes(i.disposition)))return result('withheld_pending_reconciliation');
- const failed=assessment.items.filter(i=>i.disposition==='reported_failure').map(i=>i.criterion_id);
- if(!failed.length)return result('no_reported_failure');
- const recalled=reviewExperienceRecall(snapshot,{project_id:scope.project_id,workflow_id:scope.workflow_id,revision:snapshot.revision,criterion_ids:failed},request.criteria,request.attempts,{enabled:true});
- const receipts=new Set(request.observations.map(o=>o.evidence_id));
- for(const attempt of request.attempts)for(const run of [attempt.before,attempt.after]){
-  if(run.scope.run_id===scope.run_id)throw Error('current-run-in-experience');
-  if(run.observations.some(o=>receipts.has(o.evidence_id)))throw Error('current-evidence-in-experience');
- }
- return {...recalled,...boundary};
+const boundary={automatic_application:false,execution_authorized:false,completion_verified:false,storage_authorized:false,model_context_authorized:false};
+const result=status=>({status,matches:[],...boundary});
+if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
+if(isolated||!enabled)return result(isolated?'isolated':'off');
+const id=x=>typeof x==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(x);
+if(typeof validateState!=='function'||!session||session.enabled!==true||session.vaultUnlocked!==true||session.busy!==false||session.isolated!==false||!id(session.projectId)||!id(session.threadId)||!Number.isSafeInteger(session.revision)||session.revision<0)throw Error('archive-recall-unavailable');
+const scope=request?.scope;
+if(!scope||scope.project_id!==session.projectId||!id(scope.workflow_id)||request.threadId!==session.threadId||request.sessionRevision!==session.revision||!Number.isSafeInteger(request.snapshotRevision)||request.snapshotRevision<0)throw Error('archive-recall-scope');
+const data=validateState(value),project=data.projects.find(p=>p.id===session.projectId),thread=project?.threads.find(t=>t.id===session.threadId);
+if(!thread||thread.temporary||thread.isolated||thread.archived)throw Error('archive-recall-scope');
+const snapshot=project.experiences?.find(s=>s.workflow_id===scope.workflow_id);
+if(!snapshot)return result('no_snapshot');
+if(snapshot.revision!==request.snapshotRevision)throw Error('stale-archive-recall');
+const assessment=evaluateWorkflowOutcome(scope,request.criteria,request.observations,{enabled:true});
+if(assessment.items.some(i=>i.required&&['conflicting_reports','requires_reconciliation'].includes(i.disposition)))return result('withheld_pending_reconciliation');
+const failed=assessment.items.filter(i=>i.disposition==='reported_failure').map(i=>i.criterion_id);
+if(!failed.length)return result('no_reported_failure');
+const recalled=reviewExperienceRecall(snapshot,{project_id:scope.project_id,workflow_id:scope.workflow_id,revision:snapshot.revision,criterion_ids:failed},request.criteria,request.attempts,{enabled:true});
+const receipts=new Set(request.observations.map(o=>o.evidence_id));
+for(const attempt of request.attempts)for(const run of [attempt.before,attempt.after]){
+if(run.scope.run_id===scope.run_id)throw Error('current-run-in-experience');
+if(run.observations.some(o=>receipts.has(o.evidence_id)))throw Error('current-evidence-in-experience');
+}
+return {...recalled,...boundary};
 }
 
 
 
 
 function prepareChatArchiveRecall(raw,{projectId,threadId,sessionRevision,sessionId,round,planHash,steps}={}){
- const id=x=>typeof x==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(x);
- const exact=(x,keys)=>x&&typeof x==='object'&&!Array.isArray(x)&&Object.keys(x).sort().join('|')===keys;
- if(typeof raw!=='string'||raw.length<1||raw.length>65536||!id(projectId)||!id(threadId)||!id(sessionId)||sessionId.length>48||!Number.isSafeInteger(sessionRevision)||sessionRevision<0||!Number.isSafeInteger(round)||round<1||round>100||typeof planHash!=='string'||!/^[a-f0-9]{64}$/.test(planHash)||!Array.isArray(steps)||steps.length<2||steps.length>6)throw Error('invalid-chat-recall-input');
- const report=JSON.parse(raw),workflow_id='wf-'+planHash;
- if(!exact(report,'attempts|criteria|operation|schema|workflow_id')||report.schema!=='nexus.experience-review.v1'||report.workflow_id!==workflow_id||!exact(report.operation,'correction_code|criterion_id|kind')||!['accept','refresh'].includes(report.operation.kind)||!id(report.operation.correction_code)||!id(report.operation.criterion_id)||!Array.isArray(report.attempts)||report.attempts.length<2||report.attempts.length>12)throw Error('invalid-chat-recall-report');
- const criteria=steps.map((s,i)=>{
-  if(!s||typeof s.criterion!=='string'||!s.criterion.trim()||s.criterion.trim().length>260||s.opened!==true||s.acknowledged!==true||s.observed==='started'||!['pass','fail','inconclusive'].includes(s.verdict))throw Error('incomplete-chat-recall-round');
-  return {id:'s'+(i+1),required:true,evidence_kind:'human_review'};
- });
- if(!Array.isArray(report.criteria)||report.criteria.length!==criteria.length||criteria.some((c,i)=>!exact(report.criteria[i],'evidence_kind|id|required')||Object.keys(c).some(k=>report.criteria[i][k]!==c[k]))||!criteria.some(c=>c.id===report.operation.criterion_id))throw Error('chat-recall-criteria-mismatch');
- for(const attempt of report.attempts){
-  if(!exact(attempt,'after|before|correction_code')||attempt.correction_code!==report.operation.correction_code)throw Error('chat-recall-correction-mismatch');
-  for(const run of [attempt.before,attempt.after]){
-   if(!exact(run,'observations|scope')||!exact(run.scope,'plan_sha256|project_id|run_id|workflow_id')||run.scope.project_id!==projectId||run.scope.workflow_id!==workflow_id||run.scope.plan_sha256!==planHash||!Array.isArray(run.observations)||run.observations.length!==criteria.length||run.observations.some(o=>!exact(o,'criterion_id|evidence_id|kind|plan_sha256|project_id|result|run_id|workflow_id')||o.kind!=='human_review'))throw Error('chat-recall-evidence-scope');
-  }
- }
- const scope={project_id:projectId,workflow_id,run_id:sessionId+'-r'+round,plan_sha256:planHash};
- const observations=steps.map((s,i)=>({...scope,criterion_id:criteria[i].id,evidence_id:scope.run_id+'-h'+(i+1),kind:'human_review',result:s.verdict}));
- return {scope,observations,criteria,attempts:report.attempts,threadId,sessionRevision};
+const id=x=>typeof x==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(x);
+const exact=(x,keys)=>x&&typeof x==='object'&&!Array.isArray(x)&&Object.keys(x).sort().join('|')===keys;
+if(typeof raw!=='string'||raw.length<1||raw.length>65536||!id(projectId)||!id(threadId)||!id(sessionId)||sessionId.length>48||!Number.isSafeInteger(sessionRevision)||sessionRevision<0||!Number.isSafeInteger(round)||round<1||round>100||typeof planHash!=='string'||!/^[a-f0-9]{64}$/.test(planHash)||!Array.isArray(steps)||steps.length<2||steps.length>6)throw Error('invalid-chat-recall-input');
+const report=JSON.parse(raw),workflow_id='wf-'+planHash;
+if(!exact(report,'attempts|criteria|operation|schema|workflow_id')||report.schema!=='nexus.experience-review.v1'||report.workflow_id!==workflow_id||!exact(report.operation,'correction_code|criterion_id|kind')||!['accept','refresh'].includes(report.operation.kind)||!id(report.operation.correction_code)||!id(report.operation.criterion_id)||!Array.isArray(report.attempts)||report.attempts.length<2||report.attempts.length>12)throw Error('invalid-chat-recall-report');
+const criteria=steps.map((s,i)=>{
+if(!s||typeof s.criterion!=='string'||!s.criterion.trim()||s.criterion.trim().length>260||s.opened!==true||s.acknowledged!==true||s.observed==='started'||!['pass','fail','inconclusive'].includes(s.verdict))throw Error('incomplete-chat-recall-round');
+return {id:'s'+(i+1),required:true,evidence_kind:'human_review'};
+});
+if(!Array.isArray(report.criteria)||report.criteria.length!==criteria.length||criteria.some((c,i)=>!exact(report.criteria[i],'evidence_kind|id|required')||Object.keys(c).some(k=>report.criteria[i][k]!==c[k]))||!criteria.some(c=>c.id===report.operation.criterion_id))throw Error('chat-recall-criteria-mismatch');
+for(const attempt of report.attempts){
+if(!exact(attempt,'after|before|correction_code')||attempt.correction_code!==report.operation.correction_code)throw Error('chat-recall-correction-mismatch');
+for(const run of [attempt.before,attempt.after]){
+if(!exact(run,'observations|scope')||!exact(run.scope,'plan_sha256|project_id|run_id|workflow_id')||run.scope.project_id!==projectId||run.scope.workflow_id!==workflow_id||run.scope.plan_sha256!==planHash||!Array.isArray(run.observations)||run.observations.length!==criteria.length||run.observations.some(o=>!exact(o,'criterion_id|evidence_id|kind|plan_sha256|project_id|result|run_id|workflow_id')||o.kind!=='human_review'))throw Error('chat-recall-evidence-scope');
+}
+}
+const scope={project_id:projectId,workflow_id,run_id:sessionId+'-r'+round,plan_sha256:planHash};
+const observations=steps.map((s,i)=>({...scope,criterion_id:criteria[i].id,evidence_id:scope.run_id+'-h'+(i+1),kind:'human_review',result:s.verdict}));
+return {scope,observations,criteria,attempts:report.attempts,threadId,sessionRevision};
 }
 
 
@@ -3277,35 +3278,93 @@ function prepareChatArchiveRecall(raw,{projectId,threadId,sessionRevision,sessio
 
 
 function reviewChatCorrectionOptions(validateState,value,session,input,{enabled=false,isolated=false}={}){
- const boundary={automatic_selection:false,automatic_application:false,execution_authorized:false,completion_verified:false,storage_authorized:false,model_context_authorized:false};
- const empty=status=>({status,comparison:null,scenarios:null,...boundary});
- if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
- if(isolated||!enabled)return empty(isolated?'isolated':'off');
- if(!session||session.enabled!==true||session.vaultUnlocked!==true||session.busy!==false||session.isolated!==false)throw Error('archive-recall-unavailable');
- const {reports,context,snapshotRevision,comparison,scenarios}=input||{};
- if(!context||context.projectId!==session.projectId||context.threadId!==session.threadId||context.sessionRevision!==session.revision||!Number.isSafeInteger(snapshotRevision)||snapshotRevision<0)throw Error('archive-recall-scope');
- if(!Array.isArray(reports)||reports.length<2||reports.length>5||reports.some(r=>typeof r!=='string'||r.length<1||r.length>65536)||reports.reduce((n,r)=>n+r.length,0)>196608||!comparison||!Array.isArray(comparison.options)||comparison.options.length!==reports.length)throw Error('invalid-chat-comparison-input');
- const prepared=reports.map(raw=>prepareChatArchiveRecall(raw,context));
- const first=prepared[0],attempts=prepared.flatMap(p=>p.attempts);
- if(attempts.length>12)throw Error('chat-comparison-attempt-capacity');
- const codes=prepared.map(p=>p.attempts[0].correction_code),wanted=new Set(codes);
- if(wanted.size!==codes.length||comparison.options.some(o=>!wanted.has(o?.correction_code))||new Set(comparison.options.map(o=>o.correction_code)).size!==codes.length||reports.some(raw=>JSON.parse(raw).operation.criterion_id!==comparison.criterion_id))throw Error('chat-comparison-option-mismatch');
- if(scenarios!==undefined&&(!Array.isArray(scenarios?.options)||scenarios.criterion_id!==comparison.criterion_id||scenarios.options.some(o=>!wanted.has(o?.correction_code))))throw Error('chat-comparison-scenario-mismatch');
- const recall=reviewArchivedExperience(validateState,value,session,{...first,attempts,snapshotRevision},{enabled:true});
- if(recall.status!=='review_only')return empty(recall.status);
- const eligible=new Set(recall.matches.filter(m=>m.criterion_id===comparison.criterion_id).map(m=>m.correction_code));
- if(codes.some(c=>!eligible.has(c)))return empty('insufficient_recalled_support');
+const boundary={automatic_selection:false,automatic_application:false,execution_authorized:false,completion_verified:false,storage_authorized:false,model_context_authorized:false};
+const empty=status=>({status,comparison:null,scenarios:null,...boundary});
+if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
+if(isolated||!enabled)return empty(isolated?'isolated':'off');
+if(!session||session.enabled!==true||session.vaultUnlocked!==true||session.busy!==false||session.isolated!==false)throw Error('archive-recall-unavailable');
+const {reports,context,snapshotRevision,comparison,scenarios}=input||{};
+if(!context||context.projectId!==session.projectId||context.threadId!==session.threadId||context.sessionRevision!==session.revision||!Number.isSafeInteger(snapshotRevision)||snapshotRevision<0)throw Error('archive-recall-scope');
+if(!Array.isArray(reports)||reports.length<2||reports.length>5||reports.some(r=>typeof r!=='string'||r.length<1||r.length>65536)||reports.reduce((n,r)=>n+r.length,0)>196608||!comparison||!Array.isArray(comparison.options)||comparison.options.length!==reports.length)throw Error('invalid-chat-comparison-input');
+const prepared=reports.map(raw=>prepareChatArchiveRecall(raw,context));
+const first=prepared[0],attempts=prepared.flatMap(p=>p.attempts);
+if(attempts.length>12)throw Error('chat-comparison-attempt-capacity');
+const codes=prepared.map(p=>p.attempts[0].correction_code),wanted=new Set(codes);
+if(wanted.size!==codes.length||comparison.options.some(o=>!wanted.has(o?.correction_code))||new Set(comparison.options.map(o=>o.correction_code)).size!==codes.length||reports.some(raw=>JSON.parse(raw).operation.criterion_id!==comparison.criterion_id))throw Error('chat-comparison-option-mismatch');
+if(scenarios!==undefined&&(!Array.isArray(scenarios?.options)||scenarios.criterion_id!==comparison.criterion_id||scenarios.options.some(o=>!wanted.has(o?.correction_code))))throw Error('chat-comparison-scenario-mismatch');
+const recall=reviewArchivedExperience(validateState,value,session,{...first,attempts,snapshotRevision},{enabled:true});
+if(recall.status!=='review_only')return empty(recall.status);
+const eligible=new Set(recall.matches.filter(m=>m.criterion_id===comparison.criterion_id).map(m=>m.correction_code));
+if(codes.some(c=>!eligible.has(c)))return empty('insufficient_recalled_support');
 
 
- const phases={started:'running',succeeded:'succeeded',failed:'failed',cancelled:'cancelled',partial:'blocked'};
- const plan={goal:'Review prior correction alternatives',steps:context.steps.map((s,i)=>({id:'s'+(i+1),needs:[],effect:s.command==='code'?'local_compute':s.command==='research'?'network_read':'unknown',success_criteria:s.criterion.trim()}))};
- const step_observations=context.steps.flatMap((s,i)=>Object.hasOwn(phases,s.observed)?[{...first.scope,id:'s'+(i+1),status:phases[s.observed]}]:[]);
- const data=validateState(value),snapshot=data.projects.find(p=>p.id===session.projectId)?.experiences?.find(s=>s.workflow_id===first.scope.workflow_id);
- const review=reviewAssistantWorkflow({scope:first.scope,plan,criteria:first.criteria,step_observations,evidence:first.observations,experience:{snapshot,revision:snapshotRevision,attempts},correction_comparison:comparison,...(scenarios===undefined?{}:{correction_scenarios:scenarios})},{enabled:true,experienceEnabled:true});
- return {status:review.correction_comparison.status,comparison:review.correction_comparison,scenarios:review.correction_scenarios??null,...boundary};
+const phases={started:'running',succeeded:'succeeded',failed:'failed',cancelled:'cancelled',partial:'blocked'};
+const plan={goal:'Review prior correction alternatives',steps:context.steps.map((s,i)=>({id:'s'+(i+1),needs:[],effect:s.command==='code'?'local_compute':s.command==='research'?'network_read':'unknown',success_criteria:s.criterion.trim()}))};
+const step_observations=context.steps.flatMap((s,i)=>Object.hasOwn(phases,s.observed)?[{...first.scope,id:'s'+(i+1),status:phases[s.observed]}]:[]);
+const data=validateState(value),snapshot=data.projects.find(p=>p.id===session.projectId)?.experiences?.find(s=>s.workflow_id===first.scope.workflow_id);
+const review=reviewAssistantWorkflow({scope:first.scope,plan,criteria:first.criteria,step_observations,evidence:first.observations,experience:{snapshot,revision:snapshotRevision,attempts},correction_comparison:comparison,...(scenarios===undefined?{}:{correction_scenarios:scenarios})},{enabled:true,experienceEnabled:true});
+return {status:review.correction_comparison.status,comparison:review.correction_comparison,scenarios:review.correction_scenarios??null,...boundary};
 }
 
- return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow,buildChatExperienceReport,prepareChatArchiveRecall,reviewArchivedExperience,reviewChatCorrectionOptions});
+
+
+
+function reviewEvidenceClaims(passages,claims,{enabled=false,isolated=false}={}){
+const boundary={facts_verified:false,source_independence_verified:false,semantic_support_verified:false,automatic_resolution:false,execution_authorized:false,storage_authorized:false};
+if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-review-options');
+if(!enabled||isolated)return {status:isolated?'isolated':'off',claims:[],...boundary};
+const ref=x=>typeof x==='string'&&/^[SA][1-9]\d?$/.test(x);
+const id=x=>typeof x==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(x);
+const positive=x=>Number.isSafeInteger(x)&&x>0;
+const exact=(x,keys)=>x&&typeof x==='object'&&!Array.isArray(x)&&Object.keys(x).sort().join('|')===keys;
+const norm=x=>x.normalize('NFC').replace(/\s+/gu,' ').trim();
+if(!Array.isArray(passages)||passages.length>10||!Array.isArray(claims)||claims.length<1||claims.length>20)throw Error('invalid-evidence-input');
+const index=new Map();
+for(const p of passages){
+if(!exact(p,'kind|line|offset|partial|ref|source_id|text')||!ref(p.ref)||index.has(p.ref)||!id(p.source_id)||!positive(p.line)||!positive(p.offset)||typeof p.partial!=='boolean'||typeof p.text!=='string'||!p.text.trim()||p.text.length>1800||!['project_source','one_turn_attachment'].includes(p.kind)||p.ref[0]!== (p.kind==='project_source'?'S':'A'))throw Error('invalid-evidence-passage');
+index.set(p.ref,p);
+}
+const seenClaims=new Set(),results=[];
+let total=0;
+for(const c of claims){
+if(!exact(c,'claim_id|judgments')||!id(c.claim_id)||seenClaims.has(c.claim_id)||!Array.isArray(c.judgments)||c.judgments.length>10||(total+=c.judgments.length)>80)throw Error('invalid-claim-review');
+seenClaims.add(c.claim_id);
+const rows=[],seen=new Set(),groups=new Map(),files=new Set();
+for(const j of c.judgments){
+if(!exact(j,'quote|ref|stance')||!ref(j.ref)||typeof j.quote!=='string'||j.quote.length<12||j.quote.length>500||norm(j.quote).length<12||!['supports','contradicts','uncertain'].includes(j.stance))throw Error('invalid-quote-judgment');
+const key=JSON.stringify([j.ref,j.quote,j.stance]);
+if(seen.has(key))throw Error('duplicate-quote-judgment');seen.add(key);
+const p=index.get(j.ref);
+if(!p){rows.push({ref:j.ref,stance:j.stance,status:'unknown_reference'});continue}
+if(!p.text.includes(j.quote)){rows.push({ref:j.ref,stance:j.stance,status:'quote_not_found'});continue}
+const q=norm(j.quote),content=norm(p.text);
+const g=groups.get(content)||{stances:new Set(),quotes:new Set(),refs:new Set(),files:new Set()};
+g.stances.add(j.stance);g.quotes.add(q);g.refs.add(j.ref);g.files.add(p.kind+':'+p.source_id);groups.set(content,g);
+files.add(p.kind+':'+p.source_id);
+rows.push({ref:j.ref,stance:j.stance,status:'exact_quote_found',partial:p.partial});
+}
+
+
+const quoteGroups=new Map();
+for(const g of groups.values())for(const q of g.quotes)quoteGroups.set(q,(quoteGroups.get(q)||0)+1);
+const dispositions=[...groups.values()].map(g=>g.stances.has('supports')&&g.stances.has('contradicts')?'ambiguous_interpretation':g.stances.has('uncertain')?'uncertain':g.stances.has('supports')?'reported_support':'reported_contradiction');
+const support=dispositions.filter(x=>x==='reported_support').length,contradiction=dispositions.filter(x=>x==='reported_contradiction').length,ambiguous=dispositions.filter(x=>x==='ambiguous_interpretation').length,uncertain=dispositions.filter(x=>x==='uncertain').length;
+const invalid=rows.filter(x=>x.status!=='exact_quote_found').length;
+const duplicateExcerpts=[...groups.values()].some(g=>g.refs.size>1),duplicateQuotes=[...quoteGroups.values()].some(n=>n>1);
+const flags=[];
+if(invalid)flags.push('unmatched_evidence');
+if(rows.some(x=>x.partial))flags.push('partial_passage');
+if(duplicateExcerpts||duplicateQuotes)flags.push('repeated_content');
+if(ambiguous)flags.push('opposing_interpretations_of_same_excerpt');
+if(uncertain)flags.push('uncertain_interpretation');
+if(groups.size&&files.size===1)flags.push('single_file');
+const disposition=invalid?'reconcile_references':ambiguous?'reconcile_interpretations':support&&contradiction?'conflicting_reported_evidence':uncertain?'uncertain_evidence':support?'reported_support_only':contradiction?'reported_contradiction_only':'no_reviewed_evidence';
+results.push({claim_id:c.claim_id,disposition,exact_quote_count:rows.length-invalid,distinct_excerpt_count:groups.size,distinct_file_count:files.size,reported_support_excerpt_count:support,reported_contradiction_excerpt_count:contradiction,flags,judgments:rows});
+}
+return {status:'review_only',basis:'exact_substrings_and_declared_stances_not_verified_entailment_or_source_quality',claims:results,...boundary};
+}
+
+ return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow,buildChatExperienceReport,prepareChatArchiveRecall,reviewArchivedExperience,reviewChatCorrectionOptions,reviewEvidenceClaims});
 })();
 // Direct chat handoff: same validated import engine, no intermediate file.
 function canApplyChatExperience(){
@@ -3476,6 +3535,38 @@ function fillProfile(){$('instructions').value=p()?.instructions||'';$('memories
 function fillDoc(){$('editor').value=doc()?.versions.at(-1)?.text||'';renderVersions()}
 function renderVersions(){const d=doc();$('versions').replaceChildren(...(d?.versions||[]).map((v,i)=>option(v.id,(i+1)+' · '+v.at)));$('versions').value=d?.versions.at(-1)?.id||'';$('version-diff').textContent=''}
 let lastChatView;
+function mountEvidenceReview(answer,passages){
+ if(!passages.length||chat()?.isolated||chat()?.archived)return;
+ const parent=$('messages').lastElementChild,head=chat()?.head,rev=revision;
+ if(!parent)return;
+ const w=(en,fa)=>language==='fa'?fa:en,panel=el('details','');
+ panel.dataset.evidenceReview='';panel.append(el('summary',w('Review evidence','بازبینی شواهد')),el('p',w('Exact quotes, your judgments; not fact verification.','نقل‌قول دقیق و ارزیابی شما؛ نه راستی‌آزمایی.')));
+ const field=(p,label,tag)=>{const l=el('label',label),n=el(tag,'');l.append(n);p.append(l);return n};
+ const area=(p,label)=>{const n=field(p,label,'textarea');n.maxLength=500;n.rows=2;return n};
+ const claim=area(panel,w('Exact claim from answer','متن دقیق ادعا')),result=el('pre','');result.setAttribute('role','status');
+ const rows=Array.from({length:2},()=>{
+  const group=el('fieldset','');panel.append(group);
+  const ref=field(group,w('Excerpt','گزیده'),'select'),preview=el('p','');
+  ref.append(option('',w('None','هیچ')),...passages.map(p=>option(p.ref,p.ref+' · '+p.line+':'+p.offset)));group.append(preview);
+  const quote=area(group,w('Exact quote (12–500 characters)','نقل‌قول دقیق (۱۲ تا ۵۰۰ نویسه)'));
+  const stance=field(group,w('Judgment','ارزیابی'),'select');
+  stance.append(option('uncertain',w('Uncertain','نامطمئن')),option('supports',w('Supports','موافق')),option('contradicts',w('Contradicts','مخالف')));
+  ref.onchange=()=>{preview.textContent=passages.find(p=>p.ref===ref.value)?.text||'';quote.value='';stance.value='uncertain';result.textContent=''};
+  return {ref,quote,stance};
+ });
+ const run=el('button',w('Check evidence','بررسی شواهد'));run.type='button';run.dataset.evidenceCheck='';
+ panel.oninput=()=>{result.textContent=''};panel.onchange=panel.oninput;
+ run.onclick=()=>{
+  if(!panel.isConnected||busy||chat()?.head!==head||revision!==rev)return;
+  try{
+   if(claim.value.trim().length<12||!answer.includes(claim.value))throw Error('claim');
+   const judgments=rows.filter(x=>x.ref.value||x.quote.value).map(x=>({ref:x.ref.value,quote:x.quote.value,stance:x.stance.value}));
+   const c=experienceImportEngine.reviewEvidenceClaims(passages,[{claim_id:'claim1',judgments}],{enabled:true}).claims[0];
+   result.textContent=c.disposition+'\n'+c.judgments.map(j=>j.ref+' · '+j.status+' · '+j.stance).join('\n')+'\n'+c.flags.join(', ');
+  }catch{result.textContent=w('Check claim and quotes.','ادعا و نقل‌قول‌ها را بررسی کنید.')}
+ };
+ panel.append(run,result);parent.append(panel);
+}
 function messageOriginLabel(n){
  const ordinary=t(n.origin==='human'?'human':n.origin==='model'?'model':'local');
  // Only receipts accepted from the reviewed gateway route are attributed.
@@ -3687,7 +3778,7 @@ function installThread(next){
 $('auto-speak').onchange=()=>{if(!$('auto-speak').checked)window.NexusSpeechPlayback?.stop()};
 function selectedModelEngine(){return document.getElementById('model-engine')?.value==='device'?'device':'gateway'}
 function prepare(regenerate=false){if(!chat()?.isolated&&(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,relatedChats:$('use-related-chats').checked,historyDays:data.history_days,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked,onDevice:destination==='device'});if([NexusReplyFormat.answerReviewPrompt('en'),NexusReplyFormat.answerReviewPrompt('fa')].includes(S.path(c).at(-1)?.text)&&!NexusReplyFormat.checkAnswerReviewContext(S.path(c),ctx.messages))throw Error('answer-review-context-missing');if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');const privacyAudit=destination==='gateway'?S.inspectSecrets(ctx.messages):{categories:[],possible_secrets:false};const stream=destination==='gateway'&&modelInfo.streaming===true;
- pending={destination,stream,thread:c,referenceMarkers:[...ctx.citations,...ctx.attachments_supplied].map(x=>x.ref),body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(destination==='gateway'&&selectedModelSlot!=='primary'?{model_slot:selectedModelSlot}:{}),...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,...(destination==='gateway'?{model_slot:selectedModelSlot}:{}),provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,memory_review:ctx.memory_review,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);showPrivacy(privacyAudit);$('request-review').hidden=false;controls()}catch(error){if(error?.message==='answer-review-context-missing')$('status').textContent=language==='fa'?'متن کامل درخواست و پاسخ پیشین در زمینه بازبینی نیست؛ ارسال انجام نشد.':'The complete previous request and answer are not in the review context. Nothing was sent.';else status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
+ pending={destination,stream,thread:c,evidencePassages:ctx.evidence_passages,referenceMarkers:[...ctx.citations,...ctx.attachments_supplied].map(x=>x.ref),body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(destination==='gateway'&&selectedModelSlot!=='primary'?{model_slot:selectedModelSlot}:{}),...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,...(destination==='gateway'?{model_slot:selectedModelSlot}:{}),provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,memory_review:ctx.memory_review,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);showPrivacy(privacyAudit);$('request-review').hidden=false;controls()}catch(error){if(error?.message==='answer-review-context-missing')$('status').textContent=language==='fa'?'متن کامل درخواست و پاسخ پیشین در زمینه بازبینی نیست؛ ارسال انجام نشد.':'The complete previous request and answer are not in the review context. Nothing was sent.';else status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
 function gateway(){const value=$('gateway').value.trim();const u=new URL(value||location.origin);if((u.protocol!=='https:'&&!(u.protocol==='http:'&&['127.0.0.1','[::1]'].includes(u.hostname)))||u.username||u.password||u.search||u.hash||!['','/'].includes(u.pathname))throw Error('gateway-url');return u.origin}
 function gatewayFailureLabel(error,request,timedOut=false){
  if(request.destination!=='gateway')return request.stream?'streamFailed':'failed';
@@ -3888,6 +3979,7 @@ $('send-model').onclick=async()=>{
   const label=request.destination==='device'?'[On-device draft · SmolLM2-135M · English / limited]\n\n':'';
   const installed=installThread(S.append(request.thread,'assistant',label+out.text,'model',
    undefined,[],receipt));
+  if(installed)mountEvidenceReview(out.text,request.evidencePassages);
   if(installed&&(draftReview.findings.length||references.status!=='no_supplied_refs')){
    const warnings={length_limit:['The response reached its length limit.','پاسخ به سقف طول رسیده است.'],control_characters:['Unusual control characters.','نویسه‌های کنترلی غیرمعمول.'],unclosed_code_fence:['Unclosed code block.','بلوک کد بسته نشده.'],repeated_paragraph:['Repeated paragraph.','پاراگراف تکراری.'],review_limit:['Structural review size limit.','محدودیت حجم بازبینی ساختاری.']};
    const refStatus={unknown_markers:['Unknown request reference markers: ','شناسه ارجاع ناشناخته: '],matched_markers:['Matching request reference markers: ','شناسه ارجاع مطابق درخواست: '],no_markers:['Supplied passages have no explicit reference markers in this answer.','برای گزیده‌های ارسالی شناسه ارجاع صریح در پاسخ نیست.'],limit:['Reference scan limit.','سقف بازبینی ارجاع.']};
