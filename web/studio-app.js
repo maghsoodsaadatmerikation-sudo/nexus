@@ -288,7 +288,7 @@ function clearTrainingReview(){
 // Existing project-memory surface: no new top-level navigation.
 const experienceImportEngine=(()=>{
  /* EXPERIENCE_EDIT_ENGINE */
- return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow,buildChatExperienceReport,prepareChatArchiveRecall,reviewArchivedExperience});
+ return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow,buildChatExperienceReport,prepareChatArchiveRecall,reviewArchivedExperience,reviewChatCorrectionOptions});
 })();
 // Direct chat handoff: same validated import engine, no intermediate file.
 function canApplyChatExperience(){
@@ -323,6 +323,15 @@ function recallChatExperienceReport(raw,expected,details){
  const snapshot=p().experiences?.find(s=>s.workflow_id===request.scope.workflow_id);
  if(!snapshot)return {status:'no_snapshot',matches:[]};
  return experienceImportEngine.reviewArchivedExperience(S.state,data,{enabled:true,vaultUnlocked:vault.unlocked,busy,isolated:!!chat()?.isolated,projectId,threadId,revision},{...request,snapshotRevision:snapshot.revision},{enabled:true});
+}
+function compareChatExperienceReports(reports,expected,details,comparison,scenarios){
+ const current=chatArchiveRecallContext();
+ if(!current||!expected||JSON.stringify(current)!==JSON.stringify(expected))return {status:'unavailable',comparison:null,scenarios:null};
+ const context={...details,projectId,threadId,sessionRevision:revision};
+ const request=experienceImportEngine.prepareChatArchiveRecall(reports[0],context);
+ const snapshot=p().experiences?.find(s=>s.workflow_id===request.scope.workflow_id);
+ if(!snapshot)return {status:'no_snapshot',comparison:null,scenarios:null};
+ return experienceImportEngine.reviewChatCorrectionOptions(S.state,data,{enabled:true,vaultUnlocked:vault.unlocked,busy,isolated:!!chat()?.isolated,projectId,threadId,revision},{reports,context,snapshotRevision:snapshot.revision,comparison,scenarios},{enabled:true});
 }
 function renderExperienceImport(parent,allowed){
  let panel=$('experience-import-panel');
