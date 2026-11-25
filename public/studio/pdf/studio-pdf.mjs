@@ -13,7 +13,7 @@ function refresh() {
   const {busy, archived} = ui.uiStatus();
   const resourceBlocked = !gate || gate.audioBusy();
   input.disabled = Boolean(active || busy || archived || resourceBlocked);
-  input.title = resourceBlocked && !active ? words('Finish the active local job or unload the local model first.', 'ابتدا پردازش محلی را پایان بده یا مدل محلی را از حافظه خارج کن.') : '';
+  input.title = resourceBlocked && !active ? (gate?.resourceMessage?.() || words('Finish the active local job or unload the local model first.', 'ابتدا پردازش محلی را پایان بده یا مدل محلی را از حافظه خارج کن.')) : '';
   $('studio-pdf-label').textContent = words('Attach a PDF', 'پیوست PDF');
   $('studio-pdf-help').textContent = words(
     'Extracts selectable text from the first 20 pages locally. Maximum file size is 2 MiB.',
@@ -47,7 +47,7 @@ input.onchange = async () => {
     status.textContent = words('Choose a PDF up to 2 MiB.', 'یک PDF تا حجم ۲ مگابایت انتخاب کن.');
     return;
   }
-  const release = gate?.acquireAudioJob();
+  const release = gate?.acquireAudioJob('pdf');
   if (!release) return;
   const job = {...ui.selection(), worker: null};
   let initialSettled;
