@@ -52,7 +52,9 @@ function testArchiveEdit(S){
  const imported=stageImportedExperience(adapter,data,session,JSON.stringify(report));
  eq(imported.correction_code,'fix');
  eq(adapter.approve(imported.ticket,data,session,{approved:true}).state.projects[0].experiences[0].entries[0].supporting_pair_count,2);
+ const supersededImport=stageImportedExperience(adapter,data,session,JSON.stringify(report));
  reject(()=>stageImportedExperience(adapter,data,session,'x'.repeat(65537)),'invalid-experience-import');
+ reject(()=>adapter.approve(supersededImport.ticket,data,session,{approved:true}),'inactive-archive-review');
  for(const bad of [{...report,schema:'other'},{...report,raw_evidence:[]},{...report,attempts:[attempts[0]]},{...report,operation:{...accept,kind:'delete'}},{...report,operation:{...accept,extra:true}},{...report,criteria:[]}])reject(()=>stageImportedExperience(adapter,data,session,JSON.stringify(bad)),'invalid-experience-import');
  reject(()=>stageImportedExperience(adapter,data,{...session,isolated:true},JSON.stringify(report)),'archive-review-unavailable');
  eq(JSON.stringify(data),original);
