@@ -1,6 +1,6 @@
 // Exact Studio UI handlers, synthetic DOM and delayed audio engines.
 import {readFileSync} from 'node:fs';
-export async function testAudioJobGate(musicSource,orchestraSource,deviceSource){
+export async function testAudioJobGate(musicSource,orchestraSource,deviceSource,deviceUiSource){
  const checks=[],ok=(x,label)=>{if(!x)throw Error(label);checks.push(label)};
  const nodes=new Map(),listeners=new Map(),jobs=[],reads=[];
  const node=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',checked:false,disabled:false,textContent:'',type:'text',files:[],
@@ -118,9 +118,30 @@ export async function testAudioJobGate(musicSource,orchestraSource,deviceSource)
  for(const owner of ['pdf','code','data']){const release=gate.acquireAudioJob(owner);ok(gate.resourceOwner()===owner&&Boolean(gate.resourceMessage()),owner+' bounded owner label');release()}
  ok(gate.acquireAudioJob('private-file-name.pdf')===null&&!gate.audioBusy(),'arbitrary owner rejected');
  ok(gate.resourceOwner()===null&&node('studio-resource-status').hidden,'no residual resource notice');
+ let coerced=false;
+ const malformed={toString(){coerced=true;return 'model'}};
+ ok(gate.acquireAudioJob(malformed)===null&&!coerced&&!gate.audioBusy(),'nonstring owner rejected without coercion');
+ ok(gate.acquireAudioJob(['model'])===null&&gate.acquireAudioJob(null)===null&&gate.acquireAudioJob('__proto__')===null,'invalid owner shapes rejected');
+ // Exercise the actual model load click handler: a blocked click must not reset chat.
+ let resetCalls=0,loadCalls=0,loadState='idle';
+ const deviceNodes=new Map();
+ const deviceNode=id=>{if(!deviceNodes.has(id))deviceNodes.set(id,{checked:false,value:'',disabled:false,textContent:'',title:''});return deviceNodes.get(id)};
+ const deviceGate={audioBusy:gate.audioBusy,resourceMessage:gate.resourceMessage,acquireAudioJob:gate.acquireAudioJob};
+ const deviceWindow={NexusMusicUI:deviceGate,NexusStudioUI:{resetModel(){resetCalls++}}};
+ class FakeEngine{constructor(options){this.options=options}get state(){return loadState}async load(){loadCalls++}}
+ const deviceDocument={documentElement:{lang:'en'},getElementById:deviceNode,addEventListener(){}};
+ const transformed=deviceUiSource.replace(/^import[^\n]*\n/m,'').replaceAll('import.meta.url',"'https://fixture.test/device/device-ui.js'");
+ new Function('document','window','DeviceEngine','inspectReadiness','URL',transformed)(deviceDocument,deviceWindow,FakeEngine,()=>{},class{});
+ const loadClick=()=>deviceNode('device-load').onclick();
+ await loadClick();ok(resetCalls===0&&loadCalls===0,'missing consent causes no reset');
+ deviceNode('device-consent').checked=true;
+ const busyLease=gate.acquireAudioJob('pdf');
+ await loadClick();ok(resetCalls===0&&loadCalls===0&&deviceNode('device-state').textContent.includes('PDF extraction'),'blocked model load preserves chat and identifies owner');
+ busyLease();loadState='ready';await loadClick();ok(resetCalls===0&&loadCalls===0,'duplicate model load preserves chat');
+ loadState='idle';await loadClick();ok(resetCalls===1&&loadCalls===1,'eligible model load resets and loads once');
  return checks;
 }
 if(typeof process!=='undefined'){
- const checks=await testAudioJobGate(readFileSync(new URL('../web/studio-music-ui.js',import.meta.url),'utf8'),readFileSync(new URL('../web/studio-orchestra-ui.js',import.meta.url),'utf8'),readFileSync(new URL('../web/device/device-engine.js',import.meta.url),'utf8'));
+ const checks=await testAudioJobGate(readFileSync(new URL('../web/studio-music-ui.js',import.meta.url),'utf8'),readFileSync(new URL('../web/studio-orchestra-ui.js',import.meta.url),'utf8'),readFileSync(new URL('../web/device/device-engine.js',import.meta.url),'utf8'),readFileSync(new URL('../web/device/device-ui.js',import.meta.url),'utf8'));
  console.log('AUDIO JOB GATE: PASS ('+checks.length+' checks)');
 }
