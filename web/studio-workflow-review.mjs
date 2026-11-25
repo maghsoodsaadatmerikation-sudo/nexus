@@ -31,6 +31,13 @@ export function reviewAssistantWorkflow(input,{enabled=false,isolated=false,expe
   else {
    const e=input.experience;
    experience=reviewExperienceRecall(e.snapshot,{project_id:scope.project_id,workflow_id:scope.workflow_id,revision:e.revision,criterion_ids:failed},input.criteria,e.attempts,on);
+   // Recall validates the bounded attempt structure before this cross-check.
+   // The current run cannot supply independent historical support for itself.
+   const currentReceipts=new Set(input.evidence.map(o=>o.evidence_id));
+   for(const attempt of e.attempts)for(const run of [attempt.before,attempt.after]){
+    if(run.scope.run_id===scope.run_id)throw Error('current-run-in-experience');
+    if(run.observations.some(o=>currentReceipts.has(o.evidence_id)))throw Error('current-evidence-in-experience');
+   }
   }
  }
  const priority=critique.blocking_review_count?'review_plan_boundaries':
