@@ -292,7 +292,7 @@ function renderStoredExperiencePanel(){
  let panel=$('stored-experience-panel');
  const allowed=vault.unlocked&&!busy&&!!p()&&!!chat()&&!chat().temporary&&!chat().isolated&&!chat().archived;
  const entries=allowed?(p().experiences||[]):[];
- const stamp=JSON.stringify([language,projectId,threadId,revision,allowed,entries]);
+ const stamp=JSON.stringify([language,projectId,threadId,revision,vault.archiveRevision,allowed,entries]);
  if(panel&&stamp===experiencePanelStamp)return;
  experiencePanelStamp=stamp;
  if(!panel){panel=document.createElement('details');panel.id='stored-experience-panel';parent.append(panel)}
