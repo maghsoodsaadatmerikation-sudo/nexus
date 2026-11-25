@@ -64,6 +64,7 @@ jobs:
           node scripts/test-studio-draft-review.mjs
           node scripts/test-studio-answer-review.mjs
           node scripts/test-studio-reference-audit.mjs
+          node scripts/test-studio-evidence-review.mjs
           node scripts/test-studio-memory-review.mjs
           node scripts/test-studio-memory-edits.mjs
           node scripts/test-studio-workflow-outcome.mjs
