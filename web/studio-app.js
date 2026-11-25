@@ -278,6 +278,7 @@ function clearModelReview(){
  $('model-stream-preview').hidden=true;$('model-stream-text').textContent='';
 }
 function stop({refresh=true}={}){
+ $('messages')?.querySelector('[data-evidence-review]')?.remove();
  languageImport++;toolLifecycle('cancel');revision++;controller?.abort();controller=null;busy=false;
  clearModelReview();window.NexusSpeechPlayback?.stop();if(refresh)controls();
 }
@@ -288,7 +289,7 @@ function clearTrainingReview(){
 // Existing project-memory surface: no new top-level navigation.
 const experienceImportEngine=(()=>{
  /* EXPERIENCE_EDIT_ENGINE */
- return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow,buildChatExperienceReport,prepareChatArchiveRecall,reviewArchivedExperience,reviewChatCorrectionOptions});
+ return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow,buildChatExperienceReport,prepareChatArchiveRecall,reviewArchivedExperience,reviewChatCorrectionOptions,reviewEvidenceClaims});
 })();
 // Direct chat handoff: same validated import engine, no intermediate file.
 function canApplyChatExperience(){
@@ -459,6 +460,38 @@ function fillProfile(){$('instructions').value=p()?.instructions||'';$('memories
 function fillDoc(){$('editor').value=doc()?.versions.at(-1)?.text||'';renderVersions()}
 function renderVersions(){const d=doc();$('versions').replaceChildren(...(d?.versions||[]).map((v,i)=>option(v.id,(i+1)+' · '+v.at)));$('versions').value=d?.versions.at(-1)?.id||'';$('version-diff').textContent=''}
 let lastChatView;
+function mountEvidenceReview(answer,passages){
+ if(!passages.length||chat()?.isolated||chat()?.archived)return;
+ const parent=$('messages').lastElementChild,head=chat()?.head,rev=revision;
+ if(!parent)return;
+ const w=(en,fa)=>language==='fa'?fa:en,panel=el('details','');
+ panel.dataset.evidenceReview='';panel.append(el('summary',w('Review evidence','بازبینی شواهد')),el('p',w('Exact quotes, your judgments; not fact verification.','نقل‌قول دقیق و ارزیابی شما؛ نه راستی‌آزمایی.')));
+ const field=(p,label,tag)=>{const l=el('label',label),n=el(tag,'');l.append(n);p.append(l);return n};
+ const area=(p,label)=>{const n=field(p,label,'textarea');n.maxLength=500;n.rows=2;return n};
+ const claim=area(panel,w('Exact claim from answer','متن دقیق ادعا')),result=el('pre','');result.setAttribute('role','status');
+ const rows=Array.from({length:2},()=>{
+  const group=el('fieldset','');panel.append(group);
+  const ref=field(group,w('Excerpt','گزیده'),'select'),preview=el('p','');
+  ref.append(option('',w('None','هیچ')),...passages.map(p=>option(p.ref,p.ref+' · '+p.line+':'+p.offset)));group.append(preview);
+  const quote=area(group,w('Exact quote (12–500 characters)','نقل‌قول دقیق (۱۲ تا ۵۰۰ نویسه)'));
+  const stance=field(group,w('Judgment','ارزیابی'),'select');
+  stance.append(option('uncertain',w('Uncertain','نامطمئن')),option('supports',w('Supports','موافق')),option('contradicts',w('Contradicts','مخالف')));
+  ref.onchange=()=>{preview.textContent=passages.find(p=>p.ref===ref.value)?.text||'';quote.value='';stance.value='uncertain';result.textContent=''};
+  return {ref,quote,stance};
+ });
+ const run=el('button',w('Check evidence','بررسی شواهد'));run.type='button';run.dataset.evidenceCheck='';
+ panel.oninput=()=>{result.textContent=''};panel.onchange=panel.oninput;
+ run.onclick=()=>{
+  if(!panel.isConnected||busy||chat()?.head!==head||revision!==rev)return;
+  try{
+   if(claim.value.trim().length<12||!answer.includes(claim.value))throw Error('claim');
+   const judgments=rows.filter(x=>x.ref.value||x.quote.value).map(x=>({ref:x.ref.value,quote:x.quote.value,stance:x.stance.value}));
+   const c=experienceImportEngine.reviewEvidenceClaims(passages,[{claim_id:'claim1',judgments}],{enabled:true}).claims[0];
+   result.textContent=c.disposition+'\n'+c.judgments.map(j=>j.ref+' · '+j.status+' · '+j.stance).join('\n')+'\n'+c.flags.join(', ');
+  }catch{result.textContent=w('Check claim and quotes.','ادعا و نقل‌قول‌ها را بررسی کنید.')}
+ };
+ panel.append(run,result);parent.append(panel);
+}
 function messageOriginLabel(n){
  const ordinary=t(n.origin==='human'?'human':n.origin==='model'?'model':'local');
  // Only receipts accepted from the reviewed gateway route are attributed.
@@ -670,7 +703,7 @@ function installThread(next){
 $('auto-speak').onchange=()=>{if(!$('auto-speak').checked)window.NexusSpeechPlayback?.stop()};
 function selectedModelEngine(){return document.getElementById('model-engine')?.value==='device'?'device':'gateway'}
 function prepare(regenerate=false){if(!chat()?.isolated&&(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,relatedChats:$('use-related-chats').checked,historyDays:data.history_days,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked,onDevice:destination==='device'});if([NexusReplyFormat.answerReviewPrompt('en'),NexusReplyFormat.answerReviewPrompt('fa')].includes(S.path(c).at(-1)?.text)&&!NexusReplyFormat.checkAnswerReviewContext(S.path(c),ctx.messages))throw Error('answer-review-context-missing');if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');const privacyAudit=destination==='gateway'?S.inspectSecrets(ctx.messages):{categories:[],possible_secrets:false};const stream=destination==='gateway'&&modelInfo.streaming===true;
- pending={destination,stream,thread:c,referenceMarkers:[...ctx.citations,...ctx.attachments_supplied].map(x=>x.ref),body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(destination==='gateway'&&selectedModelSlot!=='primary'?{model_slot:selectedModelSlot}:{}),...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,...(destination==='gateway'?{model_slot:selectedModelSlot}:{}),provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,memory_review:ctx.memory_review,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);showPrivacy(privacyAudit);$('request-review').hidden=false;controls()}catch(error){if(error?.message==='answer-review-context-missing')$('status').textContent=language==='fa'?'متن کامل درخواست و پاسخ پیشین در زمینه بازبینی نیست؛ ارسال انجام نشد.':'The complete previous request and answer are not in the review context. Nothing was sent.';else status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
+ pending={destination,stream,thread:c,evidencePassages:ctx.evidence_passages,referenceMarkers:[...ctx.citations,...ctx.attachments_supplied].map(x=>x.ref),body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(destination==='gateway'&&selectedModelSlot!=='primary'?{model_slot:selectedModelSlot}:{}),...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,...(destination==='gateway'?{model_slot:selectedModelSlot}:{}),provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,memory_review:ctx.memory_review,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);showPrivacy(privacyAudit);$('request-review').hidden=false;controls()}catch(error){if(error?.message==='answer-review-context-missing')$('status').textContent=language==='fa'?'متن کامل درخواست و پاسخ پیشین در زمینه بازبینی نیست؛ ارسال انجام نشد.':'The complete previous request and answer are not in the review context. Nothing was sent.';else status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
 function gateway(){const value=$('gateway').value.trim();const u=new URL(value||location.origin);if((u.protocol!=='https:'&&!(u.protocol==='http:'&&['127.0.0.1','[::1]'].includes(u.hostname)))||u.username||u.password||u.search||u.hash||!['','/'].includes(u.pathname))throw Error('gateway-url');return u.origin}
 function gatewayFailureLabel(error,request,timedOut=false){
  if(request.destination!=='gateway')return request.stream?'streamFailed':'failed';
@@ -871,6 +904,7 @@ $('send-model').onclick=async()=>{
   const label=request.destination==='device'?'[On-device draft · SmolLM2-135M · English / limited]\n\n':'';
   const installed=installThread(S.append(request.thread,'assistant',label+out.text,'model',
    undefined,[],receipt));
+  if(installed)mountEvidenceReview(out.text,request.evidencePassages);
   if(installed&&(draftReview.findings.length||references.status!=='no_supplied_refs')){
    const warnings={length_limit:['The response reached its length limit.','پاسخ به سقف طول رسیده است.'],control_characters:['Unusual control characters.','نویسه‌های کنترلی غیرمعمول.'],unclosed_code_fence:['Unclosed code block.','بلوک کد بسته نشده.'],repeated_paragraph:['Repeated paragraph.','پاراگراف تکراری.'],review_limit:['Structural review size limit.','محدودیت حجم بازبینی ساختاری.']};
    const refStatus={unknown_markers:['Unknown request reference markers: ','شناسه ارجاع ناشناخته: '],matched_markers:['Matching request reference markers: ','شناسه ارجاع مطابق درخواست: '],no_markers:['Supplied passages have no explicit reference markers in this answer.','برای گزیده‌های ارسالی شناسه ارجاع صریح در پاسخ نیست.'],limit:['Reference scan limit.','سقف بازبینی ارجاع.']};
