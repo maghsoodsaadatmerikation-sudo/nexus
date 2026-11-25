@@ -2325,7 +2325,7 @@ function clearTrainingReview(){
  trainingReview=null;
  $('training-preview').textContent='';$('training-preview').hidden=true;$('training-download').hidden=true;
 }
-// Existing project-memory surface: no new top-level navigation, no recall.
+// Existing project-memory surface: no new top-level navigation.
 const experienceImportEngine=(()=>{
  // Pure, review-only structural critique of declared plan effects. No inference, execution or authorization.
 // An effect label is a caller assertion, never proof of what code or tools will actually do.
@@ -2945,7 +2945,62 @@ function buildChatExperienceReport(rounds,request,{enabled=false,isolated=false}
  return {status:'review_only',report,supporting_pair_count:match.supporting_pair_count,completion_verified:false,execution_authorized:false,automatic_application:false};
 }
 
- return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow,buildChatExperienceReport});
+
+// Read-only archive bridge. The host supplies the live, unlocked session and
+// expected revisions. Scope labels and supplied evidence are not authentication.
+function reviewArchivedExperience(validateState,value,session,request,{enabled=false,isolated=false}={}){
+ const boundary={automatic_application:false,execution_authorized:false,completion_verified:false,storage_authorized:false,model_context_authorized:false};
+ const result=status=>({status,matches:[],...boundary});
+ if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
+ if(isolated||!enabled)return result(isolated?'isolated':'off');
+ const id=x=>typeof x==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(x);
+ if(typeof validateState!=='function'||!session||session.enabled!==true||session.vaultUnlocked!==true||session.busy!==false||session.isolated!==false||!id(session.projectId)||!id(session.threadId)||!Number.isSafeInteger(session.revision)||session.revision<0)throw Error('archive-recall-unavailable');
+ const scope=request?.scope;
+ if(!scope||scope.project_id!==session.projectId||!id(scope.workflow_id)||request.threadId!==session.threadId||request.sessionRevision!==session.revision||!Number.isSafeInteger(request.snapshotRevision)||request.snapshotRevision<0)throw Error('archive-recall-scope');
+ const data=validateState(value),project=data.projects.find(p=>p.id===session.projectId),thread=project?.threads.find(t=>t.id===session.threadId);
+ if(!thread||thread.temporary||thread.isolated||thread.archived)throw Error('archive-recall-scope');
+ const snapshot=project.experiences?.find(s=>s.workflow_id===scope.workflow_id);
+ if(!snapshot)return result('no_snapshot');
+ if(snapshot.revision!==request.snapshotRevision)throw Error('stale-archive-recall');
+ const assessment=evaluateWorkflowOutcome(scope,request.criteria,request.observations,{enabled:true});
+ if(assessment.items.some(i=>i.required&&['conflicting_reports','requires_reconciliation'].includes(i.disposition)))return result('withheld_pending_reconciliation');
+ const failed=assessment.items.filter(i=>i.disposition==='reported_failure').map(i=>i.criterion_id);
+ if(!failed.length)return result('no_reported_failure');
+ const recalled=reviewExperienceRecall(snapshot,{project_id:scope.project_id,workflow_id:scope.workflow_id,revision:snapshot.revision,criterion_ids:failed},request.criteria,request.attempts,{enabled:true});
+ const receipts=new Set(request.observations.map(o=>o.evidence_id));
+ for(const attempt of request.attempts)for(const run of [attempt.before,attempt.after]){
+  if(run.scope.run_id===scope.run_id)throw Error('current-run-in-experience');
+  if(run.observations.some(o=>receipts.has(o.evidence_id)))throw Error('current-evidence-in-experience');
+ }
+ return {...recalled,...boundary};
+}
+
+// Chat reports are bound to the exact current draft/criteria digest. Do not
+// use arbitrary workflow labels, changed criteria or a report's own scope as
+// the source of current observations. The host computes the digest locally.
+function prepareChatArchiveRecall(raw,{projectId,threadId,sessionRevision,sessionId,round,planHash,steps}={}){
+ const id=x=>typeof x==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(x);
+ const exact=(x,keys)=>x&&typeof x==='object'&&!Array.isArray(x)&&Object.keys(x).sort().join('|')===keys;
+ if(typeof raw!=='string'||raw.length<1||raw.length>65536||!id(projectId)||!id(threadId)||!id(sessionId)||sessionId.length>48||!Number.isSafeInteger(sessionRevision)||sessionRevision<0||!Number.isSafeInteger(round)||round<1||round>100||typeof planHash!=='string'||!/^[a-f0-9]{64}$/.test(planHash)||!Array.isArray(steps)||steps.length<2||steps.length>6)throw Error('invalid-chat-recall-input');
+ const report=JSON.parse(raw),workflow_id='wf-'+planHash;
+ if(!exact(report,'attempts|criteria|operation|schema|workflow_id')||report.schema!=='nexus.experience-review.v1'||report.workflow_id!==workflow_id||!exact(report.operation,'correction_code|criterion_id|kind')||!['accept','refresh'].includes(report.operation.kind)||!id(report.operation.correction_code)||!id(report.operation.criterion_id)||!Array.isArray(report.attempts)||report.attempts.length<2||report.attempts.length>12)throw Error('invalid-chat-recall-report');
+ const criteria=steps.map((s,i)=>{
+  if(!s||typeof s.criterion!=='string'||!s.criterion.trim()||s.criterion.trim().length>260||s.opened!==true||s.acknowledged!==true||s.observed==='started'||!['pass','fail','inconclusive'].includes(s.verdict))throw Error('incomplete-chat-recall-round');
+  return {id:'s'+(i+1),required:true,evidence_kind:'human_review'};
+ });
+ if(!Array.isArray(report.criteria)||report.criteria.length!==criteria.length||criteria.some((c,i)=>!exact(report.criteria[i],'evidence_kind|id|required')||Object.keys(c).some(k=>report.criteria[i][k]!==c[k]))||!criteria.some(c=>c.id===report.operation.criterion_id))throw Error('chat-recall-criteria-mismatch');
+ for(const attempt of report.attempts){
+  if(!exact(attempt,'after|before|correction_code')||attempt.correction_code!==report.operation.correction_code)throw Error('chat-recall-correction-mismatch');
+  for(const run of [attempt.before,attempt.after]){
+   if(!exact(run,'observations|scope')||!exact(run.scope,'plan_sha256|project_id|run_id|workflow_id')||run.scope.project_id!==projectId||run.scope.workflow_id!==workflow_id||run.scope.plan_sha256!==planHash||!Array.isArray(run.observations)||run.observations.length!==criteria.length||run.observations.some(o=>!exact(o,'criterion_id|evidence_id|kind|plan_sha256|project_id|result|run_id|workflow_id')||o.kind!=='human_review'))throw Error('chat-recall-evidence-scope');
+  }
+ }
+ const scope={project_id:projectId,workflow_id,run_id:sessionId+'-r'+round,plan_sha256:planHash};
+ const observations=steps.map((s,i)=>({...scope,criterion_id:criteria[i].id,evidence_id:scope.run_id+'-h'+(i+1),kind:'human_review',result:s.verdict}));
+ return {scope,observations,criteria,attempts:report.attempts,threadId,sessionRevision};
+}
+
+ return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow,buildChatExperienceReport,prepareChatArchiveRecall,reviewArchivedExperience});
 })();
 // Direct chat handoff: same validated import engine, no intermediate file.
 function canApplyChatExperience(){
@@ -2967,6 +3022,19 @@ function applyChatExperienceReport(report,expected){
   });
   return ok?'applied':'rejected';
  }catch{return 'rejected'}finally{adapter.invalidate()}
+}
+// Local, read-only recall; no report retention or model/tool access.
+function chatArchiveRecallContext(){
+ if(!canApplyChatExperience())return null;
+ return {projectId,threadId,revision,head:chat()?.head||null,archiveRevision:vault.archiveRevision};
+}
+function recallChatExperienceReport(raw,expected,details){
+ const current=chatArchiveRecallContext();
+ if(!current||!expected||JSON.stringify(current)!==JSON.stringify(expected))return {status:'unavailable',matches:[]};
+ const request=experienceImportEngine.prepareChatArchiveRecall(raw,{...details,projectId,threadId,sessionRevision:revision});
+ const snapshot=p().experiences?.find(s=>s.workflow_id===request.scope.workflow_id);
+ if(!snapshot)return {status:'no_snapshot',matches:[]};
+ return experienceImportEngine.reviewArchivedExperience(S.state,data,{enabled:true,vaultUnlocked:vault.unlocked,busy,isolated:!!chat()?.isolated,projectId,threadId,revision},{...request,snapshotRevision:snapshot.revision},{enabled:true});
 }
 function renderExperienceImport(parent,allowed){
  let panel=$('experience-import-panel');
@@ -4823,6 +4891,46 @@ function appendExperienceReportControls(){
  button.onclick=()=>submit(false);apply.onclick=()=>submit(true);
  workflow.append(details);
 }
+// Explicit local report selection; results are ephemeral.
+let chatRecallGeneration=0;
+function clearChatRecallResult(){
+ chatRecallGeneration++;
+ const notice=workflow.querySelector('[data-chat-recall-result]');
+ if(notice)notice.textContent='';
+}
+function canRecallCurrent(current){
+ return !!current&&workflowState===current&&validWorkflow()&&canCompareRound(current)&&!!chatArchiveRecallContext()&&current.steps.some(s=>humanCriterion(s).verdict==='fail');
+}
+function appendChatRecallControls(){
+ const current=workflowState;
+ const details=document.createElement('details'),summary=document.createElement('summary');
+ summary.textContent=words('Review a previous correction','بازبینی اصلاح پیشین');details.append(summary);
+ const help=document.createElement('p');help.className='help';help.textContent=words('Choose a previously exported correction report for the same workflow after a complete round with a reported failure. Local review only; nothing sent, saved or applied.','پس از یک دور کامل با شکست گزارش‌شده، گزارش اصلاح پیشین همان گردش‌کار را انتخاب کنید. فقط بازبینی محلی؛ بدون ارسال، ذخیره یا اعمال خودکار.');details.append(help);
+ const label=document.createElement('label');label.textContent=words('Previous correction report (.json)','گزارش اصلاح پیشین (.json)');
+ const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.dataset.chatRecallFile='true';input.disabled=!canRecallCurrent(current);label.append(input);details.append(label);
+ const notice=document.createElement('p');notice.dataset.chatRecallResult='true';notice.setAttribute('role','status');details.append(notice);
+ input.onchange=async()=>{
+  const file=input.files?.[0];input.value='';clearChatRecallResult();
+  if(!file||!input.isConnected||!canRecallCurrent(current))return;
+  if(file.size<1||file.size>65536||!/\.json$/i.test(file.name)){notice.textContent=words('Invalid report file.','فایل گزارش نامعتبر است.');return}
+  if(!confirm(words('Read this local report and compare it with the current failure? The report is not independently verified. No data will be sent or saved.','این گزارش محلی خوانده و با شکست فعلی مقایسه شود؟ گزارش مستقلاً تأیید نشده و داده‌ای ارسال یا ذخیره نمی‌شود.')))return;
+  const expected=chatArchiveRecallContext(),epoch=current.epoch,generation=chatRecallGeneration,steps=reviewSnapshot(current),captured=JSON.stringify(steps);
+  const live=()=>input.isConnected&&canRecallCurrent(current)&&epoch===current.epoch&&generation===chatRecallGeneration&&JSON.stringify(chatArchiveRecallContext())===JSON.stringify(expected)&&JSON.stringify(reviewSnapshot(current))===captured;
+  input.disabled=true;
+  try{
+   const raw=await file.text();if(!live())return;
+   const planHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([current.draft,steps.map(s=>s.criterion.trim())])))),b=>b.toString(16).padStart(2,'0')).join('');
+   if(!live())return;
+   if(!current.reportSessionId)current.reportSessionId=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');
+   const result=recallChatExperienceReport(raw,expected,{sessionId:current.reportSessionId,round:current.round,planHash,steps});
+   if(!live())return;
+   if(result.matches.length)notice.textContent=words('Previous reported correction(s) for review: ','اصلاح‌های پیشین گزارش‌شده برای بازبینی: ')+result.matches.map(m=>m.criterion_id+' / '+m.correction_code+' ('+m.supporting_pair_count+')').join(' · ')+words(' · Associations, not proof. Nothing applied.',' · همبستگی، نه مدرک اثربخشی. هیچ اصلاحی اعمال نشده.');
+   else notice.textContent=words('No matching active correction with rechecked reported support. Nothing applied.','اصلاح فعال مطابق با پشتیبانی بازبینی‌شده یافت نشد. هیچ اصلاحی اعمال نشده.');
+  }catch{if(live())notice.textContent=words('Recall unavailable or report rejected. Nothing applied.','بازیابی در دسترس نیست یا گزارش رد شد. هیچ اصلاحی اعمال نشده.')}
+  finally{if(input.isConnected&&generation===chatRecallGeneration)input.disabled=!canRecallCurrent(current)}
+ };
+ workflow.append(details);
+}
 function showWorkflow(){
  if(!workflowState)return;
  workflow.hidden=false;workflow.replaceChildren();
@@ -4868,7 +4976,7 @@ function showWorkflow(){
    for(const [value,en,fa] of [['','Not assessed','ارزیابی نشده'],['pass','Reported pass','موفق به گزارش شما'],['fail','Reported failure','ناموفق به گزارش شما'],['inconclusive','Inconclusive','نامشخص']]){
     const option=document.createElement('option');option.value=value;option.textContent=words(en,fa);verdict.append(option);
    }
-   const invalidate=()=>{workflowState.epoch++;const n=workflow.querySelector('[data-central-result]');if(n)n.textContent='';const retry=workflow.querySelector('[data-central-restart]');if(retry)retry.disabled=!canCompareRound(workflowState)||workflowState.round>=100;const exp=workflow.querySelector('[data-experience-report]');if(exp)exp.disabled=!completeReportRounds(workflowState);const apply=workflow.querySelector('[data-experience-apply]');if(apply)apply.disabled=!completeReportRounds(workflowState)||!canApplyChatExperience();};
+   const invalidate=()=>{workflowState.epoch++;clearChatRecallResult();const recall=workflow.querySelector('[data-chat-recall-file]');if(recall)recall.disabled=!canRecallCurrent(workflowState);const n=workflow.querySelector('[data-central-result]');if(n)n.textContent='';const retry=workflow.querySelector('[data-central-restart]');if(retry)retry.disabled=!canCompareRound(workflowState)||workflowState.round>=100;const exp=workflow.querySelector('[data-experience-report]');if(exp)exp.disabled=!completeReportRounds(workflowState);const apply=workflow.querySelector('[data-experience-apply]');if(apply)apply.disabled=!completeReportRounds(workflowState)||!canApplyChatExperience();};
    const canAssess=()=>validWorkflow()&&!window.NexusStudioUI.uiStatus().isolated&&step.opened&&step.observed!=='started'&&!!humanCriterion(step).criterion;
    verdict.value=humanCriterion(step).verdict||'';verdict.disabled=!canAssess();
    criterion.oninput=()=>{
@@ -4944,6 +5052,7 @@ function showWorkflow(){
   };
   workflow.append(restart);
   appendExperienceReportControls();
+  appendChatRecallControls();
   if(workflowState.history.length){
    const forget=document.createElement('button');forget.type='button';forget.className='secondary';forget.dataset.centralForget='true';
    forget.textContent=words('Clear previous review rounds','پاک‌کردن دورهای بازبینی پیشین');
@@ -5210,7 +5319,7 @@ $('message').addEventListener('keydown',event=>{
  }
 });
 $('language').addEventListener('change',()=>queueMicrotask(()=>{if(!directory.hidden)showDirectory();refresh()}));
-document.addEventListener('nexus-studio-state',refresh);
+document.addEventListener('nexus-studio-state',()=>{clearChatRecallResult();refresh();const recall=workflow.querySelector('[data-chat-recall-file]');if(recall)recall.disabled=!canRecallCurrent(workflowState)});
 document.addEventListener('nexus-studio-chat-layout',refresh);
 document.addEventListener('nexus-studio-open-chat',()=>{
  clearOffer();closeDirectory();
