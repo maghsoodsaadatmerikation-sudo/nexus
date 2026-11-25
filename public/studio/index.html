@@ -3022,7 +3022,7 @@ if(!snapshot)return result('no_snapshot');
 if(snapshot.revision!==request.snapshotRevision)throw Error('stale-archive-recall');
 const assessment=evaluateWorkflowOutcome(scope,request.criteria,request.observations,{enabled:true});
 if(assessment.items.some(i=>i.required&&['conflicting_reports','requires_reconciliation'].includes(i.disposition)))return result('withheld_pending_reconciliation');
-const failed=assessment.items.filter(i=>i.disposition==='reported_failure').map(i=>i.criterion_id);
+const failed=assessment.items.filter(i=>i.disposition==='reported_failure'&&i.criterion_id===(request.criterion??i.criterion_id)).map(i=>i.criterion_id);
 if(!failed.length)return result('no_reported_failure');
 const recalled=reviewExperienceRecall(snapshot,{project_id:scope.project_id,workflow_id:scope.workflow_id,revision:snapshot.revision,criterion_ids:failed},request.criteria,request.attempts,{enabled:true});
 const receipts=new Set(request.observations.map(o=>o.evidence_id));
@@ -3039,7 +3039,7 @@ return {...recalled,...boundary};
 function prepareChatArchiveRecall(raw,{projectId,threadId,sessionRevision,sessionId,round,planHash,steps}={}){
 const id=x=>typeof x==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(x);
 const exact=(x,keys)=>x&&typeof x==='object'&&!Array.isArray(x)&&Object.keys(x).sort().join('|')===keys;
-if(typeof raw!=='string'||raw.length<1||raw.length>65536||!id(projectId)||!id(threadId)||!id(sessionId)||sessionId.length>48||!Number.isSafeInteger(sessionRevision)||sessionRevision<0||!Number.isSafeInteger(round)||round<1||round>100||typeof planHash!=='string'||!/^[a-f0-9]{64}$/.test(planHash)||!Array.isArray(steps)||steps.length<2||steps.length>6)throw Error('invalid-chat-recall-input');
+if(typeof raw!=='string'||!raw||raw.length>65536||!id(projectId)||!id(threadId)||!id(sessionId)||sessionId.length>48||!Number.isSafeInteger(sessionRevision)||sessionRevision<0||!Number.isSafeInteger(round)||round<1||round>100||typeof planHash!=='string'||!/^[a-f0-9]{64}$/.test(planHash)||!Array.isArray(steps)||steps.length<2||steps.length>6)throw Error('invalid-chat-recall-input');
 const report=JSON.parse(raw),workflow_id='wf-'+planHash;
 if(!exact(report,'attempts|criteria|operation|schema|workflow_id')||report.schema!=='nexus.experience-review.v1'||report.workflow_id!==workflow_id||!exact(report.operation,'correction_code|criterion_id|kind')||!['accept','refresh'].includes(report.operation.kind)||!id(report.operation.correction_code)||!id(report.operation.criterion_id)||!Array.isArray(report.attempts)||report.attempts.length<2||report.attempts.length>12)throw Error('invalid-chat-recall-report');
 const criteria=steps.map((s,i)=>{
@@ -3055,7 +3055,7 @@ if(!exact(run,'observations|scope')||!exact(run.scope,'plan_sha256|project_id|ru
 }
 const scope={project_id:projectId,workflow_id,run_id:sessionId+'-r'+round,plan_sha256:planHash};
 const observations=steps.map((s,i)=>({...scope,criterion_id:criteria[i].id,evidence_id:scope.run_id+'-h'+(i+1),kind:'human_review',result:s.verdict}));
-return {scope,observations,criteria,attempts:report.attempts,threadId,sessionRevision};
+return {scope,observations,criteria,attempts:report.attempts,threadId,sessionRevision,criterion:report.operation.criterion_id};
 }
 
 
