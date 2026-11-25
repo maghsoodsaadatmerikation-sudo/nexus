@@ -4652,6 +4652,24 @@ function comparableFailureHistory(current,hash,snapshot){
   return {scope:previous.scope,observations:previous.evidence};
  });
 }
+// A proposed review graph only. Never mutate or execute the current workflow.
+function adaptiveChatDraft(input,result){
+ const recurrent=new Set((result.failure_patterns?.patterns||[]).filter(p=>p.historical_reported_failure>=2).map(p=>p.criterion_id));
+ if(!recurrent.size)return null;
+ const steps=[],checkpoints=[];
+ for(const step of input.plan.steps){
+  const copy={...step,needs:[...step.needs]};
+  if(recurrent.has(step.id)){
+   const check='pre-'+step.id;
+   steps.push({id:check,needs:[...step.needs],effect:'human_review',success_criteria:'Before starting, review the prior failure and agree on a verification method: '+step.success_criteria});
+   copy.needs.push(check);
+   checkpoints.push({criterion_id:step.id,check_step_id:check,protected_step_ids:[step.id]});
+  }
+  steps.push(copy);
+ }
+ if(steps.length>12)return null;
+ return {plan:{goal:'Draft preventive review of next chat workflow',steps},checkpoints};
+}
 async function showEngineReview(button,notice){
  const current=workflowState,state=window.NexusStudioUI.uiStatus();
  if(!validWorkflow()||state.isolated||!current)return;
@@ -4669,7 +4687,15 @@ async function showEngineReview(button,notice){
   }
   const history=comparableFailureHistory(current,hash,JSON.parse(captured));
   if(history.length)input.failure_history=history;
-  const result=reviewAssistantWorkflow(input,{enabled:true,experienceEnabled:history.length>0});
+  let result=reviewAssistantWorkflow(input,{enabled:true,experienceEnabled:history.length>0});
+  const proposal=adaptiveChatDraft(input,result);
+  if(proposal){
+   const proposalHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(proposal.plan)))),b=>b.toString(16).padStart(2,'0')).join('');
+   if(workflowState!==current||!validWorkflow()||window.NexusStudioUI.uiStatus().isolated||epoch!==current.epoch||captured!==snapshot()||!notice.isConnected)return;
+   input.adaptive_plan={scope:{...input.scope,run_id:'draft-'+current.round,plan_sha256:proposalHash},...proposal};
+   result=reviewAssistantWorkflow(input,{enabled:true,experienceEnabled:true});
+  }
+  const preventive=result.adaptive_plan?.findings.filter(f=>f.status==='declared_checkpoint_present').map(f=>f.criterion_id)||[];
   const recurrent=result.failure_patterns?.patterns.filter(p=>p.historical_reported_failure>=2).map(p=>p.criterion_id)||[];
   const reviewed=result.outcome.items.filter(i=>i.disposition==='reported_pass').length;
   const failed=result.outcome.items.filter(i=>i.disposition==='reported_failure').length;
@@ -4681,7 +4707,7 @@ async function showEngineReview(button,notice){
    review_plan_findings:words('define success criteria','تعریف معیار موفقیت'),
    review_outcome_evidence:words('review evidence','بازبینی شواهد'),
    manual_final_review:words('manual final review','بازبینی نهایی انسانی')
-  })[result.priority]+words(' · Human-reported pass / fail: ',' · موفق / ناموفق به گزارش کاربر: ')+reviewed+'/'+failed+(result.revision?words(' · Reported gains / losses: ',' · پیشرفت / پسرفت گزارش‌شده: ')+result.revision.gained_count+'/'+result.revision.lost_count:'')+(history.length?words(' · Comparable previous rounds: ',' · دورهای قابل‌مقایسهٔ پیشین: ')+history.length+words(' · Repeated prior failures: ',' · شکست‌های مکرر پیشین: ')+(recurrent.join(', ')||'0'):'')+words(' · No completion verified; no action authorized.',' · تکمیل تأیید نشده؛ هیچ مجوز اجرایی صادر نشده.');
+  })[result.priority]+words(' · Human-reported pass / fail: ',' · موفق / ناموفق به گزارش کاربر: ')+reviewed+'/'+failed+(result.revision?words(' · Reported gains / losses: ',' · پیشرفت / پسرفت گزارش‌شده: ')+result.revision.gained_count+'/'+result.revision.lost_count:'')+(history.length?words(' · Comparable previous rounds: ',' · دورهای قابل‌مقایسهٔ پیشین: ')+history.length+words(' · Repeated prior failures: ',' · شکست‌های مکرر پیشین: ')+(recurrent.join(', ')||'0'):'')+(preventive.length?words(' · Suggested for next round: before steps ',' · پیشنهاد برای دور بعد: پیش از گام‌های ')+preventive.map(id=>id.slice(1)).join(', ')+words(', review prior failures and agree on a verification method. Draft only; not applied.','، شکست‌های پیشین و روش اعتبارسنجی را بازبینی کنید. فقط پیش‌نویس؛ اعمال نشده.'):'' )+words(' · No completion verified; no action authorized.',' · تکمیل تأیید نشده؛ هیچ مجوز اجرایی صادر نشده.');
  }catch{if(notice.isConnected)notice.textContent=words('Central review unavailable; no action taken.','بازبینی مرکزی در دسترس نیست؛ اقدامی انجام نشد.')}
  finally{if(button.isConnected)button.disabled=false}
 }
