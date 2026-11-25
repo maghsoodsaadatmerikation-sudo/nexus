@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import '../web/studio-core.js';
 import {createArchiveExperienceReview,stageImportedExperience} from '../web/studio-experience-archive-edit.mjs';
 const S=globalThis.NexusStudio;
@@ -122,6 +123,52 @@ function testStoredRemoval(S){
  return checks;
 }
 console.log('STORED EXPERIENCE REMOVAL: PASS ('+testStoredRemoval(S)+' checks)');
+
+// Exercise the exact host consent boundary with synthetic mutable context.
+function testChatArchiveConsentRace(S,source){
+ const start='function canApplyChatExperience(){',end='// Local, read-only recall;';
+ assert.equal(source.split(start).length,2);
+ assert.equal(source.split(end).length,2);
+ const project={id:'p1',title:'Test',instructions:'',memories:[],threads:[{id:'t1',title:'Review',nodes:[],head:null}],sources:[],documents:[]};
+ const initial=S.state({schema:S.SCHEMA,projects:[project]});
+ const selected={projectId:'p1',threadId:'t1',revision:1,head:null};
+ const run=(name,result)=>{const scope={project_id:'p1',workflow_id:'w1',run_id:name,plan_sha256:'a'.repeat(64)};return {scope,observations:[{...scope,evidence_id:name+'-receipt',criterion_id:'s1',kind:'human_review',result}]}};
+ const report={schema:'nexus.experience-review.v1',workflow_id:'w1',operation:{kind:'accept',criterion_id:'s1',correction_code:'fix'},criteria:[{id:'s1',required:true,evidence_kind:'human_review'}],attempts:[1,2].map(i=>({correction_code:'fix',before:run('before'+i,'fail'),after:run('after'+i,'pass')}))};
+ const factory=new Function('S','experienceImportEngine','initial',`
+ let data=S.copy(initial),projectId='p1',threadId='t1',revision=1,busy=false,language='en',flag={},decision=()=>true,confirms=0,mutations=0;
+ const vault={unlocked:true,archiveRevision:'v1'};
+ const projectIn=v=>v.projects.find(p=>p.id===projectId);
+ const p=()=>projectIn(data);
+ const chat=()=>{const t=p()?.threads.find(t=>t.id===threadId);return t?{...t,...flag}:null};
+ const confirm=()=>{confirms++;return decision()};
+ const mutate=fn=>{try{const next=S.copy(data);fn(next);data=S.state(next);revision++;mutations++;return true}catch{return false}};
+ `+source.slice(source.indexOf(start),source.indexOf(end))+`
+ return {apply:applyChatExperienceReport,snapshot:()=>S.copy(data),counts:()=>[confirms,mutations],decision:fn=>decision=fn,lock:()=>vault.unlocked=false,changeArchive:()=>vault.archiveRevision='v2',changeProject:()=>projectId='p2',changeThread:()=>threadId='t2',isolate:()=>flag={isolated:true},temporary:()=>flag={temporary:true},archive:()=>flag={archived:true},changeHead:()=>flag={head:'different'},setBusy:()=>busy=true,changeRevision:()=>revision++};`);
+ const host=()=>factory(S,{createArchiveExperienceReview,stageImportedExperience},initial);
+ let checks=0;
+ const eq=(actual,expected,label)=>{assert.deepEqual(actual,expected,label);checks++};
+ const baseline=host();
+ eq(baseline.apply(report,selected),'applied','valid approval');eq(baseline.counts(),[1,1],'valid single mutation');
+ eq(baseline.snapshot().projects[0].experiences[0].entries[0].supporting_pair_count,2,'valid support');
+ eq(JSON.stringify(baseline.snapshot()).includes('-receipt'),false,'no raw receipt');
+ eq(baseline.apply(report,selected),'unavailable','consumed selection');eq(baseline.counts(),[1,1],'no replay');
+ const changes=['lock','changeProject','changeThread','isolate','temporary','archive','changeHead','setBusy','changeRevision'];
+ for(const change of changes){
+  const h=host();h[change]();
+  eq(h.apply(report,selected),'unavailable',change+' before approval');
+  eq(h.counts(),[0,0],change+' no prompt');eq(h.snapshot(),initial,change+' unchanged');
+ }
+ for(const change of [...changes,'changeArchive']){
+  const h=host();h.decision(()=>{h[change]();return true});
+  eq(h.apply(report,selected),'unavailable',change+' during approval');
+  eq(h.counts(),[1,0],change+' no mutation');eq(h.snapshot(),initial,change+' unchanged');
+ }
+ const denied=host();denied.decision(()=>false);
+ eq(denied.apply(report,selected),'declined','declined');eq(denied.counts(),[1,0],'declined no mutation');eq(denied.snapshot(),initial,'declined unchanged');
+ return checks;
+}
+const appSource=readFileSync(new URL('../web/studio-app.js',import.meta.url),'utf8');
+console.log('CHAT ARCHIVE CONSENT RACE: PASS ('+testChatArchiveConsentRace(S,appSource)+' checks)');
 
 // Use the existing real WebCrypto vault rather than a second key or store.
 class Store{raw=null;async read(){return this.raw}async commit(expected,raw,guard){if(!guard())throw Error('locked');if((this.raw?JSON.parse(this.raw).revision:null)!==expected)throw Error('conflict');this.raw=raw}}
