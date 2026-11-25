@@ -35,6 +35,18 @@ for item in modules:
         writer_end = pilot.index('  function reportRows(raw){', writer_start)
         writer = dedent(pilot[writer_start:writer_end])
         code = replace_exact(code, '/* OFFICE_ZIP_HELPERS */', (reader + writer).rstrip())
+    if filename == 'studio-app.js':
+        # Private closure: archive import reuses the reviewed outcome and edit modules.
+        import re
+        edit_source = []
+        for name in ["studio-workflow-outcome.mjs", "studio-experience-archive-edit.mjs"]:
+            part = (root/'web'/name).read_text()
+            part = re.sub(r'^import[^\n]*\n', '', part, flags=re.M)
+            part = re.sub(r'^export function ', 'function ', part, flags=re.M)
+            if re.search(r'^\s*(import|export)\s', part, re.M):
+                raise ValueError('unsupported experience module syntax')
+            edit_source.append(part)
+        code = replace_exact(code, '/* EXPERIENCE_EDIT_ENGINE */', '\n'.join(edit_source))
     if filename == 'studio-composer-ui.js':
         # Explicit ordered module list; preserve source as single local closure.
         import re
