@@ -23,6 +23,18 @@ fa:{ready:'ابتدا قطعه را آهنگ‌سازی کن.',built:'پارتی
 };
 const fa=()=>document.documentElement.lang==='fa',txt=k=>labels[fa()?'fa':'en'][k];
 let score=null,wav=null,revision=0,working=false,objectUrl=null;
+// One heavy audio job per tab. Cancellation invalidates results, not the lease;
+ // only the original operation's finally releases it.
+function createAudioJobGate(notify){
+ let active=null;
+ return Object.freeze({busy:()=>active!==null,acquire(){
+  if(active!==null)return null;
+  const token={};active=token;notify();
+  return ()=>{if(active!==token)return;active=null;notify()};
+ }});
+}
+const audioJobs=createAudioJobGate(()=>document.dispatchEvent(new Event('nexus-audio-job-state')));
+document.addEventListener('nexus-audio-job-state',buttons);
 function out(status){$('music-status').textContent=status}
 function field(name){const node=$('music-'+name);return node.type==='checkbox'?node.checked:node.type==='number'?Number(node.value):node.value}
 function inputs(){return {
@@ -33,7 +45,7 @@ function inputs(){return {
 }}
 function buttons(){
  $('music-build').disabled=working;$('music-variation').disabled=working;
- $('music-render').disabled=working||!score;$('music-midi').disabled=working||!score;
+ $('music-render').disabled=working||audioJobs.busy()||!score;$('music-midi').disabled=working||!score;
  $('music-score').disabled=working||!score;$('music-wav').disabled=working||!wav;
  $('music-cancel').disabled=!working;
  document.dispatchEvent(new Event('nexus-studio-media-state'));
@@ -119,8 +131,11 @@ $('music-wav').addEventListener('click',()=>{
 });
 $('music-render').addEventListener('click',async()=>{
  if(!score||working)return;
- const start=++revision,active=score;working=true;resetAudio();buttons();
+ const release=audioJobs.acquire();
+ if(!release){out(fa()?'پردازش صوتی دیگری هنوز فعال است.':'Another audio operation is still active.');return}
+ const start=++revision,active=score;
  try{
+  working=true;resetAudio();buttons();
   const sr=Number($('music-quality').value);
   const data=await Music.renderWav(active,{sampleRate:sr,sound:$('music-sound').value,
    shouldAbort:()=>start!==revision,
@@ -148,7 +163,7 @@ $('music-render').addEventListener('click',async()=>{
   out((fa()?'WAV استریو آماده شد.':'Stereo WAV ready.')+' '+txt('browser'));
  }catch(e){if(start===revision)out(e?.message==='render-cancelled'?txt('cancelled'):
     e?.message==='mobile-render-memory-budget'?txt('resource'):txt('error'))}
- finally{if(start===revision){working=false;buttons()}}
+ finally{if(start===revision)working=false;release();buttons()}
 });
 $('music-cancel').addEventListener('click',()=>{
  if(!working)return;
@@ -182,6 +197,6 @@ window.addEventListener('pagehide',()=>{
  out(txt(wasRendering?'cancelled':score?'built':'ready'));
 });
 out(txt('ready'));buttons();
-window.NexusMusicUI=Object.freeze({clear:resetPrivateDraft,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
+window.NexusMusicUI=Object.freeze({audioBusy:audioJobs.busy,acquireAudioJob:audioJobs.acquire,clear:resetPrivateDraft,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
  hasTransientWork:()=>Boolean(score||wav||working||isFormChanged())});
 })();
