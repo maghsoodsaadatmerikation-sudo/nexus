@@ -56,6 +56,7 @@ export function createArchiveExperienceReview(validateState){
 // Local JSON import is a user-supplied report, not authenticated evidence.
 // Restrict the import to one explicit accept/refresh operation.
 export function stageImportedExperience(adapter,value,session,raw){
+ adapter.invalidate();
  if(typeof raw!=='string'||raw.length>65536)throw Error('invalid-experience-import');
  const report=JSON.parse(raw);
  const exact=(x,keys)=>x&&typeof x==='object'&&!Array.isArray(x)&&Object.keys(x).sort().join('|')===keys;
