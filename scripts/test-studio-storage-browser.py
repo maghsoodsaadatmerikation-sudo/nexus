@@ -104,15 +104,24 @@ window.addEventListener('load',async()=>{
   $('save').click();await wait(()=>$('status').textContent.includes('encrypted data')&&!$('save').disabled);
   assert((await S.decrypt(await store.read(),pass)).data.projects[0].experiences[0].entries[0].correction_code==='new_reviewed_fix','explicit-save-persists-import');
   // Direct session handoff uses the same review engine without a file.
-  const directReport={...report,operation:{...report.operation,correction_code:'direct_fixture'},attempts:report.attempts.map(a=>({...a,correction_code:'direct_fixture'}))};
-  const directBefore=await store.read(),directSelection=NexusStudioUI.selection();
-  window.confirm=()=>false;
+  const directReport={...report,operation:{...report.operation,correction_code:'direct_fixture'},attempts:report.attempts.map((a,i)=>({...a,correction_code:'direct_fixture',before:reportRun('direct-private-before'+i,'fail'),after:reportRun('direct-private-after'+i,'pass')}))};
+  const directBefore=await store.read(),directSelection=NexusStudioUI.selection(),directState=JSON.stringify(NexusStudioUI.snapshot());
+  let directConfirms=0;
+  window.confirm=()=>{directConfirms++;return false};
   assert(applyChatExperienceReport(directReport,directSelection)==='declined','direct-consent-declined');
-  window.confirm=()=>true;
+  assert(directConfirms===1&&await store.read()===directBefore&&JSON.stringify(NexusStudioUI.snapshot())===directState,'direct-decline-preserves-state-and-ciphertext');
+  window.confirm=()=>{directConfirms++;return true};
   assert(applyChatExperienceReport(directReport,{...directSelection,revision:directSelection.revision-1})==='unavailable','direct-stale-session-refused');
+  assert(applyChatExperienceReport(directReport,{...directSelection,head:'different-head'})==='unavailable','direct-stale-head-refused');
+  assert(applyChatExperienceReport({...directReport,workflow_id:'foreign-workflow'},directSelection)==='rejected','direct-inconsistent-report-refused');
+  assert(directConfirms===1&&JSON.stringify(NexusStudioUI.snapshot())===directState&&await store.read()===directBefore,'invalid-direct-handoff-never-prompts-or-mutates');
   assert(applyChatExperienceReport(directReport,directSelection)==='applied','direct-session-apply');
-  assert(await store.read()===directBefore,'direct-does-not-autosave');
+  assert(directConfirms===2&&await store.read()===directBefore,'direct-does-not-autosave');
   assert(NexusStudioUI.snapshot().projects[0].experiences[0].entries.some(e=>e.correction_code==='direct_fixture'),'direct-metadata-visible');
+  assert(!JSON.stringify(NexusStudioUI.snapshot()).includes('direct-private-'),'direct-raw-receipts-not-retained');
+  const directAppliedState=JSON.stringify(NexusStudioUI.snapshot());
+  assert(applyChatExperienceReport(directReport,directSelection)==='unavailable','direct-consumed-selection-refused');
+  assert(directConfirms===2&&JSON.stringify(NexusStudioUI.snapshot())===directAppliedState&&await store.read()===directBefore,'direct-replay-never-prompts-or-mutates');
   $('save').click();await wait(()=>$('status').textContent.includes('encrypted data')&&!$('save').disabled);
   assert((await S.decrypt(await store.read(),pass)).data.projects[0].experiences[0].entries.some(e=>e.correction_code==='direct_fixture'),'direct-explicit-save');
   // The exact chat report must match the active archive and current failure.
