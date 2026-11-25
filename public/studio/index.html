@@ -4428,6 +4428,10 @@ function restartReviewedRound(current){
  return {...current,round:current.round+1,epoch:0,baseline:prior,history:[...(current.history||[]),prior].slice(-30),index:0,opened:false,
   steps:current.steps.map(s=>({...s,opened:false,acknowledged:false,runId:null,observed:null,verdict:null}))};
 }
+// Forget only retained prior rounds; preserve the current review and invalidate in-flight results.
+function forgetReviewedHistory(current){
+ return {...current,epoch:current.epoch+1,baseline:null,history:[]};
+}
 // Retain only comparable, completed rounds in the current workflow tab.
 function comparableFailureHistory(current,hash,snapshot){
  const signature=steps=>JSON.stringify(steps.map(s=>[s.command,humanCriterion(s).criterion]));
@@ -4637,6 +4641,15 @@ function showWorkflow(){
    workflowState=restartReviewedRound(workflowState);showWorkflow();
   };
   workflow.append(restart);
+  if(workflowState.history.length){
+   const forget=document.createElement('button');forget.type='button';forget.className='secondary';forget.dataset.centralForget='true';
+   forget.textContent=words('Clear previous review rounds','پاک‌کردن دورهای بازبینی پیشین');
+   forget.onclick=()=>{
+    if(!forget.isConnected||!retainedWorkflow()||window.NexusStudioUI.uiStatus().isolated)return;
+    workflowState=forgetReviewedHistory(workflowState);showWorkflow();
+   };
+   workflow.append(forget);
+  }
  }
 }
 function reviewWorkflow(message){
