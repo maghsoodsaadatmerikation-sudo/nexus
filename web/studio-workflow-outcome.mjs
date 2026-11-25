@@ -5,7 +5,7 @@ export function evaluateWorkflowOutcome(scope,criteria,observations,{enabled=fal
  if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
  if(isolated||!enabled)return {status:isolated?'isolated':'off',completion_verified:false,execution_authorized:false};
  const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
- if(!scope||!id(scope.project_id)||!id(scope.run_id)||typeof scope.plan_sha256!=='string'||!/^[a-f0-9]{64}$/.test(scope.plan_sha256))throw Error('invalid-scope');
+ if(!scope||!id(scope.project_id)||!id(scope.run_id)||(scope.workflow_id!==undefined&&!id(scope.workflow_id))||typeof scope.plan_sha256!=='string'||!/^[a-f0-9]{64}$/.test(scope.plan_sha256))throw Error('invalid-scope');
  if(!Array.isArray(criteria)||criteria.length<1||criteria.length>30||!Array.isArray(observations)||observations.length>60)throw Error('invalid-outcome-input');
  const byId=new Map();
  for(const c of criteria){
@@ -16,7 +16,9 @@ export function evaluateWorkflowOutcome(scope,criteria,observations,{enabled=fal
  // Each observation ID is unique within a run; separate criterion-specific receipts are required.
  const grouped=new Map(),seenEvidence=new Set();
  for(const o of observations){
-  if(!o||o.project_id!==scope.project_id||o.run_id!==scope.run_id||o.plan_sha256!==scope.plan_sha256)throw Error('observation-scope-mismatch');
+  // A workflow-scoped report must match that workflow; legacy unscoped reports
+  // remain supported only when both scope and observation omit the workflow ID.
+  if(!o||o.project_id!==scope.project_id||o.workflow_id!==scope.workflow_id||o.run_id!==scope.run_id||o.plan_sha256!==scope.plan_sha256)throw Error('observation-scope-mismatch');
   if(!byId.has(o.criterion_id)||!id(o.evidence_id)||!['pass','fail','inconclusive'].includes(o.result)||!['automated_check','human_review','independent_witness','self_report'].includes(o.kind))throw Error('invalid-observation');
   if(!grouped.has(o.criterion_id))grouped.set(o.criterion_id,new Map());
   const g=grouped.get(o.criterion_id);
