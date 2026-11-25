@@ -314,6 +314,11 @@ try{
  stage='true-offline';await setOffline(true);await rpc('Page.reload',{ignoreCache:true});
  await poll(()=>retryJs("!window.__beforeOfflineReload&&navigator.onLine===false&&document.readyState==='complete'&&Boolean(window.NexusStudioUI)&&Boolean(document.getElementById('studio-offline'))"),15000,'offline-reload');
  assert(await js("NexusStudioUI.snapshot().projects.length===0"),'automatic-private-reopen');checks.push('true-offline-reload-still-locked');
+ assert(await js("Boolean(window.NexusOrchestra&&window.NexusOrchestraUI)"),'offline-orchestra-engine-not-loaded');checks.push('split-orchestra-loaded-without-network');
+ const moduleIntegrity=await js(`(async()=>{const cache=await caches.open((await caches.keys())[0]),url=new URL(${JSON.stringify(orchestraModule)},location.href).href,original=await cache.match(url);if(!original)return false;
+ try{await cache.put(url,new Response('CORRUPTED ORCHESTRA ASSET',{headers:{'content-type':'text/javascript'}}));const r=await fetch(url);return r.status===503}
+ finally{await cache.put(url,original)}})()`);
+ assert(moduleIntegrity,'corrupted-orchestra-cache-accepted');checks.push('corrupted-offline-orchestra-rejected');
  await js("document.getElementById('passphrase').value='synthetic secret phrase 123';document.getElementById('unlock').click();true");
  await poll(()=>retryJs("NexusStudioUI.snapshot().projects[0]?.title==='My conversations'"),12000,'offline-unlock');checks.push('offline-encrypted-reopen');
  stage='offline-pdf';
