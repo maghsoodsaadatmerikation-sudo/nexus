@@ -16,18 +16,21 @@ export async function inspectReadiness(downloadBytes){
  return assessReadiness({secure:globalThis.isSecureContext===true,worker:typeof Worker==='function',wasm:typeof WebAssembly==='object',cache:typeof caches==='object',crypto:!!globalThis.crypto?.subtle,memoryGiB:navigator.deviceMemory,quota:storage.quota,usage:storage.usage,downloadBytes});
 }
 export class DeviceEngine{
- constructor({workerURL,onStatus=()=>{}}){this.workerURL=workerURL;this.onStatus=onStatus;this.worker=null;this.state='idle';this.details=null;this.pending=null;this.serial=0;this.evidence={}}
+ constructor({workerURL,onStatus=()=>{},acquireResidency=()=>()=>{}}){this.acquireResidency=acquireResidency;this.releaseResidency=null;this.workerURL=workerURL;this.onStatus=onStatus;this.worker=null;this.state='idle';this.details=null;this.pending=null;this.serial=0;this.evidence={}}
  info(){return this.state==='ready'?{ready:true,...this.details}:null}
  report(){
   return {schema:'nexus.device-runtime-report.v1',scope:'local-runtime-observation',state:this.state,model:this.details?.model||null,configuration_id:this.details?.configuration_id||null,model_loaded:!!this.details,generation_observed:this.evidence.generated===true,input_tokens:this.evidence.inputTokens??null,max_output_tokens:this.evidence.budget??null,elapsed_ms:this.evidence.elapsed??null,quality_evaluated:false,physical_android_verified:false,authority:'none'};
  }
- unload(reason='cancelled'){this.worker?.terminate();this.worker=null;this.details=null;this.state='idle';this.evidence={};if(this.pending){this.pending.reject(Error(reason));this.pending=null}this.onStatus({type:'idle',reason})}
+ unload(reason='cancelled'){this.worker?.terminate();this.worker=null;this.details=null;this.state='idle';this.evidence={};if(this.pending){this.pending.reject(Error(reason));this.pending=null}const release=this.releaseResidency;this.releaseResidency=null;release?.();this.onStatus({type:'idle',reason})}
  async load({consent=false}={}){
   if(consent!==true)throw Error('explicit-consent-required');
   if(this.state!=='idle')throw Error('model-busy');
   if(!globalThis.Worker||!globalThis.WebAssembly||!globalThis.caches||!globalThis.crypto?.subtle)throw Error('unsupported-device');
   if(navigator.deviceMemory&&navigator.deviceMemory<4)throw Error('insufficient-device-memory');
-  this.state='loading';let worker;try{worker=new Worker(this.workerURL,{type:'module'})}catch{this.state='idle';throw Error('worker-start-failed')}this.worker=worker;
+  const release=this.acquireResidency();
+  if(typeof release!=='function')throw Error('local-resource-busy');
+  this.releaseResidency=release;this.state='loading';
+  let worker;try{worker=new Worker(this.workerURL,{type:'module'})}catch{this.unload('worker-start-failed');throw Error('worker-start-failed')}this.worker=worker;
   return new Promise((resolve,reject)=>{
    const timer=setTimeout(()=>{if(this.worker===worker)this.unload('load-timeout')},300000);
    const done=(fn,value)=>{clearTimeout(timer);fn(value)};
@@ -38,7 +41,7 @@ export class DeviceEngine{
     if(this.worker!==worker)return;const data=event.data;
     if(data.type==='download'||data.type==='phase'){this.onStatus(data);return}
     if(data.type==='ready'){this.state='ready';this.details=data;this.pending=null;done(resolve,this.info());this.onStatus(data)}
-    else if(data.type==='error'){this.onStatus(data);this.pending?.reject(Error(data.code));this.pending=null;if(data.phase==='loading')this.unload();else{this.state='ready';this.onStatus(data)}}
+    else if(data.type==='error'){this.onStatus(data);this.pending?.reject(Error(data.code));this.pending=null;if(this.state==='loading')this.unload(data.code);else{this.state='ready';this.onStatus(data)}}
     else if(data.type==='result'&&this.pending?.id===data.id){const pending=this.pending;this.pending=null;this.state='ready';this.evidence={generated:true,inputTokens:Number.isSafeInteger(data.input_tokens)?data.input_tokens:null,budget:this.evidence.budget,elapsed:Math.max(0,Math.round(performance.now()-this.evidence.started))};pending.resolve(data);this.onStatus({type:'ready',...this.details})}
    };
    try{worker.postMessage({type:'load',consent:true})}catch{this.unload('worker-start-failed')}
