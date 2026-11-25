@@ -5,7 +5,7 @@ import argparse
 import base64
 import hashlib
 from textwrap import dedent
-from studio_module_graph import validate_module_graph
+from studio_module_graph import validate_executable_slots, validate_module_graph
 from studio_template_contract import replace_exact
 root = Path(__file__).resolve().parents[1]
 vendor=root/'web/vendor/astronomy-2.1.19.min.js'
@@ -16,6 +16,7 @@ theme = (root/'web/studio-theme.css').read_text()
 if '</style' in theme.lower() or shell.count('/*STUDIO_THEME*/') != 1:
     raise ValueError('invalid Studio theme source')
 modules = validate_module_graph(shell, root/'web')
+validate_executable_slots(shell, modules)
 shell = replace_exact(shell, '/*STUDIO_THEME*/', theme)
 brand = base64.b64encode((root/'web/nexus-brand-icon.png').read_bytes()).decode('ascii')
 shell = replace_exact(shell, '__NEXUS_BRAND_PNG__', brand)
