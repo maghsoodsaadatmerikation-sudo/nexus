@@ -43,7 +43,7 @@ function renderBrief(){
 function syncCodeRun(){
  const gate=window.NexusMusicUI;
  $('code-run').disabled=Boolean(codeController||!gate||gate.audioBusy());
- $('code-run').title=gate?.audioBusy()?t('localResourceBusy'):'';
+ $('code-run').title=gate?.audioBusy()?(gate.resourceMessage?.()||t('localResourceBusy')):'';
 }
 Object.assign(EN,{localResourceBusy:'Finish the active local job or unload the local model first.'});
 Object.assign(FA,{localResourceBusy:'ابتدا پردازش محلی فعال را پایان بده یا مدل محلی را از حافظه خارج کن.'});
@@ -85,7 +85,7 @@ for(const id of ['code','code-input'])$(id).addEventListener('input',()=>{cancel
 $('code-sample').onclick=()=>{if($('code').value&&!confirm(t('discard')))return;cancel();result=null;$('code-result').textContent='';$('code-console').textContent='';$('code-input').value='{"values":[3,5,2]}';$('code').value="const data = JSON.parse(input);\nconst values = data.values;\nconsole.log({count: values.length, sum: values.reduce((a,b)=>a+b, 0)});\nreturn {type:'bar', title:'Local calculation', labels: values.map((_,i)=>String(i+1)), values};";renderStorage()};
 $('code-run').onclick=async()=>{
  if(!$('code-consent').checked||codeController)return;
- const release=window.NexusMusicUI?.acquireAudioJob();
+ const release=window.NexusMusicUI?.acquireAudioJob('code');
  if(!release){$('code-status').textContent=t('localResourceBusy');return}
  const scope=epoch,abort=new AbortController();codeController=abort;$('code-consent').checked=false;$('code-run').disabled=true;$('code-stop').disabled=false;$('code-status').textContent=t('codeWorking');$('code-console').textContent='';$('code-result').textContent='';result=null;
  const runId=++localAttempt;activeCodeAttempt=runId;localLifecycle('code',runId,'started');
