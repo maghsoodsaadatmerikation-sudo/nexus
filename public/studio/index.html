@@ -1787,6 +1787,36 @@ function render(container, text, {codeActions = false} = {}) {
  }
 }
 
+// Structural review only: no fact checking, rewriting or additional model calls.
+function reviewDraft(text,{truncated=false}={}){
+ if(typeof text!=='string'||typeof truncated!=='boolean')throw Error('invalid-draft-review');
+ const findings=[];
+ if(truncated)findings.push('length_limit');
+ if(!text.trim())findings.push('empty_answer');
+ if(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(text))findings.push('control_characters');
+ if(text.length>100000)return {findings:[...findings,'review_limit'],facts_verified:false,automatic_rewrite:false};
+ let open=null,paragraph=[],repeated=false;
+ const seen=new Set();
+ const flush=()=>{
+  const value=paragraph.join(' ').replace(/\s+/g,' ').trim();paragraph=[];
+  if(value.length<100)return;
+  if(seen.has(value))repeated=true;else seen.add(value);
+ };
+ for(const line of text.split(/\r\n?|\n/)){
+  const mark=fence.exec(line);
+  if(open){
+   if(mark&&mark[1][0]===open[0]&&mark[1].length>=open.length&&!mark[2].trim())open=null;
+   continue;
+  }
+  if(mark){flush();open=mark[1];continue}
+  if(!line.trim())flush();else paragraph.push(line);
+ }
+ flush();
+ if(open)findings.push('unclosed_code_fence');
+ if(repeated)findings.push('repeated_paragraph');
+ return {findings,facts_verified:false,automatic_rewrite:false};
+}
+
 const exportStyle = `
  :root {color-scheme: light dark; font: 17px/1.6 system-ui, sans-serif;}
  body {margin: 0; padding: clamp(1rem, 4vw, 3rem);}
@@ -1842,6 +1872,7 @@ function exportHtml(sourceDocument, sections, {title}) {
 
 globalThis.NexusReplyFormat = Object.freeze({
  render,
+ reviewDraft,
  exportHtml:(doc,text,{title,format})=>exportHtml(doc,[{text,format}],{title}),
  exportConversation:(doc,sections,title)=>exportHtml(doc,sections,{title})
 });
@@ -2327,8 +2358,8 @@ function clearTrainingReview(){
 }
 // Existing project-memory surface: no new top-level navigation.
 const experienceImportEngine=(()=>{
- // Pure, review-only structural critique of declared plan effects. No inference, execution or authorization.
-// An effect label is a caller assertion, never proof of what code or tools will actually do.
+ 
+
 function critiqueWorkflow(plan,{enabled=false,isolated=false}={}){
  if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
  if(isolated||!enabled)return {status:isolated?'isolated':'off',execution_authorized:false};
@@ -2364,8 +2395,8 @@ function critiqueWorkflow(plan,{enabled=false,isolated=false}={}){
   review_order:order,terminal_steps:terminal,findings,blocking_review_count:findings.filter(f=>f.level==='blocking_review').length};
 }
 
-// Local advisory only, no tool calls, storage, retries or execution authority.
-// Host must bind observations to the exact plan, run and project. Reported success is not proof.
+
+
 function reviewWorkflowRecovery(steps,observations,{enabled=false,isolated=false}={}){
  if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
  if(isolated||!enabled)return {status:isolated?'isolated':'off',execution_authorized:false};
@@ -2390,7 +2421,7 @@ function reviewWorkflowRecovery(steps,observations,{enabled=false,isolated=false
   if(!o||!graph.has(o.id)||states.has(o.id)||!['queued','running','succeeded','failed','cancelled','blocked'].includes(o.status))throw Error('invalid-observation');
   states.set(o.id,o.status);
  }
- // A missing observation is unknown, not evidence that no action happened.
+
  const state=id=>states.get(id)||'unknown';
  const items=[],effective=new Map();
  for(const id of order){
@@ -2408,9 +2439,9 @@ function reviewWorkflowRecovery(steps,observations,{enabled=false,isolated=false
  return {status:'review_only',basis:'supplied_statuses_not_verified_execution_evidence',execution_authorized:false,items};
 }
 
-// Review recurring failure codes across explicitly scoped, distinct reported runs.
-// Caller must authenticate reports, criteria identity and code vocabulary. No causal inference,
-// model training, persistence or automatic application. Failure codes must be nonsensitive.
+
+
+
 function reviewWorkflowLessons(scope,runs,{enabled=false,isolated=false}={}){
  if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
  if(isolated||!enabled)return {status:isolated?'isolated':'off',candidates:[],automatic_learning:false};
@@ -2434,9 +2465,9 @@ function reviewWorkflowLessons(scope,runs,{enabled=false,isolated=false}={}){
  return {status:'review_only',basis:'repeated_supplied_failure_reports_not_verified_causality',candidates,review_required:true,automatic_learning:false,execution_authorized:false};
 }
 
-// Review-only assessment of supplied criterion and evidence metadata, not actual verification.
-// The host must verify evidence provenance, integrity, scope and authority independently.
-// No execution, automatic completion, storage, network or data export.
+
+
+
 function evaluateWorkflowOutcome(scope,criteria,observations,{enabled=false,isolated=false}={}){
  if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
  if(isolated||!enabled)return {status:isolated?'isolated':'off',completion_verified:false,execution_authorized:false};
@@ -2449,11 +2480,11 @@ function evaluateWorkflowOutcome(scope,criteria,observations,{enabled=false,isol
   byId.set(c.id,c);
  }
  if(!criteria.some(c=>c.required))throw Error('missing-required-criteria');
- // Each observation ID is unique within a run; separate criterion-specific receipts are required.
+
  const grouped=new Map(),seenEvidence=new Set();
  for(const o of observations){
-  // A workflow-scoped report must match that workflow; legacy unscoped reports
-  // remain supported only when both scope and observation omit the workflow ID.
+
+
   if(!o||o.project_id!==scope.project_id||o.workflow_id!==scope.workflow_id||o.run_id!==scope.run_id||o.plan_sha256!==scope.plan_sha256)throw Error('observation-scope-mismatch');
   if(!byId.has(o.criterion_id)||!id(o.evidence_id)||!['pass','fail','inconclusive'].includes(o.result)||!['automated_check','human_review','independent_witness','self_report'].includes(o.kind))throw Error('invalid-observation');
   if(!grouped.has(o.criterion_id))grouped.set(o.criterion_id,new Map());
@@ -2479,14 +2510,14 @@ function evaluateWorkflowOutcome(scope,criteria,observations,{enabled=false,isol
  const required=items.filter(c=>c.required);
  const assessment=required.some(c=>c.disposition==='reported_failure')?'reported_required_failure':required.every(c=>c.disposition==='reported_pass')?'required_reports_present':'review_incomplete';
  const actionByDisposition={reported_failure:'review_failure',conflicting_reports:'reconcile_reports',requires_reconciliation:'reconcile_reports',inconclusive:'request_conclusive_evidence',missing_required_evidence_kind:'request_matching_evidence'};
- // Stable ordering: required criteria first; never request an automatic retry or action.
+
  const review_actions=[...required,...items.filter(c=>!c.required)].filter(c=>c.disposition!=='reported_pass').map(c=>({criterion_id:c.criterion_id,required:c.required,evidence_kind:byId.get(c.criterion_id).evidence_kind,action:actionByDisposition[c.disposition]}));
  return {review_actions,status:'review_only',basis:'supplied_evidence_metadata_not_authenticity_or_outcome_proof',assessment,completion_verified:false,execution_authorized:false,items};
 }
 
-// Compare distinct declared runs against one shared criterion list, never against a
-// caller-supplied aggregate score. The caller must authenticate scope, criterion
-// semantics and receipt provenance. No proof of regression, causality or success.
+
+
+
 function reviewOutcomeRevision(before,after,criteria,{enabled=false,isolated=false}={}){
  if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
  if(isolated||!enabled)return {status:isolated?'isolated':'off',completion_verified:false,execution_authorized:false};
@@ -2513,8 +2544,8 @@ function reviewOutcomeRevision(before,after,criteria,{enabled=false,isolated=fal
   review_actions:next.review_actions,completion_verified:false,execution_authorized:false};
 }
 
-// Conservative, ephemeral experience candidates; correction codes are caller-declared
-// nonsensitive labels, not instructions. Repeated associations are not causal evidence.
+
+
 function reviewCorrectionExperience(scope,criteria,attempts,{enabled=false,isolated=false}={}){
  if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
  const boundary={automatic_learning:false,completion_verified:false,execution_authorized:false};
@@ -2564,9 +2595,9 @@ function readExperienceSnapshot(snapshot){
   return {project_id:snapshot.project_id,workflow_id:snapshot.workflow_id,revision:snapshot.revision,entries};
  }
 
-// A serializable snapshot proposal, not a storage engine. Host owns authenticated
-// human consent, monotonic revision/CAS, encryption, deletion and invalidation.
-// Do not persist tickets, raw observations or untrusted instructions.
+
+
+
 function createExperienceEditReview(){
  let pending=null;
  const id=experienceId;
@@ -2607,9 +2638,9 @@ function createExperienceEditReview(){
  return Object.freeze({stage,approve,invalidate});
 }
 
-// Explicit, local recall for review only. The host must supply the current
-// authenticated snapshot and full relevant evidence set, not selected successes.
-// Exact criterion IDs are not proof that criterion semantics are unchanged.
+
+
+
 function reviewExperienceRecall(snapshot,request,criteria,attempts,{enabled=false,isolated=false,limit=5}={}){
  if(typeof enabled!=='boolean'||typeof isolated!=='boolean'||!Number.isInteger(limit)||limit<1||limit>10)throw Error('invalid-options');
  const boundary={automatic_application:false,execution_authorized:false,completion_verified:false};
@@ -2633,7 +2664,7 @@ function reviewExperienceRecall(snapshot,request,criteria,attempts,{enabled=fals
  let withheld=0;
  for(const e of current.entries){
   if(e.status!=='active'||!requested.has(e.criterion_id))continue;
-  // Changed support requires explicit refresh rather than silent acceptance.
+
   if(fresh.get(e.correction_code+'|'+e.criterion_id)!==e.supporting_pair_count){withheld++;continue}
   matches.push({correction_code:e.correction_code,criterion_id:e.criterion_id,required:catalog.get(e.criterion_id),supporting_pair_count:e.supporting_pair_count,review_required:true});
  }
@@ -2643,8 +2674,8 @@ function reviewExperienceRecall(snapshot,request,criteria,attempts,{enabled=fals
 }
 
 
-// Read-only orchestration. No tool dispatcher, persistence, model context or
-// permission grant. Scope labels are consistency checks, not authentication.
+
+
 function reviewAssistantWorkflow(input,{enabled=false,isolated=false,experienceEnabled=false}={}){
  if([enabled,isolated,experienceEnabled].some(v=>typeof v!=='boolean'))throw Error('invalid-options');
  const boundary={execution_authorized:false,completion_verified:false,automatic_application:false};
@@ -2663,12 +2694,12 @@ function reviewAssistantWorkflow(input,{enabled=false,isolated=false,experienceE
  const revision=input.prior_run===undefined?null:reviewOutcomeRevision(input.prior_run,{scope,observations:input.evidence},input.criteria,on);
  const unresolved=recovery.items.filter(i=>i.disposition!=='reported_success');
  const failed=outcome.items.filter(i=>i.disposition==='reported_failure').map(i=>i.criterion_id);
- // Contradictory required evidence is a reconciliation problem, not a
- // reliable basis for selecting a historical correction. Optional conflicts
- // remain visible in the outcome but do not suppress unrelated recall.
+
+
+
  const reconciliation=outcome.items.filter(i=>i.required&&['conflicting_reports','requires_reconciliation'].includes(i.disposition)).map(i=>i.criterion_id);
- // Only an explicit recall opt-in and present reported failures can expose
- // previous experience; missing evidence alone is not a failed criterion.
+
+
  let experience={status:'off',matches:[]};
  if(experienceEnabled){
   if(reconciliation.length)experience={status:'withheld_pending_reconciliation',matches:[]};
@@ -2677,8 +2708,8 @@ function reviewAssistantWorkflow(input,{enabled=false,isolated=false,experienceE
   else {
    const e=input.experience;
    experience=reviewExperienceRecall(e.snapshot,{project_id:scope.project_id,workflow_id:scope.workflow_id,revision:e.revision,criterion_ids:failed},input.criteria,e.attempts,on);
-   // Recall validates the bounded attempt structure before this cross-check.
-   // The current run cannot supply independent historical support for itself.
+
+
    const currentReceipts=new Set(input.evidence.map(o=>o.evidence_id));
    for(const attempt of e.attempts)for(const run of [attempt.before,attempt.after]){
     if(run.scope.run_id===scope.run_id)throw Error('current-run-in-experience');
@@ -2712,9 +2743,9 @@ function reviewAssistantWorkflow(input,{enabled=false,isolated=false,experienceE
  return {status:'review_only',priority,critique,recovery,outcome,revision,experience,...comparison,...scenarios,...patterns,...adaptive,...boundary};
 }
 
-// Compare explicitly supplied estimates for one failed criterion, and only
-// against already reviewed recall matches. Counts are not probabilities.
-// No scoring weights, causal claims, spending or automatic selection.
+
+
+
 function compareRecalledCorrections(experience,request){
  const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
  const bounded=(v,max)=>Number.isSafeInteger(v)&&v>=0&&v<=max;
@@ -2744,8 +2775,8 @@ function compareRecalledCorrections(experience,request){
  return {status:'review_only',basis:'supplied_estimates_for_recalled_options_not_verified_cost_risk_or_success',criterion_id:request.criterion_id,options:rows,recall_truncated:experience.truncated,automatic_selection:false,execution_authorized:false};
 }
 
-// Stress-test supplied ranges, not predictions. Rollback is a separate
-// declared contingency; no backup, restore, execution or authorization occurs.
+
+
 function reviewCorrectionScenarios(comparison,limits,request){
  const valid=(v,max)=>Number.isSafeInteger(v)&&v>=0&&v<=max;
  const money=v=>valid(v,100000000),minutes=v=>valid(v,525600);
@@ -2774,8 +2805,8 @@ function reviewCorrectionScenarios(comparison,limits,request){
  return {status:'review_only',basis:'caller_supplied_ranges_and_contingency_not_validated_predictions_or_restore_proof',criterion_id:comparison.criterion_id,options,automatic_selection:false,rollback_verified:false,execution_authorized:false};
 }
 
-// Explicitly supplied historical reports only; no chronology, frequency in the
-// population, causal inference, durable memory, training or corrective action.
+
+
 function reviewFailurePatterns(scope,criteria,evidence,outcome,history){
  if(!Array.isArray(history)||history.length>30)throw Error('invalid-failure-history');
  const runs=new Set([scope.run_id]),receipts=new Set(evidence.map(o=>o.evidence_id));
@@ -2809,8 +2840,8 @@ function reviewFailurePatterns(scope,criteria,evidence,outcome,history){
  return {status:'review_only',basis:'distinct_supplied_reports_not_verified_prevalence_or_causality',historical_run_count:history.length,patterns,automatic_learning:false,execution_authorized:false};
 }
 
-// Prospective, advisory structural review. Mappings are caller declarations;
-// dependencies and success criteria do not prove a check will actually run.
+
+
 function reviewAdaptivePlan(scope,criteria,history,request){
  const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
  const next=request?.scope;
@@ -2841,8 +2872,8 @@ function reviewAdaptivePlan(scope,criteria,history,request){
 }
 
 
-// Host-owned session metadata is a consistency boundary, not authentication.
-// Returns a validated proposed state only: no persistence, execution or model context.
+
+
 function createArchiveExperienceReview(validateState){
  if(typeof validateState!=='function')throw Error('invalid-state-validator');
  const engine=createExperienceEditReview();
@@ -2862,7 +2893,7 @@ function createArchiveExperienceReview(validateState){
   invalidate();
   const current=read(value,session,workflow);
   if(!current.exists&&(current.project.experiences||[]).length>=12)throw Error('archive-experience-capacity');
-  // Enforce workflow labels even on older compatible outcome-engine versions.
+
   if(['accept','refresh'].includes(operation?.kind)){
    if(!Array.isArray(attempts)||attempts.length<1||attempts.length>12)throw Error('invalid-experience-input');
    for(const a of attempts)for(const run of [a?.before,a?.after]){
@@ -2885,7 +2916,7 @@ function createArchiveExperienceReview(validateState){
    if(binding(session)!==review.session||current.exists!==review.exists)throw Error('stale-archive-review');
    const snapshot=engine.approve(review.inner,current.snapshot,{enabled:true,approved:true});
    const list=(current.project.experiences||[]).filter(s=>s.workflow_id!==review.workflow);
-   // Preserve empty snapshots as revision tombstones, not as active experience.
+
    current.project.experiences=[...list,snapshot];
    const next=validateState(current.data);
    return {status:'proposed_state',state:next,storage_authorized:false,execution_authorized:false,automatic_application:false};
@@ -2894,8 +2925,8 @@ function createArchiveExperienceReview(validateState){
  return Object.freeze({stage,approve,invalidate});
 }
 
-// Local JSON import is a user-supplied report, not authenticated evidence.
-// Restrict the import to one explicit accept/refresh operation.
+
+
 function stageImportedExperience(adapter,value,session,raw){
  adapter.invalidate();
  if(typeof raw!=='string'||raw.length>65536)throw Error('invalid-experience-import');
@@ -2909,9 +2940,9 @@ function stageImportedExperience(adapter,value,session,raw){
 }
 
 
-// The caller must capture a stable random session ID and compute the workflow
-// hash over the exact draft and normalized criteria. Labels are not proof.
-// This is an unencrypted report proposal; no download, persistence or learning.
+
+
+
 function buildChatExperienceReport(rounds,request,{enabled=false,isolated=false}={}){
  if(typeof enabled!=='boolean'||typeof isolated!=='boolean')throw Error('invalid-options');
  if(!enabled||isolated)return {status:isolated?'isolated':'off',report:null};
@@ -2921,7 +2952,7 @@ function buildChatExperienceReport(rounds,request,{enabled=false,isolated=false}
     !id(request.project_id)||!hash(request.plan_sha256)||!id(request.session_id)||request.session_id.length>48||
     !id(request.correction_code)||!id(request.criterion_id)||!['accept','refresh'].includes(request.kind))throw Error('invalid-report-request');
  if(!Array.isArray(rounds)||rounds.length<4||rounds.length>24||rounds.length%2)throw Error('incomplete-paired-history');
- // Refuse gaps or a retained suffix: never silently select successful pairs.
+
  const first=rounds[0]?.steps;
  if(!Array.isArray(first)||first.length<2||first.length>6)throw Error('invalid-report-round');
  const signature=steps=>JSON.stringify(steps.map(s=>[s.command,s.criterion.trim()]));
@@ -2946,8 +2977,8 @@ function buildChatExperienceReport(rounds,request,{enabled=false,isolated=false}
 }
 
 
-// Read-only archive bridge. The host supplies the live, unlocked session and
-// expected revisions. Scope labels and supplied evidence are not authentication.
+
+
 function reviewArchivedExperience(validateState,value,session,request,{enabled=false,isolated=false}={}){
  const boundary={automatic_application:false,execution_authorized:false,completion_verified:false,storage_authorized:false,model_context_authorized:false};
  const result=status=>({status,matches:[],...boundary});
@@ -2975,9 +3006,9 @@ function reviewArchivedExperience(validateState,value,session,request,{enabled=f
  return {...recalled,...boundary};
 }
 
-// Chat reports are bound to the exact current draft/criteria digest. Do not
-// use arbitrary workflow labels, changed criteria or a report's own scope as
-// the source of current observations. The host computes the digest locally.
+
+
+
 function prepareChatArchiveRecall(raw,{projectId,threadId,sessionRevision,sessionId,round,planHash,steps}={}){
  const id=x=>typeof x==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(x);
  const exact=(x,keys)=>x&&typeof x==='object'&&!Array.isArray(x)&&Object.keys(x).sort().join('|')===keys;
@@ -3001,9 +3032,9 @@ function prepareChatArchiveRecall(raw,{projectId,threadId,sessionRevision,sessio
 }
 
 
-// Source-only bridge for multiple explicitly selected reports about one failed
-// criterion. Host supplies a live session, exact draft digest and UI statuses.
-// No estimates are inferred, no report is retained and no authority is granted.
+
+
+
 function reviewChatCorrectionOptions(validateState,value,session,input,{enabled=false,isolated=false}={}){
  const boundary={automatic_selection:false,automatic_application:false,execution_authorized:false,completion_verified:false,storage_authorized:false,model_context_authorized:false};
  const empty=status=>({status,comparison:null,scenarios:null,...boundary});
@@ -3023,8 +3054,8 @@ function reviewChatCorrectionOptions(validateState,value,session,input,{enabled=
  if(recall.status!=='review_only')return empty(recall.status);
  const eligible=new Set(recall.matches.filter(m=>m.criterion_id===comparison.criterion_id).map(m=>m.correction_code));
  if(codes.some(c=>!eligible.has(c)))return empty('insufficient_recalled_support');
- // Preserve the existing central engine's effect and execution-status gates.
- // Unknown commands remain unknown; a human verdict is not a tool receipt.
+
+
  const phases={started:'running',succeeded:'succeeded',failed:'failed',cancelled:'cancelled',partial:'blocked'};
  const plan={goal:'Review prior correction alternatives',steps:context.steps.map((s,i)=>({id:'s'+(i+1),needs:[],effect:s.command==='code'?'local_compute':s.command==='research'?'network_read':'unknown',success_criteria:s.criterion.trim()}))};
  const step_observations=context.steps.flatMap((s,i)=>Object.hasOwn(phases,s.observed)?[{...first.scope,id:'s'+(i+1),status:phases[s.observed]}]:[]);
@@ -3595,11 +3626,16 @@ $('send-model').onclick=async()=>{
    throw Error('model-route-mismatch');
   const receipt=gatewayReply&&reported?
    {model_slot:expectedSlot,model:out.model,configuration_id:request.body.configuration_id}:undefined;
+  const draftReview=NexusReplyFormat.reviewDraft(out.text,{truncated:Boolean(out.truncated)});
+  if(draftReview.findings.includes('empty_answer'))throw Error('empty-response');
   busy=false;
   const label=request.destination==='device'?'[On-device draft · SmolLM2-135M · English / limited]\n\n':'';
   const installed=installThread(S.append(request.thread,'assistant',label+out.text,'model',
    undefined,[],receipt));
-  if(installed&&out.truncated)$('status').textContent=language==='fa'?'پاسخ به سقف طول رسیده است.':'The response reached its length limit.';
+  if(installed&&draftReview.findings.length){
+   const warnings={length_limit:['The response reached its length limit.','پاسخ به سقف طول رسیده است.'],control_characters:['Unusual control characters.','نویسه‌های کنترلی غیرمعمول.'],unclosed_code_fence:['Unclosed code block.','بلوک کد بسته نشده.'],repeated_paragraph:['Repeated paragraph.','پاراگراف تکراری.'],review_limit:['Structural review size limit.','محدودیت حجم بازبینی ساختاری.']};
+   $('status').textContent=draftReview.findings.map(k=>warnings[k]?.[language==='fa'?1:0]).filter(Boolean).join(' ')+(language==='fa'?' بازبینی ساختاری؛ درستی محتوا تأیید نشده.':' Structural review only; facts not verified.');
+  }
  }catch(error){if(rev===revision)status(gatewayFailureLabel(error,request,timedOut))}
  finally{clearTimeout(timer);if(rev===revision){busy=false;clearModelReview();controller=null;controls()}}
 };
