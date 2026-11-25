@@ -280,6 +280,71 @@ function openReviewedSurface(result,message){
  }else window.NexusStudioFocus?.openPanel(panel);
  return true;
 }
+
+/* WORKFLOW_REVIEW_ENGINE */
+function humanCriterion(step){
+ const criterion=typeof step.criterion==='string'?step.criterion.trim():'';
+ const valid=criterion.length>0&&criterion.length<=260;
+ const verdict=valid&&step.opened===true&&step.observed!=='started'&&
+  ['pass','fail','inconclusive'].includes(step.verdict)?step.verdict:null;
+ return {criterion:valid?criterion:'',verdict};
+}
+function engineInput(draft,steps,planHash,round=1){
+ if(!Number.isSafeInteger(round)||round<1)throw Error('invalid-review-round');
+ const scope={project_id:'tab-local',workflow_id:'chat-review',run_id:'review-'+round,plan_sha256:planHash};
+ const phase={started:'running',succeeded:'succeeded',failed:'failed',cancelled:'cancelled',partial:'blocked'};
+ const plan={goal:'Review explicit chat workflow',steps:steps.map((step,i)=>({
+  id:'s'+(i+1),needs:[],effect:step.command==='code'?'local_compute':step.command==='research'?'network_read':'unknown',
+  ...(humanCriterion(step).criterion?{success_criteria:humanCriterion(step).criterion}:{})
+ }))};
+ const criteria=plan.steps.map(step=>({id:step.id,required:true,evidence_kind:'human_review'}));
+ const step_observations=steps.flatMap((step,i)=>phase[step.observed]?[{...scope,id:plan.steps[i].id,status:phase[step.observed]}]:[]);
+ const evidence=steps.flatMap((step,i)=>{const {verdict}=humanCriterion(step);return verdict?[{...scope,criterion_id:plan.steps[i].id,evidence_id:scope.run_id+'-human-'+(i+1),kind:'human_review',result:verdict}]:[]});
+ return {scope,plan,criteria,step_observations,evidence};
+}
+function reviewSnapshot(current){
+ return current.steps.map(s=>({command:s.result.route[0],observed:s.observed||null,acknowledged:s.acknowledged,opened:s.opened,criterion:s.criterion||'',verdict:s.verdict||null}));
+}
+function canCompareRound(current){
+ return current.index===current.steps.length&&current.steps.every(s=>humanCriterion(s).verdict!==null);
+}
+function restartReviewedRound(current){
+ if(!canCompareRound(current)||current.round>=100)throw Error('review-round-unavailable');
+ const prior={round:current.round,steps:reviewSnapshot(current)};
+ return {...current,round:current.round+1,epoch:0,baseline:prior,index:0,opened:false,
+  steps:current.steps.map(s=>({...s,opened:false,acknowledged:false,runId:null,observed:null,verdict:null}))};
+}
+async function showEngineReview(button,notice){
+ const current=workflowState,state=window.NexusStudioUI.uiStatus();
+ if(!validWorkflow()||state.isolated||!current)return;
+ const snapshot=()=>JSON.stringify(reviewSnapshot(current));
+ const captured=snapshot(),draft=current.draft,epoch=current.epoch;
+ button.disabled=true;
+ try{
+  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([draft,JSON.parse(captured).map(s=>s.criterion)])))),b=>b.toString(16).padStart(2,'0')).join('');
+  if(workflowState!==current||!validWorkflow()||window.NexusStudioUI.uiStatus().isolated||epoch!==current.epoch||captured!==snapshot()||!notice.isConnected)return;
+  const input=engineInput(draft,JSON.parse(captured),hash,current.round);
+  const baseline=current.baseline;
+  if(baseline&&canCompareRound(current)){
+   const previous=engineInput(draft,baseline.steps,hash,baseline.round);
+   input.prior_run={scope:previous.scope,observations:previous.evidence};
+  }
+  const result=reviewAssistantWorkflow(input,{enabled:true});
+  const reviewed=result.outcome.items.filter(i=>i.disposition==='reported_pass').length;
+  const failed=result.outcome.items.filter(i=>i.disposition==='reported_failure').length;
+  notice.textContent=words('Central review: ','بازبینی مرکزی: ')+({
+   review_plan_boundaries:words('review tool boundaries','بازبینی محدودیت ابزار'),
+   reconcile_execution_status:words('reconcile execution status','بررسی وضعیت اجرا'),
+   review_lost_criteria:words('review lost criteria','بازبینی معیارهای ازدست‌رفته'),
+   review_unfinished_steps:words('review unfinished steps','بازبینی مراحل ناتمام'),
+   review_plan_findings:words('define success criteria','تعریف معیار موفقیت'),
+   review_outcome_evidence:words('review evidence','بازبینی شواهد'),
+   manual_final_review:words('manual final review','بازبینی نهایی انسانی')
+  })[result.priority]+words(' · Human-reported pass / fail: ',' · موفق / ناموفق به گزارش کاربر: ')+reviewed+'/'+failed+(result.revision?words(' · Reported gains / losses: ',' · پیشرفت / پسرفت گزارش‌شده: ')+result.revision.gained_count+'/'+result.revision.lost_count:'')+words(' · No completion verified; no action authorized.',' · تکمیل تأیید نشده؛ هیچ مجوز اجرایی صادر نشده.');
+ }catch{if(notice.isConnected)notice.textContent=words('Central review unavailable; no action taken.','بازبینی مرکزی در دسترس نیست؛ اقدامی انجام نشد.')}
+ finally{if(button.isConnected)button.disabled=false}
+}
+
 function workflowAction(p){return p==='started'?'wait':p==='succeeded'?'verify':p?'reconcile':'inspect'}
 function workflowOutcomes(){
  const counts={succeeded:0,incomplete:0,running:0,unobserved:0,verified:false};
@@ -334,6 +399,30 @@ function showWorkflow(){
     words('Local UI reported failure · do not treat as success','رابط محلی شکست را گزارش کرد؛ موفقیت محسوب نمی‌شود'));
    item.append(observation);
   }
+  if(!window.NexusStudioUI.uiStatus().isolated){
+   const criterionLabel=document.createElement('label'),criterion=document.createElement('input');
+   criterionLabel.textContent=words('Success criterion (optional definition)','معیار موفقیت (تعریف اختیاری)');
+   criterion.type='text';criterion.maxLength=260;criterion.value=step.criterion||'';
+   criterion.dataset.centralCriterion=String(i);criterionLabel.append(criterion);
+   const verdictLabel=document.createElement('label'),verdict=document.createElement('select');
+   verdictLabel.textContent=words('Your result assessment (not independent proof)','ارزیابی شما از نتیجه (نه مدرک مستقل)');
+   verdict.dataset.centralVerdict=String(i);
+   for(const [value,en,fa] of [['','Not assessed','ارزیابی نشده'],['pass','Reported pass','موفق به گزارش شما'],['fail','Reported failure','ناموفق به گزارش شما'],['inconclusive','Inconclusive','نامشخص']]){
+    const option=document.createElement('option');option.value=value;option.textContent=words(en,fa);verdict.append(option);
+   }
+   const invalidate=()=>{workflowState.epoch++;const n=workflow.querySelector('[data-central-result]');if(n)n.textContent='';const retry=workflow.querySelector('[data-central-restart]');if(retry)retry.disabled=!canCompareRound(workflowState)||workflowState.round>=100;};
+   const canAssess=()=>validWorkflow()&&!window.NexusStudioUI.uiStatus().isolated&&step.opened&&step.observed!=='started'&&!!humanCriterion(step).criterion;
+   verdict.value=humanCriterion(step).verdict||'';verdict.disabled=!canAssess();
+   criterion.oninput=()=>{
+    if(!retainedWorkflow()||!criterion.isConnected||window.NexusStudioUI.uiStatus().isolated)return;
+    workflowState.baseline=null;step.criterion=criterion.value.slice(0,260);step.verdict=null;verdict.value='';verdict.disabled=!canAssess();invalidate();
+   };
+   verdict.onchange=()=>{
+    if(!verdict.isConnected||!canAssess()){verdict.value='';return}
+    step.verdict=['pass','fail','inconclusive'].includes(verdict.value)?verdict.value:null;invalidate();
+   };
+   verdictLabel.append(verdict);item.append(criterionLabel,verdictLabel);
+  }
   if(i===workflowState.index){
    const open=document.createElement('button');open.type='button';open.className='secondary';
    open.textContent=words('Open tool for review','بازکردن ابزار برای بازبینی');
@@ -380,13 +469,30 @@ function showWorkflow(){
   download(JSON.stringify(record,null,2),'nexus-workflow-review.json','application/json');
  };
  workflow.append(exportButton);
+ const central=document.createElement('button');central.type='button';central.className='secondary';central.dataset.centralReview='true';
+ central.textContent=words('Review with central engine','بازبینی با موتور مرکزی');
+ central.disabled=Boolean(window.NexusStudioUI.uiStatus().isolated);
+ const reviewNotice=document.createElement('p');reviewNotice.dataset.centralResult='true';reviewNotice.setAttribute('role','status');
+ central.onclick=()=>showEngineReview(central,reviewNotice);
+ workflow.append(central,reviewNotice);
+ if(!window.NexusStudioUI.uiStatus().isolated){
+  const restart=document.createElement('button');restart.type='button';restart.className='secondary';restart.dataset.centralRestart='true';
+  restart.textContent=words('Review another round · compare results','بازبینی دور جدید و مقایسهٔ نتایج');
+  restart.disabled=!canCompareRound(workflowState)||workflowState.round>=100;
+  restart.onclick=()=>{
+   if(!restart.isConnected||!validWorkflow()||window.NexusStudioUI.uiStatus().isolated||!canCompareRound(workflowState)||workflowState.round>=100)return;
+   if(!confirm(words('Keep this assessment only in this tab and start a new manual review round? No tool will run automatically.','این ارزیابی فقط در این برگه بماند و دور جدید بازبینی دستی آغاز شود؟ هیچ ابزاری خودکار اجرا نمی‌شود.')))return;
+   workflowState=restartReviewedRound(workflowState);showWorkflow();
+  };
+  workflow.append(restart);
+ }
 }
 function reviewWorkflow(message){
  closeDirectory();clearOffer();
  const parsed=parseWorkflow(message);
  if(parsed.error){workflowError(parsed.error);return}
- workflowState={draft:message,scope:workflowScope(),steps:parsed.steps.map(step=>({
-  ...step,opened:false,acknowledged:false,runId:null,observed:null
+ workflowState={draft:message,scope:workflowScope(),round:1,epoch:0,baseline:null,steps:parsed.steps.map(step=>({
+  ...step,opened:false,acknowledged:false,runId:null,observed:null,criterion:'',verdict:null
  })),index:0,opened:false};
  showWorkflow();
 }
@@ -400,7 +506,7 @@ document.addEventListener('nexus-studio-local-tool-lifecycle',event=>{
     !['started','succeeded','partial','failed','cancelled'].includes(detail.phase))return;
  const step=workflowState.steps[workflowState.index];
  if(!step||step.result.route[0]!==detail.tool)return;
- if(detail.phase==='started'){step.runId=detail.runId;step.observed='started'}
+ if(detail.phase==='started'){step.runId=detail.runId;step.observed='started';step.verdict=null}
  else if(step.runId===detail.runId&&step.observed==='started')step.observed=detail.phase;
  else return;
  showWorkflow();
