@@ -52,3 +52,16 @@ export function createArchiveExperienceReview(validateState){
  }
  return Object.freeze({stage,approve,invalidate});
 }
+
+// Local JSON import is a user-supplied report, not authenticated evidence.
+// Restrict the import to one explicit accept/refresh operation.
+export function stageImportedExperience(adapter,value,session,raw){
+ if(typeof raw!=='string'||raw.length>65536)throw Error('invalid-experience-import');
+ const report=JSON.parse(raw);
+ const exact=(x,keys)=>x&&typeof x==='object'&&!Array.isArray(x)&&Object.keys(x).sort().join('|')===keys;
+ if(!exact(report,'attempts|criteria|operation|schema|workflow_id')||report.schema!=='nexus.experience-review.v1'||
+ !exact(report.operation,'correction_code|criterion_id|kind')||!['accept','refresh'].includes(report.operation.kind)||
+ !Array.isArray(report.criteria)||report.criteria.length<1||report.criteria.length>30||
+ !Array.isArray(report.attempts)||report.attempts.length<2||report.attempts.length>12)throw Error('invalid-experience-import');
+ return adapter.stage(value,session,report.workflow_id,report.operation,{criteria:report.criteria,attempts:report.attempts});
+}
