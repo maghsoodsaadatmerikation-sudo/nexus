@@ -3,6 +3,7 @@
 import {spawn} from 'node:child_process';
 import {readFile,mkdtemp,rm} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
+import {checkStudioCachePolicy} from './test-studio-cache-policy.mjs';
 import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -16,6 +17,7 @@ const browser=process.env.NEXUS_PWA_CHROME;
 if(!browser||typeof WebSocket==='undefined')throw Error('real-chromium-and-node-required');
 const sha=buf=>createHash('sha256').update(buf).digest('hex');
 const sourceHtml=await readFile(new URL('index.html',root)),sourceDigest=sha(sourceHtml);
+const cachePolicyChecks=await checkStudioCachePolicy({worker:await readFile(new URL('service-worker.js',root),'utf8'),html:sourceHtml,orchestra:await readFile(new URL('studio-orchestra.js',root)),sha256:bytes=>createHash('sha256').update(bytes).digest()});
 const assert=(v,label)=>{if(!v)throw Error(label)};
 const pdfModules=['pdf/studio-pdf.mjs','pdf/pdf.min.mjs','pdf/pdf.worker.min.mjs'];
 const astronomyModule='vendor/astronomy-2.1.19.min.js';
@@ -92,7 +94,7 @@ async function setOffline(offline){
   await rpc('Network.emulateNetworkConditions',conditions,10000,session);
  }
 }
-const checks=[];
+const checks=[...cachePolicyChecks.map(label=>'synthetic-cache-policy-'+label)];
 try{
  const port=await poll(async()=>{
   try{const s=await readFile(path.join(profile,'DevToolsActivePort'),'utf8');
