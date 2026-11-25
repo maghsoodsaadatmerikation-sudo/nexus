@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import '../web/studio-core.js';
-import {createArchiveExperienceReview} from '../web/studio-experience-archive-edit.mjs';
+import {createArchiveExperienceReview,stageImportedExperience} from '../web/studio-experience-archive-edit.mjs';
 const S=globalThis.NexusStudio;
 function testArchive(S){
  let checks=0;
@@ -48,6 +48,14 @@ function testArchiveEdit(S){
  const stage=(value=data,sess=session,op=accept,opts=options)=>adapter.stage(value,sess,'w1',op,opts);
  const approval={approved:true};
  const original=JSON.stringify(data);
+ const report={schema:'nexus.experience-review.v1',workflow_id:'w1',operation:accept,criteria,attempts};
+ const imported=stageImportedExperience(adapter,data,session,JSON.stringify(report));
+ eq(imported.correction_code,'fix');
+ eq(adapter.approve(imported.ticket,data,session,{approved:true}).state.projects[0].experiences[0].entries[0].supporting_pair_count,2);
+ reject(()=>stageImportedExperience(adapter,data,session,'x'.repeat(65537)),'invalid-experience-import');
+ for(const bad of [{...report,schema:'other'},{...report,raw_evidence:[]},{...report,attempts:[attempts[0]]},{...report,operation:{...accept,kind:'delete'}},{...report,operation:{...accept,extra:true}},{...report,criteria:[]}])reject(()=>stageImportedExperience(adapter,data,session,JSON.stringify(bad)),'invalid-experience-import');
+ reject(()=>stageImportedExperience(adapter,data,{...session,isolated:true},JSON.stringify(report)),'archive-review-unavailable');
+ eq(JSON.stringify(data),original);
  const proposal=stage();
  eq(proposal.storage_authorized,false);eq(proposal.review_required,true);
  eq(JSON.stringify(data),original);
