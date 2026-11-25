@@ -61,7 +61,10 @@ export function reviewAssistantWorkflow(input,{enabled=false,isolated=false,expe
   !experienceEnabled?{status:'off',options:[]}:
   comparison.correction_comparison?.status!=='review_only'?{status:'withheld_pending_comparison',options:[]}:
   reviewCorrectionScenarios(comparison.correction_comparison,input.correction_comparison,input.correction_scenarios)};
- return {status:'review_only',priority,critique,recovery,outcome,revision,experience,...comparison,...scenarios,...boundary};
+ const patterns=input.failure_history===undefined?{}:{failure_patterns:
+  !experienceEnabled?{status:'off',patterns:[]}:
+  reviewFailurePatterns(scope,input.criteria,input.evidence,outcome,input.failure_history)};
+ return {status:'review_only',priority,critique,recovery,outcome,revision,experience,...comparison,...scenarios,...patterns,...boundary};
 }
 
 // Compare explicitly supplied estimates for one failed criterion, and only
@@ -124,4 +127,39 @@ function reviewCorrectionScenarios(comparison,limits,request){
   options.push({correction_code:row.correction_code,status,worst_case:baseWorst,worst_with_rollback:total,rollback_declared:rollback!==null});
  }
  return {status:'review_only',basis:'caller_supplied_ranges_and_contingency_not_validated_predictions_or_restore_proof',criterion_id:comparison.criterion_id,options,automatic_selection:false,rollback_verified:false,execution_authorized:false};
+}
+
+// Explicitly supplied historical reports only; no chronology, frequency in the
+// population, causal inference, durable memory, training or corrective action.
+function reviewFailurePatterns(scope,criteria,evidence,outcome,history){
+ if(!Array.isArray(history)||history.length>30)throw Error('invalid-failure-history');
+ const runs=new Set([scope.run_id]),receipts=new Set(evidence.map(o=>o.evidence_id));
+ const counts=new Map(criteria.map(c=>[c.id,{pass:0,fail:0,unresolved:0}]));
+ for(const run of history){
+  const s=run?.scope;
+  if(!s||s.project_id!==scope.project_id||s.workflow_id!==scope.workflow_id)throw Error('failure-history-scope-mismatch');
+  if(runs.has(s.run_id))throw Error('reused-failure-history-run');
+  const assessment=evaluateWorkflowOutcome(s,criteria,run.observations,{enabled:true});
+  runs.add(s.run_id);
+  for(const o of run.observations){
+   if(receipts.has(o.evidence_id))throw Error('reused-failure-history-evidence');
+   receipts.add(o.evidence_id);
+  }
+  for(const item of assessment.items){
+   const c=counts.get(item.criterion_id);
+   if(item.disposition==='reported_pass')c.pass++;
+   else if(item.disposition==='reported_failure')c.fail++;
+   else c.unresolved++;
+  }
+ }
+ const patterns=outcome.items.map(item=>{
+  const c=counts.get(item.criterion_id);
+  const status=item.disposition!=='reported_failure'?'no_current_reported_failure':
+   c.fail>=2?'repeated_reported_failure':
+   c.fail===1?'one_prior_reported_failure':
+   c.pass===history.length&&history.length?'no_failure_in_supplied_history':'insufficient_history';
+  return {criterion_id:item.criterion_id,required:item.required,current_disposition:item.disposition,
+   historical_reported_pass:c.pass,historical_reported_failure:c.fail,historical_unresolved:c.unresolved,status};
+ });
+ return {status:'review_only',basis:'distinct_supplied_reports_not_verified_prevalence_or_causality',historical_run_count:history.length,patterns,automatic_learning:false,execution_authorized:false};
 }
