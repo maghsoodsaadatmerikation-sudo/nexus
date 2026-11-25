@@ -22,11 +22,16 @@ export function reviewAssistantWorkflow(input,{enabled=false,isolated=false,expe
  const revision=input.prior_run===undefined?null:reviewOutcomeRevision(input.prior_run,{scope,observations:input.evidence},input.criteria,on);
  const unresolved=recovery.items.filter(i=>i.disposition!=='reported_success');
  const failed=outcome.items.filter(i=>i.disposition==='reported_failure').map(i=>i.criterion_id);
+ // Contradictory required evidence is a reconciliation problem, not a
+ // reliable basis for selecting a historical correction. Optional conflicts
+ // remain visible in the outcome but do not suppress unrelated recall.
+ const reconciliation=outcome.items.filter(i=>i.required&&['conflicting_reports','requires_reconciliation'].includes(i.disposition)).map(i=>i.criterion_id);
  // Only an explicit recall opt-in and present reported failures can expose
  // previous experience; missing evidence alone is not a failed criterion.
  let experience={status:'off',matches:[]};
  if(experienceEnabled){
-  if(!failed.length)experience={status:'no_reported_failure',matches:[]};
+  if(reconciliation.length)experience={status:'withheld_pending_reconciliation',matches:[]};
+  else if(!failed.length)experience={status:'no_reported_failure',matches:[]};
   else if(input.experience===undefined)experience={status:'no_snapshot',matches:[]};
   else {
    const e=input.experience;
@@ -42,6 +47,7 @@ export function reviewAssistantWorkflow(input,{enabled=false,isolated=false,expe
  }
  const priority=critique.blocking_review_count?'review_plan_boundaries':
   unresolved.some(i=>['inconsistent_observation','reconcile_before_action'].includes(i.disposition))?'reconcile_execution_status':
+  reconciliation.length?'review_outcome_evidence':
   revision?.lost_count?'review_lost_criteria':
   unresolved.length?'review_unfinished_steps':
   critique.findings.length?'review_plan_findings':
