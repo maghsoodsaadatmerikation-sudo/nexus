@@ -68,6 +68,7 @@ jobs:
           node scripts/test-studio-chat-review-matrix.mjs
           node scripts/test-studio-experience-archive.mjs
           node scripts/test-studio-experience-archive-recall.mjs
+          node scripts/test-studio-chat-correction-options.mjs
           node scripts/test-studio-memory-dates.mjs
           node scripts/test-studio-memory-vectors.mjs
           node scripts/test-studio-memory-hybrid.mjs
