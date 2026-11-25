@@ -288,8 +288,32 @@ function clearTrainingReview(){
 // Existing project-memory surface: no new top-level navigation, no recall.
 const experienceImportEngine=(()=>{
  /* EXPERIENCE_EDIT_ENGINE */
- return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow});
+ return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow,buildChatExperienceReport});
 })();
+// Capture the exact eligible local archive and conversation. No storage grant.
+function experienceReviewContext(){
+ const thread=chat();
+ if(!vault.unlocked||busy||!p()||!thread||thread.temporary||thread.isolated||thread.archived||data.history_days===0||pending||attachmentLoading)return null;
+ return {projectId,threadId,revision,archiveRevision:vault.archiveRevision};
+}
+function applyReviewedExperienceReport(raw,expected){
+ const matches=()=>{const current=experienceReviewContext();return !!current&&JSON.stringify(current)===JSON.stringify(expected)};
+ if(!matches())return 'unavailable';
+ const adapter=experienceImportEngine.createArchiveExperienceReview(S.state);
+ const session=()=>({enabled:true,vaultUnlocked:vault.unlocked,busy,isolated:!!chat()?.isolated,projectId,threadId,revision});
+ try{
+  const review=experienceImportEngine.stageImportedExperience(adapter,data,session(),raw);
+  const prefix=language==='fa'?'ثبت اطلاعات تجربه در نشست فعلی: ':'Retain reviewed experience metadata in this session: ';
+  const suffix=language==='fa'?'؟ گزارش مدرک مستقل نیست. برای ثبت پایدار، نشست را جداگانه ذخیره کنید.':'? Reports are not independent proof. Save session separately to persist.';
+  if(!confirm(prefix+[review.kind,review.workflow_id,review.criterion_id,review.correction_code].join(' / ')+suffix))return 'declined';
+  if(!matches())return 'unavailable';
+  return mutate(next=>{
+   const result=adapter.approve(review.ticket,next,session(),{approved:true});
+   projectIn(next).experiences=projectIn(result.state).experiences;
+  })?'applied_to_session':'rejected';
+ }catch{return 'rejected'}
+ finally{adapter.invalidate()}
+}
 function renderExperienceImport(parent,allowed){
  let panel=$('experience-import-panel');
  if(!panel){panel=document.createElement('details');panel.id='experience-import-panel';parent.append(panel)}
@@ -1072,7 +1096,7 @@ function selectModelSlot(slot){
  $('model-status').textContent=t('configured')+': '+choice.model+' · '+choice.provider_host;
  controls();return true;
 }
-window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,openConversation,selection:()=>({projectId,threadId,head:chat()?.head||null,revision,branchBase}),appendVisionResult,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),isolated:!!chat()?.isolated,attachmentLoading,archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),modelAvailability,availableModelOptions,stageMemoryNote,selectModelSlot,revokeModelReview:()=>stop(),resetModel:()=>{stop();modelChoices=[];selectedModelSlot='primary';modelInfo=null;modelReadiness=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
+window.NexusStudioUI=Object.freeze({schema:'nexus.studio.ui.v1',startConversation,openConversation,selection:()=>({projectId,threadId,head:chat()?.head||null,revision,branchBase}),appendVisionResult,lifecycle_version:TOOL_LIFECYCLE.version,storageStatus:storageSnapshot,snapshot:()=>S.copy(data),stageChatContext,uiStatus:()=>({vaultUnlocked:vault.unlocked,dirty,busy,unsavedForms:forms()||chatAttachments.length>0||$('attach-document').checked,unsavedLocalMedia:unsavedLocalMedia(),lossRisk:storageSnapshot().lossRisk,threadReady:!!chat(),isolated:!!chat()?.isolated,attachmentLoading,archived:!!chat()?.archived,pendingReview:!!pending,hasChatAttachments:chatAttachments.length>0||$('attach-document').checked}),modelAvailability,availableModelOptions,stageMemoryNote,experienceReviewContext,applyReviewedExperienceReport,selectModelSlot,revokeModelReview:()=>stop(),resetModel:()=>{stop();modelChoices=[];selectedModelSlot='primary';modelInfo=null;modelReadiness=null;$('model-status').textContent='';render()}});$('language').value=language;applyLanguage();
 
 for(const id of ['model-mode','model-budget'])$(id).addEventListener('input',stop);
 for(const id of ['gateway','gateway-token'])$(id).addEventListener('input',()=>{modelReadiness=null});
