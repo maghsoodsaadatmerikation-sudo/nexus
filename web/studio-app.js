@@ -288,8 +288,25 @@ function clearTrainingReview(){
 // Existing project-memory surface: no new top-level navigation, no recall.
 const experienceImportEngine=(()=>{
  /* EXPERIENCE_EDIT_ENGINE */
- return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow});
+ return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow,buildChatExperienceReport});
 })();
+// Chat handoff uses the same validator as file import; no implicit save.
+const applyChatExperienceReport=(report,expected)=>{
+ const current=()=>!!expected&&!busy&&vault.unlocked&&!!chat()&&!chat().temporary&&!chat().isolated&&!chat().archived&&projectId===expected.projectId&&threadId===expected.threadId&&revision===expected.revision;
+ if(!current())return 'unavailable';
+ const archiveRevision=vault.archiveRevision;
+ const session=()=>({enabled:true,vaultUnlocked:vault.unlocked,busy,isolated:!!chat()?.isolated,projectId,threadId,revision});
+ const adapter=experienceImportEngine.createArchiveExperienceReview(S.state);
+ try{
+  const raw=JSON.stringify(report),review=experienceImportEngine.stageImportedExperience(adapter,data,session(),raw);
+  if(!confirm((language==='fa'?'ثبت اطلاعات این تجربه فقط در نشست فعلی؟ برای ماندگاری، نشست را جدا ذخیره کنید. گزارش‌ها مدرک مستقل نیستند. ':'Retain this experience metadata in the current session only? Save session separately. Reports are not independent proof. ')+[review.kind,review.workflow_id,review.criterion_id,review.correction_code].join(' / ')))return 'declined';
+  if(!current()||archiveRevision!==vault.archiveRevision)return 'unavailable';
+  return mutate(next=>{
+   const result=adapter.approve(review.ticket,next,session(),{approved:true});
+   projectIn(next).experiences=projectIn(result.state).experiences;
+  })?'applied':'rejected';
+ }catch{return 'rejected'}finally{adapter.invalidate()}
+};
 function renderExperienceImport(parent,allowed){
  let panel=$('experience-import-panel');
  if(!panel){panel=document.createElement('details');panel.id='experience-import-panel';parent.append(panel)}
