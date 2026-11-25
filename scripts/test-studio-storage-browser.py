@@ -115,6 +115,20 @@ window.addEventListener('load',async()=>{
   assert(NexusStudioUI.snapshot().projects[0].experiences[0].entries.some(e=>e.correction_code==='direct_fixture'),'direct-metadata-visible');
   $('save').click();await wait(()=>$('status').textContent.includes('encrypted data')&&!$('save').disabled);
   assert((await S.decrypt(await store.read(),pass)).data.projects[0].experiences[0].entries.some(e=>e.correction_code==='direct_fixture'),'direct-explicit-save');
+  // The exact chat report must match the active archive and current failure.
+  const recallSteps=['fail','pass'].map((verdict,i)=>({command:'code',criterion:'Check '+i,opened:true,acknowledged:true,observed:'succeeded',verdict}));
+  const recallHash='b'.repeat(64),recallRounds=[1,2,3,4].map(round=>({round,steps:recallSteps.map((s,i)=>({...s,verdict:i===0&&round%2?'fail':'pass'}))}));
+  const recalledReport=experienceImportEngine.buildChatExperienceReport(recallRounds,{project_id:project.id,plan_sha256:recallHash,session_id:'old-report',correction_code:'recall_fixture',criterion_id:'s1',kind:'accept',same_correction_reported:true,complete_relevant_history_reported:true},{enabled:true}).report;
+  assert(recalledReport&&applyChatExperienceReport(recalledReport,NexusStudioUI.selection())==='applied','recall-fixture-retained');
+  const recallContext=chatArchiveRecallContext(),recallArgs={sessionId:'current-report',round:1,planHash:recallHash,steps:recallSteps};
+  const recallBefore=JSON.stringify(NexusStudioUI.snapshot()),recallCipher=await store.read();
+  const recalled=recallChatExperienceReport(JSON.stringify(recalledReport),recallContext,recallArgs);
+  assert(recalled.matches.length===1&&recalled.matches[0].correction_code==='recall_fixture','exact-chat-recall-matches');
+  assert(!recalled.execution_authorized&&!recalled.model_context_authorized&&!recalled.storage_authorized,'recall-no-authority');
+  assert(JSON.stringify(NexusStudioUI.snapshot())===recallBefore&&await store.read()===recallCipher,'recall-does-not-mutate-or-save');
+  assert(recallChatExperienceReport(JSON.stringify(recalledReport),{...recallContext,revision:recallContext.revision-1},recallArgs).status==='unavailable','stale-recall-refused');
+  const noFailure=recallChatExperienceReport(JSON.stringify(recalledReport),recallContext,{...recallArgs,steps:recallSteps.map(s=>({...s,verdict:'pass'}))});
+  assert(noFailure.status==='no_reported_failure'&&!noFailure.matches.length,'passing-round-does-not-recall');
   $('history-days').value='0';$('history-days').dispatchEvent(new Event('change',{bubbles:true}));
   $('save').click();await wait(()=>$('status').textContent.includes('encrypted data')&&!$('save').disabled);
   const off=(await S.decrypt(await store.read(),pass)).data;
