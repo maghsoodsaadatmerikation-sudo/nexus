@@ -176,6 +176,36 @@ function render(container, text, {codeActions = false} = {}) {
  }
 }
 
+// Structural review only: no fact checking, rewriting or additional model calls.
+function reviewDraft(text,{truncated=false}={}){
+ if(typeof text!=='string'||typeof truncated!=='boolean')throw Error('invalid-draft-review');
+ const findings=[];
+ if(truncated)findings.push('length_limit');
+ if(!text.trim())findings.push('empty_answer');
+ if(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(text))findings.push('control_characters');
+ if(text.length>100000)return {findings:[...findings,'review_limit'],facts_verified:false,automatic_rewrite:false};
+ let open=null,paragraph=[],repeated=false;
+ const seen=new Set();
+ const flush=()=>{
+  const value=paragraph.join(' ').replace(/\s+/g,' ').trim();paragraph=[];
+  if(value.length<100)return;
+  if(seen.has(value))repeated=true;else seen.add(value);
+ };
+ for(const line of text.split(/\r\n?|\n/)){
+  const mark=fence.exec(line);
+  if(open){
+   if(mark&&mark[1][0]===open[0]&&mark[1].length>=open.length&&!mark[2].trim())open=null;
+   continue;
+  }
+  if(mark){flush();open=mark[1];continue}
+  if(!line.trim())flush();else paragraph.push(line);
+ }
+ flush();
+ if(open)findings.push('unclosed_code_fence');
+ if(repeated)findings.push('repeated_paragraph');
+ return {findings,facts_verified:false,automatic_rewrite:false};
+}
+
 const exportStyle = `
  :root {color-scheme: light dark; font: 17px/1.6 system-ui, sans-serif;}
  body {margin: 0; padding: clamp(1rem, 4vw, 3rem);}
@@ -231,6 +261,7 @@ function exportHtml(sourceDocument, sections, {title}) {
 
 globalThis.NexusReplyFormat = Object.freeze({
  render,
+ reviewDraft,
  exportHtml:(doc,text,{title,format})=>exportHtml(doc,[{text,format}],{title}),
  exportConversation:(doc,sections,title)=>exportHtml(doc,sections,{title})
 });
