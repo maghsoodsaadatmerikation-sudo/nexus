@@ -57,7 +57,11 @@ export function reviewAssistantWorkflow(input,{enabled=false,isolated=false,expe
   critique.blocking_review_count||unresolved.length||reconciliation.length?{status:'withheld_pending_review',options:[]}:
   experience.status!=='review_only'?{status:'no_recalled_support',options:[]}:
   compareRecalledCorrections(experience,input.correction_comparison)};
- return {status:'review_only',priority,critique,recovery,outcome,revision,experience,...comparison,...boundary};
+ const scenarios=input.correction_scenarios===undefined?{}:{correction_scenarios:
+  !experienceEnabled?{status:'off',options:[]}:
+  comparison.correction_comparison?.status!=='review_only'?{status:'withheld_pending_comparison',options:[]}:
+  reviewCorrectionScenarios(comparison.correction_comparison,input.correction_comparison,input.correction_scenarios)};
+ return {status:'review_only',priority,critique,recovery,outcome,revision,experience,...comparison,...scenarios,...boundary};
 }
 
 // Compare explicitly supplied estimates for one failed criterion, and only
@@ -90,4 +94,34 @@ function compareRecalledCorrections(experience,request){
   })?'dominated_estimates':'tradeoff_candidate';
  }
  return {status:'review_only',basis:'supplied_estimates_for_recalled_options_not_verified_cost_risk_or_success',criterion_id:request.criterion_id,options:rows,recall_truncated:experience.truncated,automatic_selection:false,execution_authorized:false};
+}
+
+// Stress-test supplied ranges, not predictions. Rollback is a separate
+// declared contingency; no backup, restore, execution or authorization occurs.
+function reviewCorrectionScenarios(comparison,limits,request){
+ const valid=(v,max)=>Number.isSafeInteger(v)&&v>=0&&v<=max;
+ const money=v=>valid(v,100000000),minutes=v=>valid(v,525600);
+ const range=(v,check,base)=>v&&check(v.best)&&check(v.expected)&&check(v.worst)&&v.best<=v.expected&&v.expected<=v.worst&&v.expected===base;
+ const label=s=>typeof s==='string'&&s.trim().length>0&&s.length<=300;
+ if(!request||request.criterion_id!==comparison.criterion_id||!Array.isArray(request.options)||request.options.length<1||request.options.length>10)throw Error('invalid-scenario-request');
+ const known=new Map(comparison.options.map(o=>[o.correction_code,o])),seen=new Set(),options=[];
+ for(const o of request.options){
+  const row=known.get(o?.correction_code);
+  if(!row||seen.has(o.correction_code))throw Error('invalid-scenario-option');
+  seen.add(o.correction_code);
+  if(!['tradeoff_candidate','dominated_estimates'].includes(row.status)){
+   options.push({correction_code:row.correction_code,status:'not_eligible_for_scenario_review'});
+   continue;
+  }
+  if(!range(o.cost_usd_cents,money,row.cost_usd_cents)||!range(o.effort_minutes,minutes,row.effort_minutes))throw Error('invalid-scenario-range');
+  const rollback=o.rollback;
+  if(rollback!==null&&(!rollback||!money(rollback.cost_usd_cents)||!minutes(rollback.effort_minutes)||!label(rollback.trigger)||!label(rollback.restore_check)))throw Error('invalid-rollback-contingency');
+  if(!row.reversible&&rollback!==null)throw Error('inconsistent-rollback-claim');
+  const baseWorst={cost_usd_cents:o.cost_usd_cents.worst,effort_minutes:o.effort_minutes.worst};
+  const total=rollback?{cost_usd_cents:baseWorst.cost_usd_cents+rollback.cost_usd_cents,effort_minutes:baseWorst.effort_minutes+rollback.effort_minutes}:null;
+  const exceeds=v=>v.cost_usd_cents>limits.max_cost_usd_cents||v.effort_minutes>limits.max_effort_minutes;
+  const status=exceeds(baseWorst)?'worst_case_outside_limits':!row.reversible?'irreversible_review_required':!rollback?'rollback_details_missing':exceeds(total)?'rollback_reserve_outside_limits':'within_declared_limits_review_required';
+  options.push({correction_code:row.correction_code,status,worst_case:baseWorst,worst_with_rollback:total,rollback_declared:rollback!==null});
+ }
+ return {status:'review_only',basis:'caller_supplied_ranges_and_contingency_not_validated_predictions_or_restore_proof',criterion_id:comparison.criterion_id,options,automatic_selection:false,rollback_verified:false,execution_authorized:false};
 }
