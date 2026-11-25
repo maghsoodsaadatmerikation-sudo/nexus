@@ -41,6 +41,13 @@ function testOutcome(evaluate){
  eq(evaluate(scope,criteria,[...good,obs('optional','e3','independent_witness','pass')],on).review_actions,[]);
  eq(evaluate(null,null,null).review_actions,undefined);
  eq(JSON.stringify(x.review_actions).includes('e1'),false);
+ const scoped={...scope,workflow_id:'workflow-a'};
+ const scopedReceipt={...good[0],workflow_id:'workflow-a'};
+ eq(evaluate(scoped,criteria,[scopedReceipt],on).items[0].disposition,'reported_pass');
+ reject(()=>evaluate(scoped,criteria,[{...scopedReceipt,workflow_id:'workflow-b'}],on),'observation-scope-mismatch');
+ reject(()=>evaluate(scoped,criteria,[good[0]],on),'observation-scope-mismatch');
+ reject(()=>evaluate(scope,criteria,[scopedReceipt],on),'observation-scope-mismatch');
+ for(const invalid of [null,'','bad workflow',42])reject(()=>evaluate({...scope,workflow_id:invalid},criteria,[],on),'invalid-scope');
  eq(good.length,2);return checks;
 }
 console.log('WORKFLOW OUTCOME: PASS ('+testOutcome(evaluateWorkflowOutcome)+' checks)');
@@ -77,6 +84,10 @@ function testOutcomeRevision(compare){
  reject(()=>compare(before,reused,criteria,on),'reused-run-evidence');
  reject(()=>compare(before,after,[],on),'invalid-outcome-input');
  reject(()=>compare(before,after,criteria,{enabled:'yes'}),'invalid-options');
+ const crossWorkflow=run('new',['pass','pass','pass']);crossWorkflow.observations[0].workflow_id='other';
+ reject(()=>compare(before,crossWorkflow,criteria,on),'observation-scope-mismatch');
+ const foreignPrior=run('old',['pass','fail','pass']);foreignPrior.observations[0].workflow_id='other';
+ reject(()=>compare(foreignPrior,after,criteria,on),'observation-scope-mismatch');
  const forged=run('new',['pass','pass','pass']);forged.observations[0].run_id='old';
  reject(()=>compare(before,forged,criteria,on),'observation-scope-mismatch');
  eq(compare(null,null,null).status,'off');eq(compare(null,null,null,{...on,isolated:true}).status,'isolated');
