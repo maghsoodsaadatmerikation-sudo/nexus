@@ -10,7 +10,8 @@ import unittest
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
-from studio_module_graph import MODULES, Module, validate_module_graph
+from studio_module_graph import (MODULES, Module, validate_executable_slots,
+                                 validate_module_graph)
 
 
 class StudioModuleGraphTests(unittest.TestCase):
@@ -19,6 +20,42 @@ class StudioModuleGraphTests(unittest.TestCase):
         self.assertEqual(validate_module_graph(shell, ROOT / "web"), MODULES)
         self.assertEqual(len(MODULES), 29)
         self.assertEqual(len({m.filename for m in MODULES}), len(MODULES))
+
+    def test_real_shell_has_plain_executable_slots(self):
+        shell = (ROOT / "web/studio-shell.html").read_text()
+        validate_executable_slots(shell, MODULES)
+
+    def test_module_slots_cannot_be_moved_into_inert_markup(self):
+        module = Module("/*STUDIO_ONE*/", "one.js")
+        plain = "<script>/*STUDIO_ONE*/</script>"
+        validate_executable_slots(plain, (module,))
+        for bad in (
+            "<!--" + plain + "-->",
+            "<template>" + plain + "</template>",
+            "<noscript>" + plain + "</noscript>",
+            "<textarea>" + plain + "</textarea>",
+            "<iframe>" + plain + "</iframe>",
+            "<svg>" + plain + "</svg>",
+            '<script type="application/json">/*STUDIO_ONE*/</script>',
+            '<script defer>/*STUDIO_ONE*/</script>',
+            '<script src="other.js">/*STUDIO_ONE*/</script>',
+            '<div data-slot="/*STUDIO_ONE*/"></div>',
+            "<script>const marker = '/*STUDIO_ONE*/';</script>",
+            "<script>/*STUDIO_ONE*/",
+            "<script/>/*STUDIO_ONE*/</script>",
+        ):
+            with self.subTest(shell=bad), self.assertRaises(ValueError):
+                validate_executable_slots(bad, (module,))
+
+    def test_script_slot_order_is_execution_order(self):
+        first = Module("/*STUDIO_ONE*/", "one.js")
+        second = Module("/*STUDIO_TWO*/", "two.js")
+        a = "<script>/*STUDIO_ONE*/</script>"
+        b = "<script>/*STUDIO_TWO*/</script>"
+        validate_executable_slots(a + b, (first, second))
+        for bad in (b + a, a + a + b, a):
+            with self.subTest(shell=bad), self.assertRaises(ValueError):
+                validate_executable_slots(bad, (first, second))
 
     def test_missing_duplicate_unreviewed_and_reordered_slots_are_rejected(self):
         shell = (ROOT / "web/studio-shell.html").read_text()

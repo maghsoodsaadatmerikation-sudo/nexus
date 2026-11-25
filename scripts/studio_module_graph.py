@@ -7,6 +7,7 @@ new network requests, dynamic evaluation, or changes to the generated bundle.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 import re
 
@@ -138,3 +139,58 @@ def validate_module_graph(shell: str, web: Path, modules: tuple[Module, ...] = M
             raise ValueError("undeclared or obsolete Studio global dependency: " + item.filename)
         seen_providers.update(expected_exported)
     return modules
+
+
+class _ScriptSlotParser(HTMLParser):
+    """Conservative source check, not a browser HTML conformance validator."""
+
+    _INERT = frozenset({"template", "noscript", "textarea", "title", "xmp",
+                        "iframe", "noembed", "noframes", "plaintext", "svg", "math"})
+
+    def __init__(self):
+        super().__init__(convert_charrefs=False)
+        self.inert = []
+        self.script = None
+        self.slots = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self._INERT:
+            self.inert.append(tag)
+        if tag == "script":
+            self.script = [] if not attrs and not self.inert else None
+
+    def handle_startendtag(self, tag, attrs):
+        # HTML script and raw-text elements are not self-closing.
+        if tag == "script" or tag in self._INERT:
+            raise ValueError("self-closing Studio script or inert element")
+
+    def handle_data(self, data):
+        if self.script is not None:
+            self.script.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "script":
+            if self.script is not None:
+                candidate = "".join(self.script).strip()
+                if MARKER_RE.fullmatch(candidate):
+                    self.slots.append(candidate)
+            self.script = None
+        if tag in self._INERT:
+            if not self.inert or self.inert[-1] != tag:
+                raise ValueError("unbalanced Studio inert element")
+            self.inert.pop()
+
+
+def validate_executable_slots(shell: str, modules: tuple[Module, ...]) -> None:
+    """Require each module slot to be the entire body of a plain script tag.
+
+    Reject slots moved into comments, attributes, non-JS script types or
+    inert containers; preserve classic synchronous execution order.
+    """
+    parser = _ScriptSlotParser()
+    parser.feed(shell)
+    parser.close()
+    if parser.inert or parser.script is not None:
+        raise ValueError("unclosed Studio script or inert element")
+    if parser.slots != [item.marker for item in modules]:
+        raise ValueError("Studio module slots must be plain executable script bodies in order")
