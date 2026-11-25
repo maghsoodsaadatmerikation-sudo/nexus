@@ -850,11 +850,16 @@ $('send-model').onclick=async()=>{
    throw Error('model-route-mismatch');
   const receipt=gatewayReply&&reported?
    {model_slot:expectedSlot,model:out.model,configuration_id:request.body.configuration_id}:undefined;
+  const draftReview=NexusReplyFormat.reviewDraft(out.text,{truncated:Boolean(out.truncated)});
+  if(draftReview.findings.includes('empty_answer'))throw Error('empty-response');
   busy=false;
   const label=request.destination==='device'?'[On-device draft · SmolLM2-135M · English / limited]\n\n':'';
   const installed=installThread(S.append(request.thread,'assistant',label+out.text,'model',
    undefined,[],receipt));
-  if(installed&&out.truncated)$('status').textContent=language==='fa'?'پاسخ به سقف طول رسیده است.':'The response reached its length limit.';
+  if(installed&&draftReview.findings.length){
+   const warnings={length_limit:['The response reached its length limit.','پاسخ به سقف طول رسیده است.'],control_characters:['Unusual control characters.','نویسه‌های کنترلی غیرمعمول.'],unclosed_code_fence:['Unclosed code block.','بلوک کد بسته نشده.'],repeated_paragraph:['Repeated paragraph.','پاراگراف تکراری.'],review_limit:['Structural review size limit.','محدودیت حجم بازبینی ساختاری.']};
+   $('status').textContent=draftReview.findings.map(k=>warnings[k]?.[language==='fa'?1:0]).filter(Boolean).join(' ')+(language==='fa'?' بازبینی ساختاری؛ درستی محتوا تأیید نشده.':' Structural review only; facts not verified.');
+  }
  }catch(error){if(rev===revision)status(gatewayFailureLabel(error,request,timedOut))}
  finally{clearTimeout(timer);if(rev===revision){busy=false;clearModelReview();controller=null;controls()}}
 };
