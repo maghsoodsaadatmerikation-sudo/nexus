@@ -5,9 +5,9 @@ import {buildChatExperienceReport} from '../web/studio-chat-experience-report.mj
 const source=readFileSync(new URL('../web/studio-composer-ui.js',import.meta.url),'utf8');
 const start='function humanCriterion(step){',end='async function showEngineReview(button,notice){';
 if(source.split(start).length!==2||source.split(end).length!==2||source.indexOf(end)<source.indexOf(start))throw Error('chat bridge extraction markers changed');
-const bridge=new Function(source.slice(source.indexOf(start),source.indexOf(end))+'\nreturn {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory,adaptiveChatDraft,forgetReviewedHistory};')();
+const bridge=new Function(source.slice(source.indexOf(start),source.indexOf(end))+'\nreturn {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory,adaptiveChatDraft,forgetReviewedHistory,completeReportRounds};')();
 function testChatBridge(bridge,review){
- const {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory,adaptiveChatDraft,forgetReviewedHistory}=bridge;
+ const {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory,adaptiveChatDraft,forgetReviewedHistory,completeReportRounds}=bridge;
  let cases=0;
  const eq=(actual,expected,msg)=>{if(JSON.stringify(actual)!==JSON.stringify(expected))throw Error(msg+' '+JSON.stringify({actual,expected}));};
  const check=(label,fn)=>{try{fn();cases++}catch(e){throw Error(label+': '+e.message)}};
@@ -134,6 +134,20 @@ function testChatBridge(bridge,review){
   eq(next.steps,state.steps,'keeps current assessment');eq(next.index,state.index,'keeps progress');
   eq(comparableFailureHistory(next,hash,reviewSnapshot(next)),[],'no prior receipts');
   eq(JSON.stringify(state),before,'input unchanged');
+ });
+ check('report export includes all complete rounds',()=>{
+  const step={result:{route:['code']},criterion:'test',opened:true,acknowledged:true,observed:'succeeded',verdict:'fail'};
+  const prior=[1,2,3].map(round=>({round,steps:reviewSnapshot({steps:[step]})}));
+  const current={round:4,index:1,steps:[{...step,verdict:'pass'}],history:prior};
+  const rounds=completeReportRounds(current);
+  eq(rounds.map(r=>r.round),[1,2,3,4],'all rounds');
+  eq(rounds[3].steps[0].verdict,'pass','current assessment');
+  eq(completeReportRounds({...current,index:0}),null,'unfinished');
+  eq(completeReportRounds({...current,round:5}),null,'unpaired');
+  eq(completeReportRounds({...current,history:prior.slice(1)}),null,'missing history');
+  eq(completeReportRounds({...current,history:[prior[0],prior[0],prior[2]]}),null,'duplicate history');
+  eq(completeReportRounds({...current,round:26}),null,'bounded history');
+  eq(current.history.length,3,'input unchanged');
  });
  check('isolation',()=>{eq(review(null,{enabled:true,isolated:true}).status,'isolated','isolated');eq(review(null).status,'off','disabled')});
  return cases;
