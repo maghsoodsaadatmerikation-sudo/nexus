@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {buildChatExperienceReport} from '../web/studio-chat-experience-report.mjs';
 import '../web/studio-core.js';
 import {createArchiveExperienceReview,stageImportedExperience} from '../web/studio-experience-archive-edit.mjs';
 const S=globalThis.NexusStudio;
@@ -123,6 +125,44 @@ function testStoredRemoval(S){
 }
 console.log('STORED EXPERIENCE REMOVAL: PASS ('+testStoredRemoval(S)+' checks)');
 
+// Exact host handoff with simulated live session state; browser persistence
+// is tested separately below. No encryption claim for this fixture.
+const appSource=readFileSync(new URL('../web/studio-app.js',import.meta.url),'utf8');
+function testChatArchiveHandoff(S,source){
+ const start='const applyChatExperienceReport=',end='function renderExperienceImport(parent,allowed){';
+ if(source.split(start).length!==2||source.split(end).length!==2)throw Error('host extraction markers');
+ const project={id:'p1',title:'Test',instructions:'',memories:[],threads:[{id:'t1',title:'Review',nodes:[],head:null}],sources:[],documents:[]};
+ const initial=S.state({schema:S.SCHEMA,projects:[project]});
+ const selection={projectId:'p1',threadId:'t1',revision:1};
+ const req={project_id:'p1',plan_sha256:'a'.repeat(64),session_id:'fixture',correction_code:'fix',criterion_id:'s1',kind:'accept',same_correction_reported:true,complete_relevant_history_reported:true};
+ const rounds=['fail','pass','fail','pass'].map((verdict,i)=>({round:i+1,steps:[{command:'code',criterion:'Test',opened:true,acknowledged:true,verdict},{command:'write',criterion:'Read',opened:true,acknowledged:true,verdict:'pass'}]}));
+ const report=buildChatExperienceReport(rounds,req,{enabled:true}).report;
+ const factory=new Function('S','experienceImportEngine','initial',`
+ let data=S.copy(initial),projectId='p1',threadId='t1',revision=1,busy=false,language='en',flag={},decision=()=>true,confirmCalls=0,mutations=0;
+ const vault={unlocked:true,archiveRevision:'v1'};
+ const chat=()=>({...data.projects[0].threads[0],...flag});
+ const projectIn=v=>v.projects.find(p=>p.id===projectId);
+ const confirm=()=>{confirmCalls++;return decision()};
+ const mutate=fn=>{try{const next=S.copy(data);fn(next);data=S.state(next);revision++;mutations++;return true}catch{return false}};
+ `+source.slice(source.indexOf(start),source.indexOf(end))+`
+ return {apply:applyChatExperienceReport,snapshot:()=>S.copy(data),counts:()=>[confirmCalls,mutations],setDecision:fn=>decision=fn,lock:()=>vault.unlocked=false,changeArchive:()=>vault.archiveRevision='v2',changeProject:()=>projectId='p2',isolate:()=>flag={isolated:true},setBusy:()=>busy=true,changeRevision:()=>revision++};`);
+ const host=()=>factory(S,{createArchiveExperienceReview,stageImportedExperience},initial);
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('chat archive fixture '+checks)};
+ const ok=host();eq(ok.apply(report,selection),'applied');eq(ok.counts(),[1,1]);eq(ok.snapshot().projects[0].experiences[0].entries[0].supporting_pair_count,2);
+ eq(JSON.stringify(ok.snapshot()).includes('fixture-r1'),false);
+ eq(ok.apply(report,selection),'unavailable');eq(ok.counts(),[1,1]);
+ const denied=host();denied.setDecision(()=>false);eq(denied.apply(report,selection),'declined');eq(denied.snapshot(),initial);eq(denied.counts(),[1,0]);
+ for(const change of ['lock','changeProject','isolate','setBusy','changeRevision']){
+  const h=host();h[change]();eq(h.apply(report,selection),'unavailable');eq(h.counts(),[0,0]);eq(h.snapshot(),initial);
+ }
+ for(const change of ['lock','changeProject','isolate','setBusy','changeRevision','changeArchive']){
+  const h=host();h.setDecision(()=>{h[change]();return true});eq(h.apply(report,selection),'unavailable');eq(h.counts(),[1,0]);eq(h.snapshot(),initial);
+ }
+ const bad=host();eq(bad.apply({...report,workflow_id:'foreign'},selection),'rejected');eq(bad.counts(),[0,0]);eq(bad.snapshot(),initial);
+ return checks;
+}
+console.log('CHAT ARCHIVE HANDOFF: PASS ('+testChatArchiveHandoff(S,appSource)+' checks)');
 // Use the existing real WebCrypto vault rather than a second key or store.
 class Store{raw=null;async read(){return this.raw}async commit(expected,raw,guard){if(!guard())throw Error('locked');if((this.raw?JSON.parse(this.raw).revision:null)!==expected)throw Error('conflict');this.raw=raw}}
 const store=new Store(),vault=new S.Vault(store),pass='synthetic archive experience passphrase';
