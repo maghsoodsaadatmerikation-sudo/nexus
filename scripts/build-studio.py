@@ -40,7 +40,7 @@ for item in modules:
         # the later composer. No new window export or dynamic module loader.
         import re
         review_source = []
-        for name in ["studio-workflow-critique.mjs", "studio-workflow-recovery.mjs", "studio-workflow-outcome.mjs", "studio-workflow-review.mjs", "studio-experience-archive-edit.mjs"]:
+        for name in ["studio-workflow-critique.mjs", "studio-workflow-recovery.mjs", "studio-workflow-outcome.mjs", "studio-workflow-review.mjs", "studio-experience-archive-edit.mjs", "studio-chat-experience-report.mjs"]:
             part = (root/'web'/name).read_text()
             part = re.sub(r'^import[^\n]*\n', '', part, flags=re.M)
             part = re.sub(r'^export function ', 'function ', part, flags=re.M)
