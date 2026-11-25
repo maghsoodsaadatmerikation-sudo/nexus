@@ -64,7 +64,11 @@ export function reviewAssistantWorkflow(input,{enabled=false,isolated=false,expe
  const patterns=input.failure_history===undefined?{}:{failure_patterns:
   !experienceEnabled?{status:'off',patterns:[]}:
   reviewFailurePatterns(scope,input.criteria,input.evidence,outcome,input.failure_history)};
- return {status:'review_only',priority,critique,recovery,outcome,revision,experience,...comparison,...scenarios,...patterns,...boundary};
+ const adaptive=input.adaptive_plan===undefined?{}:{adaptive_plan:
+  !experienceEnabled?{status:'off',findings:[]}:
+  patterns.failure_patterns?.status!=='review_only'?{status:'withheld_pending_history',findings:[]}:
+  reviewAdaptivePlan(scope,input.criteria,patterns.failure_patterns,input.adaptive_plan)};
+ return {status:'review_only',priority,critique,recovery,outcome,revision,experience,...comparison,...scenarios,...patterns,...adaptive,...boundary};
 }
 
 // Compare explicitly supplied estimates for one failed criterion, and only
@@ -162,4 +166,35 @@ function reviewFailurePatterns(scope,criteria,evidence,outcome,history){
    historical_reported_pass:c.pass,historical_reported_failure:c.fail,historical_unresolved:c.unresolved,status};
  });
  return {status:'review_only',basis:'distinct_supplied_reports_not_verified_prevalence_or_causality',historical_run_count:history.length,patterns,automatic_learning:false,execution_authorized:false};
+}
+
+// Prospective, advisory structural review. Mappings are caller declarations;
+// dependencies and success criteria do not prove a check will actually run.
+function reviewAdaptivePlan(scope,criteria,history,request){
+ const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
+ const next=request?.scope;
+ if(!next||next.project_id!==scope.project_id||next.workflow_id!==scope.workflow_id||!id(next.run_id)||next.run_id===scope.run_id||typeof next.plan_sha256!=='string'||!/^[a-f0-9]{64}$/.test(next.plan_sha256))throw Error('adaptive-plan-scope-mismatch');
+ const critique=critiqueWorkflow(request.plan,{enabled:true});
+ if(!Array.isArray(request.checkpoints)||request.checkpoints.length>30)throw Error('invalid-adaptive-checkpoints');
+ const steps=new Map(request.plan.steps.map(s=>[s.id,s])),catalog=new Set(criteria.map(c=>c.id)),mappings=new Map();
+ for(const entry of request.checkpoints){
+  if(!entry||!catalog.has(entry.criterion_id)||mappings.has(entry.criterion_id)||!steps.has(entry.check_step_id)||!Array.isArray(entry.protected_step_ids)||entry.protected_step_ids.length<1||entry.protected_step_ids.length>11||new Set(entry.protected_step_ids).size!==entry.protected_step_ids.length||entry.protected_step_ids.some(x=>!steps.has(x)||x===entry.check_step_id))throw Error('invalid-adaptive-checkpoint');
+  mappings.set(entry.criterion_id,entry);
+ }
+ function ancestors(step){
+  const seen=new Set(),pending=[...steps.get(step).needs];
+  while(pending.length){const x=pending.pop();if(seen.has(x))continue;seen.add(x);pending.push(...steps.get(x).needs)}
+  return seen;
+ }
+ const findings=[];
+ for(const pattern of history.patterns){
+  if(pattern.historical_reported_failure<2)continue;
+  const mapping=mappings.get(pattern.criterion_id);
+  if(!mapping){findings.push({criterion_id:pattern.criterion_id,required:pattern.required,status:'checkpoint_missing'});continue}
+  const check=steps.get(mapping.check_step_id);
+  const unprotected=mapping.protected_step_ids.filter(x=>!ancestors(x).has(check.id));
+  const status=!['local_compute','human_review'].includes(check.effect)||!check.success_criteria?'checkpoint_needs_review':unprotected.length?'dependency_missing':'declared_checkpoint_present';
+  findings.push({criterion_id:pattern.criterion_id,required:pattern.required,status,check_step_id:check.id,unprotected_step_ids:unprotected});
+ }
+ return {status:'review_only',basis:'declared_future_plan_dependencies_and_reported_history_not_verified_prevention',plan_critique:critique,findings,review_required:critique.findings.length>0||findings.some(f=>f.status!=='declared_checkpoint_present'),automatic_application:false,execution_authorized:false};
 }
