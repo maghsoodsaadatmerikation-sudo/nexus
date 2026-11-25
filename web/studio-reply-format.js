@@ -220,6 +220,15 @@ function checkAnswerReviewContext(path,messages){
   sentUser?.role==='user'&&sentUser.content===user.text&&sentAnswer?.role==='assistant'&&sentAnswer.content===answer.text&&sentReview?.role==='user'&&sentReview.content===review.text);
 }
 
+// Match explicit request-local reference markers, not factual support.
+function auditReferenceMarkers(text,refs){
+ if(typeof text!=='string'||!Array.isArray(refs)||refs.length>30||refs.some(x=>typeof x!=='string'||!/^[SA][1-9]\d?$/.test(x))||new Set(refs).size!==refs.length)throw Error('invalid-reference-audit');
+ const allowed=new Set(refs),matched=new Set(),unknown=new Set();
+ if(text.length>100000)return {status:'limit',matched:[],unknown:[],facts_verified:false};
+ for(const m of text.matchAll(/\[NXS:([SA][1-9]\d?)\]/g))(allowed.has(m[1])?matched:unknown).add(m[1]);
+ return {status:unknown.size?'unknown_markers':matched.size?'matched_markers':refs.length?'no_markers':'no_supplied_refs',matched:[...matched],unknown:[...unknown],facts_verified:false};
+}
+
 const exportStyle = `
  :root {color-scheme: light dark; font: 17px/1.6 system-ui, sans-serif;}
  body {margin: 0; padding: clamp(1rem, 4vw, 3rem);}
@@ -276,6 +285,7 @@ function exportHtml(sourceDocument, sections, {title}) {
 globalThis.NexusReplyFormat = Object.freeze({
  render,
  reviewDraft,
+ auditReferenceMarkers,
  answerReviewPrompt,
  checkAnswerReviewContext,
  exportHtml:(doc,text,{title,format})=>exportHtml(doc,[{text,format}],{title}),
