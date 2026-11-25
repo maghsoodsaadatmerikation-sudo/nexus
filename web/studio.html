@@ -7973,6 +7973,7 @@ async function render(score,{sampleRate=22050,excludeSyntheticLead=false,onProgr
  const playable=excludeSyntheticLead?score.notes.filter(n=>n.part!=='lead_voice'):score.notes;
  const frames=Math.ceil((score.durationSeconds+.25)*sampleRate);
  if(frames*12>80*1024*1024)fail('render-memory-budget');
+ if(shouldAbort())fail('render-cancelled');
  const l=new Float32Array(frames),r=new Float32Array(frames);
  for(let j=0;j<playable.length;j++){
   if(shouldAbort())fail('render-cancelled');
@@ -7989,7 +7990,13 @@ async function render(score,{sampleRate=22050,excludeSyntheticLead=false,onProgr
   if(j%12===0){onProgress(j/Math.max(1,playable.length)*.7);await new Promise(resolve=>setTimeout(resolve,0))}
  }
  let peak=0;
- for(let k=0;k<frames;k++){if(shouldAbort())fail('render-cancelled');peak=Math.max(peak,Math.abs(l[k]),Math.abs(r[k]))}
+ for(let pos=0;pos<frames;pos+=65536){
+  if(shouldAbort())fail('render-cancelled');
+  const end=Math.min(frames,pos+65536);
+  for(let k=pos;k<end;k++)peak=Math.max(peak,Math.abs(l[k]),Math.abs(r[k]));
+  onProgress(.7+.04*end/frames);await new Promise(resolve=>setTimeout(resolve,0));
+ }
+ if(shouldAbort())fail('render-cancelled');
  const gain=peak>.88?.88/peak:1,buffer=new ArrayBuffer(44+4*frames),dv=new DataView(buffer);
  function tag(offset,s){for(let i=0;i<s.length;i++)dv.setUint8(offset+i,s.charCodeAt(i))}
  tag(0,'RIFF');dv.setUint32(4,36+4*frames,true);tag(8,'WAVE');tag(12,'fmt ');
@@ -8001,8 +8008,9 @@ async function render(score,{sampleRate=22050,excludeSyntheticLead=false,onProgr
   const fade=Math.min(1,k/(sampleRate*.03),(frames-k)/(sampleRate*.25));
   dv.setInt16(44+4*k,Math.round(clamp(l[k]*gain*fade,-1,1)*32767),true);
   dv.setInt16(46+4*k,Math.round(clamp(r[k]*gain*fade,-1,1)*32767),true);
-  if(k%262144===0){onProgress(.7+.3*k/frames);await new Promise(resolve=>setTimeout(resolve,0))}
+  if(k%262144===0){onProgress(.74+.26*k/frames);await new Promise(resolve=>setTimeout(resolve,0))}
  }
+ if(shouldAbort())fail('render-cancelled');
  onProgress(1);return new Uint8Array(buffer);
 }
 function inspectDryWav(raw){
