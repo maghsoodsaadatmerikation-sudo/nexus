@@ -373,6 +373,32 @@ window.addEventListener('load',async()=>{
    receiptWorkflow.querySelector('[data-central-review]').click();
    await wait(()=>receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Central review:'));
    assert(!receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Comparable previous rounds:')&&!receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Suggested for next round:'),'deleted-history-not-recalled');
+   // A fresh four-round workflow, explicitly reported by the human.
+   fill('message','/plan\n/code\n/write correction');chatSend.click();
+   for(let round=1;round<=4;round++){
+    for(let step=0;step<2;step++){
+     const criterion=receiptWorkflow.querySelector('[data-central-criterion="'+step+'"]');
+     if(round===1){criterion.value='Criterion '+step;criterion.dispatchEvent(new Event('input',{bubbles:true}));}
+     receiptWorkflow.querySelector('li:nth-child('+(step+1)+') button').click();
+     const verdict=receiptWorkflow.querySelector('[data-central-verdict="'+step+'"]');
+     verdict.value=step===0&&round%2?'fail':'pass';verdict.dispatchEvent(new Event('change',{bubbles:true}));
+     receiptWorkflow.querySelectorAll('li button')[1].click();
+    }
+    if(round<4)receiptWorkflow.querySelector('[data-central-restart]').click();
+   }
+   const reportButton=receiptWorkflow.querySelector('[data-experience-report]');
+   assert(reportButton&&!reportButton.disabled,'complete-four-rounds-enable-export');
+   const reportControls=reportButton.closest('details');reportControls.open=true;
+   reportControls.querySelector('input').value='synthetic-fix';
+   reportBlob=null;reportName='';
+   window.confirm=()=>false;reportButton.click();
+   assert(!reportBlob,'declined-attestation-no-report');
+   window.confirm=()=>true;reportButton.click();
+   await wait(()=>reportName==='nexus-correction-experience.json'&&reportBlob);
+   const correction=JSON.parse(await reportBlob.text());
+   assert(correction.schema==='nexus.experience-review.v1'&&correction.attempts.length===2&&correction.operation.correction_code==='synthetic-fix','export-contains-two-reported-pairs');
+   assert(correction.attempts.every(a=>a.before.scope.project_id===NexusStudioUI.selection().projectId)&&!JSON.stringify(correction).includes('Criterion 0'),'export-scoped-without-criterion-text');
+   assert(!$('code-consent').checked,'export-does-not-grant-code-consent');
   }finally{
    URL.createObjectURL=oldCreateURL;HTMLAnchorElement.prototype.click=oldAnchorClick;
   }
