@@ -311,8 +311,17 @@ function canCompareRound(current){
 function restartReviewedRound(current){
  if(!canCompareRound(current)||current.round>=100)throw Error('review-round-unavailable');
  const prior={round:current.round,steps:reviewSnapshot(current)};
- return {...current,round:current.round+1,epoch:0,baseline:prior,index:0,opened:false,
+ return {...current,round:current.round+1,epoch:0,baseline:prior,history:[...(current.history||[]),prior].slice(-30),index:0,opened:false,
   steps:current.steps.map(s=>({...s,opened:false,acknowledged:false,runId:null,observed:null,verdict:null}))};
+}
+// Retain only comparable, completed rounds in the current workflow tab.
+function comparableFailureHistory(current,hash,snapshot){
+ const signature=steps=>JSON.stringify(steps.map(s=>[s.command,humanCriterion(s).criterion]));
+ const expected=signature(snapshot);
+ return (current.history||[]).filter(r=>r.round<current.round&&signature(r.steps)===expected&&r.steps.every(s=>humanCriterion(s).verdict!==null)).map(r=>{
+  const previous=engineInput(current.draft,r.steps,hash,r.round);
+  return {scope:previous.scope,observations:previous.evidence};
+ });
 }
 async function showEngineReview(button,notice){
  const current=workflowState,state=window.NexusStudioUI.uiStatus();
@@ -329,7 +338,10 @@ async function showEngineReview(button,notice){
    const previous=engineInput(draft,baseline.steps,hash,baseline.round);
    input.prior_run={scope:previous.scope,observations:previous.evidence};
   }
-  const result=reviewAssistantWorkflow(input,{enabled:true});
+  const history=comparableFailureHistory(current,hash,JSON.parse(captured));
+  if(history.length)input.failure_history=history;
+  const result=reviewAssistantWorkflow(input,{enabled:true,experienceEnabled:history.length>0});
+  const recurrent=result.failure_patterns?.patterns.filter(p=>p.historical_reported_failure>=2).map(p=>p.criterion_id)||[];
   const reviewed=result.outcome.items.filter(i=>i.disposition==='reported_pass').length;
   const failed=result.outcome.items.filter(i=>i.disposition==='reported_failure').length;
   notice.textContent=words('Central review: ','بازبینی مرکزی: ')+({
@@ -340,7 +352,7 @@ async function showEngineReview(button,notice){
    review_plan_findings:words('define success criteria','تعریف معیار موفقیت'),
    review_outcome_evidence:words('review evidence','بازبینی شواهد'),
    manual_final_review:words('manual final review','بازبینی نهایی انسانی')
-  })[result.priority]+words(' · Human-reported pass / fail: ',' · موفق / ناموفق به گزارش کاربر: ')+reviewed+'/'+failed+(result.revision?words(' · Reported gains / losses: ',' · پیشرفت / پسرفت گزارش‌شده: ')+result.revision.gained_count+'/'+result.revision.lost_count:'')+words(' · No completion verified; no action authorized.',' · تکمیل تأیید نشده؛ هیچ مجوز اجرایی صادر نشده.');
+  })[result.priority]+words(' · Human-reported pass / fail: ',' · موفق / ناموفق به گزارش کاربر: ')+reviewed+'/'+failed+(result.revision?words(' · Reported gains / losses: ',' · پیشرفت / پسرفت گزارش‌شده: ')+result.revision.gained_count+'/'+result.revision.lost_count:'')+(history.length?words(' · Comparable previous rounds: ',' · دورهای قابل‌مقایسهٔ پیشین: ')+history.length+words(' · Repeated prior failures: ',' · شکست‌های مکرر پیشین: ')+(recurrent.join(', ')||'0'):'')+words(' · No completion verified; no action authorized.',' · تکمیل تأیید نشده؛ هیچ مجوز اجرایی صادر نشده.');
  }catch{if(notice.isConnected)notice.textContent=words('Central review unavailable; no action taken.','بازبینی مرکزی در دسترس نیست؛ اقدامی انجام نشد.')}
  finally{if(button.isConnected)button.disabled=false}
 }
@@ -415,7 +427,7 @@ function showWorkflow(){
    verdict.value=humanCriterion(step).verdict||'';verdict.disabled=!canAssess();
    criterion.oninput=()=>{
     if(!retainedWorkflow()||!criterion.isConnected||window.NexusStudioUI.uiStatus().isolated)return;
-    workflowState.baseline=null;step.criterion=criterion.value.slice(0,260);step.verdict=null;verdict.value='';verdict.disabled=!canAssess();invalidate();
+    workflowState.baseline=null;workflowState.history=[];step.criterion=criterion.value.slice(0,260);step.verdict=null;verdict.value='';verdict.disabled=!canAssess();invalidate();
    };
    verdict.onchange=()=>{
     if(!verdict.isConnected||!canAssess()){verdict.value='';return}
@@ -481,7 +493,7 @@ function showWorkflow(){
   restart.disabled=!canCompareRound(workflowState)||workflowState.round>=100;
   restart.onclick=()=>{
    if(!restart.isConnected||!validWorkflow()||window.NexusStudioUI.uiStatus().isolated||!canCompareRound(workflowState)||workflowState.round>=100)return;
-   if(!confirm(words('Keep this assessment only in this tab and start a new manual review round? No tool will run automatically.','این ارزیابی فقط در این برگه بماند و دور جدید بازبینی دستی آغاز شود؟ هیچ ابزاری خودکار اجرا نمی‌شود.')))return;
+   if(!confirm(words('Keep this assessment in up to 30 comparable review rounds in this tab only, to identify repeated failures? Changing criteria clears history. No tool runs automatically.','این ارزیابی در تاریخچهٔ حداکثر ۳۰ دور قابل‌مقایسه، فقط در همین برگه، برای تشخیص شکست‌های مکرر بماند؟ تغییر معیارها تاریخچه را پاک می‌کند. هیچ ابزاری خودکار اجرا نمی‌شود.')))return;
    workflowState=restartReviewedRound(workflowState);showWorkflow();
   };
   workflow.append(restart);
@@ -491,7 +503,7 @@ function reviewWorkflow(message){
  closeDirectory();clearOffer();
  const parsed=parseWorkflow(message);
  if(parsed.error){workflowError(parsed.error);return}
- workflowState={draft:message,scope:workflowScope(),round:1,epoch:0,baseline:null,steps:parsed.steps.map(step=>({
+ workflowState={draft:message,scope:workflowScope(),round:1,epoch:0,baseline:null,history:[],steps:parsed.steps.map(step=>({
   ...step,opened:false,acknowledged:false,runId:null,observed:null,criterion:'',verdict:null
  })),index:0,opened:false};
  showWorkflow();
