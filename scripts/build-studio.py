@@ -46,6 +46,11 @@ for item in modules:
             part = re.sub(r'^export function ', 'function ', part, flags=re.M)
             if re.search(r'^\s*(import|export)\s', part, re.M):
                 raise ValueError('unsupported review module syntax')
+            # Preserve line boundaries (including ASI). Only strip standalone
+            # line comments in this narrow reviewed module subset, never in
+            # template literals, multiline strings or block comments.
+            if not any(token in part for token in ("`", "/*", "\\\n")):
+                part = re.sub(r'^[ \t]*//[^\n]*$', '', part, flags=re.M)
             review_source.append(part)
         code = replace_exact(code, '/* EXPERIENCE_EDIT_ENGINE */', '\n'.join(review_source))
     if '</script' in code.lower():
