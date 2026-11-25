@@ -36,30 +36,18 @@ for item in modules:
         writer = dedent(pilot[writer_start:writer_end])
         code = replace_exact(code, '/* OFFICE_ZIP_HELPERS */', (reader + writer).rstrip())
     if filename == 'studio-app.js':
-        # Private closure: archive import reuses the reviewed outcome and edit modules.
+        # One reviewed engine in an immutable lexical closure, shared with
+        # the later composer. No new window export or dynamic module loader.
         import re
-        edit_source = []
-        for name in ["studio-workflow-outcome.mjs", "studio-experience-archive-edit.mjs"]:
+        review_source = []
+        for name in ["studio-workflow-critique.mjs", "studio-workflow-recovery.mjs", "studio-workflow-outcome.mjs", "studio-workflow-review.mjs", "studio-experience-archive-edit.mjs"]:
             part = (root/'web'/name).read_text()
             part = re.sub(r'^import[^\n]*\n', '', part, flags=re.M)
             part = re.sub(r'^export function ', 'function ', part, flags=re.M)
             if re.search(r'^\s*(import|export)\s', part, re.M):
-                raise ValueError('unsupported experience module syntax')
-            edit_source.append(part)
-        code = replace_exact(code, '/* EXPERIENCE_EDIT_ENGINE */', '\n'.join(edit_source))
-    if filename == 'studio-composer-ui.js':
-        # Explicit ordered module list; preserve source as single local closure.
-        import re
-        review_modules = ["studio-workflow-critique.mjs","studio-workflow-recovery.mjs","studio-workflow-outcome.mjs","studio-workflow-review.mjs"]
-        review_source = []
-        for review_name in review_modules:
-            review_code = (root/'web'/review_name).read_text()
-            review_code = re.sub(r'^import[^\n]*\n', '', review_code, flags=re.M)
-            review_code = re.sub(r'^export function ', 'function ', review_code, flags=re.M)
-            if re.search(r'^\s*(import|export)\s', review_code, re.M):
-                raise ValueError('unsupported workflow module syntax')
-            review_source.append(review_code)
-        code = replace_exact(code, '/* WORKFLOW_REVIEW_ENGINE */', '\n'.join(review_source))
+                raise ValueError('unsupported review module syntax')
+            review_source.append(part)
+        code = replace_exact(code, '/* EXPERIENCE_EDIT_ENGINE */', '\n'.join(review_source))
     if '</script' in code.lower():
         raise ValueError('script closing sequence is not permitted in bundled sources')
     shell = replace_exact(shell, marker, code)
