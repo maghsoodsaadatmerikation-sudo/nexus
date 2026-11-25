@@ -44,6 +44,8 @@ window.addEventListener('load',async()=>{
    if(replyCase==='wrong-id')Object.assign(result,{model_slot:'primary',configuration_id:'f'.repeat(64)});
    if(replyCase==='partial')Object.assign(result,{model_slot:'primary'});
    if(replyCase==='valid')Object.assign(result,{model_slot:'primary',configuration_id:rid});
+   if(replyCase==='empty-draft')result.text='  \n ';
+   if(replyCase==='structural-warning'){result.text='```js\nconst x=1;';result.truncated=true}
    return Response.json(result);
  };
  try{
@@ -98,6 +100,14 @@ window.addEventListener('load',async()=>{
    await wait(()=>NexusStudio.path(selected()).at(-1)?.text==='Reviewed model answer');
    const last=NexusStudio.path(selected()).at(-1);
    assert(!last.model_receipt&&calls===6,'legacy-unattributed-reply-is-not-falsely-verified');
+   const beforeEmpty=JSON.stringify(snapshot());
+   replyCase='empty-draft';await submit();
+   assert(JSON.stringify(snapshot())===beforeEmpty&&$('message').value==='Confirm the selected route'&&calls===7,'empty-draft-rejected-with-original-draft');
+   replyCase='structural-warning';await submit();
+   const warned=NexusStudio.path(selected()).at(-1);
+   assert(warned.text==='```js\nconst x=1;'&&calls===8,'structural-warning-does-not-rewrite-or-resend');
+   assert($('status').textContent.includes('Unclosed code block.')&&$('status').textContent.includes('facts not verified'),'structural-warning-visible');
+
    $('nexus-browser-result').textContent=JSON.stringify({
       status:'PASS',checks,width:innerWidth,provider_requests:0,authority:'none'});
  }catch(error){
