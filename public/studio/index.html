@@ -7212,7 +7212,7 @@ const resourceNames=Object.freeze({local:['Local job','پردازش محلی'],m
 function createAudioJobGate(notify){
  let active=null;
  return Object.freeze({busy:()=>active!==null,owner:()=>active?.owner??null,acquire(owner='local'){
-  if(active!==null||!Object.hasOwn(resourceNames,owner))return null;
+  if(active!==null||typeof owner!=='string'||!Object.hasOwn(resourceNames,owner))return null;
   const token={owner};active=token;notify();
   return ()=>{if(active!==token)return;active=null;notify()};
  }});
