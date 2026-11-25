@@ -285,7 +285,45 @@ function clearTrainingReview(){
  trainingReview=null;
  $('training-preview').textContent='';$('training-preview').hidden=true;$('training-download').hidden=true;
 }
+// Existing project-memory surface: no new top-level navigation, no recall.
+let experiencePanelStamp='';
+function renderStoredExperiencePanel(){
+ const parent=$('profile-card');
+ let panel=$('stored-experience-panel');
+ const allowed=vault.unlocked&&!busy&&!!p()&&!!chat()&&!chat().temporary&&!chat().isolated&&!chat().archived;
+ const entries=allowed?(p().experiences||[]):[];
+ const stamp=JSON.stringify([language,projectId,threadId,revision,allowed,entries]);
+ if(panel&&stamp===experiencePanelStamp)return;
+ experiencePanelStamp=stamp;
+ if(!panel){panel=document.createElement('details');panel.id='stored-experience-panel';parent.append(panel)}
+ panel.replaceChildren();panel.hidden=!allowed||!entries.some(s=>s.entries.length);
+ if(panel.hidden){panel.open=false;return}
+ const words=(en,fa)=>language==='fa'?fa:en;
+ const summary=el('summary',words('Reviewed correction experiences','تجربه‌های اصلاحی بازبینی‌شده'));
+ const help=el('p',words('Stored review metadata only, not proof of success. Changes remain in this session until you explicitly Save session.','فقط اطلاعات بازبینی، نه مدرک موفقیت. تغییرات تا ذخیرهٔ صریح نشست در همین نشست می‌مانند.'));
+ help.className='help';panel.append(summary,help);
+ const captured={projectId,threadId,revision,archiveRevision:vault.archiveRevision};
+ for(const snapshot of entries)for(const entry of snapshot.entries){
+  const row=el('div','');const label=el('p',snapshot.workflow_id+' / '+entry.criterion_id+' / '+entry.correction_code+' · '+words(entry.status,entry.status==='active'?'فعال':'لغوشده')+' · '+entry.supporting_pair_count);
+  row.append(label);
+  for(const kind of (entry.status==='active'?['revoke','delete']:['delete'])){
+   const action=el('button',kind==='revoke'?words('Revoke','لغو اعتبار'):words('Delete','حذف'));action.type='button';action.className='secondary';
+   action.onclick=()=>{
+    const current=()=>action.isConnected&&!busy&&vault.unlocked&&captured.archiveRevision===vault.archiveRevision&&captured.projectId===projectId&&captured.threadId===threadId&&captured.revision===revision&&!chat()?.temporary&&!chat()?.isolated&&!chat()?.archived;
+    if(!current())return;
+    if(!confirm(words((kind==='revoke'?'Revoke':'Delete')+' this reviewed experience from the current session? Save session separately to persist the change.','این تجربه در نشست فعلی '+(kind==='revoke'?'لغو اعتبار':'حذف')+' شود؟ برای ثبت پایدار، نشست را جداگانه ذخیره کنید.'))||!current())return;
+    mutate(next=>{
+     const reviewed=S.reviewStoredExperienceRemoval(next,{projectId,threadId,workflowId:snapshot.workflow_id,expectedRevision:snapshot.revision,criterionId:entry.criterion_id,correctionCode:entry.correction_code,kind});
+     projectIn(next).experiences=projectIn(reviewed).experiences;
+    });
+   };
+   row.append(action);
+  }
+  panel.append(row);
+ }
+}
 function controls(){
+ renderStoredExperiencePanel();
  $('history-days').value=String(data.history_days??'');
  $('history-days').disabled=busy;
  $('training-opt-in').disabled=busy;
