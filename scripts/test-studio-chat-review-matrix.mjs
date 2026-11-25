@@ -4,9 +4,9 @@ import {reviewAssistantWorkflow} from '../web/studio-workflow-review.mjs';
 const source=readFileSync(new URL('../web/studio-composer-ui.js',import.meta.url),'utf8');
 const start='function humanCriterion(step){',end='async function showEngineReview(button,notice){';
 if(source.split(start).length!==2||source.split(end).length!==2||source.indexOf(end)<source.indexOf(start))throw Error('chat bridge extraction markers changed');
-const bridge=new Function(source.slice(source.indexOf(start),source.indexOf(end))+'\nreturn {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory};')();
+const bridge=new Function(source.slice(source.indexOf(start),source.indexOf(end))+'\nreturn {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory,adaptiveChatDraft};')();
 function testChatBridge(bridge,review){
- const {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory}=bridge;
+ const {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory,adaptiveChatDraft}=bridge;
  let cases=0;
  const eq=(actual,expected,msg)=>{if(JSON.stringify(actual)!==JSON.stringify(expected))throw Error(msg+' '+JSON.stringify({actual,expected}));};
  const check=(label,fn)=>{try{fn();cases++}catch(e){throw Error(label+': '+e.message)}};
@@ -91,6 +91,38 @@ function testChatBridge(bridge,review){
   eq(next.history[0].round,3,'oldest removed');
   eq(next.history[29].round,32,'latest retained');
   eq(current.history.length,31,'input unchanged');
+ });
+ check('adaptive draft with repeated human-reported failures',()=>{
+  const steps=[{command:'code',criterion:'Returns 42',opened:true,observed:'succeeded',verdict:'fail'},{command:'write',criterion:'Reviewed',opened:true,observed:null,verdict:'pass'}];
+  const cur=engineInput('',steps,hash,3);
+  cur.failure_history=[1,2].map(round=>{const p=engineInput('',steps,hash,round);return {scope:p.scope,observations:p.evidence}});
+  const original=JSON.stringify(cur);
+  const result=review(cur,{enabled:true,experienceEnabled:true});
+  const draft=adaptiveChatDraft(cur,result);
+  eq(draft.plan.steps.map(s=>s.id),['pre-s1','s1','s2'],'adds only recurrent checkpoint');
+  eq(draft.plan.steps[0].effect,'human_review','human checkpoint');
+  eq(draft.plan.steps[1].needs,['pre-s1'],'proposed dependency');
+  eq(draft.checkpoints,[{criterion_id:'s1',check_step_id:'pre-s1',protected_step_ids:['s1']}],'mapping');
+  const audited=review({...cur,adaptive_plan:{scope:{...cur.scope,run_id:'draft-3',plan_sha256:'b'.repeat(64)},...draft}},{enabled:true,experienceEnabled:true}).adaptive_plan;
+  eq(audited.findings[0].status,'declared_checkpoint_present','structural finding');
+  eq(audited.review_required,true,'human review remains required');
+  eq(audited.execution_authorized,false,'no execution');
+  eq(JSON.stringify(cur),original,'does not mutate current plan');
+ });
+ check('adaptive draft ignores sparse or disabled history',()=>{
+  const steps=[{command:'code',criterion:'test',opened:true,observed:'succeeded',verdict:'fail'}];
+  const cur=engineInput('',steps,hash,2),prior=engineInput('',steps,hash,1);
+  cur.failure_history=[{scope:prior.scope,observations:prior.evidence}];
+  eq(adaptiveChatDraft(cur,review(cur,{enabled:true,experienceEnabled:true})),null,'one prior failure');
+  eq(adaptiveChatDraft(cur,review(cur,{enabled:true})),null,'history disabled');
+ });
+ check('adaptive draft bounds',()=>{
+  const steps=Array.from({length:6},()=>({command:'code',criterion:'test',opened:true,observed:'succeeded',verdict:'fail'}));
+  const cur=engineInput('',steps,hash,3);
+  cur.failure_history=[1,2].map(round=>{const p=engineInput('',steps,hash,round);return {scope:p.scope,observations:p.evidence}});
+  const draft=adaptiveChatDraft(cur,review(cur,{enabled:true,experienceEnabled:true}));
+  eq(draft.plan.steps.length,12,'bounded plan');
+  eq(draft.checkpoints.length,6,'one checkpoint per recurrent criterion');
  });
  check('isolation',()=>{eq(review(null,{enabled:true,isolated:true}).status,'isolated','isolated');eq(review(null).status,'off','disabled')});
  return cases;
