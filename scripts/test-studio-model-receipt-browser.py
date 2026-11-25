@@ -108,6 +108,21 @@ window.addEventListener('load',async()=>{
    assert(warned.text==='```js\nconst x=1;'&&calls===8,'structural-warning-does-not-rewrite-or-resend');
    assert($('status').textContent.includes('Unclosed code block.')&&$('status').textContent.includes('facts not verified'),'structural-warning-visible');
 
+   // A deliberate second pass opens the existing exact consent review.
+   const reviewButton=$('messages').querySelector('[data-chat-review-answer]');
+   assert(reviewButton,'latest-model-answer-has-review-action');
+   fill('message','Preserve my draft');reviewButton.click();
+   assert($('message').value==='Preserve my draft'&&calls===8,'review-preserves-existing-draft');
+   fill('message','');const beforeReview=JSON.stringify(snapshot());
+   reviewButton.click();
+   const preparedReview=JSON.parse($('request-context').textContent);
+   const tail=preparedReview.messages.slice(-3);
+   assert(!$('request-review').hidden&&!$('consent').checked&&calls===8,'review-prepares-without-sending');
+   assert(tail[0].content==='Confirm the selected route'&&tail[1].content===warned.text&&tail[2].content.includes('unsupported factual claims'),'review-binds-original-question-and-answer');
+   assert(JSON.stringify(snapshot())===beforeReview,'review-preparation-does-not-change-history');
+   $('consent').checked=true;$('consent').dispatchEvent(new Event('change'));
+   replyCase='missing';$('send-model').click();await wait(()=>$('request-review').hidden);
+   assert(calls===9&&NexusStudio.path(selected()).some(n=>n.id===warned.id&&n.text===warned.text),'approved-review-adds-new-turn-preserving-answer');
    $('nexus-browser-result').textContent=JSON.stringify({
       status:'PASS',checks,width:innerWidth,provider_requests:0,authority:'none'});
  }catch(error){
