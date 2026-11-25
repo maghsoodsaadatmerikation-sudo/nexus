@@ -1,0 +1,51 @@
+// Exact local code and table handlers; synthetic DOM, delayed sandbox and file reads.
+import {readFileSync} from 'node:fs';
+export async function checkLocalToolResourcePolicy(labSource,dataSource){
+ const checks=[],ok=(value,label)=>{if(!value)throw Error(label);checks.push(label)};
+ const defer=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}};
+ const nodes=new Map(),runs=[],reads=[],digests=[],lifecycle=[];
+ const $=id=>{if(!nodes.has(id))nodes.set(id,{value:'',checked:false,disabled:false,textContent:'',title:'',replaceChildren(){}});return nodes.get(id)};
+ let lease=null,projectId='p1',busy=false,analysed=0;
+ const gate={audioBusy:()=>lease!==null,acquireAudioJob(){if(lease)return null;const token={};lease=token;return ()=>{if(lease===token)lease=null}}};
+ const window={NexusMusicUI:gate},t=k=>k;
+ const AbortController=class{constructor(){this.signal={aborted:false}}abort(){this.signal.aborted=true}};
+ const run={run(code,input,opts){const job=defer();runs.push({...job,opts});return job.promise},cancel(){}};
+ const extract=(source,start,end)=>{const i=source.indexOf(start),j=source.indexOf(end,i+start.length);if(i<0||j<0)throw Error('fixture source changed');return source.slice(i,j)};
+ const lab=extract(labSource,"$('code-run').onclick=async()=>{","$('code-stop').onclick=cancel;");
+ const sync=extract(labSource,'function syncCodeRun(){','Object.assign(EN,{localResourceBusy:');
+ const cancel=extract(labSource,'function cancel(){const oldResearch','const workFields=');
+ const code=new Function('$','window','t','AbortController','run','localLifecycle',`let epoch=0,searchController=null,codeController=null,activeResearchAttempt=null,activeCodeAttempt=null,localAttempt=0,result=null;
+ ${sync}\n${cancel}\n${lab}\nreturn {click:$('code-run').onclick,cancel,result:()=>result};`)($,window,t,AbortController,run,(...a)=>lifecycle.push(a));
+ const file={name:'fixture.csv',size:8,arrayBuffer(){const job=defer();reads.push(job);return job.promise}};
+ const T={MAX_BYTES:1048576,parse:()=>({columns:['x']}),analyseTable:()=>{analysed++;return {column_stats:[{type:'numeric'}]}}};
+ const crypto={subtle:{digest(){const job=defer();digests.push(job);return job.promise}}};
+ const Encoder=class{encode(){return new Uint8Array(8)}},Decoder=class{decode(){return 'x\\n1'}};
+ const data=extract(dataSource,"$('data-run').onclick=async()=>{","$('data-group').onchange=show;");
+ const dsync=extract(dataSource,'function syncDataRun(){',"document.addEventListener('nexus-audio-job-state',syncDataRun);");
+ const table=new Function('$','window','t','T','crypto','TextEncoder','TextDecoder','file','getProject','isBusy',`let epoch=0,analysis=null,sourceStamp=null;let busy=false,projectId='p1';
+ const p=()=>({sources:[]}),stop=()=>{epoch++},resetResult=()=>{analysis=null},show=()=>{},renderStorage=()=>{},option=(...a)=>a;
+ ${dsync}\n${data}\nreturn {click:()=>{busy=isBusy();projectId=getProject();return $('data-run').onclick()},cancel:()=>{epoch++},switchProject:()=>{projectId=getProject()},result:()=>analysis};`)($,window,t,T,crypto,Encoder,Decoder,file,()=>projectId,()=>busy);
+ $('code-consent').checked=true;
+ const external=gate.acquireAudioJob();await code.click();await table.click();
+ ok(runs.length===0&&reads.length===0&&$('code-consent').checked,'busy lease blocks code and table without consuming consent');external();
+ const first=code.click();ok(runs.length===1&&gate.audioBusy()&&!$('code-consent').checked,'code acquires lease after consent');
+ await table.click();ok(reads.length===0,'code excludes table');
+ code.cancel();ok(runs[0].opts.signal.aborted&&gate.audioBusy(),'code cancel retains lease');
+ $('code-consent').checked=true;await code.click();ok(runs.length===1&&$('code-consent').checked,'no new code while cancelled sandbox unwinds');
+ runs[0].resolve('late private result');await first;ok(!gate.audioBusy()&&code.result()===null,'late code result ignored and lease released');
+ const second=table.click();ok(reads.length===1&&gate.audioBusy(),'table read acquires lease');
+ await code.click();ok(runs.length===1&&$('code-consent').checked,'table excludes code');
+ table.cancel();ok(gate.audioBusy(),'table cancel retains file read lease');
+ reads[0].resolve(new ArrayBuffer(8));await second;ok(!gate.audioBusy()&&digests.length===0&&analysed===0,'cancelled file does not hash or analyse');
+ const third=table.click();reads[1].resolve(new ArrayBuffer(8));await Promise.resolve();await Promise.resolve();
+ ok(digests.length===1&&gate.audioBusy(),'table hashing retains lease');table.cancel();digests[0].resolve(new ArrayBuffer(32));await third;ok(!gate.audioBusy()&&analysed===0,'cancelled digest cannot publish');
+ const fourth=table.click();reads[2].resolve(new ArrayBuffer(8));await Promise.resolve();await Promise.resolve();digests[1].resolve(new ArrayBuffer(32));await fourth;
+ ok(!gate.audioBusy()&&analysed===1&&table.result()!==null,'valid table analysis releases lease');
+ const fifth=code.click();runs[1].reject(Error('sandbox-failure'));await fifth;ok(!gate.audioBusy()&&$('code-status').textContent==='codeFailed','sandbox failure releases lease');
+ return checks;
+}
+if(typeof process!=='undefined'){
+ const read=name=>readFileSync(new URL('../web/'+name,import.meta.url),'utf8');
+ const checks=await checkLocalToolResourcePolicy(read('studio-lab-ui.js'),read('studio-quality-ui.js'));
+ console.log('LOCAL TOOL RESOURCE POLICY: PASS ('+checks.length+' checks)');
+}
