@@ -475,7 +475,7 @@ html.studio-focus-mode{
 <section id="model-stream-preview" class="message assistant" aria-labelledby="model-stream-title" hidden><strong id="model-stream-title" data-t="streamPreview">Answer in progress</strong><div id="model-stream-text" class="body" dir="auto"></div></section>
 <label for="message" data-t="message">Your message</label><textarea id="message" maxlength="12000" dir="auto"></textarea><label class="inline"><input id="study-mode" type="checkbox"><span data-t="studyMode">Study mode</span></label><p id="branch-notice" class="help"></p>
 <details id="chat-file-panel"><summary data-t="chatAttachments">Attach text files to this message</summary><p class="help" data-t="chatAttachmentsHelp"></p>
-<input id="chat-file" type="file" multiple accept=".txt,.md,.csv,.tsv,.json,.docx,.pptx" aria-label="Attach files for reviewed model context"><label id="studio-pdf-label" for="studio-pdf-file">Attach a PDF</label><input id="studio-pdf-file" type="file" accept=".pdf,application/pdf" disabled><p id="studio-pdf-help" class="help"></p><p id="studio-pdf-status" role="status"></p><div id="chat-attachment-tray" class="row" aria-live="polite"></div>
+<input id="chat-file" type="file" multiple accept=".txt,.md,.csv,.tsv,.json,.docx,.pptx" aria-label="Attach files for reviewed model context"><label id="studio-pdf-label" for="studio-pdf-file">Attach a PDF</label><input id="studio-pdf-file" type="file" accept=".pdf,application/pdf" disabled><p id="studio-pdf-help" class="help"></p><p id="studio-pdf-status" role="status"></p><div id="chat-attachment-tray" class="row" aria-live="polite"></div><p id="studio-resource-status" class="help" role="status" aria-live="polite" hidden></p>
 <label class="inline"><input id="attach-document" type="checkbox"><span data-t="chatAttachedDocument">Include latest saved writing document as a temporary excerpt</span></label>
 <button id="clear-chat-files" class="secondary" data-t="chatClearAttachments">Clear attachments</button></details>
 <label class="inline"><input id="use-memory" type="checkbox"><span data-t="useMemory">Include this project's reviewed memory</span></label><label class="inline"><input id="auto-speak" type="checkbox"><span data-t="autoSpeak"></span></label><label class="inline"><input id="use-related-chats" type="checkbox"><span data-t="useRelatedChats"></span></label><label class="inline"><input id="use-sources" type="checkbox"><span data-t="useSources">Include relevant project source excerpts</span></label><div class="row"><button id="guide" data-t="guide">Use local reflection guide</button><button id="prepare" data-t="prepare">Prepare model request</button><button id="regenerate" data-t="regenerate">Prepare another answer</button><button id="stop" data-t="stop">Stop</button></div>
@@ -4082,7 +4082,7 @@ function renderBrief(){
 function syncCodeRun(){
  const gate=window.NexusMusicUI;
  $('code-run').disabled=Boolean(codeController||!gate||gate.audioBusy());
- $('code-run').title=gate?.audioBusy()?t('localResourceBusy'):'';
+ $('code-run').title=gate?.audioBusy()?(gate.resourceMessage?.()||t('localResourceBusy')):'';
 }
 Object.assign(EN,{localResourceBusy:'Finish the active local job or unload the local model first.'});
 Object.assign(FA,{localResourceBusy:'ابتدا پردازش محلی فعال را پایان بده یا مدل محلی را از حافظه خارج کن.'});
@@ -4124,7 +4124,7 @@ for(const id of ['code','code-input'])$(id).addEventListener('input',()=>{cancel
 $('code-sample').onclick=()=>{if($('code').value&&!confirm(t('discard')))return;cancel();result=null;$('code-result').textContent='';$('code-console').textContent='';$('code-input').value='{"values":[3,5,2]}';$('code').value="const data = JSON.parse(input);\nconst values = data.values;\nconsole.log({count: values.length, sum: values.reduce((a,b)=>a+b, 0)});\nreturn {type:'bar', title:'Local calculation', labels: values.map((_,i)=>String(i+1)), values};";renderStorage()};
 $('code-run').onclick=async()=>{
  if(!$('code-consent').checked||codeController)return;
- const release=window.NexusMusicUI?.acquireAudioJob();
+ const release=window.NexusMusicUI?.acquireAudioJob('code');
  if(!release){$('code-status').textContent=t('localResourceBusy');return}
  const scope=epoch,abort=new AbortController();codeController=abort;$('code-consent').checked=false;$('code-run').disabled=true;$('code-stop').disabled=false;$('code-status').textContent=t('codeWorking');$('code-console').textContent='';$('code-result').textContent='';result=null;
  const runId=++localAttempt;activeCodeAttempt=runId;localLifecycle('code',runId,'started');
@@ -4268,7 +4268,7 @@ Object.assign(EN,{dataChat:'Use analysis summary in next chat'});Object.assign(F
 function syncDataRun(){
  const gate=window.NexusMusicUI;
  $('data-run').disabled=Boolean(busy||!gate||gate.audioBusy());
- $('data-run').title=gate?.audioBusy()?t('localResourceBusy'):'';
+ $('data-run').title=gate?.audioBusy()?(gate.resourceMessage?.()||t('localResourceBusy')):'';
 }
 document.addEventListener('nexus-audio-job-state',syncDataRun);
 document.addEventListener('nexus-studio-state',syncDataRun);
@@ -4300,7 +4300,7 @@ $('data-file').onchange=event=>{cancel();file=event.target.files[0]||null;event.
 $('data-source').onchange=()=>{cancel();resetResult();$('data-status').textContent=t('dataEmpty')};
 $('data-run').onclick=async()=>{
  if(busy)return;
- const release=window.NexusMusicUI?.acquireAudioJob();
+ const release=window.NexusMusicUI?.acquireAudioJob('data');
  if(!release){$('data-status').textContent=t('localResourceBusy');return}
  let scope;
  try{
@@ -7208,16 +7208,29 @@ const fa=()=>document.documentElement.lang==='fa',txt=k=>labels[fa()?'fa':'en'][
 let score=null,wav=null,revision=0,working=false,objectUrl=null;
 // One heavy audio job per tab. Cancellation invalidates results, not the lease;
  // only the original operation's finally releases it.
+const resourceNames=Object.freeze({local:['Local job','پردازش محلی'],music:['Music rendering','ساخت موسیقی'],orchestra:['Orchestra rendering','ساخت ارکستر'],vocal:['Vocal file import','خواندن فایل وکال'],mix:['Vocal mixing','میکس وکال'],model:['Resident local AI model','مدل هوش مصنوعی محلی'],pdf:['PDF extraction','استخراج متن PDF'],code:['JavaScript execution','اجرای JavaScript'],data:['Data analysis','تحلیل داده']});
 function createAudioJobGate(notify){
  let active=null;
- return Object.freeze({busy:()=>active!==null,acquire(){
-  if(active!==null)return null;
-  const token={};active=token;notify();
+ return Object.freeze({busy:()=>active!==null,owner:()=>active?.owner??null,acquire(owner='local'){
+  if(active!==null||!Object.hasOwn(resourceNames,owner))return null;
+  const token={owner};active=token;notify();
   return ()=>{if(active!==token)return;active=null;notify()};
  }});
 }
+function resourceMessage(){
+ const owner=audioJobs.owner();if(!owner)return '';
+ const name=resourceNames[owner][fa()?1:0];
+ return fa()?name+' فعال است. '+(owner==='model'?'برای ابزار سنگین دیگر، مدل را از حافظه خارج کن.':'تا پایان یا لغو کامل عملیات، ابزار سنگین دیگری شروع نمی‌شود.'):
+ name+' is active. '+(owner==='model'?'Unload the model before another heavy local job.':'Finish or cancel it and allow cleanup before starting another heavy local job.');
+}
+function syncResourceNotice(){
+ const node=$('studio-resource-status');if(!node)return;
+ const message=resourceMessage();node.textContent=message;node.hidden=!message;
+}
 const audioJobs=createAudioJobGate(()=>document.dispatchEvent(new Event('nexus-audio-job-state')));
 document.addEventListener('nexus-audio-job-state',buttons);
+document.addEventListener('nexus-audio-job-state',syncResourceNotice);
+document.addEventListener('nexus-studio-state',syncResourceNotice);
 function out(status){$('music-status').textContent=status}
 function field(name){const node=$('music-'+name);return node.type==='checkbox'?node.checked:node.type==='number'?Number(node.value):node.value}
 function inputs(){return {
@@ -7228,7 +7241,7 @@ function inputs(){return {
 }}
 function buttons(){
  $('music-build').disabled=working;$('music-variation').disabled=working;
- $('music-render').disabled=working||audioJobs.busy()||!score;$('music-midi').disabled=working||!score;
+ $('music-render').disabled=working||audioJobs.busy()||!score;$('music-render').title=resourceMessage();$('music-midi').disabled=working||!score;
  $('music-score').disabled=working||!score;$('music-wav').disabled=working||!wav;
  $('music-cancel').disabled=!working;
  document.dispatchEvent(new Event('nexus-studio-media-state'));
@@ -7314,8 +7327,8 @@ $('music-wav').addEventListener('click',()=>{
 });
 $('music-render').addEventListener('click',async()=>{
  if(!score||working)return;
- const release=audioJobs.acquire();
- if(!release){out(fa()?'پردازش صوتی دیگری هنوز فعال است.':'Another audio operation is still active.');return}
+ const release=audioJobs.acquire('music');
+ if(!release){out(resourceMessage());return}
  const start=++revision,active=score;
  try{
   working=true;resetAudio();buttons();
@@ -7380,8 +7393,9 @@ window.addEventListener('pagehide',()=>{
  out(txt(wasRendering?'cancelled':score?'built':'ready'));
 });
 out(txt('ready'));buttons();
-window.NexusMusicUI=Object.freeze({audioBusy:audioJobs.busy,acquireAudioJob:audioJobs.acquire,clear:resetPrivateDraft,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
+window.NexusMusicUI=Object.freeze({audioBusy:audioJobs.busy,acquireAudioJob:audioJobs.acquire,resourceOwner:audioJobs.owner,resourceMessage,clear:resetPrivateDraft,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
  hasTransientWork:()=>Boolean(score||wav||working||isFormChanged())});
+document.dispatchEvent(new Event('nexus-audio-job-state'));
 })();
 </script><script src="./studio-orchestra.js" integrity="sha256-KiT+159073qegY5LVliVVZv8iF2/xVSmOnsWWczsdy4="></script><script>/* NEXUS Original Vocal Mix v1 — offline, explicit, non-destructive.
  * A mixed WAV necessarily differs from the original dry recording.
@@ -7549,6 +7563,7 @@ function buttons(){
  $('orchestra-dry-download').disabled=rendering||!dryBytes;
  $('orchestra-together').disabled=!wav||!dryBytes||rendering;
  $('orchestra-mix').disabled=rendering||gate.audioBusy()||!aligned();
+ for(const id of ['orchestra-render','orchestra-mix','orchestra-dry-file'])$(id).title=gate.resourceMessage();
  $('orchestra-mix-download').disabled=rendering||!mixWav;
  for(const name of ['orchestra-offset','orchestra-dry-gain','orchestra-backing-gain'])$(name).disabled=rendering;
  document.dispatchEvent(new Event('nexus-studio-media-state'));
@@ -7625,8 +7640,8 @@ $('orchestra-wav').addEventListener('click',()=>{
 });
 $('orchestra-render').addEventListener('click',async()=>{
  if(!score||rendering)return;
- const release=gate.acquireAudioJob();
- if(!release){status('Another audio operation is still active.','پردازش صوتی دیگری هنوز فعال است.');return}
+ const release=gate.acquireAudioJob('orchestra');
+ if(!release){$('orchestra-status').textContent=gate.resourceMessage();return}
  const id=++ticket,source=score;
  try{
   rendering=true;clearWav();buttons();
@@ -7679,7 +7694,7 @@ $('orchestra-dry-file').addEventListener('change',async()=>{
  if(rendering||gate.audioBusy()){$('orchestra-dry-file').value='';return}
  const file=$('orchestra-dry-file').files[0];
  if(!file){clearDry();return}
- const release=gate.acquireAudioJob();
+ const release=gate.acquireAudioJob('vocal');
  if(!release){$('orchestra-dry-file').value='';return}
  let id,voiceGeneration;
  const current=()=>id===ticket&&voiceGeneration===dryEpoch;
@@ -7740,8 +7755,8 @@ for(const id of ['orchestra-offset','orchestra-dry-gain','orchestra-backing-gain
 $('orchestra-mix').addEventListener('click',async()=>{
  if(rendering||!aligned())return;
  // Clicking is explicit authority to mix two local, user-selected sounds.
- const release=gate.acquireAudioJob();
- if(!release){status('Another audio operation is still active.','پردازش صوتی دیگری هنوز فعال است.');return}
+ const release=gate.acquireAudioJob('mix');
+ if(!release){$('orchestra-status').textContent=gate.resourceMessage();return}
  const id=++ticket,sourceDry=dryBytes,sourceBacking=wav;
  try{
   rendering=true;mixing=true;clearMixed();buttons();
