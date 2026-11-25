@@ -389,6 +389,7 @@ window.addEventListener('load',async()=>{
    const reportButton=receiptWorkflow.querySelector('[data-experience-report]');
    assert(reportButton&&!reportButton.disabled,'complete-four-rounds-enable-export');
    assert(receiptWorkflow.querySelector('[data-chat-recall-file]')?.disabled,'passing-round-disables-recall');
+   assert(receiptWorkflow.querySelector('[data-chat-compare-files]')?.disabled,'passing-round-disables-comparison');
    const reportControls=reportButton.closest('details');reportControls.open=true;
    reportControls.querySelector('input').value='synthetic-fix';
    reportBlob=null;reportName='';
