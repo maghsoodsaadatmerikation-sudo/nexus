@@ -4,9 +4,9 @@ import {reviewAssistantWorkflow} from '../web/studio-workflow-review.mjs';
 const source=readFileSync(new URL('../web/studio-composer-ui.js',import.meta.url),'utf8');
 const start='function humanCriterion(step){',end='async function showEngineReview(button,notice){';
 if(source.split(start).length!==2||source.split(end).length!==2||source.indexOf(end)<source.indexOf(start))throw Error('chat bridge extraction markers changed');
-const bridge=new Function(source.slice(source.indexOf(start),source.indexOf(end))+'\nreturn {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory,adaptiveChatDraft};')();
+const bridge=new Function(source.slice(source.indexOf(start),source.indexOf(end))+'\nreturn {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory,adaptiveChatDraft,forgetReviewedHistory};')();
 function testChatBridge(bridge,review){
- const {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory,adaptiveChatDraft}=bridge;
+ const {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory,adaptiveChatDraft,forgetReviewedHistory}=bridge;
  let cases=0;
  const eq=(actual,expected,msg)=>{if(JSON.stringify(actual)!==JSON.stringify(expected))throw Error(msg+' '+JSON.stringify({actual,expected}));};
  const check=(label,fn)=>{try{fn();cases++}catch(e){throw Error(label+': '+e.message)}};
@@ -123,6 +123,16 @@ function testChatBridge(bridge,review){
   const draft=adaptiveChatDraft(cur,review(cur,{enabled:true,experienceEnabled:true}));
   eq(draft.plan.steps.length,12,'bounded plan');
   eq(draft.checkpoints.length,6,'one checkpoint per recurrent criterion');
+ });
+ check('explicit history deletion preserves current assessment',()=>{
+  const step={result:{route:['code']},criterion:'test',opened:true,observed:'succeeded',verdict:'fail'};
+  const previous={round:1,steps:reviewSnapshot({steps:[step]})};
+  const state={draft:'test',round:2,epoch:5,index:1,steps:[step],baseline:previous,history:[previous]};
+  const before=JSON.stringify(state),next=forgetReviewedHistory(state);
+  eq(next.epoch,6,'invalidates pending review');eq(next.history,[],'clears history');eq(next.baseline,null,'clears baseline');
+  eq(next.steps,state.steps,'keeps current assessment');eq(next.index,state.index,'keeps progress');
+  eq(comparableFailureHistory(next,hash,reviewSnapshot(next)),[],'no prior receipts');
+  eq(JSON.stringify(state),before,'input unchanged');
  });
  check('isolation',()=>{eq(review(null,{enabled:true,isolated:true}).status,'isolated','isolated');eq(review(null).status,'off','disabled')});
  return cases;
