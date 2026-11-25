@@ -7520,7 +7520,7 @@ function buttons(){
  $('orchestra-score').disabled=rendering||!score;
  $('orchestra-wav').disabled=rendering||!wav;
  $('orchestra-cancel').disabled=!rendering;
- $('orchestra-dry-file').disabled=rendering;
+ $('orchestra-dry-file').disabled=rendering||gate.audioBusy();
  $('orchestra-dry-clear').disabled=rendering;
  $('orchestra-exclude-lead').disabled=rendering;
  $('orchestra-dry-download').disabled=rendering||!dryBytes;
@@ -7653,13 +7653,15 @@ $('orchestra-dry-clear').addEventListener('click',()=>{
                   'وکال اصلی از حافظهٔ این برگه آزاد شد.');
 });
 $('orchestra-dry-file').addEventListener('change',async()=>{
- if(rendering)return;
- const file=$('orchestra-dry-file').files[0];clearDry();
- if(!file)return;
- const id=++ticket,voiceGeneration=dryEpoch;
- dryPending=true;
+ if(rendering||gate.audioBusy()){$('orchestra-dry-file').value='';return}
+ const file=$('orchestra-dry-file').files[0];
+ if(!file){clearDry();return}
+ const release=gate.acquireAudioJob();
+ if(!release){$('orchestra-dry-file').value='';return}
+ let id,voiceGeneration;
  const current=()=>id===ticket&&voiceGeneration===dryEpoch;
  try{
+  clearDry();id=++ticket;voiceGeneration=dryEpoch;dryPending=true;buttons();
   if(file.size>20*1024*1024||file.size<48)throw Error('file-size');
   const bytes=new Uint8Array(await file.arrayBuffer());
   if(!current())return;
@@ -7686,7 +7688,7 @@ $('orchestra-dry-file').addEventListener('change',async()=>{
     'نرخ نمونه‌برداری دو صدا متفاوت است؛ موسیقی را پس از وارد کردن وکال دوباره تولید کن.');
  }catch{if(current())status('Dry vocal rejected: use a local PCM 16-bit WAV (22.05/44.1 kHz; 20 MiB max).',
      'فایل وکال پذیرفته نشد؛ WAV خام ۱۶ بیتی با نرخ ۲۲ یا ۴۴ کیلوهرتز، حداکثر ۲۰ مگابایت لازم است.')}
- finally{if(current()){dryPending=false;buttons()}}
+ finally{if(voiceGeneration===dryEpoch)dryPending=false;release();buttons()}
 });
 $('orchestra-dry-download').addEventListener('click',()=>{
  if(dryBytes)download(dryBytes,'original-voice-unchanged.wav','audio/wav');
