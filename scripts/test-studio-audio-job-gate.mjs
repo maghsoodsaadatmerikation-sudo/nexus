@@ -18,15 +18,19 @@ export async function testAudioJobGate(musicSource,orchestraSource,deviceSource)
  click('music-build');click('orchestra-parse');click('orchestra-compose');
  const gate=root.NexusMusicUI;
  ok(!gate.audioBusy(),'idle');
+ ok(gate.resourceOwner()===null&&node('studio-resource-status').hidden,'idle notice hidden');
  const first=click('music-render');
  ok(jobs.length===1&&jobs[0].kind==='music'&&gate.audioBusy(),'music acquired');
+ ok(gate.resourceOwner()==='music'&&!node('studio-resource-status').hidden&&node('studio-resource-status').textContent.includes('Music rendering'),'music owner shown in chat');
  ok(node('orchestra-render').disabled,'orchestra disabled');
  await click('orchestra-render');ok(jobs.length===1,'cross-tool programmatic start refused');
  click('music-cancel');ok(jobs[0].opts.shouldAbort()&&gate.audioBusy(),'cancel retains lease until unwind');
  await click('music-render');await click('orchestra-render');ok(jobs.length===1,'no restart while unwinding');
  jobs[0].reject(Error('render-cancelled'));await first;
  ok(!gate.audioBusy()&&!node('orchestra-render').disabled,'release after unwind');
+ ok(node('studio-resource-status').hidden&&node('studio-resource-status').textContent==='','notice clears after unwind');
  const second=click('orchestra-render');ok(jobs.length===2&&jobs[1].kind==='orchestra','orchestra acquired');
+ ok(gate.resourceOwner()==='orchestra','orchestra owns resource');
  await click('music-render');ok(jobs.length===2&&node('music-render').disabled,'music blocked');
  root.NexusOrchestraUI.clear();ok(gate.audioBusy()&&jobs[1].opts.shouldAbort(),'private clear invalidates not releases');
  jobs[1].reject(Error('render-cancelled'));await second;ok(!gate.audioBusy(),'clear unwinds safely');
@@ -40,6 +44,7 @@ export async function testAudioJobGate(musicSource,orchestraSource,deviceSource)
  file.files=[{size:wav.length,arrayBuffer:()=>new Promise((resolve,reject)=>reads.push({resolve,reject}))}];
  const choose=()=>file.handlers.get('change')();
  const read=choose();ok(reads.length===1&&gate.audioBusy(),'vocal read owns lease');
+ ok(gate.resourceOwner()==='vocal','vocal import owner');
  ok(file.disabled&&node('music-render').disabled,'other operations disabled during file read');
  await click('music-render');await click('orchestra-render');await choose();
  ok(jobs.length===3&&reads.length===1,'overlapping work refused during file read');
@@ -50,6 +55,7 @@ export async function testAudioJobGate(musicSource,orchestraSource,deviceSource)
  ok(root.NexusOrchestraUI.hasOriginalVocal()&&!gate.audioBusy(),'reimport succeeds');
  const mix=click('orchestra-mix');
  ok(jobs.length===4&&jobs[3].kind==='mix'&&gate.audioBusy(),'mix owns lease');
+ ok(gate.resourceOwner()==='mix','mix owner');
  await click('music-render');await click('orchestra-render');await choose();
  ok(jobs.length===4&&reads.length===2,'mix excludes render and import');
  click('orchestra-cancel');ok(jobs[3].opts.shouldAbort()&&gate.audioBusy(),'mix cancellation retains lease');
@@ -69,7 +75,7 @@ export async function testAudioJobGate(musicSource,orchestraSource,deviceSource)
  }
  const globals={Worker,WebAssembly:{},caches:{delete:async()=>true},crypto};
  const Engine=new Function('globalThis','Worker','navigator','setTimeout','clearTimeout','performance','caches',deviceSource.replace(/^export /gm,'')+'\nreturn DeviceEngine;')(globals,Worker,{deviceMemory:4},()=>1,()=>{}, {now:()=>0},globals.caches);
- const device=new Engine({workerURL:'synthetic',acquireResidency:gate.acquireAudioJob});
+ const device=new Engine({workerURL:'synthetic',acquireResidency:()=>gate.acquireAudioJob('model')});
  const reject=async(p,code,label)=>{let error;try{await p}catch(e){error=e.message}ok(error===code,label)};
  const audio=gate.acquireAudioJob();
  await reject(device.load({consent:false}),'explicit-consent-required','device consent still required');
@@ -79,6 +85,10 @@ export async function testAudioJobGate(musicSource,orchestraSource,deviceSource)
  ok(gate.audioBusy()&&device.state==='loading'&&workers.length===1,'device load reserves resources');
  const w=workers[0];w.emit({type:'ready',configuration_id:'fixture',model:'fixture'});await loading;
  ok(device.state==='ready'&&gate.audioBusy(),'ready resident model retains lease');
+ ok(gate.resourceOwner()==='model'&&gate.resourceMessage().includes('Unload the model'),'model owner gives actionable recovery');
+ document.documentElement.lang='fa';document.dispatchEvent(new Event('nexus-studio-state'));
+ ok(node('studio-resource-status').textContent.includes('مدل هوش مصنوعی محلی'),'notice follows Persian language');
+ document.documentElement.lang='en';document.dispatchEvent(new Event('nexus-studio-state'));
  await click('music-render');await click('orchestra-render');await choose();
  ok(jobs.length===4&&reads.length===3,'resident model excludes heavy audio');
  const generation=device.generate({consent:true,configuration_id:'fixture'},null);
@@ -105,6 +115,9 @@ export async function testAudioJobGate(musicSource,orchestraSource,deviceSource)
  await reject(generationFailure,'synthetic-generation-error','generation error rejects');
  ok(gate.audioBusy()&&device.state==='ready','recoverable generation error retains resident lease');
  await device.erase();ok(!gate.audioBusy()&&wg.terminated,'explicit erase unloads and releases');
+ for(const owner of ['pdf','code','data']){const release=gate.acquireAudioJob(owner);ok(gate.resourceOwner()===owner&&Boolean(gate.resourceMessage()),owner+' bounded owner label');release()}
+ ok(gate.acquireAudioJob('private-file-name.pdf')===null&&!gate.audioBusy(),'arbitrary owner rejected');
+ ok(gate.resourceOwner()===null&&node('studio-resource-status').hidden,'no residual resource notice');
  return checks;
 }
 if(typeof process!=='undefined'){
