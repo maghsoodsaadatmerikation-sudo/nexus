@@ -15,4 +15,10 @@ Development candidate, not a deployed feature. Open Project assistant & memory i
 
 The import does not verify signatures, causal effectiveness, chronology, or whether a supplied report omits failed attempts. It cannot grant permission, apply a correction, or train a model. Only approved summary metadata is added to session state; the raw report is not saved or injected into model context. File selection remains local. Project/workflow labels are consistency checks, not evidence authentication. Prior backups and source files are not erased when a stored entry is removed.
 
-The current importer requires the user to supply a structured report. A chat-generated evidence-pair export, replay verification, and recall integration are not yet connected.
+The importer accepts structured reports; the integrated chat candidate can also generate a report and explicitly retain its reviewed metadata. Saving the encrypted session remains a separate step.
+
+## Read-only recall adapter (development source only)
+
+`web/studio-experience-archive-recall.mjs` bridges the validated archive and existing review engine. It requires an explicit recall opt-in, a live unlocked regular thread, matching project/workflow/thread and session/snapshot revisions, a present reported failure, and freshly supplied historical evidence pairs. It suppresses recall when required evidence is contradictory, rejects reuse of current run or evidence IDs, and excludes revoked or changed-support entries. Missing historical reports produce no recommendation. Counts are associations, not causality or authenticated evidence. The adapter does not save, modify, apply or inject any correction into model context. Its 35 synthetic regression checks are in `scripts/test-studio-experience-archive-recall.mjs` and wired into Studio CI.
+
+The adapter is deliberately not bundled or wired to the chat UI yet; the host must separately gather consent, bind live session state, review any resupplied report and discard results when scope changes. No public deployment or feature acceptance is claimed.
