@@ -41,6 +41,18 @@ function testUnified(review){
  reject(()=>review({...input,evidence:[unscopedReceipt]},on),'observation-scope-mismatch');
  const foreignExperience={...experience,attempts:attempts.map((a,i)=>i===0?{...a,before:{...a.before,observations:[{...a.before.observations[0],workflow_id:'other'}]}}:a)};
  reject(()=>review({...bad,experience:foreignExperience},recall),'observation-scope-mismatch');
+ const withFirst=(first)=>({...experience,attempts:[first,attempts[1]]});
+ const currentBefore=withFirst({...attempts[0],before:run(scope.run_id,'fail')});
+ const currentAfter=withFirst({...attempts[0],after:run(scope.run_id,'pass')});
+ reject(()=>review({...bad,experience:currentBefore},recall),'current-run-in-experience');
+ reject(()=>review({...bad,experience:currentAfter},recall),'current-run-in-experience');
+ const reuseReceipt=(r)=>({...r,observations:[{...r.observations[0],evidence_id:bad.evidence[0].evidence_id}]});
+ const reuseBefore=withFirst({...attempts[0],before:reuseReceipt(attempts[0].before)});
+ const reuseAfter=withFirst({...attempts[0],after:reuseReceipt(attempts[0].after)});
+ reject(()=>review({...bad,experience:reuseBefore},recall),'current-evidence-in-experience');
+ reject(()=>review({...bad,experience:reuseAfter},recall),'current-evidence-in-experience');
+ eq(review({...bad,experience:currentBefore},on).experience.status,'off');
+ eq(review({...bad,experience:{...experience,attempts:[]}},recall).experience.status,'no_current_evidence');
  reject(()=>review(input,{enabled:true,experienceEnabled:1}),'invalid-options');
  eq(JSON.stringify(x).includes('current-e'),false);
  eq(input.step_observations.length,2);
