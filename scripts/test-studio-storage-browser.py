@@ -103,6 +103,18 @@ window.addEventListener('load',async()=>{
   assert(!JSON.stringify(NexusStudioUI.snapshot()).includes('private-evidence'),'import-retains-metadata-not-raw-evidence');
   $('save').click();await wait(()=>$('status').textContent.includes('encrypted data')&&!$('save').disabled);
   assert((await S.decrypt(await store.read(),pass)).data.projects[0].experiences[0].entries[0].correction_code==='new_reviewed_fix','explicit-save-persists-import');
+  // Direct session handoff uses the same review engine without a file.
+  const directReport={...report,operation:{...report.operation,correction_code:'direct_fixture'},attempts:report.attempts.map(a=>({...a,correction_code:'direct_fixture'}))};
+  const directBefore=await store.read(),directSelection=NexusStudioUI.selection();
+  window.confirm=()=>false;
+  assert(applyChatExperienceReport(directReport,directSelection)==='declined','direct-consent-declined');
+  window.confirm=()=>true;
+  assert(applyChatExperienceReport(directReport,{...directSelection,revision:directSelection.revision-1})==='unavailable','direct-stale-session-refused');
+  assert(applyChatExperienceReport(directReport,directSelection)==='applied','direct-session-apply');
+  assert(await store.read()===directBefore,'direct-does-not-autosave');
+  assert(NexusStudioUI.snapshot().projects[0].experiences[0].entries.some(e=>e.correction_code==='direct_fixture'),'direct-metadata-visible');
+  $('save').click();await wait(()=>$('status').textContent.includes('encrypted data')&&!$('save').disabled);
+  assert((await S.decrypt(await store.read(),pass)).data.projects[0].experiences[0].entries.some(e=>e.correction_code==='direct_fixture'),'direct-explicit-save');
   $('history-days').value='0';$('history-days').dispatchEvent(new Event('change',{bubbles:true}));
   $('save').click();await wait(()=>$('status').textContent.includes('encrypted data')&&!$('save').disabled);
   const off=(await S.decrypt(await store.read(),pass)).data;

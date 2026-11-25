@@ -288,8 +288,29 @@ function clearTrainingReview(){
 // Existing project-memory surface: no new top-level navigation, no recall.
 const experienceImportEngine=(()=>{
  /* EXPERIENCE_EDIT_ENGINE */
- return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow});
+ return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow,buildChatExperienceReport});
 })();
+// Direct chat handoff: same validated import engine, no intermediate file.
+function canApplyChatExperience(){
+ return vault.unlocked&&!busy&&!!p()&&!!chat()&&!chat().temporary&&!chat().isolated&&!chat().archived;
+}
+function applyChatExperienceReport(report,expected){
+ const current=()=>canApplyChatExperience()&&expected?.projectId===projectId&&expected.threadId===threadId&&expected.revision===revision&&expected.head===(chat()?.head||null);
+ if(!current())return 'unavailable';
+ const version=vault.archiveRevision,adapter=experienceImportEngine.createArchiveExperienceReview(S.state);
+ const session=()=>({enabled:true,vaultUnlocked:vault.unlocked,busy,isolated:!!chat()?.isolated,projectId,threadId,revision});
+ try{
+  const review=experienceImportEngine.stageImportedExperience(adapter,data,session(),JSON.stringify(report));
+  const en=language!=='fa';
+  if(!confirm((en?'Retain this reviewed correction in the current session? ':'این اصلاح بازبینی‌شده در نشست فعلی ثبت شود؟ ')+[review.kind,review.workflow_id,review.criterion_id,review.correction_code].join(' / ')+(en?' · Human reports are not independent proof. Save session separately after clearing the workflow draft.':' · گزارش انسانی مدرک مستقل نیست. پس از پاک‌کردن پیش‌نویس گردش‌کار، نشست را جداگانه ذخیره کنید.')))return 'declined';
+  if(!current()||version!==vault.archiveRevision)return 'unavailable';
+  const ok=mutate(next=>{
+   const result=adapter.approve(review.ticket,next,session(),{approved:true});
+   projectIn(next).experiences=projectIn(result.state).experiences;
+  });
+  return ok?'applied':'rejected';
+ }catch{return 'rejected'}finally{adapter.invalidate()}
+}
 function renderExperienceImport(parent,allowed){
  let panel=$('experience-import-panel');
  if(!panel){panel=document.createElement('details');panel.id='experience-import-panel';parent.append(panel)}
