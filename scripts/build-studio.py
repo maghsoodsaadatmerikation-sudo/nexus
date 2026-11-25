@@ -38,7 +38,7 @@ for item in modules:
     if filename == 'studio-composer-ui.js':
         # Explicit ordered module list; preserve source as single local closure.
         import re
-        review_modules = ["studio-workflow-critique.mjs","studio-workflow-recovery.mjs","studio-workflow-outcome.mjs","studio-workflow-review.mjs"]
+        review_modules = ["studio-workflow-critique.mjs","studio-workflow-recovery.mjs","studio-workflow-outcome.mjs","studio-workflow-review.mjs","studio-chat-experience-report.mjs"]
         review_source = []
         for review_name in review_modules:
             review_code = (root/'web'/review_name).read_text()
