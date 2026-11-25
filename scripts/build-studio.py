@@ -40,7 +40,7 @@ for item in modules:
         # the later composer. No new window export or dynamic module loader.
         import re
         review_source = []
-        for name in ["studio-workflow-critique.mjs", "studio-workflow-recovery.mjs", "studio-workflow-outcome.mjs", "studio-workflow-review.mjs", "studio-experience-archive-edit.mjs", "studio-chat-experience-report.mjs", "studio-experience-archive-recall.mjs", "studio-chat-correction-options.mjs"]:
+        for name in ["studio-workflow-critique.mjs", "studio-workflow-recovery.mjs", "studio-workflow-outcome.mjs", "studio-workflow-review.mjs", "studio-experience-archive-edit.mjs", "studio-chat-experience-report.mjs", "studio-experience-archive-recall.mjs", "studio-chat-correction-options.mjs", "studio-evidence-review.mjs"]:
             part = (root/'web'/name).read_text()
             part = re.sub(r'^import[^\n]*\n', '', part, flags=re.M)
             part = re.sub(r'^export function ', 'function ', part, flags=re.M)
@@ -51,6 +51,7 @@ for item in modules:
             # template literals, multiline strings or block comments.
             if not any(token in part for token in ("`", "/*", "\\\n")):
                 part = re.sub(r'^[ \t]*//[^\n]*$', '', part, flags=re.M)
+                part = re.sub(r'^[ \t]+', '', part, flags=re.M)
             review_source.append(part)
         code = replace_exact(code, '/* EXPERIENCE_EDIT_ENGINE */', '\n'.join(review_source))
     if '</script' in code.lower():
