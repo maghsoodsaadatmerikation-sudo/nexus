@@ -285,10 +285,10 @@ function clearTrainingReview(){
  trainingReview=null;
  $('training-preview').textContent='';$('training-preview').hidden=true;$('training-download').hidden=true;
 }
-// Existing project-memory surface: no new top-level navigation, no recall.
+// Existing project-memory surface: no new top-level navigation.
 const experienceImportEngine=(()=>{
  /* EXPERIENCE_EDIT_ENGINE */
- return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow,buildChatExperienceReport});
+ return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow,buildChatExperienceReport,prepareChatArchiveRecall,reviewArchivedExperience});
 })();
 // Direct chat handoff: same validated import engine, no intermediate file.
 function canApplyChatExperience(){
@@ -310,6 +310,19 @@ function applyChatExperienceReport(report,expected){
   });
   return ok?'applied':'rejected';
  }catch{return 'rejected'}finally{adapter.invalidate()}
+}
+// Local, read-only recall; no report retention or model/tool access.
+function chatArchiveRecallContext(){
+ if(!canApplyChatExperience())return null;
+ return {projectId,threadId,revision,head:chat()?.head||null,archiveRevision:vault.archiveRevision};
+}
+function recallChatExperienceReport(raw,expected,details){
+ const current=chatArchiveRecallContext();
+ if(!current||!expected||JSON.stringify(current)!==JSON.stringify(expected))return {status:'unavailable',matches:[]};
+ const request=experienceImportEngine.prepareChatArchiveRecall(raw,{...details,projectId,threadId,sessionRevision:revision});
+ const snapshot=p().experiences?.find(s=>s.workflow_id===request.scope.workflow_id);
+ if(!snapshot)return {status:'no_snapshot',matches:[]};
+ return experienceImportEngine.reviewArchivedExperience(S.state,data,{enabled:true,vaultUnlocked:vault.unlocked,busy,isolated:!!chat()?.isolated,projectId,threadId,revision},{...request,snapshotRevision:snapshot.revision},{enabled:true});
 }
 function renderExperienceImport(parent,allowed){
  let panel=$('experience-import-panel');
