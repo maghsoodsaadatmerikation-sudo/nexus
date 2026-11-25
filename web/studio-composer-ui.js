@@ -232,7 +232,7 @@ function parseWorkflow(message){
  return {steps};
 }
 function clearWorkflow(){
- workflowState=null;workflow.hidden=true;workflow.replaceChildren();
+ resetChatCorrectionPanel();resetChatCorrectionPanel=()=>{};workflowState=null;workflow.hidden=true;workflow.replaceChildren();
 }
 function retainedWorkflow(){
  const state=window.NexusStudioUI.uiStatus();
@@ -470,7 +470,7 @@ function appendExperienceReportControls(){
 // Explicit local report selection; results are ephemeral.
 let chatRecallGeneration=0;
 function clearChatRecallResult(){
- chatRecallGeneration++;
+ resetChatCorrectionPanel();chatRecallGeneration++;
  const notice=workflow.querySelector('[data-chat-recall-result]');
  if(notice)notice.textContent='';
 }
@@ -507,9 +507,84 @@ function appendChatRecallControls(){
  };
  workflow.append(details);
 }
+// Local report set and estimates are ephemeral; the central engine makes
+// no decision or execution grant. A scope change discards the whole form.
+let resetChatCorrectionPanel=()=>{};
+function appendChatCorrectionControls(){
+ const current=workflowState,details=document.createElement('details'),summary=document.createElement('summary');
+ summary.textContent=words('Compare previous corrections','مقایسه اصلاح‌های پیشین');details.append(summary);
+ const help=document.createElement('p');help.className='help';
+ help.textContent=words('Choose 2–5 exported reports for distinct corrections of the same failed criterion. Both archive support and local tool status must pass review. Enter your own estimates; this is not prediction or execution.','۲ تا ۵ گزارش اصلاح متمایز برای یک معیار ناموفق انتخاب کنید. پشتیبانی آرشیو و وضعیت ابزار باید بازبینی شود. برآوردها را خودتان وارد کنید؛ این پیش‌بینی یا اجرا نیست.');details.append(help);
+ const label=document.createElement('label');label.textContent=words('Previous reports (.json)','گزارش‌های پیشین (.json)');
+ const files=document.createElement('input');files.type='file';files.multiple=true;files.accept='.json,application/json';files.dataset.chatCompareFiles='true';label.append(files);details.append(label);
+ const form=document.createElement('div'),notice=document.createElement('div');notice.dataset.chatCompareResult='true';notice.setAttribute('role','status');details.append(form,notice);
+ let generation=0,reports=null;
+ const reset=()=>{generation++;reports=null;files.value='';form.replaceChildren();notice.textContent='';files.disabled=!canRecallCurrent(current)};
+ resetChatCorrectionPanel=reset;reset();
+ details.ontoggle=()=>{if(!details.open)reset()};
+ const make=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n};
+ const field=(parent,title,control)=>{const l=make('label',title);l.append(control);parent.append(l);return control};
+ const num=(parent,title,max)=>{const n=make('input');n.type='number';n.min='0';n.max=String(max);n.step='1';n.inputMode='numeric';return field(parent,title,n)};
+ const select=(parent,title,choices)=>{const n=make('select');for(const [v,en,fa] of choices){const o=make('option',words(en,fa));o.value=v;n.append(o)}return field(parent,title,n)};
+ const integer=(n,optional=false)=>{if(!n.value&&optional)return null;if(!/^\d+$/.test(n.value)||!Number.isSafeInteger(Number(n.value))||Number(n.value)>Number(n.max))throw Error('invalid-estimate');return Number(n.value)};
+ files.onchange=async()=>{
+  const selected=Array.from(files.files||[]);reset();
+  if(!files.isConnected||!canRecallCurrent(current)||!selected.length)return;
+  if(selected.length<2||selected.length>5||selected.some(f=>f.size<1||f.size>65536||!/\.json$/i.test(f.name))||selected.reduce((n,f)=>n+f.size,0)>196608){notice.textContent=words('Select 2–5 valid JSON reports within the size limits.','۲ تا ۵ گزارش JSON معتبر در محدوده حجم انتخاب کنید.');return}
+  if(!confirm(words('Read these local reports for comparison? No files will be sent or saved.','این گزارش‌های محلی برای مقایسه خوانده شوند؟ هیچ فایلی ارسال یا ذخیره نمی‌شود.')))return;
+  const version=generation,expected=chatArchiveRecallContext(),epoch=current.epoch,steps=reviewSnapshot(current),captured=JSON.stringify(steps);
+  const live=()=>files.isConnected&&version===generation&&canRecallCurrent(current)&&epoch===current.epoch&&JSON.stringify(expected)===JSON.stringify(chatArchiveRecallContext())&&captured===JSON.stringify(reviewSnapshot(current));
+  files.disabled=true;
+  try{
+   const raw=await Promise.all(selected.map(f=>f.text()));if(!live())return;
+   const planHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([current.draft,steps.map(s=>s.criterion.trim())])))),b=>b.toString(16).padStart(2,'0')).join('');
+   if(!live())return;
+   if(!current.reportSessionId)current.reportSessionId=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');
+   const context={sessionId:current.reportSessionId,round:current.round,planHash,steps},ops=raw.map(text=>{experienceImportEngine.prepareChatArchiveRecall(text,{...context,projectId:expected.projectId,threadId:expected.threadId,sessionRevision:expected.revision});return JSON.parse(text).operation});
+   if(new Set(ops.map(o=>o.criterion_id)).size!==1||new Set(ops.map(o=>o.correction_code)).size!==ops.length||steps[Number(ops[0].criterion_id.slice(1))-1]?.verdict!=='fail')throw Error('incomparable-reports');
+   reports=raw;
+   const budget=num(form,words('Maximum cost (USD cents)','حداکثر هزینه (سنت دلار)'),100000000),time=num(form,words('Maximum effort (minutes)','حداکثر زمان (دقیقه)'),525600);
+   form.append(make('p',words('Blank cost, effort, risk or reversibility means unknown. Scenario fields are optional unless enabled.','هزینه، زمان، ریسک یا بازگشت‌پذیری خالی یعنی نامشخص. تکمیل سناریو در صورت فعال‌سازی لازم است.')));
+   const rows=ops.map(op=>{
+    const group=make('fieldset');group.append(make('legend',op.correction_code+' / '+op.criterion_id));form.append(group);
+    const cost=num(group,words('Expected cost (cents)','هزینه مورد انتظار (سنت)'),100000000),effort=num(group,words('Expected minutes','دقایق مورد انتظار'),525600);
+    const risk=select(group,words('Risk','ریسک'),[['','Unknown','نامشخص'],['low','Low','کم'],['medium','Medium','متوسط'],['high','High','زیاد']]);
+    const reversible=select(group,words('Reversible?','بازگشت‌پذیر؟'),[['','Unknown','نامشخص'],['yes','Yes','بله'],['no','No','خیر']]);
+    const scenario=make('details');scenario.append(make('summary',words('Optional scenario estimates','برآورد اختیاری سناریو')));group.append(scenario);
+    const check=make('input');check.type='checkbox';field(scenario,words('Include scenario','بررسی سناریو'),check);
+    const bestCost=num(scenario,words('Best cost (cents)','بهترین هزینه (سنت)'),100000000),worstCost=num(scenario,words('Worst cost (cents)','بدترین هزینه (سنت)'),100000000);
+    const bestTime=num(scenario,words('Best minutes','کمترین زمان (دقیقه)'),525600),worstTime=num(scenario,words('Worst minutes','بیشترین زمان (دقیقه)'),525600);
+    const rb=make('input');rb.type='checkbox';field(scenario,words('Declare rollback contingency','تعریف برنامه بازگشت'),rb);
+    const rc=num(scenario,words('Rollback cost (cents)','هزینه بازگشت (سنت)'),100000000),rt=num(scenario,words('Rollback minutes','زمان بازگشت (دقیقه)'),525600);
+    const phrase=(title)=>{const n=make('input');n.type='text';n.maxLength=300;return field(scenario,title,n)};
+    const trigger=phrase(words('Rollback trigger','شرط بازگشت')),restore=phrase(words('Restoration check','آزمون بازیابی'));
+    return {op,cost,effort,risk,reversible,check,bestCost,worstCost,bestTime,worstTime,rb,rc,rt,trigger,restore};
+   });
+   const button=make('button',words('Review comparison','بازبینی مقایسه'));button.type='button';button.className='secondary';button.dataset.chatCompareRun='true';form.append(button);
+   form.oninput=()=>{notice.textContent=''};form.onchange=form.oninput;
+   button.onclick=()=>{
+    if(!live()||!reports)return;
+    notice.textContent='';
+    try{
+     const criterion_id=ops[0].criterion_id,comparison={criterion_id,max_cost_usd_cents:integer(budget),max_effort_minutes:integer(time),options:rows.map(x=>({correction_code:x.op.correction_code,cost_usd_cents:integer(x.cost,true),effort_minutes:integer(x.effort,true),risk:x.risk.value||null,reversible:x.reversible.value?x.reversible.value==='yes':null}))};
+     const options=rows.filter(x=>x.check.checked).map(x=>({correction_code:x.op.correction_code,cost_usd_cents:{best:integer(x.bestCost),expected:integer(x.cost),worst:integer(x.worstCost)},effort_minutes:{best:integer(x.bestTime),expected:integer(x.effort),worst:integer(x.worstTime)},rollback:x.rb.checked?{cost_usd_cents:integer(x.rc),effort_minutes:integer(x.rt),trigger:x.trigger.value,restore_check:x.restore.value}:null}));
+     const result=compareChatExperienceReports(reports,expected,context,comparison,options.length?{criterion_id,options}:undefined);
+     if(!live())return;
+     if(result.status!=='review_only'){notice.textContent=words('Comparison withheld: current review or recalled support is incomplete.','مقایسه متوقف شد: بازبینی فعلی یا پشتیبانی تجربه کافی نیست.');return}
+     const labels={tradeoff_candidate:words('Trade-off candidate','گزینه قابل بررسی'),dominated_estimates:words('Less favorable estimates','برآورد نامطلوب‌تر'),outside_limits:words('Outside limits','خارج از محدودیت'),missing_estimates:words('Missing estimates','برآورد ناقص'),no_recalled_support:words('No recalled support','بدون پشتیبانی'),worst_case_outside_limits:words('Worst case exceeds limits','بدترین حالت خارج از محدودیت'),rollback_reserve_outside_limits:words('Rollback reserve exceeds limits','ذخیره بازگشت خارج از محدودیت'),rollback_details_missing:words('Rollback details missing','جزئیات بازگشت ناقص'),irreversible_review_required:words('Irreversible: review required','برگشت‌ناپذیر: نیازمند بازبینی'),within_declared_limits_review_required:words('Within declared limits: review required','در محدوده اعلامی: نیازمند بازبینی'),not_eligible_for_scenario_review:words('Scenario not eligible','سناریو قابل بررسی نیست')};
+     const lines=make('ul');
+     for(const o of result.comparison.options){const s=result.scenarios?.options.find(x=>x.correction_code===o.correction_code);lines.append(make('li',o.correction_code+' · '+(labels[o.status]||o.status)+(s?' · '+(labels[s.status]||s.status):'')+(s?.worst_with_rollback?words(' · Worst + rollback (cents / min): ',' · بدترین حالت + بازگشت (سنت / دقیقه): ')+s.worst_with_rollback.cost_usd_cents+' / '+s.worst_with_rollback.effort_minutes:'')))}
+     notice.append(lines,make('p',words('Supplied estimates, not verified predictions. No option selected or applied.','برآوردهای واردشده، نه پیش‌بینی تأییدشده. هیچ گزینه‌ای انتخاب یا اعمال نشده.')));
+    }catch{if(live())notice.textContent=words('Invalid or incomplete estimates/reports. No action taken.','برآوردها یا گزارش‌ها نامعتبر یا ناقص‌اند. اقدامی انجام نشد.')}
+   };
+  }catch{if(live()){reports=null;form.replaceChildren();notice.textContent=words('Reports rejected or incompatible.','گزارش‌ها رد شدند یا قابل مقایسه نیستند.')}}
+  finally{if(files.isConnected&&version===generation)files.disabled=!canRecallCurrent(current)}
+ };
+ workflow.append(details);
+}
 function showWorkflow(){
  if(!workflowState)return;
- workflow.hidden=false;workflow.replaceChildren();
+ resetChatCorrectionPanel();resetChatCorrectionPanel=()=>{};workflow.hidden=false;workflow.replaceChildren();
  const title=document.createElement('strong');
  title.textContent=words('Your reviewed workflow','گردش‌کار قابل بازبینی');
  const info=document.createElement('p');info.className='help';
@@ -629,6 +704,7 @@ function showWorkflow(){
   workflow.append(restart);
   appendExperienceReportControls();
   appendChatRecallControls();
+  appendChatCorrectionControls();
   if(workflowState.history.length){
    const forget=document.createElement('button');forget.type='button';forget.className='secondary';forget.dataset.centralForget='true';
    forget.textContent=words('Clear previous review rounds','پاک‌کردن دورهای بازبینی پیشین');
