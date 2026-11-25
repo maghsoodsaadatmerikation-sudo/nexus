@@ -288,7 +288,7 @@ function clearTrainingReview(){
 // Existing project-memory surface: no new top-level navigation, no recall.
 const experienceImportEngine=(()=>{
  /* EXPERIENCE_EDIT_ENGINE */
- return {createArchiveExperienceReview,stageImportedExperience};
+ return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow});
 })();
 function renderExperienceImport(parent,allowed){
  let panel=$('experience-import-panel');
