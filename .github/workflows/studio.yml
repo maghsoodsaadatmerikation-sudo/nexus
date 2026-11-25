@@ -82,6 +82,7 @@ jobs:
           node scripts/test-studio-vault-cancellation.mjs
           node scripts/test-studio-lab.mjs
           node scripts/test-studio-workflow-critique.mjs
+          node scripts/test-studio-audio-job-gate.mjs
       - name: Reject ambiguous JSON fields and clear stale analysis in real downloads
         run: python3 scripts/test-studio-json-keys-browser.py
       - name: Exercise all-missing CSV and TSV records in real downloads
