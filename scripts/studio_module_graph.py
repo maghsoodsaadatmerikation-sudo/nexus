@@ -63,7 +63,7 @@ MODULES = (
     Module("/*STUDIO_ORCHESTRA*/", "studio-orchestra.js", "NexusOrchestra"),
     Module("/*STUDIO_VOCAL_MIX*/", "studio-vocal-mix.js", "NexusVocalMix"),
     Module("/*STUDIO_ORCHESTRA_UI*/", "studio-orchestra-ui.js", "NexusOrchestraUI",
-           ("NexusOrchestra", "NexusVocalMix")),
+           ("NexusOrchestra", "NexusVocalMix", "NexusMusicUI")),
 )
 
 
