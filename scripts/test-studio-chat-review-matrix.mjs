@@ -1,6 +1,7 @@
 // Test-only extraction of exact pure composer helper functions. No browser or production eval.
 import {readFileSync} from 'node:fs';
 import {reviewAssistantWorkflow} from '../web/studio-workflow-review.mjs';
+import {buildChatExperienceReport} from '../web/studio-chat-experience-report.mjs';
 const source=readFileSync(new URL('../web/studio-composer-ui.js',import.meta.url),'utf8');
 const start='function humanCriterion(step){',end='async function showEngineReview(button,notice){';
 if(source.split(start).length!==2||source.split(end).length!==2||source.indexOf(end)<source.indexOf(start))throw Error('chat bridge extraction markers changed');
@@ -139,3 +140,40 @@ function testChatBridge(bridge,review){
 }
 
 console.log('CHAT WORKFLOW REVIEW MATRIX: PASS ('+testChatBridge(bridge,reviewAssistantWorkflow)+' cases)');
+function testExperienceReport(){
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('report fixture '+checks+' '+JSON.stringify({a,b}))};
+ const reject=(fn,msg)=>{checks++;let error;try{fn()}catch(e){error=e}if(error?.message!==msg)throw Error('report rejection '+checks+' '+error)};
+ const req={project_id:'p1',plan_sha256:'a'.repeat(64),session_id:'session-1',correction_code:'fix',criterion_id:'s1',kind:'accept',same_correction_reported:true,complete_relevant_history_reported:true};
+ const on={enabled:true};
+ const rounds=['fail','pass','fail','pass'].map((verdict,i)=>({round:i+1,steps:[{command:'code',criterion:'Returns 42',opened:true,acknowledged:true,observed:'succeeded',verdict},{command:'write',criterion:'Reviewed',opened:true,acknowledged:true,verdict:'pass'}]}));
+ const before=JSON.stringify(rounds);
+ const result=buildChatExperienceReport(rounds,req,on);
+ eq(result.status,'review_only');eq(result.supporting_pair_count,2);
+ eq(result.completion_verified,false);eq(result.execution_authorized,false);eq(result.automatic_application,false);
+ eq(result.report.schema,'nexus.experience-review.v1');eq(result.report.workflow_id,'wf-'+req.plan_sha256);
+ eq(result.report.operation,{kind:'accept',criterion_id:'s1',correction_code:'fix'});
+ eq(result.report.attempts.map(a=>[a.before.scope.run_id,a.after.scope.run_id]),[['session-1-r1','session-1-r2'],['session-1-r3','session-1-r4']]);
+ eq(result.report.attempts.flatMap(a=>[a.before,a.after]).flatMap(r=>r.observations).every(o=>o.kind==='human_review'&&o.project_id==='p1'),true);
+ eq(JSON.stringify(result.report).includes('Returns 42'),false);
+ eq(JSON.stringify(result.report).includes('Reviewed'),false);
+ eq(JSON.stringify(rounds),before);
+ eq(buildChatExperienceReport(rounds,req,on),result);
+ eq(buildChatExperienceReport(rounds,{...req,kind:'refresh'},on).report.operation.kind,'refresh');
+ eq(buildChatExperienceReport(null,null).status,'off');
+ eq(buildChatExperienceReport(null,null,{enabled:true,isolated:true}).status,'isolated');
+ for(const change of [{same_correction_reported:false},{complete_relevant_history_reported:false},{plan_sha256:'bad'},{project_id:''},{session_id:'x'.repeat(49)},{kind:'delete'}])reject(()=>buildChatExperienceReport(rounds,{...req,...change},on),'invalid-report-request');
+ reject(()=>buildChatExperienceReport(rounds,{...req,criterion_id:'s3'},on),'invalid-report-criterion');
+ for(const list of [[],rounds.slice(0,2),rounds.slice(0,3),Array(26).fill(rounds[0])])reject(()=>buildChatExperienceReport(list,req,on),'incomplete-paired-history');
+ for(const changed of [{round:5},{steps:[{...rounds[3].steps[0],criterion:'Changed'},rounds[3].steps[1]]},{steps:[{...rounds[3].steps[0],acknowledged:false},rounds[3].steps[1]]},{steps:[{...rounds[3].steps[0],observed:'started'},rounds[3].steps[1]]}]){
+  reject(()=>buildChatExperienceReport([...rounds.slice(0,3),{...rounds[3],...changed}],req,on),'incomplete-or-incomparable-history');
+ }
+ const bad=JSON.parse(before);bad[3].steps[0].verdict='fail';
+ eq(buildChatExperienceReport(bad,req,on).status,'insufficient_reported_support');
+ const regression=JSON.parse(before);regression[3].steps[1].verdict='fail';
+ eq(buildChatExperienceReport(regression,req,on).report,null);
+ const incomplete=JSON.parse(before);incomplete[2].steps[0].verdict='inconclusive';
+ eq(buildChatExperienceReport(incomplete,req,on).report,null);
+ return checks;
+}
+console.log('CHAT EXPERIENCE REPORT: PASS ('+testExperienceReport()+' checks)');
