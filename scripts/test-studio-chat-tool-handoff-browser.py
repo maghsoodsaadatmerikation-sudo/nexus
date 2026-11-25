@@ -349,6 +349,30 @@ window.addEventListener('load',async()=>{
    receiptWorkflow.querySelector('[data-central-review]').click();
    await wait(()=>receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Central review:'));
    assert(!receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Comparable previous rounds:'),'criterion-change-clears-history');
+   // Two manually assessed failures, without running a tool, must be labelled
+   // as reports and result in an advisory draft rather than execution.
+   for(let round=0;round<2;round++){
+    for(let step=0;step<2;step++){
+     receiptWorkflow.querySelector('li:nth-child('+(step+1)+') button').click();
+     const assessment=receiptWorkflow.querySelector('[data-central-verdict="'+step+'"]');
+     assert(!assessment.disabled,'opened-step-can-be-assessed');
+     assessment.value=step===0?'fail':'pass';
+     assessment.dispatchEvent(new Event('change',{bubbles:true}));
+     receiptWorkflow.querySelectorAll('li button')[1].click();
+    }
+    assert(!receiptWorkflow.querySelector('[data-central-restart]').disabled,'assessed-round-can-be-retained');
+    receiptWorkflow.querySelector('[data-central-restart]').click();
+   }
+   receiptWorkflow.querySelector('[data-central-review]').click();
+   await wait(()=>receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Suggested for next round: before steps 1'));
+   assert(receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Repeated prior failures: s1')&&receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Draft only; not applied.')&&!$('code-consent').checked,'preventive-draft-never-executes');
+   const forget=receiptWorkflow.querySelector('[data-central-forget]');
+   assert(forget&&!forget.disabled,'history-deletion-available');
+   forget.click();
+   assert(!receiptWorkflow.querySelector('[data-central-forget]')&&receiptWorkflow.querySelector('[data-central-criterion="0"]').value==='Different check','history-deletion-preserves-current-criteria');
+   receiptWorkflow.querySelector('[data-central-review]').click();
+   await wait(()=>receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Central review:'));
+   assert(!receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Comparable previous rounds:')&&!receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Suggested for next round:'),'deleted-history-not-recalled');
   }finally{
    URL.createObjectURL=oldCreateURL;HTMLAnchorElement.prototype.click=oldAnchorClick;
   }
