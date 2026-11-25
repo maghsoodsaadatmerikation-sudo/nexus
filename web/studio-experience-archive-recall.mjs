@@ -28,3 +28,28 @@ export function reviewArchivedExperience(validateState,value,session,request,{en
  }
  return {...recalled,...boundary};
 }
+
+// Chat reports are bound to the exact current draft/criteria digest. Do not
+// use arbitrary workflow labels, changed criteria or a report's own scope as
+// the source of current observations. The host computes the digest locally.
+export function prepareChatArchiveRecall(raw,{projectId,threadId,sessionRevision,sessionId,round,planHash,steps}={}){
+ const id=x=>typeof x==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(x);
+ const exact=(x,keys)=>x&&typeof x==='object'&&!Array.isArray(x)&&Object.keys(x).sort().join('|')===keys;
+ if(typeof raw!=='string'||raw.length<1||raw.length>65536||!id(projectId)||!id(threadId)||!id(sessionId)||sessionId.length>48||!Number.isSafeInteger(sessionRevision)||sessionRevision<0||!Number.isSafeInteger(round)||round<1||round>100||typeof planHash!=='string'||!/^[a-f0-9]{64}$/.test(planHash)||!Array.isArray(steps)||steps.length<2||steps.length>6)throw Error('invalid-chat-recall-input');
+ const report=JSON.parse(raw),workflow_id='wf-'+planHash;
+ if(!exact(report,'attempts|criteria|operation|schema|workflow_id')||report.schema!=='nexus.experience-review.v1'||report.workflow_id!==workflow_id||!exact(report.operation,'correction_code|criterion_id|kind')||!['accept','refresh'].includes(report.operation.kind)||!id(report.operation.correction_code)||!id(report.operation.criterion_id)||!Array.isArray(report.attempts)||report.attempts.length<2||report.attempts.length>12)throw Error('invalid-chat-recall-report');
+ const criteria=steps.map((s,i)=>{
+  if(!s||typeof s.criterion!=='string'||!s.criterion.trim()||s.criterion.trim().length>260||s.opened!==true||s.acknowledged!==true||s.observed==='started'||!['pass','fail','inconclusive'].includes(s.verdict))throw Error('incomplete-chat-recall-round');
+  return {id:'s'+(i+1),required:true,evidence_kind:'human_review'};
+ });
+ if(!Array.isArray(report.criteria)||report.criteria.length!==criteria.length||criteria.some((c,i)=>!exact(report.criteria[i],'evidence_kind|id|required')||Object.keys(c).some(k=>report.criteria[i][k]!==c[k]))||!criteria.some(c=>c.id===report.operation.criterion_id))throw Error('chat-recall-criteria-mismatch');
+ for(const attempt of report.attempts){
+  if(!exact(attempt,'after|before|correction_code')||attempt.correction_code!==report.operation.correction_code)throw Error('chat-recall-correction-mismatch');
+  for(const run of [attempt.before,attempt.after]){
+   if(!exact(run,'observations|scope')||!exact(run.scope,'plan_sha256|project_id|run_id|workflow_id')||run.scope.project_id!==projectId||run.scope.workflow_id!==workflow_id||run.scope.plan_sha256!==planHash||!Array.isArray(run.observations)||run.observations.length!==criteria.length||run.observations.some(o=>!exact(o,'criterion_id|evidence_id|kind|plan_sha256|project_id|result|run_id|workflow_id')||o.kind!=='human_review'))throw Error('chat-recall-evidence-scope');
+  }
+ }
+ const scope={project_id:projectId,workflow_id,run_id:sessionId+'-r'+round,plan_sha256:planHash};
+ const observations=steps.map((s,i)=>({...scope,criterion_id:criteria[i].id,evidence_id:scope.run_id+'-h'+(i+1),kind:'human_review',result:s.verdict}));
+ return {scope,observations,criteria,attempts:report.attempts,threadId,sessionRevision};
+}
