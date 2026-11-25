@@ -34,6 +34,7 @@ function buttons(){
  $('orchestra-dry-download').disabled=rendering||!dryBytes;
  $('orchestra-together').disabled=!wav||!dryBytes||rendering;
  $('orchestra-mix').disabled=rendering||gate.audioBusy()||!aligned();
+ for(const id of ['orchestra-render','orchestra-mix','orchestra-dry-file'])$(id).title=gate.resourceMessage();
  $('orchestra-mix-download').disabled=rendering||!mixWav;
  for(const name of ['orchestra-offset','orchestra-dry-gain','orchestra-backing-gain'])$(name).disabled=rendering;
  document.dispatchEvent(new Event('nexus-studio-media-state'));
@@ -110,8 +111,8 @@ $('orchestra-wav').addEventListener('click',()=>{
 });
 $('orchestra-render').addEventListener('click',async()=>{
  if(!score||rendering)return;
- const release=gate.acquireAudioJob();
- if(!release){status('Another audio operation is still active.','پردازش صوتی دیگری هنوز فعال است.');return}
+ const release=gate.acquireAudioJob('orchestra');
+ if(!release){$('orchestra-status').textContent=gate.resourceMessage();return}
  const id=++ticket,source=score;
  try{
   rendering=true;clearWav();buttons();
@@ -164,7 +165,7 @@ $('orchestra-dry-file').addEventListener('change',async()=>{
  if(rendering||gate.audioBusy()){$('orchestra-dry-file').value='';return}
  const file=$('orchestra-dry-file').files[0];
  if(!file){clearDry();return}
- const release=gate.acquireAudioJob();
+ const release=gate.acquireAudioJob('vocal');
  if(!release){$('orchestra-dry-file').value='';return}
  let id,voiceGeneration;
  const current=()=>id===ticket&&voiceGeneration===dryEpoch;
@@ -225,8 +226,8 @@ for(const id of ['orchestra-offset','orchestra-dry-gain','orchestra-backing-gain
 $('orchestra-mix').addEventListener('click',async()=>{
  if(rendering||!aligned())return;
  // Clicking is explicit authority to mix two local, user-selected sounds.
- const release=gate.acquireAudioJob();
- if(!release){status('Another audio operation is still active.','پردازش صوتی دیگری هنوز فعال است.');return}
+ const release=gate.acquireAudioJob('mix');
+ if(!release){$('orchestra-status').textContent=gate.resourceMessage();return}
  const id=++ticket,sourceDry=dryBytes,sourceBacking=wav;
  try{
   rendering=true;mixing=true;clearMixed();buttons();
