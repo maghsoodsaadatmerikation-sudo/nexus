@@ -4,7 +4,7 @@ const gate=window.NexusMusicUI;
 const syncLoad=()=>{
  const blocked=engine.state==='idle'&&(!gate||gate.audioBusy());
  $('device-load').disabled=engine.state!=='idle'||blocked;
- $('device-load').title=blocked?text('Finish or cancel the active local job first.','ابتدا پردازش محلی فعال را پایان بده یا لغو کن.'):'';
+ $('device-load').title=blocked?(gate?.resourceMessage?.()||text('Finish or cancel the active local job first.','ابتدا پردازش محلی فعال را پایان بده یا لغو کن.')):'';
 };
 const engine=new DeviceEngine({workerURL:new URL('./device-worker.js',import.meta.url),acquireResidency:()=>gate?.acquireAudioJob('model')??null,onStatus:data=>{
  if(data.type==='phase')$('device-state').textContent=text('Loading local runtime: ','بارگذاری موتور محلی: ')+data.stage;
@@ -26,6 +26,10 @@ $('model-engine').onchange=()=>{
 };
 $('device-load').onclick=async()=>{
  if(!$('device-consent').checked){$('device-state').textContent=text('Choose the download consent first.','ابتدا اجازهٔ دانلود را انتخاب کن.');return}
+ if(engine.state!=='idle'||!gate||gate.audioBusy()){
+  $('device-state').textContent=gate?.resourceMessage?.()||recovery('local-resource-busy');
+  syncLoad();return;
+ }
  window.NexusStudioUI.resetModel();$('device-load').disabled=true;$('device-state').textContent=text('Loading verified public model files…','بارگذاری فایل‌های عمومیِ بررسی‌شدهٔ مدل…');
  try{await engine.load({consent:true})}catch(error){$('device-state').textContent=recovery(error.message)}finally{syncLoad()}
 };
