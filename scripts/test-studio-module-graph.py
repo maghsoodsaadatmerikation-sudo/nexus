@@ -26,11 +26,11 @@ class StudioModuleGraphTests(unittest.TestCase):
                 bundle = (ROOT / relative).read_text()
                 for name in ("evaluateWorkflowOutcome", "reviewCorrectionExperience",
                              "reviewAssistantWorkflow", "createArchiveExperienceReview",
-                             "stageImportedExperience"):
+                             "stageImportedExperience", "buildChatExperienceReport"):
                     self.assertEqual(bundle.count("function " + name + "("), 1)
-                self.assertEqual(bundle.count("const {reviewAssistantWorkflow}=experienceImportEngine;"), 1)
+                self.assertEqual(bundle.count("const {reviewAssistantWorkflow,buildChatExperienceReport}=experienceImportEngine;"), 1)
                 self.assertLess(bundle.index("const experienceImportEngine=(()=>{"),
-                                bundle.index("const {reviewAssistantWorkflow}=experienceImportEngine;"))
+                                bundle.index("const {reviewAssistantWorkflow,buildChatExperienceReport}=experienceImportEngine;"))
                 self.assertNotIn("/* EXPERIENCE_EDIT_ENGINE */", bundle)
                 self.assertNotIn("/* WORKFLOW_REVIEW_ENGINE */", bundle)
 
