@@ -286,6 +286,43 @@ function clearTrainingReview(){
  $('training-preview').textContent='';$('training-preview').hidden=true;$('training-download').hidden=true;
 }
 // Existing project-memory surface: no new top-level navigation, no recall.
+const experienceImportEngine=(()=>{
+ /* EXPERIENCE_EDIT_ENGINE */
+ return {createArchiveExperienceReview,stageImportedExperience};
+})();
+function renderExperienceImport(parent,allowed){
+ let panel=$('experience-import-panel');
+ if(!panel){panel=document.createElement('details');panel.id='experience-import-panel';parent.append(panel)}
+ panel.replaceChildren();panel.hidden=!allowed;
+ if(!allowed){panel.open=false;return}
+ const words=(en,fa)=>language==='fa'?fa:en;
+ panel.append(el('summary',words('Import a reviewed correction report','ورود گزارش اصلاح بازبینی‌شده')));
+ const help=el('p',words('Local JSON, up to 64 KiB. Requires at least two distinct before/after reports for the same correction. Reports are not independently verified. Only approved metadata is retained; Save session separately. Project ID: ','فایل JSON محلی، حداکثر ۶۴ کیبی‌بایت. حداقل دو گزارش متمایز قبل و بعد برای همان اصلاح لازم است. گزارش‌ها مستقلاً تأیید نشده‌اند. فقط اطلاعات تأییدشده نگهداری می‌شود؛ نشست را جدا ذخیره کنید. شناسهٔ پروژه: ')+projectId);
+ help.className='help';panel.append(help);
+ const label=el('label',words('Correction report (.json)','گزارش اصلاح (.json)'));
+ const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.id='experience-import-file';label.append(input);panel.append(label);
+ const notice=el('p','');notice.setAttribute('role','status');panel.append(notice);
+ const captured={projectId,threadId,revision,archiveRevision:vault.archiveRevision};
+ const session=()=>({enabled:true,vaultUnlocked:vault.unlocked,busy,isolated:!!chat()?.isolated,projectId,threadId,revision});
+ const current=()=>input.isConnected&&!busy&&vault.unlocked&&captured.archiveRevision===vault.archiveRevision&&captured.projectId===projectId&&captured.threadId===threadId&&captured.revision===revision&&!!chat()&&!chat().temporary&&!chat().isolated&&!chat().archived;
+ input.onchange=async()=>{
+  const file=input.files?.[0];input.value='';
+  if(!file||!current())return;
+  if(file.size<1||file.size>65536||!/\.json$/i.test(file.name)){notice.textContent=words('Invalid report file.','فایل گزارش نامعتبر است.');return}
+  const adapter=experienceImportEngine.createArchiveExperienceReview(S.state);
+  input.disabled=true;
+  try{
+   const raw=await file.text();if(!current())return;
+   const review=experienceImportEngine.stageImportedExperience(adapter,data,session(),raw);
+   if(!confirm(words('Review '+review.kind+' for workflow / criterion / correction: ','بازبینی عملیات '+review.kind+' برای گردش‌کار / معیار / اصلاح: ')+[review.workflow_id,review.criterion_id,review.correction_code].join(' / ')+words('. Retain metadata in this session only? Reports are not independent proof.','. فقط اطلاعات بازبینی در نشست نگهداری شود؟ گزارش‌ها مدرک مستقل نیستند.'))||!current())return;
+   mutate(next=>{
+    const result=adapter.approve(review.ticket,next,session(),{approved:true});
+    projectIn(next).experiences=projectIn(result.state).experiences;
+   });
+  }catch{if(current())notice.textContent=words('Report rejected; no experience changed.','گزارش رد شد؛ تجربه‌ای تغییر نکرد.')}
+  finally{adapter.invalidate();if(input.isConnected)input.disabled=false}
+ };
+}
 let experiencePanelStamp='';
 function renderStoredExperiencePanel(){
  const parent=$('profile-card');
@@ -295,6 +332,7 @@ function renderStoredExperiencePanel(){
  const stamp=JSON.stringify([language,projectId,threadId,revision,vault.archiveRevision,allowed,entries]);
  if(panel&&stamp===experiencePanelStamp)return;
  experiencePanelStamp=stamp;
+ renderExperienceImport(parent,allowed);
  if(!panel){panel=document.createElement('details');panel.id='stored-experience-panel';parent.append(panel)}
  panel.replaceChildren();panel.hidden=!allowed||!entries.some(s=>s.entries.length);
  if(panel.hidden){panel.open=false;return}
