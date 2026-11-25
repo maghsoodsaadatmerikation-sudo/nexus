@@ -4,9 +4,9 @@ import {reviewAssistantWorkflow} from '../web/studio-workflow-review.mjs';
 const source=readFileSync(new URL('../web/studio-composer-ui.js',import.meta.url),'utf8');
 const start='function humanCriterion(step){',end='async function showEngineReview(button,notice){';
 if(source.split(start).length!==2||source.split(end).length!==2||source.indexOf(end)<source.indexOf(start))throw Error('chat bridge extraction markers changed');
-const bridge=new Function(source.slice(source.indexOf(start),source.indexOf(end))+'\nreturn {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound};')();
+const bridge=new Function(source.slice(source.indexOf(start),source.indexOf(end))+'\nreturn {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory};')();
 function testChatBridge(bridge,review){
- const {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound}=bridge;
+ const {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory}=bridge;
  let cases=0;
  const eq=(actual,expected,msg)=>{if(JSON.stringify(actual)!==JSON.stringify(expected))throw Error(msg+' '+JSON.stringify({actual,expected}));};
  const check=(label,fn)=>{try{fn();cases++}catch(e){throw Error(label+': '+e.message)}};
@@ -66,6 +66,32 @@ function testChatBridge(bridge,review){
   });
  }
  check('round limit',()=>{let rejected=false;try{restartReviewedRound({round:100,index:1,steps:[{criterion:'x',opened:true,verdict:'pass'}]})}catch(e){rejected=e.message==='review-round-unavailable'}eq(rejected,true,'round cap')});
+ check('consented comparable history',()=>{
+  const step={result:{route:['code']},criterion:'test',opened:true,acknowledged:true,observed:'succeeded',verdict:'fail',runId:1};
+  const first={draft:'test',round:1,index:1,steps:[step],history:[]};
+  const second=restartReviewedRound(first);second.steps=[{...step,runId:2}];second.index=1;
+  const third=restartReviewedRound(second);
+  const snap=reviewSnapshot(third);
+  const hist=comparableFailureHistory(third,hash,snap);
+  eq(hist.length,2,'retained rounds');
+  eq(hist.map(r=>r.scope.run_id),['review-1','review-2'],'distinct runs');
+  const cur=engineInput(third.draft,snap,hash,third.round);
+  cur.failure_history=hist;
+  eq(review(cur,{enabled:true,experienceEnabled:true}).failure_patterns.patterns[0].historical_reported_failure,2,'repeated failure');
+  eq(review(cur,{enabled:true}).failure_patterns.status,'off','disabled history');
+  eq(comparableFailureHistory(third,hash,[{...snap[0],criterion:'different'}]),[],'changed criterion');
+  eq(comparableFailureHistory(third,hash,[{...snap[0],command:'research'}]),[],'changed command');
+  eq(comparableFailureHistory({...third,history:[...third.history,{round:3,steps:snap}]},hash,snap).length,2,'exclude current round');
+ });
+ check('bounded history',()=>{
+  const step={result:{route:['code']},criterion:'test',opened:true,observed:'succeeded',verdict:'fail'};
+  const current={round:32,index:1,steps:[step],history:Array.from({length:31},(_,i)=>({round:i+1,steps:reviewSnapshot({steps:[step]})}))};
+  const next=restartReviewedRound(current);
+  eq(next.history.length,30,'bounded');
+  eq(next.history[0].round,3,'oldest removed');
+  eq(next.history[29].round,32,'latest retained');
+  eq(current.history.length,31,'input unchanged');
+ });
  check('isolation',()=>{eq(review(null,{enabled:true,isolated:true}).status,'isolated','isolated');eq(review(null).status,'off','disabled')});
  return cases;
 }
