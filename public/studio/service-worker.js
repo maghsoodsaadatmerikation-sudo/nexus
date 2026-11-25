@@ -1,9 +1,9 @@
 /* Reviewed public Studio application code only; model bytes use a separate opt-in cache. */
 'use strict';
-const EXPECTED_SHA256='0fac078a6698481cb8f289eaa4a91a08c8da7fc844ac9ac3d0c28044b7c2926d';
-const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'fade7b977d652f1d';
+const EXPECTED_SHA256='db7aef5d0ffb20883fa31640c01103c754a1878efb8724c9edbdef3c0b58ef59';
+const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'6ccf04aaaae2e25c';
 const ENTRY=new URL('./',self.location.href).href;
-const HTML={url:ENTRY,bytes:624352,sha256:EXPECTED_SHA256,kind:'html'};
+const HTML={url:ENTRY,bytes:624581,sha256:EXPECTED_SHA256,kind:'html'};
 const CODE=[{"path":"device/device-engine.js","bytes":5332,"sha256":"aa7efe4d708f854ca35ff863edb602da7a9fb164d62e427c6521ddbd957e9175","kind":"javascript"},{"path":"device/device-worker.js","bytes":7863,"sha256":"a2b396fb0fe7a4411ba8a4e678b6c4f79bfc0eed673e1712f445baa8a9c60e85","kind":"javascript"},{"path":"device/device-ui.js","bytes":8683,"sha256":"08343f58bb01d1f26d37f55e1d3842e7f2fd22a02b23f8cfa4b7b7a2583192cd","kind":"javascript"},{"path":"device/model-manifest.json","bytes":3196,"sha256":"49353c4a16f7912fd4251b6d048923fd41d2819f9fab2faf5bfbccab9a7e3983","kind":"json"},{"path":"pdf/studio-pdf.mjs","bytes":4866,"sha256":"d506e6a2cf1ff9f5ee7849b82d53483980d407af40f0eadba07faa13184a3552","kind":"javascript"},{"path":"pdf/pdf.min.mjs","bytes":474284,"sha256":"3a88402882cfa3e7e72c2c9b5149f52f0f88baf1c5b62aa11a41abdbc2072440","kind":"javascript"},{"path":"pdf/pdf.worker.min.mjs","bytes":1271915,"sha256":"1e64c8240e54735ec5913b37acd5134747799cb8c6bb3777c70adbc01232d2aa","kind":"javascript"},{"path":"vendor/astronomy-2.1.19.min.js","bytes":116424,"sha256":"f41139a87941ea017ab902b954c9389fa27ea72083d7fab4971756d7769d14e6","kind":"javascript"},{"path":"studio-orchestra.js","bytes":27347,"sha256":"2a24fed79f74ef7a9e818e4b565895559bfc885dbfc554a63a7b1659ccec772e","kind":"javascript"}].map(a=>({...a,url:new URL(a.path,ENTRY).href}));
 async function verified(response,asset=HTML){
  if(!response||response.status!==200||response.redirected||response.type!=='basic')return false;
