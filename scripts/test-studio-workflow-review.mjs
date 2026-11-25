@@ -36,6 +36,11 @@ function testUnified(review){
  reject(()=>review({...input,scope:{...scope,plan_sha256:'bad'}},on),'invalid-review-scope');
  reject(()=>review({...bad,experience:{...experience,revision:0}},recall),'recall-scope-mismatch');
  reject(()=>review({...input,prior_run:{scope,observations:input.evidence}},on),'comparison-scope-mismatch');
+ reject(()=>review({...input,evidence:[{...input.evidence[0],workflow_id:'other'}]},on),'observation-scope-mismatch');
+ const {workflow_id:ignored,...unscopedReceipt}=input.evidence[0];
+ reject(()=>review({...input,evidence:[unscopedReceipt]},on),'observation-scope-mismatch');
+ const foreignExperience={...experience,attempts:attempts.map((a,i)=>i===0?{...a,before:{...a.before,observations:[{...a.before.observations[0],workflow_id:'other'}]}}:a)};
+ reject(()=>review({...bad,experience:foreignExperience},recall),'observation-scope-mismatch');
  reject(()=>review(input,{enabled:true,experienceEnabled:1}),'invalid-options');
  eq(JSON.stringify(x).includes('current-e'),false);
  eq(input.step_observations.length,2);
