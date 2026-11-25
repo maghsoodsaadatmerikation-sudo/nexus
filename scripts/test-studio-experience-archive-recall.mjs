@@ -75,6 +75,17 @@ function chatRecallFixtures(){
  const value=S.state({schema:S.SCHEMA,projects:[{id:'p1',title:'Test',instructions:'',memories:[],threads:[{id:'t1',title:'Review',nodes:[],head:null}],sources:[],documents:[],experiences:[{project_id:'p1',workflow_id,revision:1,entries:[{criterion_id:'s1',correction_code:'fix',status:'active',supporting_pair_count:2}]}]}]});
  const session={enabled:true,vaultUnlocked:true,busy:false,isolated:false,projectId:'p1',threadId:'t1',revision:3};
  eq(reviewArchivedExperience(S.state,value,session,{...out,snapshotRevision:1},{enabled:true}).matches.map(m=>m.correction_code),['fix']);
+ // A single report explicitly selects one criterion, even if its historical
+ // attempts also happen to support a different archived criterion.
+ const both=S.copy(report);
+ for(const attempt of both.attempts)attempt.before.observations[1].result='fail';
+ const bothValue=S.copy(value);
+ bothValue.projects[0].experiences[0].entries.push({criterion_id:'s2',correction_code:'fix',status:'active',supporting_pair_count:2});
+ const bothFail={...args,steps:steps.map(s=>({...s,verdict:'fail'}))};
+ const scoped=(report,args)=>reviewArchivedExperience(S.state,bothValue,session,{...call(report,args),snapshotRevision:1},{enabled:true});
+ eq(scoped(both,bothFail).matches.map(m=>m.criterion_id),['s1']);
+ eq(scoped({...both,operation:{...both.operation,criterion_id:'s2'}},bothFail).matches.map(m=>m.criterion_id),['s2']);
+ eq(scoped(both,{...args,steps:[{...steps[0],verdict:'pass'},{...steps[1],verdict:'fail'}]}).status,'no_reported_failure');
  return checks;
 }
 console.log('CHAT ARCHIVE RECALL: PASS ('+chatRecallFixtures()+' checks)');
