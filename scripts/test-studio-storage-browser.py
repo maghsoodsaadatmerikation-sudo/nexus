@@ -103,6 +103,21 @@ window.addEventListener('load',async()=>{
   assert(!JSON.stringify(NexusStudioUI.snapshot()).includes('private-evidence'),'import-retains-metadata-not-raw-evidence');
   $('save').click();await wait(()=>$('status').textContent.includes('encrypted data')&&!$('save').disabled);
   assert((await S.decrypt(await store.read(),pass)).data.projects[0].experiences[0].entries[0].correction_code==='new_reviewed_fix','explicit-save-persists-import');
+  // Direct handoff uses the same validator; explicit approval and separate save.
+  const directReport=JSON.parse(JSON.stringify(report));
+  directReport.operation.correction_code='direct_fix';
+  directReport.attempts.forEach(a=>a.correction_code='direct_fix');
+  const selected=NexusStudioUI.selection(),beforeDirect=await store.read();
+  window.confirm=()=>false;
+  assert(!retainChatExperienceReport(directReport,selected),'direct-handoff-declined');
+  assert(await store.read()===beforeDirect,'declined-direct-handoff-preserves-archive');
+  window.confirm=()=>true;
+  assert(!retainChatExperienceReport(directReport,{...selected,revision:selected.revision+1}),'stale-direct-handoff-refused');
+  assert(retainChatExperienceReport(directReport,selected),'direct-handoff-approved');
+  assert(NexusStudioUI.snapshot().projects[0].experiences[0].entries.some(e=>e.correction_code==='direct_fix'),'direct-handoff-retains-metadata');
+  assert(await store.read()===beforeDirect,'direct-handoff-no-autosave');
+  $('save').click();await wait(()=>$('status').textContent.includes('encrypted data')&&!$('save').disabled);
+  assert((await S.decrypt(await store.read(),pass)).data.projects[0].experiences[0].entries.some(e=>e.correction_code==='direct_fix'),'direct-handoff-explicit-save');
   $('history-days').value='0';$('history-days').dispatchEvent(new Event('change',{bubbles:true}));
   $('save').click();await wait(()=>$('status').textContent.includes('encrypted data')&&!$('save').disabled);
   const off=(await S.decrypt(await store.read(),pass)).data;
