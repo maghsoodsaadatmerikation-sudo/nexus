@@ -84,6 +84,34 @@ function testArchiveEdit(S){
  return checks;
 }
 console.log('EXPERIENCE ARCHIVE EDIT: PASS ('+testArchiveEdit(S)+' checks)');
+function testStoredRemoval(S){
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('stored removal fixture '+checks)};
+ const reject=(fn,msg)=>{checks++;let error;try{fn()}catch(e){error=e}if(!error||!String(error.message).includes(msg))throw Error('stored removal rejection '+checks+' '+error)};
+ const entry={correction_code:'fix',criterion_id:'s1',status:'active',supporting_pair_count:2};
+ const snapshot={project_id:'p1',workflow_id:'w1',revision:1,entries:[entry]};
+ const project={id:'p1',title:'Test',instructions:'',memories:['unchanged'],threads:[{id:'t1',title:'Review',nodes:[],head:null}],sources:[],documents:[],experiences:[snapshot]};
+ const value=S.state({schema:S.SCHEMA,projects:[project]});
+ const args={projectId:'p1',threadId:'t1',workflowId:'w1',expectedRevision:1,criterionId:'s1',correctionCode:'fix',kind:'revoke'};
+ const original=JSON.stringify(value);
+ const revoked=S.reviewStoredExperienceRemoval(value,args);
+ eq(revoked.projects[0].experiences[0].entries[0].status,'revoked');eq(revoked.projects[0].experiences[0].revision,2);
+ eq(revoked.projects[0].memories,['unchanged']);eq(JSON.stringify(value),original);
+ const deleted=S.reviewStoredExperienceRemoval(revoked,{...args,expectedRevision:2,kind:'delete'});
+ eq(deleted.projects[0].experiences[0].entries,[]);eq(deleted.projects[0].experiences[0].revision,3);
+ reject(()=>S.reviewStoredExperienceRemoval(revoked,args),'stale-experience-removal');
+ reject(()=>S.reviewStoredExperienceRemoval(revoked,{...args,expectedRevision:2}),'experience-already-revoked');
+ reject(()=>S.reviewStoredExperienceRemoval(value,{...args,kind:'accept'}),'experience-removal-kind');
+ reject(()=>S.reviewStoredExperienceRemoval(value,{...args,correctionCode:'other'}),'experience-not-found');
+ reject(()=>S.reviewStoredExperienceRemoval(value,{...args,workflowId:'other'}),'stale-experience-removal');
+ reject(()=>S.reviewStoredExperienceRemoval(value,{...args,projectId:'other'}),'experience-removal-scope');
+ reject(()=>S.reviewStoredExperienceRemoval(value,{...args,threadId:'other'}),'experience-removal-scope');
+ for(const flag of ['temporary','isolated','archived']){const altered=S.copy(value);altered.projects[0].threads[0][flag]=true;reject(()=>S.reviewStoredExperienceRemoval(altered,args),'experience-removal-scope')}
+ const capped=S.copy(value);capped.projects[0].experiences[0].revision=Number.MAX_SAFE_INTEGER-1;
+ reject(()=>S.reviewStoredExperienceRemoval(capped,{...args,expectedRevision:Number.MAX_SAFE_INTEGER-1}),'stale-experience-removal');
+ return checks;
+}
+console.log('STORED EXPERIENCE REMOVAL: PASS ('+testStoredRemoval(S)+' checks)');
 
 // Use the existing real WebCrypto vault rather than a second key or store.
 class Store{raw=null;async read(){return this.raw}async commit(expected,raw,guard){if(!guard())throw Error('locked');if((this.raw?JSON.parse(this.raw).revision:null)!==expected)throw Error('conflict');this.raw=raw}}
