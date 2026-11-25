@@ -288,8 +288,26 @@ function clearTrainingReview(){
 // Existing project-memory surface: no new top-level navigation, no recall.
 const experienceImportEngine=(()=>{
  /* EXPERIENCE_EDIT_ENGINE */
- return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow});
+ return Object.freeze({createArchiveExperienceReview,stageImportedExperience,reviewAssistantWorkflow,buildChatExperienceReport});
 })();
+// Direct chat handoff uses the same reviewed import adapter, never an implicit save.
+function retainChatExperienceReport(report,selected){
+ const current=()=>!!selected&&selected.projectId===projectId&&selected.threadId===threadId&&selected.revision===revision&&vault.unlocked&&!busy&&!!chat()&&!chat().temporary&&!chat().isolated&&!chat().archived;
+ if(!current())return false;
+ const archiveVersion=vault.archiveRevision;
+ const session=()=>({enabled:true,vaultUnlocked:vault.unlocked,busy,isolated:!!chat()?.isolated,projectId,threadId,revision});
+ const adapter=experienceImportEngine.createArchiveExperienceReview(S.state);
+ try{
+  const raw=JSON.stringify(report);
+  const review=experienceImportEngine.stageImportedExperience(adapter,data,session(),raw);
+  if(!confirm((language==='fa'?'فقط اطلاعات بازبینی در نشست فعلی ثبت شود؟ برای ثبت پایدار، نشست را جدا ذخیره کنید. گزارش مدرک مستقل نیست: ':'Retain reviewed metadata in this session only? Save session separately. Reports are not independent proof: ')+[review.kind,review.workflow_id,review.criterion_id,review.correction_code].join(' / ')))return false;
+  if(!current()||vault.archiveRevision!==archiveVersion)return false;
+  return mutate(next=>{
+   const result=adapter.approve(review.ticket,next,session(),{approved:true});
+   projectIn(next).experiences=projectIn(result.state).experiences;
+  });
+ }catch{return false}finally{adapter.invalidate()}
+}
 function renderExperienceImport(parent,allowed){
  let panel=$('experience-import-panel');
  if(!panel){panel=document.createElement('details');panel.id='experience-import-panel';parent.append(panel)}
