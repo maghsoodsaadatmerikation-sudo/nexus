@@ -281,7 +281,7 @@ function openReviewedSurface(result,message){
  return true;
 }
 
-/* WORKFLOW_REVIEW_ENGINE */
+const {reviewAssistantWorkflow}=experienceImportEngine;
 function humanCriterion(step){
  const criterion=typeof step.criterion==='string'?step.criterion.trim():'';
  const valid=criterion.length>0&&criterion.length<=260;
