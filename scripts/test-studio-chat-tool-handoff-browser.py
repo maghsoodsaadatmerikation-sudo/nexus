@@ -341,6 +341,14 @@ window.addEventListener('load',async()=>{
    receiptWorkflow.querySelector('[data-central-restart]').click();
    assert(receiptWorkflow.querySelector('[data-central-verdict="0"]').value===''&&receiptWorkflow.querySelector('[data-central-verdict="0"]').disabled&&!receiptWorkflow.textContent.includes('Local UI reported success'),'restart-clears-receipts-and-verdicts');
    assert(receiptWorkflow.querySelector('[data-central-criterion="0"]').value==='Returns 42','restart-keeps-reviewed-criteria');
+   receiptWorkflow.querySelector('[data-central-review]').click();
+   await wait(()=>receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Comparable previous rounds: 1'));
+   assert(receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Repeated prior failures: 0'),'passing-history-does-not-invent-repeated-failure');
+   const revisedCriterion=receiptWorkflow.querySelector('[data-central-criterion="0"]');
+   revisedCriterion.value='Different check';revisedCriterion.dispatchEvent(new Event('input',{bubbles:true}));
+   receiptWorkflow.querySelector('[data-central-review]').click();
+   await wait(()=>receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Central review:'));
+   assert(!receiptWorkflow.querySelector('[data-central-result]').textContent.includes('Comparable previous rounds:'),'criterion-change-clears-history');
   }finally{
    URL.createObjectURL=oldCreateURL;HTMLAnchorElement.prototype.click=oldAnchorClick;
   }
