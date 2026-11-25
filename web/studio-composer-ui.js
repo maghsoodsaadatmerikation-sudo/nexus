@@ -281,7 +281,7 @@ function openReviewedSurface(result,message){
  return true;
 }
 
-const {reviewAssistantWorkflow}=experienceImportEngine;
+const {reviewAssistantWorkflow,buildChatExperienceReport}=experienceImportEngine;
 function humanCriterion(step){
  const criterion=typeof step.criterion==='string'?step.criterion.trim():'';
  const valid=criterion.length>0&&criterion.length<=260;
@@ -311,8 +311,45 @@ function canCompareRound(current){
 function restartReviewedRound(current){
  if(!canCompareRound(current)||current.round>=100)throw Error('review-round-unavailable');
  const prior={round:current.round,steps:reviewSnapshot(current)};
- return {...current,round:current.round+1,epoch:0,baseline:prior,index:0,opened:false,
+ return {...current,round:current.round+1,epoch:0,baseline:prior,history:[...(current.history||[]),prior].slice(-30),index:0,opened:false,
   steps:current.steps.map(s=>({...s,opened:false,acknowledged:false,runId:null,observed:null,verdict:null}))};
+}
+// Forget only retained prior rounds; preserve the current review and invalidate in-flight results.
+function forgetReviewedHistory(current){
+ return {...current,epoch:current.epoch+1,baseline:null,history:[]};
+}
+// Retain only comparable, completed rounds in the current workflow tab.
+function comparableFailureHistory(current,hash,snapshot){
+ const signature=steps=>JSON.stringify(steps.map(s=>[s.command,humanCriterion(s).criterion]));
+ const expected=signature(snapshot);
+ return (current.history||[]).filter(r=>r.round<current.round&&signature(r.steps)===expected&&r.steps.every(s=>humanCriterion(s).verdict!==null)).map(r=>{
+  const previous=engineInput(current.draft,r.steps,hash,r.round);
+  return {scope:previous.scope,observations:previous.evidence};
+ });
+}
+// A proposed review graph only. Never mutate or execute the current workflow.
+function adaptiveChatDraft(input,result){
+ const recurrent=new Set((result.failure_patterns?.patterns||[]).filter(p=>p.historical_reported_failure>=2).map(p=>p.criterion_id));
+ if(!recurrent.size)return null;
+ const steps=[],checkpoints=[];
+ for(const step of input.plan.steps){
+  const copy={...step,needs:[...step.needs]};
+  if(recurrent.has(step.id)){
+   const check='pre-'+step.id;
+   steps.push({id:check,needs:[...step.needs],effect:'human_review',success_criteria:'Before starting, review the prior failure and agree on a verification method: '+step.success_criteria});
+   copy.needs.push(check);
+   checkpoints.push({criterion_id:step.id,check_step_id:check,protected_step_ids:[step.id]});
+  }
+  steps.push(copy);
+ }
+ if(steps.length>12)return null;
+ return {plan:{goal:'Draft preventive review of next chat workflow',steps},checkpoints};
+}
+function completeReportRounds(current){
+ if(!canCompareRound(current)||current.round<4||current.round>24||current.round%2||
+    !Array.isArray(current.history)||current.history.length!==current.round-1||
+    current.history.some((r,i)=>r.round!==i+1))return null;
+ return [...current.history,{round:current.round,steps:reviewSnapshot(current)}];
 }
 async function showEngineReview(button,notice){
  const current=workflowState,state=window.NexusStudioUI.uiStatus();
@@ -329,7 +366,18 @@ async function showEngineReview(button,notice){
    const previous=engineInput(draft,baseline.steps,hash,baseline.round);
    input.prior_run={scope:previous.scope,observations:previous.evidence};
   }
-  const result=reviewAssistantWorkflow(input,{enabled:true});
+  const history=comparableFailureHistory(current,hash,JSON.parse(captured));
+  if(history.length)input.failure_history=history;
+  let result=reviewAssistantWorkflow(input,{enabled:true,experienceEnabled:history.length>0});
+  const proposal=adaptiveChatDraft(input,result);
+  if(proposal){
+   const proposalHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(proposal.plan)))),b=>b.toString(16).padStart(2,'0')).join('');
+   if(workflowState!==current||!validWorkflow()||window.NexusStudioUI.uiStatus().isolated||epoch!==current.epoch||captured!==snapshot()||!notice.isConnected)return;
+   input.adaptive_plan={scope:{...input.scope,run_id:'draft-'+current.round,plan_sha256:proposalHash},...proposal};
+   result=reviewAssistantWorkflow(input,{enabled:true,experienceEnabled:true});
+  }
+  const preventive=result.adaptive_plan?.findings.filter(f=>f.status==='declared_checkpoint_present').map(f=>f.criterion_id)||[];
+  const recurrent=result.failure_patterns?.patterns.filter(p=>p.historical_reported_failure>=2).map(p=>p.criterion_id)||[];
   const reviewed=result.outcome.items.filter(i=>i.disposition==='reported_pass').length;
   const failed=result.outcome.items.filter(i=>i.disposition==='reported_failure').length;
   notice.textContent=words('Central review: ','بازبینی مرکزی: ')+({
@@ -340,7 +388,7 @@ async function showEngineReview(button,notice){
    review_plan_findings:words('define success criteria','تعریف معیار موفقیت'),
    review_outcome_evidence:words('review evidence','بازبینی شواهد'),
    manual_final_review:words('manual final review','بازبینی نهایی انسانی')
-  })[result.priority]+words(' · Human-reported pass / fail: ',' · موفق / ناموفق به گزارش کاربر: ')+reviewed+'/'+failed+(result.revision?words(' · Reported gains / losses: ',' · پیشرفت / پسرفت گزارش‌شده: ')+result.revision.gained_count+'/'+result.revision.lost_count:'')+words(' · No completion verified; no action authorized.',' · تکمیل تأیید نشده؛ هیچ مجوز اجرایی صادر نشده.');
+  })[result.priority]+words(' · Human-reported pass / fail: ',' · موفق / ناموفق به گزارش کاربر: ')+reviewed+'/'+failed+(result.revision?words(' · Reported gains / losses: ',' · پیشرفت / پسرفت گزارش‌شده: ')+result.revision.gained_count+'/'+result.revision.lost_count:'')+(history.length?words(' · Comparable previous rounds: ',' · دورهای قابل‌مقایسهٔ پیشین: ')+history.length+words(' · Repeated prior failures: ',' · شکست‌های مکرر پیشین: ')+(recurrent.join(', ')||'0'):'')+(preventive.length?words(' · Suggested for next round: before steps ',' · پیشنهاد برای دور بعد: پیش از گام‌های ')+preventive.map(id=>id.slice(1)).join(', ')+words(', review prior failures and agree on a verification method. Draft only; not applied.','، شکست‌های پیشین و روش اعتبارسنجی را بازبینی کنید. فقط پیش‌نویس؛ اعمال نشده.'):'' )+words(' · No completion verified; no action authorized.',' · تکمیل تأیید نشده؛ هیچ مجوز اجرایی صادر نشده.');
  }catch{if(notice.isConnected)notice.textContent=words('Central review unavailable; no action taken.','بازبینی مرکزی در دسترس نیست؛ اقدامی انجام نشد.')}
  finally{if(button.isConnected)button.disabled=false}
 }
@@ -364,6 +412,61 @@ function workflowReport(){
    local_ui_outcome:step.observed||null,next_review:workflowAction(step.observed)
   }))
  };
+}
+// Explicit local export or reviewed session-only handoff. No model or automatic vault save.
+function appendExperienceReportControls(){
+ const current=workflowState,selection=window.NexusStudioUI.selection?.();
+ if(!selection?.projectId||!selection.threadId||current.round<4||current.round>24||current.round%2||
+    current.history.length!==current.round-1)return;
+ const details=document.createElement('details'),summary=document.createElement('summary');
+ summary.textContent=words('Review correction experience','بازبینی تجربهٔ اصلاح');
+ details.append(summary);
+ const help=document.createElement('p');help.className='help';
+ help.textContent=words('Pairs are consecutive rounds (1–2, 3–4, …). Include all relevant attempts. Human reports are not independent proof. The unencrypted file contains project identifiers and verdicts.','جفت‌ها دورهای متوالی هستند (۱–۲، ۳–۴ و ...). همهٔ تلاش‌های مرتبط را لحاظ کنید. گزارش انسانی مدرک مستقل نیست. فایل بدون رمزگذاری شامل شناسهٔ پروژه و ارزیابی‌هاست.');
+ details.append(help);
+ const field=(text,node)=>{const label=document.createElement('label');label.textContent=text;label.append(node);details.append(label)};
+ const code=document.createElement('input');code.type='text';code.maxLength=80;code.placeholder='correction-code';
+ field(words('Non-sensitive correction code','شناسهٔ غیرحساس اصلاح'),code);
+ const criterion=document.createElement('select');
+ current.steps.forEach((_,i)=>{const o=document.createElement('option');o.value='s'+(i+1);o.textContent=words('Step ','گام ')+(i+1);criterion.append(o)});
+ field(words('Improved criterion','معیار بهبودیافته'),criterion);
+ const kind=document.createElement('select');
+ for(const [v,en,fa] of [['accept','New experience','تجربهٔ تازه'],['refresh','Refresh existing experience','بازبینی تجربهٔ موجود']]){const o=document.createElement('option');o.value=v;o.textContent=words(en,fa);kind.append(o)}
+ field(words('Operation','عملیات'),kind);
+ const button=document.createElement('button');button.type='button';button.className='secondary';button.dataset.experienceReport='true';
+ button.textContent=words('Review and download report','بازبینی و دریافت گزارش');button.disabled=!completeReportRounds(current);
+ const retain=document.createElement('button');retain.type='button';retain.className='secondary';retain.dataset.experienceRetain='true';
+ retain.textContent=words('Review and retain in session','بازبینی و نگهداری در نشست');
+ retain.disabled=!completeReportRounds(current)||!window.NexusStudioUI.uiStatus().vaultUnlocked;
+ const notice=document.createElement('p');notice.setAttribute('role','status');details.append(button,retain,notice);
+ const runReport=async keep=>{
+  const rounds=completeReportRounds(current),selected=window.NexusStudioUI.selection?.(),epoch=current.epoch;
+  if(!rounds||!validWorkflow()||window.NexusStudioUI.uiStatus().isolated||workflowState!==current||!button.isConnected||!selected?.projectId||!selected.threadId)return;
+  const captured=JSON.stringify(rounds),fields=[code.value.trim(),criterion.value,kind.value];
+  if(!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(fields[0])){notice.textContent=words('Enter a valid non-sensitive correction code.','شناسهٔ معتبر و غیرحساس اصلاح را وارد کنید.');return}
+  if(!confirm(words('Did you apply the same named correction between each before/after pair, and include all relevant attempts, including failures? This is your report, not verified evidence.','آیا در هر جفت قبل و بعد همان اصلاح نام‌گذاری‌شده را انجام داده‌اید و همهٔ تلاش‌های مرتبط، از جمله شکست‌ها، را لحاظ کرده‌اید؟ این گزارش شماست، نه مدرک تأییدشده.')))return;
+  button.disabled=retain.disabled=true;
+  const stillCurrent=()=>{const now=window.NexusStudioUI.selection?.();return workflowState===current&&validWorkflow()&&!window.NexusStudioUI.uiStatus().isolated&&button.isConnected&&current.epoch===epoch&&now?.projectId===selected.projectId&&now?.threadId===selected.threadId&&now?.revision===selected.revision&&JSON.stringify(completeReportRounds(current))===captured&&JSON.stringify([code.value.trim(),criterion.value,kind.value])===JSON.stringify(fields)};
+  try{
+   if(!current.reportSessionId)current.reportSessionId=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');
+   const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([current.draft,rounds[0].steps.map(s=>s.criterion.trim())])))),b=>b.toString(16).padStart(2,'0')).join('');
+   if(!stillCurrent())return;
+   const result=buildChatExperienceReport(rounds,{project_id:selected.projectId,plan_sha256:hash,session_id:current.reportSessionId,correction_code:fields[0],criterion_id:fields[1],kind:fields[2],same_correction_reported:true,complete_relevant_history_reported:true},{enabled:true});
+   if(!result.report){notice.textContent=words('Insufficient reported support; no report exported.','پشتیبانی گزارش‌شده کافی نیست؛ گزارشی دریافت نشد.');return}
+   if(keep){
+    if(!stillCurrent()||!window.NexusStudioUI.uiStatus().vaultUnlocked)return;
+    const state=applyChatExperienceReport(result.report,selected);
+    notice.textContent=state==='applied'?words('Experience retained in session. Save session separately.','تجربه در نشست نگهداری شد؛ نشست را جدا ذخیره کنید.'):words('Experience not retained.','تجربه نگهداری نشد.');
+    return;
+   }
+   if(!confirm(words('Download unencrypted report? Supporting pairs: ','گزارش بدون رمزگذاری دریافت شود؟ جفت‌های پشتیبان: ')+result.supporting_pair_count+' · '+fields.join(' / '))||!stillCurrent())return;
+   download(JSON.stringify(result.report,null,2),'nexus-correction-experience.json','application/json');
+   notice.textContent=words('Report prepared for local import. No experience saved.','گزارش برای ورود محلی آماده شد. تجربه‌ای ذخیره نشد.');
+  }catch{if(stillCurrent())notice.textContent=words('Report unavailable; no action taken.','گزارش در دسترس نیست؛ اقدامی انجام نشد.')}
+  finally{if(button.isConnected){button.disabled=!completeReportRounds(current);retain.disabled=button.disabled||!window.NexusStudioUI.uiStatus().vaultUnlocked}}
+ };
+ button.onclick=()=>runReport(false);retain.onclick=()=>runReport(true);
+ workflow.append(details);
 }
 function showWorkflow(){
  if(!workflowState)return;
@@ -410,12 +513,12 @@ function showWorkflow(){
    for(const [value,en,fa] of [['','Not assessed','ارزیابی نشده'],['pass','Reported pass','موفق به گزارش شما'],['fail','Reported failure','ناموفق به گزارش شما'],['inconclusive','Inconclusive','نامشخص']]){
     const option=document.createElement('option');option.value=value;option.textContent=words(en,fa);verdict.append(option);
    }
-   const invalidate=()=>{workflowState.epoch++;const n=workflow.querySelector('[data-central-result]');if(n)n.textContent='';const retry=workflow.querySelector('[data-central-restart]');if(retry)retry.disabled=!canCompareRound(workflowState)||workflowState.round>=100;};
+   const invalidate=()=>{workflowState.epoch++;const n=workflow.querySelector('[data-central-result]');if(n)n.textContent='';const retry=workflow.querySelector('[data-central-restart]');if(retry)retry.disabled=!canCompareRound(workflowState)||workflowState.round>=100;const exp=workflow.querySelector('[data-experience-report]');if(exp)exp.disabled=!completeReportRounds(workflowState);const retain=workflow.querySelector('[data-experience-retain]');if(retain)retain.disabled=!completeReportRounds(workflowState)||!window.NexusStudioUI.uiStatus().vaultUnlocked;};
    const canAssess=()=>validWorkflow()&&!window.NexusStudioUI.uiStatus().isolated&&step.opened&&step.observed!=='started'&&!!humanCriterion(step).criterion;
    verdict.value=humanCriterion(step).verdict||'';verdict.disabled=!canAssess();
    criterion.oninput=()=>{
     if(!retainedWorkflow()||!criterion.isConnected||window.NexusStudioUI.uiStatus().isolated)return;
-    workflowState.baseline=null;step.criterion=criterion.value.slice(0,260);step.verdict=null;verdict.value='';verdict.disabled=!canAssess();invalidate();
+    workflowState.baseline=null;workflowState.history=[];step.criterion=criterion.value.slice(0,260);step.verdict=null;verdict.value='';verdict.disabled=!canAssess();invalidate();
    };
    verdict.onchange=()=>{
     if(!verdict.isConnected||!canAssess()){verdict.value='';return}
@@ -481,17 +584,27 @@ function showWorkflow(){
   restart.disabled=!canCompareRound(workflowState)||workflowState.round>=100;
   restart.onclick=()=>{
    if(!restart.isConnected||!validWorkflow()||window.NexusStudioUI.uiStatus().isolated||!canCompareRound(workflowState)||workflowState.round>=100)return;
-   if(!confirm(words('Keep this assessment only in this tab and start a new manual review round? No tool will run automatically.','این ارزیابی فقط در این برگه بماند و دور جدید بازبینی دستی آغاز شود؟ هیچ ابزاری خودکار اجرا نمی‌شود.')))return;
+   if(!confirm(words('Keep this assessment in up to 30 comparable review rounds in this tab only, to identify repeated failures? Changing criteria clears history. No tool runs automatically.','این ارزیابی در تاریخچهٔ حداکثر ۳۰ دور قابل‌مقایسه، فقط در همین برگه، برای تشخیص شکست‌های مکرر بماند؟ تغییر معیارها تاریخچه را پاک می‌کند. هیچ ابزاری خودکار اجرا نمی‌شود.')))return;
    workflowState=restartReviewedRound(workflowState);showWorkflow();
   };
   workflow.append(restart);
+  appendExperienceReportControls();
+  if(workflowState.history.length){
+   const forget=document.createElement('button');forget.type='button';forget.className='secondary';forget.dataset.centralForget='true';
+   forget.textContent=words('Clear previous review rounds','پاک‌کردن دورهای بازبینی پیشین');
+   forget.onclick=()=>{
+    if(!forget.isConnected||!retainedWorkflow()||window.NexusStudioUI.uiStatus().isolated)return;
+    workflowState=forgetReviewedHistory(workflowState);showWorkflow();
+   };
+   workflow.append(forget);
+  }
  }
 }
 function reviewWorkflow(message){
  closeDirectory();clearOffer();
  const parsed=parseWorkflow(message);
  if(parsed.error){workflowError(parsed.error);return}
- workflowState={draft:message,scope:workflowScope(),round:1,epoch:0,baseline:null,steps:parsed.steps.map(step=>({
+ workflowState={draft:message,scope:workflowScope(),round:1,epoch:0,baseline:null,history:[],steps:parsed.steps.map(step=>({
   ...step,opened:false,acknowledged:false,runId:null,observed:null,criterion:'',verdict:null
  })),index:0,opened:false};
  showWorkflow();
