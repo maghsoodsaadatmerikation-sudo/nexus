@@ -65,6 +65,24 @@ function state(v){
  });unique(projects.map(p=>p.id));
  const clean={schema:SCHEMA,projects,...(days===undefined?{}:{history_days:days})};if(enc.encode(JSON.stringify(clean)).length>MAX)fail('capacity');return clean;
 }
+// Removal-only path for the existing project memory panel. No evidence is
+// accepted here, and no storage or execution occurs.
+function reviewStoredExperienceRemoval(value,{projectId,threadId,workflowId,expectedRevision,criterionId,correctionCode,kind}={}){
+ const next=state(value),project=next.projects.find(p=>p.id===projectId),thread=project?.threads.find(t=>t.id===threadId);
+ if(!thread||thread.temporary||thread.isolated||thread.archived)fail('experience-removal-scope');
+ if(!['revoke','delete'].includes(kind))fail('experience-removal-kind');
+ const snapshot=project.experiences?.find(s=>s.workflow_id===workflowId);
+ if(!snapshot||snapshot.revision!==expectedRevision||snapshot.revision>=Number.MAX_SAFE_INTEGER-1)fail('stale-experience-removal');
+ const index=snapshot.entries.findIndex(e=>e.criterion_id===criterionId&&e.correction_code===correctionCode);
+ if(index<0)fail('experience-not-found');
+ if(kind==='delete')snapshot.entries.splice(index,1);
+ else{
+  if(snapshot.entries[index].status!=='active')fail('experience-already-revoked');
+  snapshot.entries[index].status='revoked';
+ }
+ snapshot.revision++;
+ return state(next);
+}
 function retainHistory(value,{now=Date.now(),inSession=false}={}){
  const data=state(value),days=data.history_days;
  for(const project of data.projects){
@@ -401,5 +419,5 @@ class Vault{
   check();if(signal?.aborted)Object.assign(this,{key:null,salt:null,raw:null,data:null});else this.lock();
  },{signal})}
 }
-root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,retainHistory,empty,project,thread,readSources,path,append,context,search,retrieve,inspectSecrets,guide,asksForChoice,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid});
+root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,retainHistory,empty,project,thread,readSources,path,append,context,search,retrieve,inspectSecrets,guide,asksForChoice,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid,reviewStoredExperienceRemoval});
 })(globalThis);
