@@ -1,14 +1,21 @@
 import {DeviceEngine,inspectReadiness} from './device-engine.js';
 const $=id=>document.getElementById(id),text=(en,fa)=>document.documentElement.lang==='fa'?fa:en;
-const engine=new DeviceEngine({workerURL:new URL('./device-worker.js',import.meta.url),onStatus:data=>{
+const gate=window.NexusMusicUI;
+const syncLoad=()=>{
+ const blocked=engine.state==='idle'&&(!gate||gate.audioBusy());
+ $('device-load').disabled=engine.state!=='idle'||blocked;
+ $('device-load').title=blocked?text('Finish or cancel the active local audio job first.','ابتدا پردازش صوتی فعال را پایان بده یا لغو کن.'):'';
+};
+const engine=new DeviceEngine({workerURL:new URL('./device-worker.js',import.meta.url),acquireResidency:()=>gate?.acquireAudioJob()??null,onStatus:data=>{
  if(data.type==='phase')$('device-state').textContent=text('Loading local runtime: ','بارگذاری موتور محلی: ')+data.stage;
  else if(data.type==='download')$('device-state').textContent=text('Downloading public model file: ','دانلود فایل عمومی مدل: ')+data.file+' · '+Math.round(data.loaded/1048576)+' / '+Math.ceil(data.total/1048576)+' MiB';
- else if(data.type==='ready')$('device-state').textContent=text('Small model ready on this device. English drafts; limited accuracy.','مدل کوچک روی دستگاه آماده است؛ پیش‌نویس انگلیسی با دقت محدود.');
+ else if(data.type==='ready')$('device-state').textContent=text('Small model ready. English drafts; limited accuracy. Unload it before heavy audio work.','مدل کوچک آماده است؛ پیش‌نویس انگلیسی با دقت محدود. پیش از پردازش سنگین صوتی، مدل را از حافظه خارج کن.');
  else if(data.type==='generating')$('device-state').textContent=text('Generating locally. Stop terminates the Worker.','تولید روی دستگاه؛ توقف، پردازش مدل را قطع می‌کند.');
  else if(data.type==='error')$('device-state').textContent=data.code==='context-too-large'?text('Context exceeds the small model limit. Shorten it manually, then prepare again.','ورودی از ظرفیت مدل کوچک بیشتر است؛ آن را دستی کوتاه کن و دوباره آماده کن.'):text('Local generation failed. Try again or unload the model.','تولید محلی انجام نشد؛ دوباره تلاش کن یا مدل را از حافظه خارج کن.');
  else if(data.type==='idle')$('device-state').textContent=data.reason&&data.reason!=='cancelled'?recovery(data.reason):text('Model is unloaded. Conversations were retained.','مدل از حافظه خارج است؛ گفت‌وگوها حفظ شدند.');
- $('device-load').disabled=engine.state!=='idle';
+ syncLoad();
 }});
+document.addEventListener('nexus-audio-job-state',syncLoad);syncLoad();
 window.NexusDevice=engine;
 let previous={mode:$('model-mode').value,budget:$('model-budget').value};
 $('model-engine').onchange=()=>{
@@ -20,7 +27,7 @@ $('model-engine').onchange=()=>{
 $('device-load').onclick=async()=>{
  if(!$('device-consent').checked){$('device-state').textContent=text('Choose the download consent first.','ابتدا اجازهٔ دانلود را انتخاب کن.');return}
  window.NexusStudioUI.resetModel();$('device-load').disabled=true;$('device-state').textContent=text('Loading verified public model files…','بارگذاری فایل‌های عمومیِ بررسی‌شدهٔ مدل…');
- try{await engine.load({consent:true})}catch(error){$('device-state').textContent=recovery(error.message)}finally{$('device-load').disabled=engine.state!=='idle'}
+ try{await engine.load({consent:true})}catch(error){$('device-state').textContent=recovery(error.message)}finally{syncLoad()}
 };
 $('device-consent').onchange=()=>{if(!$('device-consent').checked){engine.unload();window.NexusStudioUI.resetModel()}};
 $('device-unload').onclick=()=>{engine.unload();window.NexusStudioUI.resetModel()};
@@ -50,6 +57,7 @@ $('device-check').onclick=async()=>{
 $('device-report').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(engine.report(),null,2)+'\n'],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='nexus-device-runtime-report.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 
 function recovery(code){const messages={
+ 'local-resource-busy':['Another local audio job is still active. Finish or cancel it, then retry.','پردازش صوتی دیگری فعال است؛ آن را پایان بده یا لغو کن و دوباره تلاش کن.'],
  'generation-timeout':['Generation timed out and the model was stopped. Shorten the request and reload.','مهلت تولید تمام شد و مدل متوقف شد؛ درخواست را کوتاه و مدل را دوباره بارگذاری کن.'],
  'worker-start-failed':['The model process could not start. Check browser permissions and retry.','پردازش مدل شروع نشد؛ مجوزهای مرورگر را بررسی و دوباره تلاش کن.'],
  'worker-send-failed':['The request could not reach the local model. Reload the model and prepare the request again.','درخواست به مدل محلی نرسید؛ مدل را دوباره بارگذاری و درخواست را دوباره آماده کن.'],
