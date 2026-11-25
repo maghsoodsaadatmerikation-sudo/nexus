@@ -31,4 +31,11 @@ assert.equal(ctx.messages[0].content.includes('"ref":"S1","name":"trees.txt"'),t
 assert.equal(ctx.messages[0].content.includes('"ref":"A1","source_id":"file-1"'),true);
 assert.deepEqual(audit('[NXS:S1] [NXS:A1]',[...ctx.citations,...ctx.attachments_supplied].map(x=>x.ref)).unknown,[]);
 assert.equal(ctx.messages.at(-1).content,'orchard trees');
-console.log('REFERENCE MARKER AUDIT: PASS (25 checks)');
+assert.deepEqual(off.evidence_passages,[]);
+assert.deepEqual(ctx.evidence_passages.map(p=>p.ref),['S1','A1']);
+assert.equal(ctx.evidence_passages[0].text,'Orchard trees grow.');
+assert.equal(ctx.evidence_passages[1].text,'Orchard notes.');
+assert.equal(ctx.evidence_passages[0].partial,true);
+assert.equal(ctx.evidence_passages.every(p=>ctx.messages[0].content.includes(JSON.stringify(p.text))),true);
+assert.deepEqual(S.context(project,{...thread,isolated:true},{sources:true,attachments}).evidence_passages,[]);
+console.log('REFERENCE MARKER AUDIT: PASS (32 checks)');
