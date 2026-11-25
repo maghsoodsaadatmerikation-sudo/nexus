@@ -355,6 +355,8 @@ class Vault{
  constructor(store=new IndexedStore()){this.store=store;this.epoch=0;this.tail=Promise.resolve();this.lock()}
  lock(){this.epoch++;this.key=null;this.salt=null;this.raw=null;this.data=null}
  get unlocked(){return this.key!==null}
+ // Opaque encrypted archive version, not an authorization token.
+ get archiveRevision(){return this.unlocked&&this.raw?envelope(this.raw).revision:null}
  run(fn,{signal}={}){
   const e=this.epoch,check=()=>{if(e!==this.epoch)fail('locked')},current=()=>{check();if(signal?.aborted)fail('cancelled')};
   const result=this.tail.catch(()=>{}).then(async()=>{current();try{return await fn(check,current)}catch(x){if(x.message==='conflict'&&e===this.epoch)this.lock();throw x}});
@@ -379,8 +381,12 @@ class Vault{
   }
   Object.assign(this,{key:opened.key,salt:opened.salt,raw:updated});return kept;
  },{signal})}
- async save(value,{signal,now=Date.now()}={}){const data=retainHistory(value,{now});return this.run(async(check,current)=>{
-  if(!this.unlocked)fail('locked');const raw=await encrypt(data,this.key,this.salt);current();
+ async save(value,{signal,now=Date.now(),expectedArchiveRevision}={}){const data=retainHistory(value,{now});return this.run(async(check,current)=>{
+  if(!this.unlocked)fail('locked');
+  // Optional version pin for an explicitly reviewed proposal. Check inside
+  // the serialized queue, not only when the caller starts a save.
+  if(expectedArchiveRevision!==undefined&&(typeof expectedArchiveRevision!=='string'||expectedArchiveRevision!==this.archiveRevision))fail('stale-archive-revision');
+  const raw=await encrypt(data,this.key,this.salt);current();
   await this.store.commit(envelope(this.raw).revision,raw,()=>{try{current();return true}catch{return false}});
   // Once committed, keep the real revision even if cancellation arrived late.
   check();this.raw=raw;
