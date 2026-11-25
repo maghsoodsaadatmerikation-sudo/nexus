@@ -7,7 +7,7 @@ Object.assign(EN,{dataChat:'Use analysis summary in next chat'});Object.assign(F
 function syncDataRun(){
  const gate=window.NexusMusicUI;
  $('data-run').disabled=Boolean(busy||!gate||gate.audioBusy());
- $('data-run').title=gate?.audioBusy()?t('localResourceBusy'):'';
+ $('data-run').title=gate?.audioBusy()?(gate.resourceMessage?.()||t('localResourceBusy')):'';
 }
 document.addEventListener('nexus-audio-job-state',syncDataRun);
 document.addEventListener('nexus-studio-state',syncDataRun);
@@ -39,7 +39,7 @@ $('data-file').onchange=event=>{cancel();file=event.target.files[0]||null;event.
 $('data-source').onchange=()=>{cancel();resetResult();$('data-status').textContent=t('dataEmpty')};
 $('data-run').onclick=async()=>{
  if(busy)return;
- const release=window.NexusMusicUI?.acquireAudioJob();
+ const release=window.NexusMusicUI?.acquireAudioJob('data');
  if(!release){$('data-status').textContent=t('localResourceBusy');return}
  let scope;
  try{
