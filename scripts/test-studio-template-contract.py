@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -73,6 +74,21 @@ class TemplateContractTests(unittest.TestCase):
             self.assertEqual(packaged, (ROOT / "public" / name).read_bytes())
             self.assertLess(len(packaged), 10_000)  # Legacy offline install gate
             self.assertEqual(len(pixel_digest(packaged, size, size)), 64)
+
+    def test_public_orchestra_asset_keeps_exact_bytes_and_script_order(self):
+        original = (ROOT / "web/studio-orchestra.js").read_bytes()
+        package = ROOT / "public/studio"
+        self.assertEqual(original, (package / "studio-orchestra.js").read_bytes())
+        standalone = (ROOT / "web/studio.html").read_bytes()
+        public = (package / "index.html").read_bytes()
+        integrity = base64.b64encode(hashlib.sha256(original).digest())
+        tag = b'<script src="./studio-orchestra.js" integrity="sha256-' + integrity + b'"></script>'
+        self.assertIn(b'<script>' + original + b'</script>', standalone)
+        self.assertEqual(public.count(tag), 1)
+        self.assertNotIn(b'<script>' + original + b'</script>', public)
+        self.assertLess(public.index(tag), public.index((ROOT / "web/studio-orchestra-ui.js").read_bytes()))
+        worker = (package / "service-worker.js").read_text()
+        self.assertIn(hashlib.sha256(original).hexdigest(), worker)
 
     def test_public_page_leaves_the_opaque_lab_module_intact(self):
         compiled = static_builder.render_public_shell(
