@@ -117,7 +117,14 @@ self.addEventListener('fetch',event=>{
  const request=event.request,url=new URL(request.url),entry=new URL(ENTRY);
  if(request.method!=='GET'||url.origin!==entry.origin||url.search)return;
  const asset=CODE.find(a=>a.url===url.href)||(request.mode==='navigate'&&[entry.pathname,entry.pathname+'index.html'].includes(url.pathname)?HTML:null);if(!asset)return;
- event.respondWith((async()=>{try{const response=await fetch(request);if(await verified(response,asset))return response}catch{}const cache=await caches.open(CACHE),response=await cache.match(asset.url);if(await verified(response,asset))return response;return new Response('Studio offline code is unavailable. Reconnect and retry.',{status:503,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}})})());
+ event.respondWith((async()=>{
+  // Code is immutable within this digest-bound package. Avoid network access
+  // for verified cached modules; keep HTML navigation network-first.
+  async function fromCache(){try{const cache=await caches.open(CACHE),response=await cache.match(asset.url);return await verified(response,asset)?response:null}catch{return null}}
+  async function fromNetwork(){try{const response=await fetch(request);return await verified(response,asset)?response:null}catch{return null}}
+  const response=asset===HTML?await fromNetwork()||await fromCache():await fromCache()||await fromNetwork();
+  return response||new Response('Studio offline code is unavailable. Reconnect and retry.',{status:503,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}});
+ })());
 });
 '''
 
