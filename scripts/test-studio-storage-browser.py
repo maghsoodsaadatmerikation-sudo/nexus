@@ -129,6 +129,20 @@ window.addEventListener('load',async()=>{
   assert(recallChatExperienceReport(JSON.stringify(recalledReport),{...recallContext,revision:recallContext.revision-1},recallArgs).status==='unavailable','stale-recall-refused');
   const noFailure=recallChatExperienceReport(JSON.stringify(recalledReport),recallContext,{...recallArgs,steps:recallSteps.map(s=>({...s,verdict:'pass'}))});
   assert(noFailure.status==='no_reported_failure'&&!noFailure.matches.length,'passing-round-does-not-recall');
+  const alternative=experienceImportEngine.buildChatExperienceReport(recallRounds,{project_id:project.id,plan_sha256:recallHash,session_id:'alternative-report',correction_code:'alt_fixture',criterion_id:'s1',kind:'accept',same_correction_reported:true,complete_relevant_history_reported:true},{enabled:true}).report;
+  assert(alternative&&applyChatExperienceReport(alternative,NexusStudioUI.selection())==='applied','alternative-retained');
+  const comparisonContext=chatArchiveRecallContext(),comparisonBefore=JSON.stringify(NexusStudioUI.snapshot()),comparisonCipher=await store.read();
+  const option=(correction_code,cost_usd_cents,effort_minutes)=>({correction_code,cost_usd_cents,effort_minutes,risk:'low',reversible:true});
+  const comparison={criterion_id:'s1',max_cost_usd_cents:100,max_effort_minutes:60,options:[option('recall_fixture',0,20),option('alt_fixture',50,10)]};
+  const scenario={criterion_id:'s1',options:[{correction_code:'recall_fixture',cost_usd_cents:{best:0,expected:0,worst:90},effort_minutes:{best:10,expected:20,worst:30},rollback:{cost_usd_cents:20,effort_minutes:10,trigger:'check fails',restore_check:'verify restore'}}]};
+  const selectedReports=[JSON.stringify(recalledReport),JSON.stringify(alternative)];
+  const compared=compareChatExperienceReports(selectedReports,comparisonContext,recallArgs,comparison,scenario);
+  assert(compared.status==='review_only'&&compared.comparison.options.every(o=>o.status==='tradeoff_candidate'),'live-host-comparison');
+  assert(compared.scenarios.options[0].status==='rollback_reserve_outside_limits','live-host-rollback-reserve');
+  assert(!compared.execution_authorized&&!compared.model_context_authorized&&!compared.storage_authorized,'comparison-no-authority');
+  assert(JSON.stringify(NexusStudioUI.snapshot())===comparisonBefore&&await store.read()===comparisonCipher,'comparison-no-mutation');
+  assert(compareChatExperienceReports(selectedReports,recallContext,recallArgs,comparison,scenario).status==='unavailable','comparison-rejects-stale-context');
+
   $('history-days').value='0';$('history-days').dispatchEvent(new Event('change',{bubbles:true}));
   $('save').click();await wait(()=>$('status').textContent.includes('encrypted data')&&!$('save').disabled);
   const off=(await S.decrypt(await store.read(),pass)).data;
