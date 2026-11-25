@@ -26,7 +26,8 @@ class StudioModuleGraphTests(unittest.TestCase):
                 bundle = (ROOT / relative).read_text()
                 for name in ("evaluateWorkflowOutcome", "reviewCorrectionExperience",
                              "reviewAssistantWorkflow", "createArchiveExperienceReview",
-                             "stageImportedExperience", "buildChatExperienceReport"):
+                             "stageImportedExperience", "buildChatExperienceReport",
+                             "reviewArchivedExperience", "prepareChatArchiveRecall"):
                     self.assertEqual(bundle.count("function " + name + "("), 1)
                 self.assertEqual(bundle.count("const {reviewAssistantWorkflow,buildChatExperienceReport}=experienceImportEngine;"), 1)
                 self.assertLess(bundle.index("const experienceImportEngine=(()=>{"),
