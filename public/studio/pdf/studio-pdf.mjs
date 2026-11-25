@@ -2,6 +2,7 @@ const $ = id => document.getElementById(id);
 const input = $('studio-pdf-file');
 const status = $('studio-pdf-status');
 const ui = window.NexusStudioUI;
+const gate = window.NexusMusicUI;
 const MAX_FILE = 2 * 1024 * 1024;
 const MAX_PAGES = 20;
 const MAX_TEXT = 32000;
@@ -10,7 +11,9 @@ let active = null;
 
 function refresh() {
   const {busy, archived} = ui.uiStatus();
-  input.disabled = Boolean(active || busy || archived);
+  const resourceBlocked = !gate || gate.audioBusy();
+  input.disabled = Boolean(active || busy || archived || resourceBlocked);
+  input.title = resourceBlocked && !active ? words('Finish the active local job or unload the local model first.', 'ابتدا پردازش محلی را پایان بده یا مدل محلی را از حافظه خارج کن.') : '';
   $('studio-pdf-label').textContent = words('Attach a PDF', 'پیوست PDF');
   $('studio-pdf-help').textContent = words(
     'Extracts selectable text from the first 20 pages locally. Maximum file size is 2 MiB.',
@@ -44,7 +47,10 @@ input.onchange = async () => {
     status.textContent = words('Choose a PDF up to 2 MiB.', 'یک PDF تا حجم ۲ مگابایت انتخاب کن.');
     return;
   }
+  const release = gate?.acquireAudioJob();
+  if (!release) return;
   const job = {...ui.selection(), worker: null};
+  let initialSettled;
   const canceled = new Promise((_, reject) => { job.abort = () => reject(Error('pdf-cancelled')); });
   const wait = operation => Promise.race([operation, canceled]);
   active = job;
@@ -56,7 +62,12 @@ input.onchange = async () => {
   refresh();
   status.textContent = words('Reading PDF locally…', 'در حال خواندن PDF روی دستگاه…');
   try {
-    const [bytes, pdf] = await wait(Promise.all([file.arrayBuffer(), import('./pdf.min.mjs')]));
+    // Racing cancellation does not stop a browser file read or module import.
+    // Keep the resource lease until both underlying promises settle.
+    const operations = [Promise.resolve().then(() => file.arrayBuffer()),
+      Promise.resolve().then(() => import('./pdf.min.mjs'))];
+    initialSettled = Promise.allSettled(operations);
+    const [bytes, pdf] = await wait(Promise.all(operations));
     if (!stillSelected(job)) return;
     job.worker = new Worker(new URL('./pdf.worker.min.mjs', import.meta.url), {type: 'module'});
     const worker = new pdf.PDFWorker({port: job.worker});
@@ -95,12 +106,16 @@ input.onchange = async () => {
   } finally {
     if (active === job) cancel(false);
     job.worker?.terminate();
+    if (initialSettled) await initialSettled;
+    release();
+    refresh();
   }
 };
 document.addEventListener('nexus-studio-state', () => {
   if (active && !stillSelected(active)) cancel();
   refresh();
 });
+document.addEventListener('nexus-audio-job-state', refresh);
 document.addEventListener('nexus-studio-private-clear', () => cancel());
 $('clear-chat-files').addEventListener('click', () => cancel());
 window.addEventListener('pagehide', () => cancel());
