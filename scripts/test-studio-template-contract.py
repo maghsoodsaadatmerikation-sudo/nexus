@@ -107,6 +107,21 @@ class TemplateContractTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     replace_exact(static_builder.WORKER + token, token, "x")
 
+    def test_tasks_resource_gate_is_declared_as_late_dependency(self):
+        from dataclasses import replace
+        from studio_module_graph import MODULES, validate_module_graph
+        shell = (ROOT / "web/studio-shell.html").read_text()
+        modules = validate_module_graph(shell, ROOT / "web")
+        task = next(item for item in modules if item.filename == "studio-tasks-ui.js")
+        self.assertEqual(task.deferred, ("NexusMusicUI",))
+        for changed, reason in (
+            (replace(task, deferred=()), "undeclared or obsolete"),
+            (replace(task, requires=task.requires + task.deferred, deferred=()), "forward"),
+        ):
+            altered = tuple(changed if item == task else item for item in MODULES)
+            with self.assertRaisesRegex(ValueError, reason):
+                validate_module_graph(shell, ROOT / "web", altered)
+
     def test_optimized_python_cannot_omit_required_studio_module(self):
         with tempfile.TemporaryDirectory(prefix="nexus-studio-template-guard-") as directory:
             root = Path(directory)

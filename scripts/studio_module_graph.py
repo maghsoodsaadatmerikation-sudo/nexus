@@ -42,7 +42,7 @@ MODULES = (
            ("NexusStudio", "NexusLocales", "NexusAstrology", "NexusReplyFormat", "NexusOfficeZip"),
            ("NexusSpeechPlayback", "NexusLabUI", "NexusTasksUI", "NexusAstrologyUI", "NexusQualityUI", "NexusDevice", "NexusCalendar", "NexusMusicUI", "NexusOrchestraUI", "NexusStudioVision", "NexusStudioFocus")),
     Module("/*STUDIO_LAB_UI*/", "studio-lab-ui.js", "NexusLabUI", ("NexusLab", "NexusStudioUI"), ("NexusMusicUI",)),
-    Module("/*STUDIO_TASKS_UI*/", "studio-tasks-ui.js", "NexusTasksUI", ("NexusTasks",)),
+    Module("/*STUDIO_TASKS_UI*/", "studio-tasks-ui.js", "NexusTasksUI", ("NexusTasks",), ("NexusMusicUI",)),
     Module("/*STUDIO_ASTROLOGY_UI*/", "studio-astrology-ui.js", "NexusAstrologyUI",
            ("NexusAstrology", "NexusSky")),
     Module("/*STUDIO_SKY_UI*/", "studio-sky-ui.js", None, ("NexusSky",)),
