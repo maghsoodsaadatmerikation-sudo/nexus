@@ -11,6 +11,7 @@ import ctypes
 import errno
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -43,6 +44,26 @@ def unique_object(pairs):
     return result
 
 
+def reject_json_constant(_value):
+    raise SnapshotError("non-finite JSON number")
+
+
+def finite_json_float(value):
+    number = float(value)
+    require(math.isfinite(number), "non-finite JSON number")
+    return number
+
+
+def strict_json(data):
+    """Reject nonstandard constants, float overflow and parser recursion."""
+    try:
+        return json.loads(data, object_pairs_hook=unique_object,
+                          parse_constant=reject_json_constant,
+                          parse_float=finite_json_float)
+    except RecursionError:
+        raise SnapshotError("JSON nesting exceeds parser limit") from None
+
+
 def validate_file(name, data):
     require(isinstance(name, str), "invalid path")
     if name == RECOVERY_MARKER:
@@ -55,7 +76,7 @@ def validate_file(name, data):
     else:
         require(re.fullmatch(r"(?:[0-9a-f]{2})*\.json", name), "unsupported data path")
         workspace_id = bytes.fromhex(name[:-5]).decode("utf-8")
-        snapshot = json.loads(data, object_pairs_hook=unique_object)
+        snapshot = strict_json(data)
         require(isinstance(snapshot, dict) and type(snapshot.get("schema_version")) is int and snapshot["schema_version"] == 1,
                 "unsupported workspace schema")
         require(isinstance(snapshot.get("workspace"), dict) and
@@ -205,7 +226,7 @@ def backup(source, output):
 
 def validated_records(archive):
     raw = read_regular(archive, MAX_BYTES)
-    document = json.loads(raw, object_pairs_hook=unique_object)
+    document = strict_json(raw)
     require(isinstance(document, dict) and set(document) ==
             {"schema", "authority", "consistency", "files"}, "invalid snapshot envelope")
     require(document["schema"] == SCHEMA and document["authority"] == "none" and
