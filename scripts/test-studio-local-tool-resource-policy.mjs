@@ -5,17 +5,17 @@ export async function checkLocalToolResourcePolicy(labSource,dataSource){
  const defer=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}};
  const nodes=new Map(),runs=[],reads=[],digests=[],lifecycle=[];
  const $=id=>{if(!nodes.has(id))nodes.set(id,{value:'',checked:false,disabled:false,textContent:'',title:'',replaceChildren(){}});return nodes.get(id)};
- let lease=null,projectId='p1',busy=false,analysed=0;
+ let lease=null,projectId='p1',busy=false,analysed=0,failSetup=false,failLifecycle=false;
  const gate={audioBusy:()=>lease!==null,acquireAudioJob(){if(lease)return null;const token={};lease=token;return ()=>{if(lease===token)lease=null}}};
  const window={NexusMusicUI:gate},t=k=>k;
- const AbortController=class{constructor(){this.signal={aborted:false}}abort(){this.signal.aborted=true}};
+ const AbortController=class{constructor(){if(failSetup)throw Error('setup-failure');this.signal={aborted:false}}abort(){this.signal.aborted=true}};
  const run={run(code,input,opts){const job=defer();runs.push({...job,opts});return job.promise},cancel(){}};
  const extract=(source,start,end)=>{const i=source.indexOf(start),j=source.indexOf(end,i+start.length);if(i<0||j<0)throw Error('fixture source changed');return source.slice(i,j)};
  const lab=extract(labSource,"$('code-run').onclick=async()=>{","$('code-stop').onclick=cancel;");
  const sync=extract(labSource,'function syncCodeRun(){','Object.assign(EN,{localResourceBusy:');
  const cancel=extract(labSource,'function cancel(){const oldResearch','const workFields=');
  const code=new Function('$','window','t','AbortController','run','localLifecycle',`let epoch=0,searchController=null,codeController=null,activeResearchAttempt=null,activeCodeAttempt=null,localAttempt=0,result=null;
- ${sync}\n${cancel}\n${lab}\nreturn {click:$('code-run').onclick,cancel,result:()=>result};`)($,window,t,AbortController,run,(...a)=>lifecycle.push(a));
+ ${sync}\n${cancel}\n${lab}\nreturn {click:$('code-run').onclick,cancel,result:()=>result};`)($,window,t,AbortController,run,(...a)=>{if(failLifecycle&&a[2]==='started')throw Error('lifecycle-start-failure');lifecycle.push(a)});
  const file={name:'fixture.csv',size:8,arrayBuffer(){const job=defer();reads.push(job);return job.promise}};
  const T={MAX_BYTES:1048576,parse:()=>({columns:['x']}),analyseTable:()=>{analysed++;return {column_stats:[{type:'numeric'}]}}};
  const crypto={subtle:{digest(){const job=defer();digests.push(job);return job.promise}}};
@@ -42,6 +42,14 @@ export async function checkLocalToolResourcePolicy(labSource,dataSource){
  const fourth=table.click();reads[2].resolve(new ArrayBuffer(8));await Promise.resolve();await Promise.resolve();digests[1].resolve(new ArrayBuffer(32));await fourth;
  ok(!gate.audioBusy()&&analysed===1&&table.result()!==null,'valid table analysis releases lease');
  const fifth=code.click();runs[1].reject(Error('sandbox-failure'));await fifth;ok(!gate.audioBusy()&&$('code-status').textContent==='codeFailed','sandbox failure releases lease');
+ $('code-consent').checked=true;failSetup=true;await code.click();failSetup=false;
+ ok(!gate.audioBusy()&&runs.length===2&&$('code-consent').checked,'failed controller setup releases without consuming consent');
+ failLifecycle=true;await code.click();failLifecycle=false;
+ ok(!gate.audioBusy()&&runs.length===2&&$('code-status').textContent==='codeFailed','failed lifecycle setup releases without sandbox execution');
+ $('code-consent').checked=true;const last=code.click();
+ ok(gate.audioBusy()&&runs.length===3,'code can restart after setup faults');
+ runs[2].resolve('recovered');await last;
+ ok(!gate.audioBusy()&&code.result()==='recovered','successful recovery releases resource');
  return checks;
 }
 if(typeof process!=='undefined'){
