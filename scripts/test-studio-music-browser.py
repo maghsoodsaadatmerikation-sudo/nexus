@@ -53,6 +53,9 @@ window.addEventListener('load',async()=>{
   $('music-cancel').click();
   assert(NexusMusicUI.hasScore()&&!$('music-report').textContent.includes('Measured WAV diagnostics'),
    'cancelled-render-displays-only-the-current-score');
+  assert(NexusMusicUI.audioBusy()&&$('music-render').disabled,'cancel-retains-lease-until-cleanup');
+  await wait(()=>!NexusMusicUI.audioBusy()&&!$('music-render').disabled);
+  assert(!NexusMusicUI.hasWav(),'cancelled-result-not-restored-after-cleanup');
   $('music-render').click();await wait(()=>NexusMusicUI.hasWav(),900);
   assert($('music-report').textContent.split('Measured WAV diagnostics').length===2,
    'only-the-current-wav-has-diagnostics');
@@ -63,12 +66,14 @@ window.addEventListener('load',async()=>{
   assert(net===0,'no-suno-or-api-request');
   $('music-render').click();
   window.dispatchEvent(new Event('pagehide'));
-  assert(!$('music-render').disabled&&$('music-cancel').disabled&&NexusMusicUI.hasScore()&&!NexusMusicUI.hasWav(),
-   'pagehide-cancels-active-render-without-stranding-controls');
+  assert(NexusMusicUI.audioBusy()&&$('music-render').disabled&&$('music-cancel').disabled&&NexusMusicUI.hasScore()&&!NexusMusicUI.hasWav(),
+   'pagehide-invalidates-audio-but-retains-lease-during-cleanup');
+  await wait(()=>!NexusMusicUI.audioBusy()&&!$('music-render').disabled);
+  assert(NexusMusicUI.hasScore()&&!NexusMusicUI.hasWav(),'pagehide-cancels-active-render-without-stranding-controls');
   // Repeat a setup change during the start of a new render: no stuck buttons.
   $('music-render').click();
   $('music-bpm').value='120';$('music-bpm').dispatchEvent(new Event('change',{bubbles:true}));
-  await new Promise(r=>setTimeout(r,300));
+  await wait(()=>!NexusMusicUI.audioBusy());
   assert(!$('music-build').disabled,'changing-settings-never-leaves-render-lock');
   assert(!NexusMusicUI.hasScore()&&!NexusMusicUI.hasWav(),'old-score-and-wav-invalidation');
   assert(net===0,'no-network-on-cancel');
