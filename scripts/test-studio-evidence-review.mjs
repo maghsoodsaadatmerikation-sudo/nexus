@@ -26,6 +26,13 @@ eq(duplicate.distinct_excerpt_count,1);eq(duplicate.distinct_file_count,2);eq(du
 eq(duplicate.flags,['partial_passage','repeated_content']);
 const copiedQuote=one(j('S1',a,'supports'),j('A1',a,'supports'));
 eq(copiedQuote.flags,['repeated_content']);eq(copiedQuote.distinct_excerpt_count,2);
+const copiedOpposition=one(j('S1',a,'supports'),j('A1',a,'contradicts'));
+eq(copiedOpposition.disposition,'reconcile_interpretations');
+eq(copiedOpposition.flags,['repeated_content','opposing_interpretations_of_repeated_quote']);
+eq(copiedOpposition.distinct_excerpt_count,2);
+eq(one(j('S1',a,'contradicts'),j('A1',a,'supports')).disposition,'reconcile_interpretations');
+eq(one(j('S1',a,'uncertain'),j('A1',a,'supports')).disposition,'uncertain_evidence');
+eq(one(j('S1',a,'supports'),j('A1','A note follows.','contradicts')).disposition,'conflicting_reported_evidence');
 const opposing=one(j('S1',a,'supports'),j('S3',a,'contradicts'));
 eq(opposing.disposition,'reconcile_interpretations');
 eq(opposing.reported_support_excerpt_count,0);
