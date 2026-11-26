@@ -38,6 +38,14 @@ ok('partial long attachments are disclosed',()=>{
  assert(ctx.attachments_supplied[0].partial===true);
  assert(JSON.stringify(ctx.messages).length<24000);
 });
+ok('an explicitly selected section remains complete and gets one reference',()=>{
+ const selection='Unmatched opening line.\nSummarize this part.\nUnmatched ending line.';
+ const ctx=S.context(p,t,{sourceAnswer:true,attachments:[{id:S.uid(),name:'Selected section',text:selection,whole:true}]});
+ assert.equal(ctx.attachments_supplied.length,1);
+ assert.equal(ctx.evidence_passages[0].text,selection);
+ assert.equal(ctx.evidence_passages[0].partial,true);
+ assert.throws(()=>S.context(p,t,{attachments:[{id:S.uid(),name:'Long section',text:'x'.repeat(1601),whole:true}]}));
+});
 ok('automatic project source search is still opt-in',()=>{
  p.sources=[{id:S.uid(),name:'SENSITIVE-PRIVATE-RESOURCE.txt',text:'Secrets inside a project file.'}];
  assert(!JSON.stringify(S.context(p,t,{attachments:files})).includes('SENSITIVE-PRIVATE-RESOURCE'));
