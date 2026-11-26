@@ -7,9 +7,15 @@ const progressLabels={
  en:{queued:'queued',running:'running',succeeded:'succeeded',failed:'failed',blocked:'blocked by dependencies',cancelled:'cancelled',deadline:'Plan time limit reached.'},
  fa:{queued:'در صف',running:'در حال اجرا',succeeded:'موفق',failed:'ناموفق',blocked:'متوقف به‌دلیل پیش‌نیاز',cancelled:'لغوشده',deadline:'مهلت اجرای طرح تمام شد.'}
 };
+function syncTaskRun(){
+ const gate=window.NexusMusicUI;
+ $('task-run').disabled=working||!gate||gate.audioBusy();
+ $('task-run').title=!working&&gate?.audioBusy()?gate.resourceMessage():'';
+}
+document.addEventListener('nexus-audio-job-state',syncTaskRun);
 function show(){
  $('task-report').textContent=report?JSON.stringify(report,null,2):'';
- $('task-run').disabled=working;
+ syncTaskRun();
  $('task-stop').disabled=!working;
  $('task-export').disabled=!report||working;
  if(!report)return;
@@ -25,7 +31,7 @@ function cancel(){epoch++;runner.cancel();working=false;$('task-consent').checke
 function clear(){cancel();report=null;$('task-plan').value='';$('task-status').textContent='';show()}
 $('task-plan').addEventListener('input',()=>{cancel();report=null;$('task-status').textContent='';show()});
 $('task-sample').onclick=()=>{if($('task-plan').value&&!confirm(t('discard')))return;clear();$('task-plan').value=JSON.stringify({version:1,concurrency:2,jobs:[{id:'sum',input:'[2,3,5]',code:'const data=JSON.parse(input); return JSON.parse(data.input).reduce((a,b)=>a+b,0);'},{id:'count',input:'[2,3,5]',code:'return JSON.parse(JSON.parse(input).input).length;'},{id:'mean',needs:['sum','count'],code:'const d=JSON.parse(input).dependencies; return JSON.parse(d.sum)/JSON.parse(d.count);'}]},null,2);renderStorage()};
-$('task-run').onclick=async()=>{if(working||!$('task-consent').checked)return;const scope=++epoch;$('task-consent').checked=false;$('task-status').textContent='';report=null;try{const plan=NexusTasks.validate(JSON.parse($('task-plan').value));working=true;await runner.run(plan,{onUpdate:value=>{if(scope===epoch){report=value;show()}}})}catch{if(scope===epoch)$('task-status').textContent=t('tasksFailed')}finally{if(scope===epoch){working=false;show()}}};
+$('task-run').onclick=async()=>{if(working||!$('task-consent').checked)return;const release=window.NexusMusicUI?.acquireAudioJob('tasks');if(!release){$('task-status').textContent=t('localResourceBusy');return}const scope=++epoch;try{$('task-consent').checked=false;$('task-status').textContent='';report=null;const plan=NexusTasks.validate(JSON.parse($('task-plan').value));working=true;await runner.run(plan,{onUpdate:value=>{if(scope===epoch){report=value;show()}}})}catch{if(scope===epoch)$('task-status').textContent=t('tasksFailed')}finally{try{if(scope===epoch){working=false;show()}}finally{release();syncTaskRun()}}};
 $('language').addEventListener('change',()=>queueMicrotask(show));
 $('task-stop').onclick=()=>{runner.cancel();working=false;$('task-consent').checked=false;show()};
 $('task-export').onclick=()=>{if(report&&!working&&confirm(t('plain')))download(JSON.stringify(report,null,2),'nexus-task-report.json','application/json')};

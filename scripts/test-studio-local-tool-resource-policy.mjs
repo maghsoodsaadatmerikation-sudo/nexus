@@ -1,10 +1,10 @@
 // Exact local code and table handlers; synthetic DOM, delayed sandbox and file reads.
 import {readFileSync} from 'node:fs';
-export async function checkLocalToolResourcePolicy(labSource,dataSource){
+export async function checkLocalToolResourcePolicy(labSource,dataSource,taskSource,musicSource){
  const checks=[],ok=(value,label)=>{if(!value)throw Error(label);checks.push(label)};
  const defer=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}};
  const nodes=new Map(),runs=[],reads=[],digests=[],lifecycle=[];
- const $=id=>{if(!nodes.has(id))nodes.set(id,{value:'',checked:false,disabled:false,textContent:'',title:'',replaceChildren(){}});return nodes.get(id)};
+ const $=id=>{if(!nodes.has(id))nodes.set(id,{value:'',checked:false,disabled:false,textContent:'',title:'',replaceChildren(){},addEventListener(){}});return nodes.get(id)};
  let lease=null,projectId='p1',busy=false,analysed=0,failSetup=false,failLifecycle=false;
  const gate={audioBusy:()=>lease!==null,acquireAudioJob(){if(lease)return null;const token={};lease=token;return ()=>{if(lease===token)lease=null}}};
  const window={NexusMusicUI:gate},t=k=>k;
@@ -50,10 +50,31 @@ export async function checkLocalToolResourcePolicy(labSource,dataSource){
  ok(gate.audioBusy()&&runs.length===3,'code can restart after setup faults');
  runs[2].resolve('recovered');await last;
  ok(!gate.audioBusy()&&code.result()==='recovered','successful recovery releases resource');
+ // Exact task UI and real shared gate, with deferred runner settlement.
+ const gateSource=extract(musicSource,'const resourceNames=','function resourceMessage(){');
+ const realGate=new Function('notify',gateSource+'\nreturn createAudioJobGate(notify);')(()=>{});
+ const taskGate={audioBusy:realGate.busy,acquireAudioJob:realGate.acquire,resourceMessage:()=>realGate.owner()};
+ const taskWindow={NexusMusicUI:taskGate};
+ const jobs=[];let rejectPlan=false;
+ const runner={run(plan,{onUpdate}){const job=defer();jobs.push(job);onUpdate({jobs:[]});return job.promise},cancel(){}};
+ const taskHandlers=extract(taskSource,'function syncTaskRun(){',"$('task-export').onclick=");
+ const task=new Function('$','window','document','runner','NexusTasks','t','renderStorage','confirm', "let epoch=0,report=null,working=false;const progressLabels={en:{}};"+taskHandlers+"\nreturn {click:$('task-run').onclick,stop:$('task-stop').onclick,cancel};")($,taskWindow,{documentElement:{lang:'en'},addEventListener(){}},runner,{validate:x=>{if(rejectPlan)throw Error('invalid');return x}},t,()=>{},()=>true);
+ $('task-plan').value='{}';$('task-consent').checked=true;
+ const model=realGate.acquire('model');await task.click();
+ ok(jobs.length===0&&$('task-consent').checked,'resident model blocks plan without consuming consent');model();
+ const taskJob=task.click();ok(realGate.owner()==='tasks'&&jobs.length===1,'task plan claims shared gate');
+ ok(realGate.acquire('pdf')===null&&realGate.acquire('music')===null,'task plan excludes other heavy tools');
+ task.stop();ok(realGate.busy(),'task cancellation retains lease until runner settles');
+ $('task-consent').checked=true;await task.click();ok(jobs.length===1&&$('task-consent').checked,'no second plan during cleanup');
+ jobs[0].resolve({jobs:[]});await taskJob;ok(!realGate.busy(),'settled cancelled plan releases lease');
+ rejectPlan=true;await task.click();rejectPlan=false;ok(!realGate.busy()&&jobs.length===1,'invalid plan releases lease');
+ $('task-consent').checked=true;const secondTask=task.click();task.cancel();
+ ok(realGate.busy(),'private cancel retains plan lease');jobs[1].resolve({jobs:[]});await secondTask;
+ ok(!realGate.busy(),'private cancel cleanup releases lease');
  return checks;
 }
 if(typeof process!=='undefined'){
  const read=name=>readFileSync(new URL('../web/'+name,import.meta.url),'utf8');
- const checks=await checkLocalToolResourcePolicy(read('studio-lab-ui.js'),read('studio-quality-ui.js'));
+ const checks=await checkLocalToolResourcePolicy(read('studio-lab-ui.js'),read('studio-quality-ui.js'),read('studio-tasks-ui.js'),read('studio-music-ui.js'));
  console.log('LOCAL TOOL RESOURCE POLICY: PASS ('+checks.length+' checks)');
 }

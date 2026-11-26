@@ -25,7 +25,7 @@ const fa=()=>document.documentElement.lang==='fa',txt=k=>labels[fa()?'fa':'en'][
 let score=null,wav=null,revision=0,working=false,objectUrl=null;
 // One heavy audio job per tab. Cancellation invalidates results, not the lease;
  // only the original operation's finally releases it.
-const resourceNames=Object.freeze({local:['Local job','پردازش محلی'],music:['Music rendering','ساخت موسیقی'],orchestra:['Orchestra rendering','ساخت ارکستر'],vocal:['Vocal file import','خواندن فایل وکال'],mix:['Vocal mixing','میکس وکال'],model:['Resident local AI model','مدل هوش مصنوعی محلی'],pdf:['PDF extraction','استخراج متن PDF'],code:['JavaScript execution','اجرای JavaScript'],data:['Data analysis','تحلیل داده']});
+const resourceNames=Object.freeze({local:['Local job','پردازش محلی'],music:['Music rendering','ساخت موسیقی'],orchestra:['Orchestra rendering','ساخت ارکستر'],vocal:['Vocal file import','خواندن فایل وکال'],mix:['Vocal mixing','میکس وکال'],model:['Resident local AI model','مدل هوش مصنوعی محلی'],pdf:['PDF extraction','استخراج متن PDF'],code:['JavaScript execution','اجرای JavaScript'],data:['Data analysis','تحلیل داده'],tasks:['Local task plan','طرح کارهای محلی']});
 function createAudioJobGate(notify){
  let active=null;
  return Object.freeze({busy:()=>active!==null,owner:()=>active?.owner??null,acquire(owner='local'){
