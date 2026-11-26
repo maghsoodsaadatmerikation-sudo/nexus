@@ -318,8 +318,55 @@ function exportHtml(sourceDocument, sections, {title}) {
  return '<!doctype html>\n' + doc.documentElement.outerHTML;
 }
 
+const followupLabels={
+ en:{
+  title:'Follow up on a passage', select:'Select text in this answer (up to 1,600 characters).',
+  label:'Selected model excerpt', explain:'Explain selection', examine:'Examine claims',
+  empty:'Select a passage of up to 1,600 characters.',
+  blocked:'Keep or clear the current chat draft and preview before starting a follow-up.',
+  explainPrompt:'Explain the selected model excerpt in plain language. Define key terms and distinguish interpretation from additional factual claims.',
+  examinePrompt:'Examine the selected model excerpt. Identify its factual claims, which are supported by evidence available in this request, and what sources could check the rest. A prior model answer and old citation markers are not evidence. State uncertainty and do not claim to have searched.'
+ },
+ fa:{
+  title:'پیگیری بخشی از پاسخ', select:'از متن پاسخ تا ۱۶۰۰ نویسه انتخاب کن.',
+  label:'گزیدهٔ پاسخ مدل', explain:'توضیح بخش انتخابی', examine:'بررسی ادعاها',
+  empty:'بخشی تا ۱۶۰۰ نویسه انتخاب کن.',
+  blocked:'پیش از پیگیری، پیش‌نویس و پیش‌نمایش فعلی گفتگو را نگه دار یا پاک کن.',
+  explainPrompt:'گزیدهٔ انتخابی از پاسخ مدل را به زبان ساده توضیح بده. اصطلاح‌ها را تعریف کن و توضیح خودت را از ادعاهای تازه جدا کن.',
+  examinePrompt:'گزیدهٔ انتخابی از پاسخ مدل را بررسی کن. ادعاهای واقعی را مشخص کن، بگو کدام‌یک در همین درخواست شاهد دارند و برای بررسی بقیه چه منبعی لازم است. پاسخ قبلی مدل و شمارهٔ ارجاع‌های قبلی خودشان شاهد نیستند. عدم قطعیت را بیان کن و ادعای جست‌وجو نکن.'
+ }
+};
+function mountFocusedFollowup(parent,answer,language,stage){
+ const doc=parent.ownerDocument,copy=followupLabels[language==='fa'?'fa':'en'];
+ const make=(tag,value='')=>{const node=doc.createElement(tag);node.textContent=value;return node};
+ const panel=make('details'),excerpt=make('textarea'),notice=make('p');
+ panel.dataset.focusedFollowup='';
+ excerpt.readOnly=true;excerpt.rows=5;excerpt.dir='auto';
+ excerpt.setAttribute('aria-label',copy.select);notice.setAttribute('role','status');
+ panel.append(make('summary',copy.title),make('p',copy.select),excerpt);
+ panel.ontoggle=()=>{
+  excerpt.value=panel.open?answer:'';
+  excerpt.setSelectionRange(0,0);
+  notice.textContent='';
+ };
+ for(const action of ['explain','examine']){
+  const button=make('button',copy[action]);button.type='button';button.className='secondary';
+  button.dataset.followupAction=action;
+  button.onclick=()=>{
+   if(!panel.open||!parent.isConnected)return;
+   const selected=excerpt.value.slice(excerpt.selectionStart,excerpt.selectionEnd);
+   if(!selected.trim()||selected.length>1600){notice.textContent=copy.empty;return}
+   if(stage(copy.label,selected,copy[action+'Prompt']))panel.open=false;
+   else notice.textContent=copy.blocked;
+  };
+  panel.append(button);
+ }
+ panel.append(notice);parent.append(panel);
+}
+
 globalThis.NexusReplyFormat = Object.freeze({
  render,
+ mountFocusedFollowup,
  reviewDraft,
  auditReferenceMarkers,
  answerReviewPrompt,
