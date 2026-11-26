@@ -839,6 +839,34 @@ window.addEventListener('load',async()=>{
    !/SAME-PREFIX|SAME-SUFFIX|UNSAVED-LOCAL-DRAFT/.test(versionContext)&&
    $('editor').value==='UNSAVED-LOCAL-DRAFT'&&JSON.stringify(snapshot())===beforeVersionReview&&forbiddenProviderRequests===0,
    'version-review-uses-only-changed-saved-passages-without-touching-editor');
+  $('clear-chat-files').click();$('source-answer').click();
+  fill('message','How should I run a pilot?');
+  $('decision-panel').open=true;
+  fill('decision-options','Small pilot\nSmall  Pilot');fill('decision-priorities','Reliability\nCost');
+  const beforeDecision=JSON.stringify(snapshot());
+  $('decision-compare').click();
+  assert($('message').value==='How should I run a pilot?'&&$('decision-status').textContent.includes('distinct options')&&
+   NexusStudioUI.storageStatus().drafts.chat,'decision-rejects-duplicate-options-without-touching-draft');
+  fill('decision-options','Small pilot\nWait for more feedback');$('decision-compare').click();
+  const decisionDraft=$('message').value;
+  assert(decisionDraft.startsWith('How should I run a pilot?')&&decisionDraft.includes('1. Reliability\n2. Cost')&&
+   decisionDraft.includes('in a table')&&$('request-review').hidden&&
+   !$('decision-options').value&&JSON.stringify(snapshot())===beforeDecision&&forbiddenProviderRequests===0,
+   'decision-comparison-builds-editable-draft-without-sending-or-saving');
+  $('prepare').click();
+  const decisionReview=JSON.parse($('request-context').textContent);
+  assert(decisionReview.messages.at(-1).content===decisionDraft&&!$('consent').checked,
+   'decision-draft-uses-the-normal-exact-review');
+  fill('message','');change('language','fa');
+  $('decision-panel').open=true;
+  fill('decision-options','آزمون کوچک\nصبر');fill('decision-priorities','اطمینان\nهزینه');$('decision-stress').click();
+  const stressDraft=$('message').value;
+  assert(stressDraft.includes('دو وضعیت متفاوت')&&stressDraft.includes('ترتیب گزینه‌ها را عوض')&&
+   stressDraft.includes('انتخاب نهایی با من است')&&$('request-review').hidden&&forbiddenProviderRequests===0,
+   'persian-assumption-test-prepares-scenarios-for-human-judgment');
+  fill('decision-options','PRIVATE UNSENT DECISION');$('lock').click();
+  assert(!$('decision-options').value&&!$('decision-priorities').value&&!$('decision-panel').open&&
+   !JSON.stringify(snapshot()).includes('PRIVATE UNSENT DECISION'),'lock-removes-temporary-decision-form');
 
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}

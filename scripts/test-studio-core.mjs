@@ -3,6 +3,14 @@ import '../web/studio-core.js';
 import '../web/studio-calendar.js';
 const S=globalThis.NexusStudio;let checks=0;
 const ok=(f)=>{f();checks++},reject=async(f)=>{await assert.rejects(f);checks++};
+const decision={question:'My original question',options:'Pilot locally\r\nWait',priorities:'Reliability\nCost',mode:'compare'};
+const comparisonDraft=S.decisionDraft(decision);
+ok(()=>assert(comparisonDraft.startsWith(decision.question)&&comparisonDraft.includes('1. Reliability\n2. Cost')&&comparisonDraft.includes('in a table')));
+ok(()=>assert.match(S.decisionDraft({...decision,mode:'stress'}),/reverse the ranking.*at least two scenarios/));
+ok(()=>assert.match(S.decisionDraft({...decision,fa:true}),/اولویت‌ها به ترتیب اهمیت/));
+ok(()=>assert.throws(()=>S.decisionDraft({...decision,options:'pilot locally\nPilot  locally'}),/decision-items/));
+ok(()=>assert.throws(()=>S.decisionDraft({...decision,priorities:'  '}),/decision-items/));
+ok(()=>assert.throws(()=>S.decisionDraft({...decision,question:'x'.repeat(12000)}),/decision-capacity/));
 const p=S.project('Project'),initial=S.thread('Thread');p.threads=[initial];let c=S.append(initial,'user','original question','human');c=S.append(c,'assistant','original draft','model');const original=S.copy(c);const edited=S.append(c,'user','edited question','human',null);const branch=S.append(edited,'assistant','alternative answer','model');
 ok(()=>assert.deepEqual(c,original));ok(()=>assert.equal(S.path(branch).length,2));ok(()=>assert.equal(branch.nodes.length,4));ok(()=>assert.equal(S.path(branch,original.head)[1].text,'original draft'));
 // Model route identity is optional for legacy data, but strict and preserved
