@@ -45,13 +45,27 @@ export function reviewAssistantWorkflow(input,{enabled=false,isolated=false,expe
    }
   }
  }
- const priority=critique.blocking_review_count?'review_plan_boundaries':
-  unresolved.some(i=>['inconsistent_observation','reconcile_before_action'].includes(i.disposition))?'reconcile_execution_status':
-  reconciliation.length?'review_outcome_evidence':
-  revision?.lost_count?'review_lost_criteria':
-  unresolved.length?'review_unfinished_steps':
-  critique.findings.length?'review_plan_findings':
-  outcome.review_actions.length?'review_outcome_evidence':'manual_final_review';
+ // Preserve all outstanding review categories, not merely the first one.
+ // Counts describe separate dimensions and must not be summed as unique issues.
+ const queue=[];
+ const add=(priority,reason,count)=>{if(count)queue.push({priority,reason,count})};
+ const reconcileSteps=unresolved.filter(i=>['inconsistent_observation','reconcile_before_action'].includes(i.disposition));
+ const otherActions=outcome.review_actions.filter(a=>!reconciliation.includes(a.criterion_id));
+ add('review_plan_boundaries','declared_plan_boundary_findings',critique.blocking_review_count);
+ add('reconcile_execution_status','uncertain_or_inconsistent_step_status',reconcileSteps.length);
+ add('review_outcome_evidence','required_evidence_reconciliation',reconciliation.length);
+ add('review_lost_criteria','reported_pass_lost',revision?.lost_count??0);
+ add('review_unfinished_steps','other_unfinished_steps',unresolved.length-reconcileSteps.length);
+ add('review_plan_findings','other_plan_findings',critique.findings.length-critique.blocking_review_count);
+ add('review_outcome_evidence','other_required_evidence_actions',otherActions.filter(a=>a.required).length);
+ add('review_outcome_evidence','optional_evidence_actions',otherActions.filter(a=>!a.required).length);
+ const priority=queue[0]?.priority??'manual_final_review';
+ const review_readiness={
+  status:queue.length?'outstanding_review_items':'manual_final_review_required',
+  queue,basis:'declared_plan_and_supplied_reports_only',
+  limitations:['actual_effects_unverified','execution_unverified','evidence_provenance_unverified','criterion_semantics_unverified'],
+  manual_review_required:true,completion_verified:false,execution_authorized:false
+ };
  const comparison=input.correction_comparison===undefined?{}:{correction_comparison:
   !experienceEnabled?{status:'off',options:[]}:
   critique.blocking_review_count||unresolved.length||reconciliation.length?{status:'withheld_pending_review',options:[]}:
@@ -69,7 +83,7 @@ export function reviewAssistantWorkflow(input,{enabled=false,isolated=false,expe
   patterns.failure_patterns?.status!=='review_only'?{status:'withheld_pending_history',findings:[]}:
   reviewAdaptivePlan(scope,input.criteria,patterns.failure_patterns,input.adaptive_plan,
    new Set([scope.run_id,...input.failure_history.map(r=>r.scope.run_id),...(revision?[input.prior_run.scope.run_id]:[])]))};
- return {status:'review_only',priority,critique,recovery,outcome,revision,experience,...comparison,...scenarios,...patterns,...adaptive,...boundary};
+ return {status:'review_only',priority,review_readiness,critique,recovery,outcome,revision,experience,...comparison,...scenarios,...patterns,...adaptive,...boundary};
 }
 
 // Compare explicitly supplied estimates for one failed criterion, and only
