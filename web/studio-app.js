@@ -911,6 +911,7 @@ $('send-model').onclick=async()=>{
    const notes=draftReview.findings.map(k=>warnings[k]?.[language==='fa'?1:0]).filter(Boolean);
    if(draftReview.findings.length)notes.push(language==='fa'?'بازبینی ساختاری؛ درستی محتوا تأیید نشده.':'Structural review only; facts not verified.');
    if(refStatus[references.status])notes.push(refStatus[references.status][language==='fa'?1:0]+(references.status==='unknown_markers'?references.unknown.join(', '):references.status==='matched_markers'?references.matched.join(', '):''),language==='fa'?'تطبیق شناسه، تأیید ادعا نیست.':'Marker matching is not claim verification.');
+   if(references.malformed_count){notes.push((language==='fa'?'ارجاع با قالب نامعتبر یا ناقص: ':'Malformed or incomplete reference markers: ')+references.malformed_count);if(!refStatus[references.status])notes.push(language==='fa'?'تطبیق شناسه، تأیید ادعا نیست.':'Marker matching is not claim verification.');}
    $('status').textContent=notes.join(' ');
   }
  }catch(error){if(rev===revision)status(gatewayFailureLabel(error,request,timedOut))}
