@@ -647,9 +647,14 @@ window.addEventListener('load',async()=>{
   assert($('chat-attachment-tray').textContent===priorTray&&$('message').value===keptDraft,
    'comparison-does-not-replace-an-existing-attachment-or-draft');
   $('clear-chat-files').click();
+  // The earlier lock cleared model configuration. Reconnect the synthetic
+  // gateway before testing the real request preview after research staging.
+  $('check-model').click();
+  await wait(()=>NexusStudioUI.modelAvailability().configured);
   fill('message','Keep my own research question');
   const beforeSourceCompare=JSON.stringify(snapshot());
   compareSources.click();$('prepare').click();
+  assert(!$('request-review').hidden,'source-comparison-opens-request-preview');
   const sourceCompare=JSON.parse($('request-context').textContent);
   assert($('source-answer').checked&&!$('consent').checked&&providerCalls===beforeVoiceNetwork&&
    JSON.stringify(snapshot())===beforeSourceCompare,'comparison-prepares-without-sending-or-saving');
