@@ -625,6 +625,28 @@ window.addEventListener('load',async()=>{
   assert(recallReview.related_chat_passages.some(p=>p.thread===priorThread.threadId&&p.turn===1)&&
    recallReview.messages[0].content.includes('orchard trees RECALL TEST')&&!$('consent').checked,
    'matching-user-excerpt-in-exact-request-review');
+  const continuationNote=$('continuation-context-note');
+  assert(continuationNote.hidden,'direct-query-has-no-continuation-note');
+  $('guide').click();
+  const followupCommand='ادامه‌بده؟';
+  fill('message',followupCommand);$('prepare').click();
+  const continuedReview=JSON.parse($('request-context').textContent);
+  assert(!continuationNote.hidden&&!continuationNote.open&&
+   $('continuation-context-summary').textContent.includes('message 1')&&
+   $('continuation-context-message').textContent==='orchard trees'&&
+   continuedReview.messages.at(-1).content===followupCommand&&
+   continuedReview.related_chat_passages.some(p=>p.thread===priorThread.threadId)&&!$('consent').checked,
+   'continuation-review-identifies-the-exact-earlier-message-before-consent');
+  $('continuation-context-summary').click();
+  assert(continuationNote.open&&!$('consent').checked&&$('message').value===followupCommand&&
+   JSON.stringify(JSON.parse($('request-context').textContent))===JSON.stringify(continuedReview),
+   'opening-the-earlier-message-preserves-the-review-and-draft');
+  $('use-related-chats').checked=false;$('use-related-chats').dispatchEvent(new Event('input'));
+  assert(continuationNote.hidden&&!continuationNote.open&&!$('continuation-context-message').textContent&&
+   $('request-review').hidden,'changing-retrieval-permission-clears-the-earlier-message');
+  $('prepare').click();
+  assert(continuationNote.hidden&&JSON.parse($('request-context').textContent).related_chat_passages.length===0,
+   'continuation-without-retrieval-has-no-note');
   fill('message','/temporary');compose.click();
   const isolatedSelection=NexusStudioUI.selection();
   const isolated=current().threads.find(t=>t.id===isolatedSelection.threadId);
