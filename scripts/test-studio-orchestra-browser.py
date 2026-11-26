@@ -90,8 +90,11 @@ window.addEventListener('load',async()=>{
   assert($('orchestra-dry-download').disabled,'no-private-voice-export-after-clear');
   $('orchestra-render').click();
   window.dispatchEvent(new Event('pagehide'));
-  assert(!$('orchestra-render').disabled&&$('orchestra-cancel').disabled&&
+  assert(NexusMusicUI.audioBusy()&&$('orchestra-render').disabled&&$('music-render').disabled&&$('orchestra-cancel').disabled&&
     NexusOrchestraUI.hasScore()&&!NexusOrchestraUI.hasWav()&&!NexusOrchestraUI.hasMixedWav(),
+    'pagehide-invalidates-render-and-retains-shared-lease');
+  await wait(()=>!NexusMusicUI.audioBusy()&&!$('orchestra-render').disabled);
+  assert(NexusOrchestraUI.hasScore()&&!NexusOrchestraUI.hasWav()&&!NexusOrchestraUI.hasMixedWav()&&!NexusOrchestraUI.hasOriginalVocal(),
     'pagehide-cancels-render-and-restores-score-controls');
   $('orchestra-prompt').value='opera rap impossible word';
   $('orchestra-prompt').dispatchEvent(new Event('input',{bubbles:true}));
