@@ -2210,21 +2210,29 @@ const followupLabels={
  en:{
   title:'Follow up on a passage', select:'Select text in this answer (up to 1,600 characters).',
   label:'Selected model excerpt', explain:'Explain selection', examine:'Examine claims',
+  challenge:'Explore counterarguments', research:'Prepare source search',
+  researchLimit:'Select a shorter search phrase of up to 250 characters.',
+  researchBlocked:'Clear the current research query or model preview before preparing another search.',
   empty:'Select a passage of up to 1,600 characters.',
   blocked:'Keep or clear the current chat draft and preview before starting a follow-up.',
   explainPrompt:'Explain the selected model excerpt in plain language. Define key terms and distinguish interpretation from additional factual claims.',
+  challengePrompt:'Give the strongest reasonable counterargument to the selected model excerpt. State the assumptions on each side, what evidence would distinguish them, and where you remain uncertain. Do not invent evidence or decide on my behalf.',
   examinePrompt:'Examine the selected model excerpt. Identify its factual claims, which are supported by evidence available in this request, and what sources could check the rest. A prior model answer and old citation markers are not evidence. State uncertainty and do not claim to have searched.'
  },
  fa:{
   title:'پیگیری بخشی از پاسخ', select:'از متن پاسخ تا ۱۶۰۰ نویسه انتخاب کن.',
   label:'گزیدهٔ پاسخ مدل', explain:'توضیح بخش انتخابی', examine:'بررسی ادعاها',
+  challenge:'بررسی دیدگاه مخالف', research:'آماده‌کردن جست‌وجوی منبع',
+  researchLimit:'برای جست‌وجو عبارتی حداکثر ۲۵۰ نویسه‌ای انتخاب کن.',
+  researchBlocked:'پیش از آماده‌کردن جست‌وجوی تازه، عبارت پژوهشی یا پیش‌نمایش مدل را پاک کن.',
   empty:'بخشی تا ۱۶۰۰ نویسه انتخاب کن.',
   blocked:'پیش از پیگیری، پیش‌نویس و پیش‌نمایش فعلی گفتگو را نگه دار یا پاک کن.',
   explainPrompt:'گزیدهٔ انتخابی از پاسخ مدل را به زبان ساده توضیح بده. اصطلاح‌ها را تعریف کن و توضیح خودت را از ادعاهای تازه جدا کن.',
+  challengePrompt:'قوی‌ترین استدلال معقول در برابر گزیدهٔ انتخابی را بیان کن. فرض‌های هر طرف، شواهدی که می‌تواند میانشان تمایز بگذارد و موارد نامطمئن را مشخص کن. شاهدی نساز و به‌جای من تصمیم نگیر.',
   examinePrompt:'گزیدهٔ انتخابی از پاسخ مدل را بررسی کن. ادعاهای واقعی را مشخص کن، بگو کدام‌یک در همین درخواست شاهد دارند و برای بررسی بقیه چه منبعی لازم است. پاسخ قبلی مدل و شمارهٔ ارجاع‌های قبلی خودشان شاهد نیستند. عدم قطعیت را بیان کن و ادعای جست‌وجو نکن.'
  }
 };
-function mountFocusedFollowup(parent,answer,language,stage){
+function mountFocusedFollowup(parent,answer,language,stage,research){
  const doc=parent.ownerDocument,copy=followupLabels[language==='fa'?'fa':'en'];
  const make=(tag,value='')=>{const node=doc.createElement(tag);node.textContent=value;return node};
  const panel=make('details'),excerpt=make('textarea'),notice=make('p');
@@ -2237,13 +2245,19 @@ function mountFocusedFollowup(parent,answer,language,stage){
   excerpt.setSelectionRange(0,0);
   notice.textContent='';
  };
- for(const action of ['explain','examine']){
+ for(const action of ['explain','examine','challenge','research']){
   const button=make('button',copy[action]);button.type='button';button.className='secondary';
   button.dataset.followupAction=action;
   button.onclick=()=>{
    if(!panel.open||!parent.isConnected)return;
    const selected=excerpt.value.slice(excerpt.selectionStart,excerpt.selectionEnd);
    if(!selected.trim()||selected.length>1600){notice.textContent=copy.empty;return}
+   if(action==='research'){
+    const query=selected.replace(/\[NXS:[SA][1-9]\d?\]/g,' ').replace(/\s+/gu,' ').trim();
+    if(!query||query.length>250){notice.textContent=copy.researchLimit;return}
+    if(research(query))panel.open=false;else notice.textContent=copy.researchBlocked;
+    return;
+   }
    if(stage(copy.label,selected,copy[action+'Prompt']))panel.open=false;
    else notice.textContent=copy.blocked;
   };
@@ -3894,6 +3908,13 @@ function renderMessage(n){
    return stageChatAttachments([{id:S.uid(),name,text,whole:true}],()=>{
     $('source-answer').checked=false;$('message').value=prompt;
    });
+  },query=>{
+   const input=$('research-query');
+   if(!item.isConnected||busy||pending||(input.value.trim()&&input.value.trim()!==query))return false;
+   stop();
+   if(input.value!==query){input.value=query;input.dispatchEvent(new Event('input',{bubbles:true}))}
+   window.NexusStudioFocus?.openPanel('research-card');input.focus();
+   return true;
   });
  if(n.role==='user'){
   if(n.attached_files?.length)item.append(el('small',t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' · '+t('chatFilesNotSaved')));

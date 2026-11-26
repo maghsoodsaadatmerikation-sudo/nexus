@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from studio_public_assets import ASTRONOMY_MODULE, ORCHESTRA_MODULE, REPLY_MODULE, STUDIO_INDEX_LIMIT
+from studio_public_assets import ASTRONOMY_MODULE, ORCHESTRA_MODULE, REPLY_MODULE, CORE_MODULE, STUDIO_INDEX_LIMIT
 
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('public_assets',ROOT/'scripts/verify-public-pwa-assets.py')
@@ -31,7 +31,7 @@ def sanity():
     worker=(ROOT/'public/studio/service-worker.js').read_text()
     manifest=json.loads((ROOT/'public/studio/manifest.json').read_text())
     assert observer.ORIGIN=='https://nexus-studio-merikation.onrender.com'
-    assert len(observer.ASSETS)==12
+    assert len(observer.ASSETS)==13
     assert observer.compare(200,'text/html',html,html,'text/html')['ok']
     oversized = b'x' * (STUDIO_INDEX_LIMIT + 1)
     assert not observer.compare(200,'text/html',oversized,oversized,'text/html')['ok']
@@ -50,6 +50,7 @@ for name in ['device-engine.js','device-worker.js','device-ui.js','model-manifes
 observer.ASSETS['/'+ASTRONOMY_MODULE]=('public/studio/'+ASTRONOMY_MODULE,'javascript')
 observer.ASSETS['/'+ORCHESTRA_MODULE]=('public/studio/'+ORCHESTRA_MODULE,'javascript')
 observer.ASSETS['/'+REPLY_MODULE]=('public/studio/'+REPLY_MODULE,'javascript')
+observer.ASSETS['/'+CORE_MODULE]=('public/studio/'+CORE_MODULE,'javascript')
 observer.source_sanity=sanity
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--self-test',action='store_true');parser.add_argument('--attempts',type=int,default=1);args=parser.parse_args()

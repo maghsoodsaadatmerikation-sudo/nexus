@@ -147,7 +147,7 @@ jobs:
           expected=set(FILES)
           paths=[x["path"] for x in r["assets"]]
           assert set(manifest["assets"])==expected
-          assert {"studio-orchestra.js","studio-reply-format.js"} <= expected
+          assert {"studio-orchestra.js","studio-reply-format.js","studio-core.js"} <= expected
           assert r["reviewed_public_files"]==r["observed_public_files"]==len(expected)
           assert len(paths)==len(expected) and set(paths)==expected
           assert r["read_only"] is True and r["source_manifest_verified"] is True

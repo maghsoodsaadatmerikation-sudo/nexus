@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 from studio_template_contract import replace_exact
-from studio_public_assets import ASTRONOMY_MODULE, ORCHESTRA_MODULE, REPLY_MODULE, PDF_MODULES, check_public_tree
+from studio_public_assets import ASTRONOMY_MODULE, ORCHESTRA_MODULE, REPLY_MODULE, CORE_MODULE, PDF_MODULES, check_public_tree
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_ORIGIN = "https://nexus-studio-merikation.onrender.com"
@@ -148,6 +148,10 @@ def render_public_shell(source: str, device_panel: str) -> bytes:
     reply_integrity=base64.b64encode(hashlib.sha256(reply).digest()).decode('ascii')
     source=replace_exact(source, '<script>'+reply.decode('utf-8')+'</script>',
                          f'<script src="./{REPLY_MODULE}" integrity="sha256-{reply_integrity}"></script>')
+    core=(ROOT/'web'/CORE_MODULE).read_bytes()
+    core_integrity=base64.b64encode(hashlib.sha256(core).digest()).decode('ascii')
+    source=replace_exact(source, '<script>'+core.decode('utf-8')+'</script>',
+                         f'<script src="./{CORE_MODULE}" integrity="sha256-{core_integrity}"></script>')
     source=replace_exact(source, "script-src 'unsafe-inline'", "script-src 'self' blob: 'unsafe-inline' 'wasm-unsafe-eval'")
     # Enable the public device worker in the page policy. The lab's srcdoc
     # keeps its independent opaque-origin, blob-only worker policy.
@@ -185,11 +189,13 @@ def artifacts():
     code.append({'path':ORCHESTRA_MODULE,'bytes':len(orchestra),'sha256':hashlib.sha256(orchestra).hexdigest(),'kind':'javascript'})
     reply=(ROOT/'web'/REPLY_MODULE).read_bytes()
     code.append({'path':REPLY_MODULE,'bytes':len(reply),'sha256':hashlib.sha256(reply).hexdigest(),'kind':'javascript'})
+    core=(ROOT/'web'/CORE_MODULE).read_bytes()
+    code.append({'path':CORE_MODULE,'bytes':len(core),'sha256':hashlib.sha256(core).hexdigest(),'kind':'javascript'})
     worker=replace_exact(WORKER, '__DIGEST__', hashlib.sha256(html).hexdigest())
     worker=replace_exact(worker, '__INDEX_BYTES__', str(len(html)))
     worker=replace_exact(worker, '__CODE_ASSETS__', json.dumps(code,separators=(',',':')))
     worker=replace_exact(worker, '__PACKAGE_ID__', hashlib.sha256(html+json.dumps(code,sort_keys=True).encode()).hexdigest()[:16])
-    return {'index.html':html, ASTRONOMY_MODULE:astronomy, ORCHESTRA_MODULE:orchestra, REPLY_MODULE:reply, 'service-worker.js':worker.encode(), 'manifest.json':(json.dumps(manifest,indent=2)+'\n').encode(), **{f'icons/nexus-{size}.png':(ROOT/f'public/icons/nexus-{size}.png').read_bytes() for size in (192,512)}}
+    return {'index.html':html, ASTRONOMY_MODULE:astronomy, ORCHESTRA_MODULE:orchestra, REPLY_MODULE:reply, CORE_MODULE:core, 'service-worker.js':worker.encode(), 'manifest.json':(json.dumps(manifest,indent=2)+'\n').encode(), **{f'icons/nexus-{size}.png':(ROOT/f'public/icons/nexus-{size}.png').read_bytes() for size in (192,512)}}
 
 
 def main():
