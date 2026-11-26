@@ -67,7 +67,8 @@ export function reviewAssistantWorkflow(input,{enabled=false,isolated=false,expe
  const adaptive=input.adaptive_plan===undefined?{}:{adaptive_plan:
   !experienceEnabled?{status:'off',findings:[]}:
   patterns.failure_patterns?.status!=='review_only'?{status:'withheld_pending_history',findings:[]}:
-  reviewAdaptivePlan(scope,input.criteria,patterns.failure_patterns,input.adaptive_plan)};
+  reviewAdaptivePlan(scope,input.criteria,patterns.failure_patterns,input.adaptive_plan,
+   new Set([scope.run_id,...input.failure_history.map(r=>r.scope.run_id),...(revision?[input.prior_run.scope.run_id]:[])]))};
  return {status:'review_only',priority,critique,recovery,outcome,revision,experience,...comparison,...scenarios,...patterns,...adaptive,...boundary};
 }
 
@@ -170,10 +171,13 @@ function reviewFailurePatterns(scope,criteria,evidence,outcome,history){
 
 // Prospective, advisory structural review. Mappings are caller declarations;
 // dependencies and success criteria do not prove a check will actually run.
-function reviewAdaptivePlan(scope,criteria,history,request){
+function reviewAdaptivePlan(scope,criteria,history,request,usedRunIds){
  const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
  const next=request?.scope;
  if(!next||next.project_id!==scope.project_id||next.workflow_id!==scope.workflow_id||!id(next.run_id)||next.run_id===scope.run_id||typeof next.plan_sha256!=='string'||!/^[a-f0-9]{64}$/.test(next.plan_sha256))throw Error('adaptive-plan-scope-mismatch');
+ // A declared future run must not reuse a known historical identity.
+ // This does not establish chronology or authenticate the supplied IDs.
+ if(usedRunIds.has(next.run_id))throw Error('adaptive-plan-run-reused');
  const critique=critiqueWorkflow(request.plan,{enabled:true});
  if(!Array.isArray(request.checkpoints)||request.checkpoints.length>30)throw Error('invalid-adaptive-checkpoints');
  const steps=new Map(request.plan.steps.map(s=>[s.id,s])),catalog=new Set(criteria.map(c=>c.id)),mappings=new Map();
