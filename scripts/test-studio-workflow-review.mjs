@@ -226,6 +226,25 @@ function testUnified(review){
  eq(adaptiveRequest.checkpoints.length,1);
  reject(()=>review(input,{enabled:true,experienceEnabled:1}),'invalid-options');
  eq(JSON.stringify(x).includes('current-e'),false);
+ eq(x.review_readiness.status,'manual_final_review_required');
+ eq(x.review_readiness.queue,[]);
+ eq(x.review_readiness.manual_review_required,true);
+ eq(x.review_readiness.completion_verified,false);
+ eq(x.review_readiness.execution_authorized,false);
+ eq(x.review_readiness.limitations.includes('evidence_provenance_unverified'),true);
+ eq(review(null).review_readiness,undefined);
+ eq(review(null,{...recall,isolated:true}).review_readiness,undefined);
+ const multiReview=review({...conflicting,plan:{...plan,steps:[{...plan.steps[0],effect:'external_write',success_criteria:undefined},plan.steps[1]]},step_observations:[step('b','failed')]},on);
+ eq(multiReview.priority,'review_plan_boundaries');
+ eq(multiReview.review_readiness.status,'outstanding_review_items');
+ eq(multiReview.review_readiness.queue.map(q=>q.reason),['declared_plan_boundary_findings','uncertain_or_inconsistent_step_status','required_evidence_reconciliation','reported_pass_lost','other_unfinished_steps','other_plan_findings','other_required_evidence_actions']);
+ eq(multiReview.review_readiness.queue.map(q=>q.count),[3,1,1,1,1,1,1]);
+ eq(multiReview.review_readiness.queue[0].priority,multiReview.priority);
+ const optionalQueue=review({...input,criteria:[...criteria,{...guard,required:false}],evidence:[]},on).review_readiness.queue;
+ eq(optionalQueue.map(q=>q.reason),['other_required_evidence_actions','optional_evidence_actions']);
+ eq(optionalQueue.map(q=>q.count),[1,1]);
+ eq(review({...input,step_observations:[]},on).review_readiness.queue.map(q=>q.reason),['uncertain_or_inconsistent_step_status']);
+ eq(JSON.stringify(multiReview.review_readiness).includes('current-e'),false);
  eq(input.step_observations.length,2);
  return checks;
 }
