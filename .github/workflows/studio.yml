@@ -104,6 +104,8 @@ jobs:
         run: python3 scripts/test-studio-vault-cancellation-browser.py
       - name: Exercise Studio in disposable narrow and wide Chromium
         run: python3 scripts/test-studio-browser.py
+      - name: Verify continuation retrieval consent and retained branches in Chromium
+        run: python3 scripts/test-studio-followup-browser.py
       - name: Reject wrong or missing model route receipts in isolated Chromium
         run: python3 scripts/test-studio-model-receipt-browser.py
       - name: Explain synthetic gateway HTTP, network and malformed errors in isolated Chromium
