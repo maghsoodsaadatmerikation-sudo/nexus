@@ -634,13 +634,36 @@ window.addEventListener('load',async()=>{
   await wait(()=>$('research-cards').children.length===2);
   assert(searchCalls===wikiBefore+1&&crossrefCalls===1,'combined-search-calls-each-reviewed-provider-once');
   const picks=$('research-cards').querySelectorAll('input[type="checkbox"]');
-  picks[0].click();picks[1].click();
+  const compareSources=$('research-compare-chat');
+  picks[0].click();assert(compareSources.disabled,'comparison-requires-two-selected-sources');picks[1].click();
   const briefText=$('research-brief-text').textContent;
   assert(!$('research-brief').hidden&&briefText.includes('wikipedia.org')&&briefText.includes('https://doi.org/10.1234/source')&&
    briefText.includes('bibliographic-metadata-only'),'research-brief-retains-links-and-evidence-types');
   $('research-brief-chat').click();
   assert($('chat-attachment-tray').textContent.includes('Research brief')&&providerCalls===beforeVoiceNetwork&&
    !JSON.stringify(snapshot()).includes('Bibliographic source'),'brief-staged-for-review-without-model-send-or-archive');
+  const keptDraft=$('message').value,priorTray=$('chat-attachment-tray').textContent;
+  compareSources.click();
+  assert($('chat-attachment-tray').textContent===priorTray&&$('message').value===keptDraft,
+   'comparison-does-not-replace-an-existing-attachment-or-draft');
+  $('clear-chat-files').click();
+  fill('message','Keep my own research question');
+  const beforeSourceCompare=JSON.stringify(snapshot());
+  compareSources.click();$('prepare').click();
+  const sourceCompare=JSON.parse($('request-context').textContent);
+  assert($('source-answer').checked&&!$('consent').checked&&providerCalls===beforeVoiceNetwork&&
+   JSON.stringify(snapshot())===beforeSourceCompare,'comparison-prepares-without-sending-or-saving');
+  assert(sourceCompare.response_style==='source_answer'&&
+   sourceCompare.messages.at(-1).content==='Keep my own research question'&&
+   sourceCompare.temporary_attachment_passages.length===2&&
+   sourceCompare.messages[0].content.includes('https://doi.org/10.1234/source')&&
+   sourceCompare.messages[0].content.includes('bibliographic-metadata-only'),
+   'comparison-keeps-draft-and-provenance-for-two-separately-citable-sources');
+  $('clear-chat-files').click();fill('message','');compareSources.click();
+  assert($('message').value.includes('combined source query')&&$('message').value.includes('contradictions and gaps'),
+   'empty-draft-receives-an-editable-source-comparison-question');
+  $('clear-chat-files').click();
+  $('source-answer').click();
   fill('research-query','revised combined source query');
   assert($('research-brief').hidden&&$('research-cards').children.length===0,'query-change-clears-old-brief');
   rejectCrossref=true;$('research-consent').click();$('research-run').click();
