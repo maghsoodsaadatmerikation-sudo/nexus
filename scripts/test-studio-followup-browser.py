@@ -35,6 +35,7 @@ window.addEventListener('load',()=>{
     assert(ctx.messages.at(-1).content===command,label+'/original-message');
     assert(ctx.citations.length===(sources?1:0),label+'/source-consent');
     assert(ctx.recalled_chats.length===(relatedChats?1:0),label+'/chat-consent');
+    assert(ctx.continuation_retrieval===(sources||relatedChats),label+'/review-flag');
     assert(!sources||ctx.citations[0].name==='orchard.txt',label+'/active-topic-source');
     assert(!relatedChats||ctx.recalled_chats[0].thread===prior.id,label+'/active-topic-chat');
     assert(!ctx.messages[0].content.includes('HIDDEN_BRANCH')&&!ctx.messages[0].content.includes('MODEL_ONLY'),label+'/no-hidden-or-model-topic');
@@ -49,10 +50,12 @@ window.addEventListener('load',()=>{
   const explicit=S.context(p,S.append(t,'user','continue with violet','human'),options);
   assert(explicit.citations[0].name==='violet.txt','explicit-request-keeps-own-query');
   assert(!explicit.messages[0].content.includes('Search topic carried'),'explicit-request-not-marked-carried');
+  assert(explicit.continuation_retrieval===false,'new-topic-omits-review-flag');
   let long=S.append(S.thread('Truncated'),'user','orchard','human');
   for(let i=0;i<22;i++)long=S.append(S.append(long,'assistant','draft','model'),'user','continue','human');
   const dropped=S.context(p,long,options);
-  assert(dropped.omitted_messages>0&&!dropped.citations.length&&!dropped.recalled_chats.length,'omitted-topic-stays-omitted');
+  assert(dropped.omitted_messages>0&&!dropped.citations.length&&!dropped.recalled_chats.length&&
+   !dropped.continuation_retrieval,'omitted-topic-stays-omitted');
   const empty=S.context(p,S.append(S.thread('Fresh'),'user','continue','human'),options);
   assert(!empty.citations.length&&!empty.recalled_chats.length,'fresh-continuation-has-no-invented-topic');
   const isolated=S.context(p,{...changed,isolated:true,temporary:true},options);

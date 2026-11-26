@@ -625,6 +625,20 @@ window.addEventListener('load',async()=>{
   assert(recallReview.related_chat_passages.some(p=>p.thread===priorThread.threadId&&p.turn===1)&&
    recallReview.messages[0].content.includes('orchard trees RECALL TEST')&&!$('consent').checked,
    'matching-user-excerpt-in-exact-request-review');
+  const continuationNote=$('continuation-context-note');
+  assert(continuationNote.hidden,'direct-query-has-no-continuation-note');
+  $('guide').click();
+  fill('message','ادامه بده');$('prepare').click();
+  const continuedReview=JSON.parse($('request-context').textContent);
+  assert(!continuationNote.hidden&&continuationNote.textContent.includes('earlier message')&&
+   continuedReview.messages.at(-1).content==='ادامه بده'&&
+   continuedReview.related_chat_passages.some(p=>p.thread===priorThread.threadId)&&!$('consent').checked,
+   'continuation-note-explains-included-excerpts-before-consent');
+  $('use-related-chats').checked=false;$('use-related-chats').dispatchEvent(new Event('input'));
+  assert(continuationNote.hidden&&$('request-review').hidden,'changing-retrieval-permission-clears-continuation-note');
+  $('prepare').click();
+  assert(continuationNote.hidden&&JSON.parse($('request-context').textContent).related_chat_passages.length===0,
+   'continuation-without-retrieval-has-no-note');
   fill('message','/temporary');compose.click();
   const isolatedSelection=NexusStudioUI.selection();
   const isolated=current().threads.find(t=>t.id===isolatedSelection.threadId);

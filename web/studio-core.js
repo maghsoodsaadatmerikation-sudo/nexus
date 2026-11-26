@@ -294,12 +294,14 @@ function context(p,t,{memory=false,sources=false,relatedChats=false,historyDays,
  const packed=pieces.length?fitOptionalContext(pieces,messages):null;
  if(packed)messages.unshift({role:'user',content:packed.value});
  const shownHits=packed?.included.has('sources')?hits:[];
+ const relatedIncluded=packed?.included.has('related-chats')===true;
+ const continuedRetrieval=topic.carried&&(shownHits.length>0||relatedIncluded);
  const shownAttachments=packed?.included.has('attachments')?extracts:[];
  const memoryCount=memory&&!t.isolated?p.memories.length:0;
  const memoryIncluded=packed?.included.has('memory')===true;
  const memoryReview={status:t.isolated?'isolated':!memory?'off':!memoryCount?'empty':memoryIncluded?'included':'omitted_budget',
   requested_count:memoryCount,included_count:memoryIncluded?memoryCount:0};
- return {messages,evidence_passages:t.isolated?[]:[...shownHits.map(({source_id,line,offset,text},i)=>({ref:'S'+(i+1),source_id,line,offset,text,partial:true,kind:'project_source'})),...shownAttachments.map(({source_id,line,offset,text,partial,kind},i)=>({ref:'A'+(i+1),source_id,line,offset,text,partial,kind}))],memory_review:memoryReview,recalled_chats:packed?.included.has('related-chats')?recalled.map(({title,thread,turn})=>({title,thread,turn})):[],study:packed?.included.has('study')===true,omitted_messages,optional_context_truncated:packed?.omitted===true,presentation: presentation?{mode:presentation.mode,at:presentation.at,engine:presentation.engine}:null,retrieval_truncated:hits.truncated===true&&shownHits.length>0,citations:shownHits.map(({source_id,name,line,offset},i)=>({ref:'S'+(i+1),source_id,name,line,offset})),attachments_supplied:shownAttachments.map(({source_id,name,line,offset,partial,kind},i)=>({ref:'A'+(i+1),source_id,name,line,offset,partial,kind})),attachments_truncated:shownAttachments.some(e=>e.partial)};
+ return {messages,evidence_passages:t.isolated?[]:[...shownHits.map(({source_id,line,offset,text},i)=>({ref:'S'+(i+1),source_id,line,offset,text,partial:true,kind:'project_source'})),...shownAttachments.map(({source_id,line,offset,text,partial,kind},i)=>({ref:'A'+(i+1),source_id,line,offset,text,partial,kind}))],memory_review:memoryReview,continuation_retrieval:continuedRetrieval,recalled_chats:relatedIncluded?recalled.map(({title,thread,turn})=>({title,thread,turn})):[],study:packed?.included.has('study')===true,omitted_messages,optional_context_truncated:packed?.omitted===true,presentation: presentation?{mode:presentation.mode,at:presentation.at,engine:presentation.engine}:null,retrieval_truncated:hits.truncated===true&&shownHits.length>0,citations:shownHits.map(({source_id,name,line,offset},i)=>({ref:'S'+(i+1),source_id,name,line,offset})),attachments_supplied:shownAttachments.map(({source_id,name,line,offset,partial,kind},i)=>({ref:'A'+(i+1),source_id,name,line,offset,partial,kind})),attachments_truncated:shownAttachments.some(e=>e.partial)};
 }
 function inspectSecrets(messages){
  if(!Array.isArray(messages)||messages.length>64)throw Error('privacy-input');
