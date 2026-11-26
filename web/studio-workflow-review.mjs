@@ -81,16 +81,24 @@ function compareRecalledCorrections(experience,request){
  const money=v=>bounded(v,100000000),minutes=v=>bounded(v,525600);
  const risks=['low','medium','high'];
  if(!request||!id(request.criterion_id)||!money(request.max_cost_usd_cents)||!minutes(request.max_effort_minutes)||!Array.isArray(request.options)||request.options.length<1||request.options.length>10)throw Error('invalid-correction-comparison');
+ const maxRisk=request.max_risk===undefined?null:request.max_risk;
+ const requireReversible=request.require_reversible===undefined?false:request.require_reversible;
+ if(!(maxRisk===null||risks.includes(maxRisk))||typeof requireReversible!=='boolean')throw Error('invalid-correction-constraints');
  const supported=new Map(experience.matches.filter(m=>m.criterion_id===request.criterion_id).map(m=>[m.correction_code,m]));
  const seen=new Set(),rows=[];
  for(const o of request.options){
   if(!o||!id(o.correction_code)||seen.has(o.correction_code)||!(o.cost_usd_cents===null||money(o.cost_usd_cents))||!(o.effort_minutes===null||minutes(o.effort_minutes))||!(o.risk===null||risks.includes(o.risk))||!(o.reversible===null||typeof o.reversible==='boolean'))throw Error('invalid-correction-option');
   seen.add(o.correction_code);
   const match=supported.get(o.correction_code);
+  const violations=[];
+  if(o.cost_usd_cents!==null&&o.cost_usd_cents>request.max_cost_usd_cents)violations.push('cost');
+  if(o.effort_minutes!==null&&o.effort_minutes>request.max_effort_minutes)violations.push('effort');
+  if(maxRisk!==null&&o.risk!==null&&risks.indexOf(o.risk)>risks.indexOf(maxRisk))violations.push('risk');
+  if(requireReversible&&o.reversible===false)violations.push('reversibility');
   const status=!match?'no_recalled_support':
-   [o.cost_usd_cents,o.effort_minutes,o.risk,o.reversible].includes(null)?'missing_estimates':
-   o.cost_usd_cents>request.max_cost_usd_cents||o.effort_minutes>request.max_effort_minutes?'outside_limits':'eligible';
-  rows.push({correction_code:o.correction_code,cost_usd_cents:o.cost_usd_cents,effort_minutes:o.effort_minutes,risk:o.risk,reversible:o.reversible,supporting_pair_count:match?.supporting_pair_count??0,status});
+   violations.length?'outside_limits':
+   [o.cost_usd_cents,o.effort_minutes,o.risk,o.reversible].includes(null)?'missing_estimates':'eligible';
+  rows.push({correction_code:o.correction_code,cost_usd_cents:o.cost_usd_cents,effort_minutes:o.effort_minutes,risk:o.risk,reversible:o.reversible,supporting_pair_count:match?.supporting_pair_count??0,status,limit_violations:violations});
  }
  const dimensions=o=>[o.cost_usd_cents,o.effort_minutes,risks.indexOf(o.risk),Number(!o.reversible)];
  const eligible=rows.filter(o=>o.status==='eligible');
@@ -101,7 +109,7 @@ function compareRecalledCorrections(experience,request){
    return b.every((v,i)=>v<=a[i])&&b.some((v,i)=>v<a[i]);
   })?'dominated_estimates':'tradeoff_candidate';
  }
- return {status:'review_only',basis:'supplied_estimates_for_recalled_options_not_verified_cost_risk_or_success',criterion_id:request.criterion_id,options:rows,recall_truncated:experience.truncated,automatic_selection:false,execution_authorized:false};
+ return {status:'review_only',basis:'supplied_estimates_for_recalled_options_not_verified_cost_risk_or_success',criterion_id:request.criterion_id,options:rows,constraints:{max_cost_usd_cents:request.max_cost_usd_cents,max_effort_minutes:request.max_effort_minutes,max_risk:maxRisk,require_reversible:requireReversible},recall_truncated:experience.truncated,automatic_selection:false,execution_authorized:false};
 }
 
 // Stress-test supplied ranges, not predictions. Rollback is a separate
