@@ -47,7 +47,7 @@ class StudioLocalTests(unittest.TestCase):
         self.assertTrue(kit.verify(self.zip, exact_commit=COMMIT))
         with zipfile.ZipFile(self.zip) as archive:
             names = archive.namelist()
-            self.assertEqual(len(names), 22)
+            self.assertEqual(len(names), 23)
             self.assertIn(kit.BUNDLE + '/vendor/astronomy-2.1.19.min.js', names)
             self.assertIn(kit.BUNDLE + '/studio-orchestra.js', names)
             self.assertEqual(
