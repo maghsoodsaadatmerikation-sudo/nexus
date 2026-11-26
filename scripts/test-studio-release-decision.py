@@ -51,11 +51,11 @@ class StudioDecisionTests(unittest.TestCase):
             source_commit=COMMIT,
         )
 
-    def test_all_19_match_still_holds_provider_identity_rollback_and_owner_approval(self):
+    def test_all_20_match_still_holds_provider_identity_rollback_and_owner_approval(self):
         record = self.evaluate(self.baseline)
         self.assertEqual(record["status"], "HOLD_PROVIDER_RECOVERY_AND_OWNER_EVIDENCE")
         self.assertEqual(record["public_source_status"], "SOURCE_MATCH_ONLY")
-        self.assertEqual(record["checked_paths"], 19)
+        self.assertEqual(record["checked_paths"], 20)
         self.assertEqual(record["problems"], [])
         self.assertIn("CURRENT_RENDER_DEPLOY_ID_NOT_INDEPENDENTLY_VERIFIED", record["blockers"])
         self.assertIn("RENDER_ROLLBACK_ARTIFACT_NOT_CONFIRMED", record["blockers"])
@@ -102,7 +102,7 @@ class StudioDecisionTests(unittest.TestCase):
 
     def test_legacy_only_observation_cannot_authorize_current_candidate(self):
         obj = copy.deepcopy(self.baseline)
-        legacy_missing = {"vendor/astronomy-2.1.19.min.js", "studio-orchestra.js"}
+        legacy_missing = {"vendor/astronomy-2.1.19.min.js", "studio-orchestra.js", "studio-reply-format.js"}
         obj["assets"] = [asset for asset in obj["assets"] if asset["path"] not in legacy_missing]
         obj["observed_public_files"] = 17
         obj["reviewed_public_files"] = 17
@@ -111,7 +111,7 @@ class StudioDecisionTests(unittest.TestCase):
 
     def test_previous_18_asset_observation_cannot_authorize_current_candidate(self):
         obj = copy.deepcopy(self.baseline)
-        obj["assets"] = [asset for asset in obj["assets"] if asset["path"] != "studio-orchestra.js"]
+        obj["assets"] = [asset for asset in obj["assets"] if asset["path"] not in {"studio-orchestra.js", "studio-reply-format.js"}]
         obj["observed_public_files"] = 18
         obj["reviewed_public_files"] = 18
         self.assertEqual(len(obj["assets"]), 18)

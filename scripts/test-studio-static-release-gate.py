@@ -36,7 +36,7 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertEqual(self.manifest_file.read_bytes(), second_manifest.read_bytes())
         self.assertEqual(manifest["schema"], gate.SCHEMA)
         self.assertEqual(manifest["source_commit"], COMMIT)
-        self.assertEqual(manifest["content_count"], 19)
+        self.assertEqual(manifest["content_count"], 20)
         self.assertEqual(manifest["readiness"], "REVIEW_CANDIDATE_ONLY")
         for name in ("contains_private_data", "contains_provider_secrets",
                      "production_promotion_authorized", "render_deploy_performed",
@@ -45,10 +45,11 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertEqual(manifest["authority"], "none")
         with zipfile.ZipFile(self.archive) as zipped:
             members = zipped.namelist()
-            self.assertEqual(len(members), 19)
+            self.assertEqual(len(members), 20)
             self.assertEqual(
                 set(members), {gate.BUNDLE + "/" + name for name in gate.FILES})
             self.assertIn(gate.BUNDLE + "/studio-orchestra.js", members)
+            self.assertIn(gate.BUNDLE + "/studio-reply-format.js", members)
             self.assertNotIn(gate.BUNDLE + "/device-check.html", members)
             self.assertNotIn(gate.BUNDLE + "/nexus-stage-d-private-capture.cms", members)
             self.assertTrue(all(x.compress_type == zipfile.ZIP_STORED for x in zipped.infolist()))
@@ -68,6 +69,19 @@ class ReleaseGateTests(unittest.TestCase):
         inline = assets["index.html"].replace(tag, b"<script>" + vendor + b"</script>", 1)
         self.assertGreater(len(inline) - len(assets["index.html"]), 100_000)
         self.assertLessEqual(len(assets["index.html"]), 650_000)
+
+    def test_reply_formatter_split_preserves_exact_source_and_sri(self):
+        import base64
+        assets = gate.source_assets()
+        code = assets["studio-reply-format.js"]
+        self.assertEqual(code, (HERE.parent / "web/studio-reply-format.js").read_bytes())
+        integrity = base64.b64encode(bytes.fromhex(gate.sha(code)))
+        tag = b'<script src="./studio-reply-format.js" integrity="sha256-' + integrity + b'"></script>'
+        self.assertEqual(assets["index.html"].count(tag), 1)
+        self.assertNotIn(code, assets["index.html"])
+        self.assertIn(b"<script>" + code + b"</script>", (HERE.parent / "web/studio.html").read_bytes())
+        self.assertIn(b"studio-reply-format.js", assets["service-worker.js"])
+        self.assertGreater(len(code) - len(tag), 15000)
 
     def test_bad_commit_and_existing_outputs_refuse_overwrite(self):
         for sha in ("main", "b"*39, "", "D"*40):
@@ -129,7 +143,7 @@ class ReleaseGateTests(unittest.TestCase):
         assets = gate.source_assets()
         result = gate.observe_public(manifest, lambda name: assets[name])
         self.assertEqual(result["status"], "SOURCE_MATCH_ONLY")
-        self.assertEqual(result["observed_asset_count"], 10)
+        self.assertEqual(result["observed_asset_count"], 11)
         self.assertTrue(all(x["status"] == "MATCH" for x in result["assets"]))
         for key in ("production_promotion_authorized", "render_deploy_performed",
                     "actual_deploy_identified", "real_browser_offline_verified"):
