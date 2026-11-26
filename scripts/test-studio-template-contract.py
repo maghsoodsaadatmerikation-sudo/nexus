@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -74,6 +75,21 @@ class TemplateContractTests(unittest.TestCase):
             self.assertLess(len(packaged), 10_000)  # Legacy offline install gate
             self.assertEqual(len(pixel_digest(packaged, size, size)), 64)
 
+    def test_public_orchestra_asset_keeps_exact_bytes_and_script_order(self):
+        original = (ROOT / "web/studio-orchestra.js").read_bytes()
+        package = ROOT / "public/studio"
+        self.assertEqual(original, (package / "studio-orchestra.js").read_bytes())
+        standalone = (ROOT / "web/studio.html").read_bytes()
+        public = (package / "index.html").read_bytes()
+        integrity = base64.b64encode(hashlib.sha256(original).digest())
+        tag = b'<script src="./studio-orchestra.js" integrity="sha256-' + integrity + b'"></script>'
+        self.assertIn(b'<script>' + original + b'</script>', standalone)
+        self.assertEqual(public.count(tag), 1)
+        self.assertNotIn(b'<script>' + original + b'</script>', public)
+        self.assertLess(public.index(tag), public.index((ROOT / "web/studio-orchestra-ui.js").read_bytes()))
+        worker = (package / "service-worker.js").read_text()
+        self.assertIn(hashlib.sha256(original).hexdigest(), worker)
+
     def test_public_page_leaves_the_opaque_lab_module_intact(self):
         compiled = static_builder.render_public_shell(
             (ROOT / "web/studio.html").read_text(),
@@ -90,6 +106,21 @@ class TemplateContractTests(unittest.TestCase):
                     replace_exact(static_builder.WORKER.replace(token, ""), token, "x")
                 with self.assertRaises(ValueError):
                     replace_exact(static_builder.WORKER + token, token, "x")
+
+    def test_tasks_resource_gate_is_declared_as_late_dependency(self):
+        from dataclasses import replace
+        from studio_module_graph import MODULES, validate_module_graph
+        shell = (ROOT / "web/studio-shell.html").read_text()
+        modules = validate_module_graph(shell, ROOT / "web")
+        task = next(item for item in modules if item.filename == "studio-tasks-ui.js")
+        self.assertEqual(task.deferred, ("NexusMusicUI",))
+        for changed, reason in (
+            (replace(task, deferred=()), "undeclared or obsolete"),
+            (replace(task, requires=task.requires + task.deferred, deferred=()), "forward"),
+        ):
+            altered = tuple(changed if item == task else item for item in MODULES)
+            with self.assertRaisesRegex(ValueError, reason):
+                validate_module_graph(shell, ROOT / "web", altered)
 
     def test_optimized_python_cannot_omit_required_studio_module(self):
         with tempfile.TemporaryDirectory(prefix="nexus-studio-template-guard-") as directory:

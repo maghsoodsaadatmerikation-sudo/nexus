@@ -40,11 +40,19 @@ function renderBrief(){
   checkbox.disabled=limit&&!checkbox.checked;
  }
 }
+function syncCodeRun(){
+ const gate=window.NexusMusicUI;
+ $('code-run').disabled=Boolean(codeController||!gate||gate.audioBusy());
+ $('code-run').title=gate?.audioBusy()?(gate.resourceMessage?.()||t('localResourceBusy')):'';
+}
+Object.assign(EN,{localResourceBusy:'Finish the active local job or unload the local model first.'});
+Object.assign(FA,{localResourceBusy:'ابتدا پردازش محلی فعال را پایان بده یا مدل محلی را از حافظه خارج کن.'});
+document.addEventListener('nexus-audio-job-state',syncCodeRun);
 function cancel(){const oldResearch=activeResearchAttempt,oldCode=activeCodeAttempt;
  activeResearchAttempt=activeCodeAttempt=null;
  epoch++;searchController?.abort();codeController?.abort();searchController=codeController=null;
  if(oldResearch!==null)localLifecycle('research',oldResearch,'cancelled');
- if(oldCode!==null)localLifecycle('code',oldCode,'cancelled');run.cancel();$('research-consent').checked=false;$('code-consent').checked=false;$('research-run').disabled=false;$('code-run').disabled=false;$('research-stop').disabled=true;$('code-stop').disabled=true;$('code-status').textContent='';$('research-status').textContent=''}
+ if(oldCode!==null)localLifecycle('code',oldCode,'cancelled');run.cancel();$('research-consent').checked=false;$('code-consent').checked=false;$('research-run').disabled=false;syncCodeRun();$('research-stop').disabled=true;$('code-stop').disabled=true;$('code-status').textContent='';$('research-status').textContent=''}
 const workFields=['research-query','code','code-input','chart-json'];
 function hasTransientWork(){return workFields.some(id=>$(id).value.length>0)}
 function clear(){cancel();cards=[];selectedSources.clear();result=chartData=null;for(const id of workFields)$(id).value='';for(const id of ['research-cards','research-status','code-result','code-console','code-status'])$(id).replaceChildren();$('chart').hidden=true;$('chart').width=1;$('chart').height=1;renderBrief()}
@@ -76,9 +84,14 @@ $('research-stop').onclick=cancel;
 for(const id of ['code','code-input'])$(id).addEventListener('input',()=>{cancel();result=null;$('code-result').textContent='';$('code-console').textContent=''});
 $('code-sample').onclick=()=>{if($('code').value&&!confirm(t('discard')))return;cancel();result=null;$('code-result').textContent='';$('code-console').textContent='';$('code-input').value='{"values":[3,5,2]}';$('code').value="const data = JSON.parse(input);\nconst values = data.values;\nconsole.log({count: values.length, sum: values.reduce((a,b)=>a+b, 0)});\nreturn {type:'bar', title:'Local calculation', labels: values.map((_,i)=>String(i+1)), values};";renderStorage()};
 $('code-run').onclick=async()=>{
- if(!$('code-consent').checked||codeController)return;const scope=epoch,abort=new AbortController();codeController=abort;$('code-consent').checked=false;$('code-run').disabled=true;$('code-stop').disabled=false;$('code-status').textContent=t('codeWorking');$('code-console').textContent='';$('code-result').textContent='';result=null;
- const runId=++localAttempt;activeCodeAttempt=runId;localLifecycle('code',runId,'started');
- try{const text=await run.run($('code').value,$('code-input').value,{signal:abort.signal,onLog:line=>{if(scope===epoch)$('code-console').textContent+=line+'\n'}});if(scope!==epoch)return;result=text;$('code-result').textContent=text;$('code-status').textContent='';localLifecycle('code',runId,'succeeded')}catch{if(scope===epoch){$('code-status').textContent=t('codeFailed');localLifecycle('code',runId,'failed')}}finally{if(scope===epoch){activeCodeAttempt=null;codeController=null;$('code-run').disabled=false;$('code-stop').disabled=true}}
+ if(!$('code-consent').checked||codeController)return;
+ const release=window.NexusMusicUI?.acquireAudioJob('code');
+ if(!release){$('code-status').textContent=t('localResourceBusy');return}
+ const scope=epoch;let runId=null;
+ try{
+ const abort=new AbortController();codeController=abort;$('code-consent').checked=false;$('code-run').disabled=true;$('code-stop').disabled=false;$('code-status').textContent=t('codeWorking');$('code-console').textContent='';$('code-result').textContent='';result=null;
+ runId=++localAttempt;activeCodeAttempt=runId;localLifecycle('code',runId,'started');
+ const text=await run.run($('code').value,$('code-input').value,{signal:abort.signal,onLog:line=>{if(scope===epoch)$('code-console').textContent+=line+'\n'}});if(scope!==epoch)return;result=text;$('code-result').textContent=text;$('code-status').textContent='';localLifecycle('code',runId,'succeeded')}catch{if(scope===epoch){$('code-status').textContent=t('codeFailed');if(runId!==null)localLifecycle('code',runId,'failed')}}finally{try{if(scope===epoch){activeCodeAttempt=null;codeController=null;$('code-stop').disabled=true}}finally{release();syncCodeRun()}}
 };
 $('code-stop').onclick=cancel;
 $('code-chat').onclick=()=>{if(result!==null)window.NexusStudioUI?.stageChatContext('Local code result · untrusted',result)};

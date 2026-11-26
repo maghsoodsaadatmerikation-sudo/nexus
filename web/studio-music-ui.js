@@ -23,6 +23,31 @@ fa:{ready:'ابتدا قطعه را آهنگ‌سازی کن.',built:'پارتی
 };
 const fa=()=>document.documentElement.lang==='fa',txt=k=>labels[fa()?'fa':'en'][k];
 let score=null,wav=null,revision=0,working=false,objectUrl=null;
+// One heavy audio job per tab. Cancellation invalidates results, not the lease;
+ // only the original operation's finally releases it.
+const resourceNames=Object.freeze({local:['Local job','پردازش محلی'],music:['Music rendering','ساخت موسیقی'],orchestra:['Orchestra rendering','ساخت ارکستر'],vocal:['Vocal file import','خواندن فایل وکال'],mix:['Vocal mixing','میکس وکال'],model:['Resident local AI model','مدل هوش مصنوعی محلی'],pdf:['PDF extraction','استخراج متن PDF'],code:['JavaScript execution','اجرای JavaScript'],data:['Data analysis','تحلیل داده'],tasks:['Local task plan','طرح کارهای محلی']});
+function createAudioJobGate(notify){
+ let active=null;
+ return Object.freeze({busy:()=>active!==null,owner:()=>active?.owner??null,acquire(owner='local'){
+  if(active!==null||typeof owner!=='string'||!Object.hasOwn(resourceNames,owner))return null;
+  const token={owner};active=token;notify();
+  return ()=>{if(active!==token)return;active=null;notify()};
+ }});
+}
+function resourceMessage(){
+ const owner=audioJobs.owner();if(!owner)return '';
+ const name=resourceNames[owner][fa()?1:0];
+ return fa()?name+' فعال است. '+(owner==='model'?'برای ابزار سنگین دیگر، مدل را از حافظه خارج کن.':'تا پایان یا لغو کامل عملیات، ابزار سنگین دیگری شروع نمی‌شود.'):
+ name+' is active. '+(owner==='model'?'Unload the model before another heavy local job.':'Finish or cancel it and allow cleanup before starting another heavy local job.');
+}
+function syncResourceNotice(){
+ const node=$('studio-resource-status');if(!node)return;
+ const message=resourceMessage();node.textContent=message;node.hidden=!message;
+}
+const audioJobs=createAudioJobGate(()=>document.dispatchEvent(new Event('nexus-audio-job-state')));
+document.addEventListener('nexus-audio-job-state',buttons);
+document.addEventListener('nexus-audio-job-state',syncResourceNotice);
+document.addEventListener('nexus-studio-state',syncResourceNotice);
 function out(status){$('music-status').textContent=status}
 function field(name){const node=$('music-'+name);return node.type==='checkbox'?node.checked:node.type==='number'?Number(node.value):node.value}
 function inputs(){return {
@@ -33,7 +58,7 @@ function inputs(){return {
 }}
 function buttons(){
  $('music-build').disabled=working;$('music-variation').disabled=working;
- $('music-render').disabled=working||!score;$('music-midi').disabled=working||!score;
+ $('music-render').disabled=working||audioJobs.busy()||!score;$('music-render').title=resourceMessage();$('music-midi').disabled=working||!score;
  $('music-score').disabled=working||!score;$('music-wav').disabled=working||!wav;
  $('music-cancel').disabled=!working;
  document.dispatchEvent(new Event('nexus-studio-media-state'));
@@ -119,8 +144,11 @@ $('music-wav').addEventListener('click',()=>{
 });
 $('music-render').addEventListener('click',async()=>{
  if(!score||working)return;
- const start=++revision,active=score;working=true;resetAudio();buttons();
+ const release=audioJobs.acquire('music');
+ if(!release){out(resourceMessage());return}
+ const start=++revision,active=score;
  try{
+  working=true;resetAudio();buttons();
   const sr=Number($('music-quality').value);
   const data=await Music.renderWav(active,{sampleRate:sr,sound:$('music-sound').value,
    shouldAbort:()=>start!==revision,
@@ -148,7 +176,7 @@ $('music-render').addEventListener('click',async()=>{
   out((fa()?'WAV استریو آماده شد.':'Stereo WAV ready.')+' '+txt('browser'));
  }catch(e){if(start===revision)out(e?.message==='render-cancelled'?txt('cancelled'):
     e?.message==='mobile-render-memory-budget'?txt('resource'):txt('error'))}
- finally{if(start===revision){working=false;buttons()}}
+ finally{if(start===revision)working=false;release();buttons()}
 });
 $('music-cancel').addEventListener('click',()=>{
  if(!working)return;
@@ -182,6 +210,7 @@ window.addEventListener('pagehide',()=>{
  out(txt(wasRendering?'cancelled':score?'built':'ready'));
 });
 out(txt('ready'));buttons();
-window.NexusMusicUI=Object.freeze({clear:resetPrivateDraft,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
+window.NexusMusicUI=Object.freeze({audioBusy:audioJobs.busy,acquireAudioJob:audioJobs.acquire,resourceOwner:audioJobs.owner,resourceMessage,clear:resetPrivateDraft,hasScore:()=>Boolean(score),hasWav:()=>Boolean(wav),
  hasTransientWork:()=>Boolean(score||wav||working||isFormChanged())});
+document.dispatchEvent(new Event('nexus-audio-job-state'));
 })();

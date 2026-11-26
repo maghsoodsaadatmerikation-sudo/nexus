@@ -1,0 +1,91 @@
+import '../web/studio-core.js';
+import {reviewArchivedExperience,prepareChatArchiveRecall} from '../web/studio-experience-archive-recall.mjs';
+
+function fixtures(S){
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('recall fixture '+checks+': '+JSON.stringify(a))};
+ const reject=(fn,msg)=>{checks++;let error;try{fn()}catch(e){error=e}if(!error||!String(error.message).includes(msg))throw Error('recall rejection '+checks+': '+error)};
+ const entry={criterion_id:'s1',correction_code:'fix',status:'active',supporting_pair_count:2};
+ const snapshot={project_id:'p1',workflow_id:'w1',revision:2,entries:[entry]};
+ const project={id:'p1',title:'Test',instructions:'',memories:[],threads:[{id:'t1',title:'Review',nodes:[],head:null}],sources:[],documents:[],experiences:[snapshot]};
+ const value=S.state({schema:S.SCHEMA,projects:[project]});
+ const ctx={enabled:true,vaultUnlocked:true,busy:false,isolated:false,projectId:'p1',threadId:'t1',revision:5};
+ const criteria=[{id:'s1',required:true,evidence_kind:'human_review'}];
+ const run=(name,result,evidence=name+'-e')=>{const scope={project_id:'p1',workflow_id:'w1',run_id:name,plan_sha256:'a'.repeat(64)};return {scope,observations:[{...scope,criterion_id:'s1',evidence_id:evidence,kind:'human_review',result}]}};
+ const current=run('now','fail');
+ const attempts=[1,2].map(n=>({correction_code:'fix',before:run('before'+n,'fail'),after:run('after'+n,'pass')}));
+ const req={scope:current.scope,observations:current.observations,criteria,attempts,threadId:'t1',sessionRevision:5,snapshotRevision:2};
+ const call=(v=value,c=ctx,q=req,o={enabled:true})=>reviewArchivedExperience(S.state,v,c,q,o);
+ const raw=JSON.stringify(value);
+ const good=call();
+ eq(good.status,'review_only');eq(good.matches.map(m=>m.correction_code),['fix']);
+ for(const k of ['automatic_application','execution_authorized','completion_verified','storage_authorized','model_context_authorized'])eq(good[k],false);
+ eq(JSON.stringify(value),raw);eq(JSON.stringify(good).includes('before1-e'),false);
+ const unread=()=>{throw Error('must-not-read')};
+ eq(reviewArchivedExperience(unread,null,null,null).status,'off');
+ eq(reviewArchivedExperience(unread,null,null,null,{enabled:true,isolated:true}).status,'isolated');
+ reject(()=>call(value,ctx,req,{enabled:'true'}),'invalid-options');
+ for(const x of [{enabled:false},{vaultUnlocked:false},{busy:true},{isolated:true}])reject(()=>call(value,{...ctx,...x}),'archive-recall-unavailable');
+ for(const x of [{threadId:'t2'},{sessionRevision:4},{scope:{...current.scope,project_id:'other'}}])reject(()=>call(value,ctx,{...req,...x}),'archive-recall-scope');
+ reject(()=>call(value,ctx,{...req,snapshotRevision:1}),'stale-archive-recall');
+ for(const flag of ['temporary','isolated','archived']){const v=S.copy(value);v.projects[0].threads[0][flag]=true;reject(()=>call(v),'archive-recall-scope')}
+ const empty=S.copy(value);empty.projects[0].experiences=[];eq(call(empty).status,'no_snapshot');
+ const revoked=S.copy(value);revoked.projects[0].experiences[0].entries[0].status='revoked';eq(call(revoked).matches,[]);
+ const changed=S.copy(value);changed.projects[0].experiences[0].entries[0].supporting_pair_count=3;eq(call(changed).matches,[]);eq(call(changed).withheld_count,1);
+ eq(call(value,ctx,{...req,attempts:[]}).status,'no_current_evidence');
+ eq(call(value,ctx,{...req,observations:run('now','pass').observations}).status,'no_reported_failure');
+ eq(call(value,ctx,{...req,observations:[]}).status,'no_reported_failure');
+ const conflicting=[...current.observations,...run('now','pass','now-pass').observations];
+ eq(call(value,ctx,{...req,observations:conflicting}).status,'withheld_pending_reconciliation');
+ const sameRun=[{...attempts[0],before:run('now','fail','separate-e')},attempts[1]];
+ reject(()=>call(value,ctx,{...req,attempts:sameRun}),'current-run-in-experience');
+ const sameReceipt=[{...attempts[0],before:run('before1','fail','now-e')},attempts[1]];
+ reject(()=>call(value,ctx,{...req,attempts:sameReceipt}),'current-evidence-in-experience');
+ const foreign=S.copy(attempts);foreign[0].before.scope.project_id='p2';foreign[0].before.observations[0].project_id='p2';reject(()=>call(value,ctx,{...req,attempts:foreign}),'scope');
+ eq(JSON.stringify(value),raw);
+ return checks;
+}
+console.log('ARCHIVE RECALL: PASS ('+fixtures(globalThis.NexusStudio)+' checks)');
+
+function chatRecallFixtures(){
+ let checks=0;
+ const eq=(a,b)=>{checks++;if(JSON.stringify(a)!==JSON.stringify(b))throw Error('chat recall '+checks)};
+ const reject=(fn,msg)=>{checks++;let e;try{fn()}catch(x){e=x}if(!e||!String(e.message).includes(msg))throw Error('chat recall reject '+checks+' '+e)};
+ const hash='b'.repeat(64),workflow_id='wf-'+hash;
+ const criteria=['s1','s2'].map(id=>({id,required:true,evidence_kind:'human_review'}));
+ const run=(run_id,verdict)=>{const scope={project_id:'p1',workflow_id,run_id,plan_sha256:hash};return {scope,observations:criteria.map(c=>({...scope,criterion_id:c.id,evidence_id:run_id+'-'+c.id,kind:'human_review',result:c.id==='s1'?verdict:'pass'}))}};
+ const attempts=[1,2].map(n=>({correction_code:'fix',before:run('before'+n,'fail'),after:run('after'+n,'pass')}));
+ const report={schema:'nexus.experience-review.v1',workflow_id,operation:{kind:'accept',criterion_id:'s1',correction_code:'fix'},criteria,attempts};
+ const steps=['fail','pass'].map(verdict=>({criterion:'check',opened:true,acknowledged:true,observed:'succeeded',verdict}));
+ const args={projectId:'p1',threadId:'t1',sessionRevision:3,sessionId:'local',round:1,planHash:hash,steps};
+ const call=(p=report,a=args)=>prepareChatArchiveRecall(JSON.stringify(p),a);
+ const out=call();eq(out.scope.run_id,'local-r1');eq(out.observations.map(x=>x.result),['fail','pass']);eq(out.criteria,criteria);eq(out.attempts,attempts);
+ reject(()=>call(report,{...args,planHash:'c'.repeat(64)}),'invalid-chat-recall-report');
+ reject(()=>call({...report,workflow_id:'wf-other'}),'invalid-chat-recall-report');
+ reject(()=>call({...report,criteria:[...criteria].reverse()}),'chat-recall-criteria-mismatch');
+ reject(()=>call({...report,criteria:[{...criteria[0],required:false},criteria[1]]}),'chat-recall-criteria-mismatch');
+ reject(()=>call({...report,attempts:[{...attempts[0],correction_code:'other'},attempts[1]]}),'chat-recall-correction-mismatch');
+ for(const flag of ['opened','acknowledged'])reject(()=>call(report,{...args,steps:[{...steps[0],[flag]:false},steps[1]]}),'incomplete-chat-recall-round');
+ reject(()=>call(report,{...args,steps:[{...steps[0],verdict:null},steps[1]]}),'incomplete-chat-recall-round');
+ reject(()=>call(report,{...args,round:101}),'invalid-chat-recall-input');
+ const bad=JSON.parse(JSON.stringify(report));bad.attempts[0].before.scope.plan_sha256='c'.repeat(64);reject(()=>call(bad),'chat-recall-evidence-scope');
+ const foreign=JSON.parse(JSON.stringify(report));foreign.attempts[0].before.scope.project_id='p2';reject(()=>call(foreign),'chat-recall-evidence-scope');
+ const extra=JSON.parse(JSON.stringify(report));extra.attempts[0].before.observations[0].instruction='not allowed';reject(()=>call(extra),'chat-recall-evidence-scope');
+ const S=globalThis.NexusStudio;
+ const value=S.state({schema:S.SCHEMA,projects:[{id:'p1',title:'Test',instructions:'',memories:[],threads:[{id:'t1',title:'Review',nodes:[],head:null}],sources:[],documents:[],experiences:[{project_id:'p1',workflow_id,revision:1,entries:[{criterion_id:'s1',correction_code:'fix',status:'active',supporting_pair_count:2}]}]}]});
+ const session={enabled:true,vaultUnlocked:true,busy:false,isolated:false,projectId:'p1',threadId:'t1',revision:3};
+ eq(reviewArchivedExperience(S.state,value,session,{...out,snapshotRevision:1},{enabled:true}).matches.map(m=>m.correction_code),['fix']);
+ // A single report explicitly selects one criterion, even if its historical
+ // attempts also happen to support a different archived criterion.
+ const both=S.copy(report);
+ for(const attempt of both.attempts)attempt.before.observations[1].result='fail';
+ const bothValue=S.copy(value);
+ bothValue.projects[0].experiences[0].entries.push({criterion_id:'s2',correction_code:'fix',status:'active',supporting_pair_count:2});
+ const bothFail={...args,steps:steps.map(s=>({...s,verdict:'fail'}))};
+ const scoped=(report,args)=>reviewArchivedExperience(S.state,bothValue,session,{...call(report,args),snapshotRevision:1},{enabled:true});
+ eq(scoped(both,bothFail).matches.map(m=>m.criterion_id),['s1']);
+ eq(scoped({...both,operation:{...both.operation,criterion_id:'s2'}},bothFail).matches.map(m=>m.criterion_id),['s2']);
+ eq(scoped(both,{...args,steps:[{...steps[0],verdict:'pass'},{...steps[1],verdict:'fail'}]}).status,'no_reported_failure');
+ return checks;
+}
+console.log('CHAT ARCHIVE RECALL: PASS ('+chatRecallFixtures()+' checks)');

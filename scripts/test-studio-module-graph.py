@@ -19,6 +19,23 @@ class StudioModuleGraphTests(unittest.TestCase):
         self.assertEqual(len(MODULES), 29)
         self.assertEqual(len({m.filename for m in MODULES}), len(MODULES))
 
+    def test_review_engine_is_bundled_once_for_archive_and_chat(self):
+        # Test the actual generated artifacts, not only the builder template.
+        for relative in ("web/studio.html", "public/studio/index.html"):
+            with self.subTest(artifact=relative):
+                bundle = (ROOT / relative).read_text()
+                for name in ("evaluateWorkflowOutcome", "reviewCorrectionExperience",
+                             "reviewAssistantWorkflow", "createArchiveExperienceReview",
+                             "stageImportedExperience", "buildChatExperienceReport",
+                             "reviewArchivedExperience", "prepareChatArchiveRecall", "reviewChatCorrectionOptions",
+                             "reviewEvidenceClaims", "mountEvidenceReview"):
+                    self.assertEqual(bundle.count("function " + name + "("), 1)
+                self.assertEqual(bundle.count("const {reviewAssistantWorkflow,buildChatExperienceReport}=experienceImportEngine;"), 1)
+                self.assertLess(bundle.index("const experienceImportEngine=(()=>{"),
+                                bundle.index("const {reviewAssistantWorkflow,buildChatExperienceReport}=experienceImportEngine;"))
+                self.assertNotIn("/* EXPERIENCE_EDIT_ENGINE */", bundle)
+                self.assertNotIn("/* WORKFLOW_REVIEW_ENGINE */", bundle)
+
     def test_missing_duplicate_unreviewed_and_reordered_slots_are_rejected(self):
         shell = (ROOT / "web/studio-shell.html").read_text()
         for bad in (

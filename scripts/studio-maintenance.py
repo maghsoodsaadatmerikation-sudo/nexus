@@ -16,6 +16,7 @@ GENERATED = {
     "public/studio/index.html",
     "public/studio/manifest.json",
     "public/studio/service-worker.js",
+    "public/studio/studio-orchestra.js",
     "public/studio/icons/nexus-192.png",
     "public/studio/icons/nexus-512.png",
     *{

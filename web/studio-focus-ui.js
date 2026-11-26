@@ -244,7 +244,7 @@ const links=nav.map(([id,en,fa])=>{const b=make('nexus-zen-'+id,'');b.addEventLi
 const full=make('nexus-zen-full','');full.addEventListener('click',()=>{dismiss();focus.setFocus(false,true)});actions.append(full);
 drawer.append(header,find,archiveLabel,history,actions);document.body.append(shade,drawer);
 let restore=null;
-function dismiss(){if(drawer.hidden)return;drawer.hidden=shade.hidden=true;menu.setAttribute('aria-expanded','false');restore?.focus?.({preventScroll:true})}
+function dismiss(){if(drawer.hidden)return;drawer.hidden=shade.hidden=true;menu.setAttribute('aria-expanded','false');history.replaceChildren();restore?.focus?.({preventScroll:true});restore=null}
 function show(){restore=document.activeElement;drawer.hidden=shade.hidden=false;menu.setAttribute('aria-expanded','true');render();find.focus()}
 function go(id){dismiss();focus.openPanel(id)}
 function start(){
@@ -253,8 +253,11 @@ function start(){
  go('conversation-card');$('message').focus({preventScroll:true});
 }
 function render(){
+ // A closed drawer must not copy the full session or build hidden previews.
+ if(drawer.hidden)return;
  history.replaceChildren();
  const state=window.NexusStudioUI?.snapshot?.(),q=find.value.trim().toLocaleLowerCase();
+ const selection=window.NexusStudioUI?.selection?.();
  let n=0;
  // Inspect session state directly. The old hidden history pane may be filtered,
  // so it must not be the source of truth for the chat drawer.
@@ -270,7 +273,6 @@ function render(){
    const detail=document.createElement('small');
    detail.textContent=project.title+(thread.archived?' · '+tr('Archived','آرشیوشده'):'');
    b.append(detail);
-   const selection=window.NexusStudioUI?.selection?.();
    b.setAttribute('aria-current',thread.id===selection?.threadId&&project.id===selection?.projectId?'page':'false');
    b.addEventListener('click',()=>{
     if(window.NexusStudioUI?.openConversation?.(project.id,thread.id))go('conversation-card');
@@ -286,10 +288,13 @@ function refreshSafety(){
  const s=window.NexusStudioUI?.uiStatus?.();
  if(!s)return;
  const unsaved=Boolean(s.lossRisk||s.dirty||s.unsavedForms||s.unsavedLocalMedia);
- safety.textContent=unsaved?tr('Unsaved changes','تغییرات ذخیره‌نشده'):
+ const label=unsaved?tr('Unsaved changes','تغییرات ذخیره‌نشده'):
   s.vaultUnlocked?tr('Archive unlocked','آرشیو باز است'):tr('Temporary · not saved','موقت · ذخیره‌نشده');
- safety.dataset.unsaved=String(unsaved);
- home.setAttribute('aria-label',tr('Back to chat: ','بازگشت به گفتگو: ')+safety.textContent);
+ const flag=String(unsaved),aria=tr('Back to chat: ','بازگشت به گفتگو: ')+label;
+ // Re-evaluate safety synchronously, but avoid redundant DOM writes.
+ if(safety.textContent!==label)safety.textContent=label;
+ if(safety.dataset.unsaved!==flag)safety.dataset.unsaved=flag;
+ if(home.getAttribute('aria-label')!==aria)home.setAttribute('aria-label',aria);
 }
 function labels(){
  title.textContent=tr('Conversations','گفتگوها');find.placeholder=tr('Search conversations','جست‌وجوی گفتگوها');find.setAttribute('aria-label',find.placeholder);

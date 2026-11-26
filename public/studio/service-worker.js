@@ -1,10 +1,10 @@
 /* Reviewed public Studio application code only; model bytes use a separate opt-in cache. */
 'use strict';
-const EXPECTED_SHA256='1160fbf91ed9e6f8ee0f2df37d5bb173f8897bab21430e39d01d88d846c6b401';
-const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'5d66bd0572ee468f';
+const EXPECTED_SHA256='efce4bf25d9e113b32325fdb5e6ce27506eaf7812d0204da1191f55be54e78ba';
+const PREFIX='nexus-studio-shell-v1-',CACHE=PREFIX+'4e7ec8ef64e80dbe';
 const ENTRY=new URL('./',self.location.href).href;
-const HTML={url:ENTRY,bytes:568327,sha256:EXPECTED_SHA256,kind:'html'};
-const CODE=[{"path":"device/device-engine.js","bytes":5332,"sha256":"aa7efe4d708f854ca35ff863edb602da7a9fb164d62e427c6521ddbd957e9175","kind":"javascript"},{"path":"device/device-worker.js","bytes":7863,"sha256":"a2b396fb0fe7a4411ba8a4e678b6c4f79bfc0eed673e1712f445baa8a9c60e85","kind":"javascript"},{"path":"device/device-ui.js","bytes":8683,"sha256":"08343f58bb01d1f26d37f55e1d3842e7f2fd22a02b23f8cfa4b7b7a2583192cd","kind":"javascript"},{"path":"device/model-manifest.json","bytes":3196,"sha256":"49353c4a16f7912fd4251b6d048923fd41d2819f9fab2faf5bfbccab9a7e3983","kind":"json"},{"path":"pdf/studio-pdf.mjs","bytes":4866,"sha256":"d506e6a2cf1ff9f5ee7849b82d53483980d407af40f0eadba07faa13184a3552","kind":"javascript"},{"path":"pdf/pdf.min.mjs","bytes":474284,"sha256":"3a88402882cfa3e7e72c2c9b5149f52f0f88baf1c5b62aa11a41abdbc2072440","kind":"javascript"},{"path":"pdf/pdf.worker.min.mjs","bytes":1271915,"sha256":"1e64c8240e54735ec5913b37acd5134747799cb8c6bb3777c70adbc01232d2aa","kind":"javascript"},{"path":"vendor/astronomy-2.1.19.min.js","bytes":116424,"sha256":"f41139a87941ea017ab902b954c9389fa27ea72083d7fab4971756d7769d14e6","kind":"javascript"}].map(a=>({...a,url:new URL(a.path,ENTRY).href}));
+const HTML={url:ENTRY,bytes:626233,sha256:EXPECTED_SHA256,kind:'html'};
+const CODE=[{"path":"device/device-engine.js","bytes":5670,"sha256":"87a04ac4fcb4aa382e1b774763e9b1a26ce400b9a9fcd88814214888029d0d90","kind":"javascript"},{"path":"device/device-worker.js","bytes":7863,"sha256":"a2b396fb0fe7a4411ba8a4e678b6c4f79bfc0eed673e1712f445baa8a9c60e85","kind":"javascript"},{"path":"device/device-ui.js","bytes":9622,"sha256":"6bc87a47e87754a3599b8ea7e16a094f98d1482f6117e231993c08e494901821","kind":"javascript"},{"path":"device/model-manifest.json","bytes":3196,"sha256":"49353c4a16f7912fd4251b6d048923fd41d2819f9fab2faf5bfbccab9a7e3983","kind":"json"},{"path":"pdf/studio-pdf.mjs","bytes":5774,"sha256":"edd140b80a539175bc424df4638fffcfebc021e0ee0673fcf5b2ce185e6e1c4c","kind":"javascript"},{"path":"pdf/pdf.min.mjs","bytes":474284,"sha256":"3a88402882cfa3e7e72c2c9b5149f52f0f88baf1c5b62aa11a41abdbc2072440","kind":"javascript"},{"path":"pdf/pdf.worker.min.mjs","bytes":1271915,"sha256":"1e64c8240e54735ec5913b37acd5134747799cb8c6bb3777c70adbc01232d2aa","kind":"javascript"},{"path":"vendor/astronomy-2.1.19.min.js","bytes":116424,"sha256":"f41139a87941ea017ab902b954c9389fa27ea72083d7fab4971756d7769d14e6","kind":"javascript"},{"path":"studio-orchestra.js","bytes":27347,"sha256":"2a24fed79f74ef7a9e818e4b565895559bfc885dbfc554a63a7b1659ccec772e","kind":"javascript"},{"path":"studio-reply-format.js","bytes":18432,"sha256":"f1f213de25eaee6eaeecb98feaebbfc49ed9251b0be816305e823e6eba23e809","kind":"javascript"}].map(a=>({...a,url:new URL(a.path,ENTRY).href}));
 async function verified(response,asset=HTML){
  if(!response||response.status!==200||response.redirected||response.type!=='basic')return false;
  const mime=(response.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
@@ -23,5 +23,12 @@ self.addEventListener('fetch',event=>{
  const request=event.request,url=new URL(request.url),entry=new URL(ENTRY);
  if(request.method!=='GET'||url.origin!==entry.origin||url.search)return;
  const asset=CODE.find(a=>a.url===url.href)||(request.mode==='navigate'&&[entry.pathname,entry.pathname+'index.html'].includes(url.pathname)?HTML:null);if(!asset)return;
- event.respondWith((async()=>{try{const response=await fetch(request);if(await verified(response,asset))return response}catch{}const cache=await caches.open(CACHE),response=await cache.match(asset.url);if(await verified(response,asset))return response;return new Response('Studio offline code is unavailable. Reconnect and retry.',{status:503,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}})})());
+ event.respondWith((async()=>{
+  // Code is immutable within this digest-bound package. Avoid network access
+  // for verified cached modules; keep HTML navigation network-first.
+  async function fromCache(){try{const cache=await caches.open(CACHE),response=await cache.match(asset.url);return await verified(response,asset)?response:null}catch{return null}}
+  async function fromNetwork(){try{const response=await fetch(request);return await verified(response,asset)?response:null}catch{return null}}
+  const response=asset===HTML?await fromNetwork()||await fromCache():await fromCache()||await fromNetwork();
+  return response||new Response('Studio offline code is unavailable. Reconnect and retry.',{status:503,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}});
+ })());
 });

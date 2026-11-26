@@ -40,14 +40,14 @@ MODULES = (
     Module("/*STUDIO_OFFICE_ZIP*/", "studio-office-zip.js", "NexusOfficeZip"),
     Module("/*STUDIO_APP*/", "studio-app.js", "NexusStudioUI",
            ("NexusStudio", "NexusLocales", "NexusAstrology", "NexusReplyFormat", "NexusOfficeZip"),
-           ("NexusSpeechPlayback", "NexusLabUI", "NexusTasksUI", "NexusAstrologyUI", "NexusQualityUI", "NexusDevice", "NexusCalendar", "NexusMusicUI", "NexusOrchestraUI", "NexusStudioVision")),
-    Module("/*STUDIO_LAB_UI*/", "studio-lab-ui.js", "NexusLabUI", ("NexusLab", "NexusStudioUI")),
-    Module("/*STUDIO_TASKS_UI*/", "studio-tasks-ui.js", "NexusTasksUI", ("NexusTasks",)),
+           ("NexusSpeechPlayback", "NexusLabUI", "NexusTasksUI", "NexusAstrologyUI", "NexusQualityUI", "NexusDevice", "NexusCalendar", "NexusMusicUI", "NexusOrchestraUI", "NexusStudioVision", "NexusStudioFocus")),
+    Module("/*STUDIO_LAB_UI*/", "studio-lab-ui.js", "NexusLabUI", ("NexusLab", "NexusStudioUI"), ("NexusMusicUI",)),
+    Module("/*STUDIO_TASKS_UI*/", "studio-tasks-ui.js", "NexusTasksUI", ("NexusTasks",), ("NexusMusicUI",)),
     Module("/*STUDIO_ASTROLOGY_UI*/", "studio-astrology-ui.js", "NexusAstrologyUI",
            ("NexusAstrology", "NexusSky")),
     Module("/*STUDIO_SKY_UI*/", "studio-sky-ui.js", None, ("NexusSky",)),
     Module("/*STUDIO_QUALITY_UI*/", "studio-quality-ui.js", "NexusQualityUI",
-           ("NexusTable", "NexusLabUI", "NexusStudioUI")),
+           ("NexusTable", "NexusLabUI", "NexusStudioUI"), ("NexusMusicUI",)),
     Module("/*STUDIO_FOCUS_UI*/", "studio-focus-ui.js", "NexusStudioFocus", ("NexusStudioUI",)),
     Module("/*STUDIO_COMPOSER_UI*/", "studio-composer-ui.js", "NexusStudioCompose",
            ("NexusStudio", "NexusStudioUI", "NexusStudioFocus"), ("NexusStudioConnections",)),
@@ -63,7 +63,7 @@ MODULES = (
     Module("/*STUDIO_ORCHESTRA*/", "studio-orchestra.js", "NexusOrchestra"),
     Module("/*STUDIO_VOCAL_MIX*/", "studio-vocal-mix.js", "NexusVocalMix"),
     Module("/*STUDIO_ORCHESTRA_UI*/", "studio-orchestra-ui.js", "NexusOrchestraUI",
-           ("NexusOrchestra", "NexusVocalMix")),
+           ("NexusOrchestra", "NexusVocalMix", "NexusMusicUI")),
 )
 
 

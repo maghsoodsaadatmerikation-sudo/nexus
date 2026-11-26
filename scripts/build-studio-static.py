@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 from studio_template_contract import replace_exact
-from studio_public_assets import ASTRONOMY_MODULE, PDF_MODULES, check_public_tree
+from studio_public_assets import ASTRONOMY_MODULE, ORCHESTRA_MODULE, REPLY_MODULE, PDF_MODULES, check_public_tree
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_ORIGIN = "https://nexus-studio-merikation.onrender.com"
@@ -117,7 +117,14 @@ self.addEventListener('fetch',event=>{
  const request=event.request,url=new URL(request.url),entry=new URL(ENTRY);
  if(request.method!=='GET'||url.origin!==entry.origin||url.search)return;
  const asset=CODE.find(a=>a.url===url.href)||(request.mode==='navigate'&&[entry.pathname,entry.pathname+'index.html'].includes(url.pathname)?HTML:null);if(!asset)return;
- event.respondWith((async()=>{try{const response=await fetch(request);if(await verified(response,asset))return response}catch{}const cache=await caches.open(CACHE),response=await cache.match(asset.url);if(await verified(response,asset))return response;return new Response('Studio offline code is unavailable. Reconnect and retry.',{status:503,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}})})());
+ event.respondWith((async()=>{
+  // Code is immutable within this digest-bound package. Avoid network access
+  // for verified cached modules; keep HTML navigation network-first.
+  async function fromCache(){try{const cache=await caches.open(CACHE),response=await cache.match(asset.url);return await verified(response,asset)?response:null}catch{return null}}
+  async function fromNetwork(){try{const response=await fetch(request);return await verified(response,asset)?response:null}catch{return null}}
+  const response=asset===HTML?await fromNetwork()||await fromCache():await fromCache()||await fromNetwork();
+  return response||new Response('Studio offline code is unavailable. Reconnect and retry.',{status:503,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}});
+ })());
 });
 '''
 
@@ -133,6 +140,14 @@ def render_public_shell(source: str, device_panel: str) -> bytes:
     integrity=base64.b64encode(digest).decode('ascii')
     source=replace_exact(source, '<script>'+astronomy.decode('utf-8')+'</script>',
                          f'<script src="./{ASTRONOMY_MODULE}" integrity="sha256-{integrity}"></script>')
+    orchestra=(ROOT/'web'/ORCHESTRA_MODULE).read_bytes()
+    orchestra_integrity=base64.b64encode(hashlib.sha256(orchestra).digest()).decode('ascii')
+    source=replace_exact(source, '<script>'+orchestra.decode('utf-8')+'</script>',
+                         f'<script src="./{ORCHESTRA_MODULE}" integrity="sha256-{orchestra_integrity}"></script>')
+    reply=(ROOT/'web'/REPLY_MODULE).read_bytes()
+    reply_integrity=base64.b64encode(hashlib.sha256(reply).digest()).decode('ascii')
+    source=replace_exact(source, '<script>'+reply.decode('utf-8')+'</script>',
+                         f'<script src="./{REPLY_MODULE}" integrity="sha256-{reply_integrity}"></script>')
     source=replace_exact(source, "script-src 'unsafe-inline'", "script-src 'self' blob: 'unsafe-inline' 'wasm-unsafe-eval'")
     # Enable the public device worker in the page policy. The lab's srcdoc
     # keeps its independent opaque-origin, blob-only worker policy.
@@ -166,11 +181,15 @@ def artifacts():
         code.append({'path':name,'bytes':len(content),'sha256':hashlib.sha256(content).hexdigest(),'kind':'javascript'})
     astronomy=(ROOT/'web'/ASTRONOMY_MODULE).read_bytes()
     code.append({'path':ASTRONOMY_MODULE,'bytes':len(astronomy),'sha256':hashlib.sha256(astronomy).hexdigest(),'kind':'javascript'})
+    orchestra=(ROOT/'web'/ORCHESTRA_MODULE).read_bytes()
+    code.append({'path':ORCHESTRA_MODULE,'bytes':len(orchestra),'sha256':hashlib.sha256(orchestra).hexdigest(),'kind':'javascript'})
+    reply=(ROOT/'web'/REPLY_MODULE).read_bytes()
+    code.append({'path':REPLY_MODULE,'bytes':len(reply),'sha256':hashlib.sha256(reply).hexdigest(),'kind':'javascript'})
     worker=replace_exact(WORKER, '__DIGEST__', hashlib.sha256(html).hexdigest())
     worker=replace_exact(worker, '__INDEX_BYTES__', str(len(html)))
     worker=replace_exact(worker, '__CODE_ASSETS__', json.dumps(code,separators=(',',':')))
     worker=replace_exact(worker, '__PACKAGE_ID__', hashlib.sha256(html+json.dumps(code,sort_keys=True).encode()).hexdigest()[:16])
-    return {'index.html':html, ASTRONOMY_MODULE:astronomy, 'service-worker.js':worker.encode(), 'manifest.json':(json.dumps(manifest,indent=2)+'\n').encode(), **{f'icons/nexus-{size}.png':(ROOT/f'public/icons/nexus-{size}.png').read_bytes() for size in (192,512)}}
+    return {'index.html':html, ASTRONOMY_MODULE:astronomy, ORCHESTRA_MODULE:orchestra, REPLY_MODULE:reply, 'service-worker.js':worker.encode(), 'manifest.json':(json.dumps(manifest,indent=2)+'\n').encode(), **{f'icons/nexus-{size}.png':(ROOT/f'public/icons/nexus-{size}.png').read_bytes() for size in (192,512)}}
 
 
 def main():

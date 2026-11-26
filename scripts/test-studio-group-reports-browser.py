@@ -44,7 +44,12 @@ window.addEventListener('load',async()=>{
   fill('project-title','NEWER ANALYSIS PROJECT');$('new-project').click();let finishOld,oldEntered=false;const oldGate=new Promise(r=>finishOld=r);digests=0;
   File.prototype.arrayBuffer=async function(){if(this.name==='older.csv'){oldEntered=true;await oldGate}return nativeRead.call(this)};
   crypto.subtle.digest=function(...args){digests++;return nativeDigest.apply(this,args)};
-  choose(file('older.csv','g,v\nSTALE,999\n'));const old=run();await wait(()=>oldEntered);choose(file('newer.csv','g,v\nCURRENT,7\n'));await run();const current=$('data-summary').textContent;assert(digests===1,'newer-analysis-hashes-its-own-input');finishOld();await old;
+  choose(file('older.csv','g,v\nSTALE,999\n'));const old=run();await wait(()=>oldEntered);choose(file('newer.csv','g,v\nCURRENT,7\n'));
+  assert(NexusMusicUI.resourceOwner()==='data'&&$('data-run').disabled,'superseded-read-retains-lease-until-cleanup');
+  const taskCount=tasks.length;$('data-run').click();assert(tasks.length===taskCount&&digests===0,'newer-read-cannot-overlap-old-cleanup');
+  finishOld();await old;
+  assert(!NexusMusicUI.audioBusy()&&!$('data-run').disabled&&digests===0,'superseded-read-releases-lease-without-hashing');
+  await run();const current=$('data-summary').textContent;assert(digests===1,'newer-analysis-hashes-its-own-input');
   assert(digests===1,'superseded-read-does-not-start-extra-hashing');assert($('data-summary').textContent===current&&current.includes('CURRENT')&&!current.includes('STALE'),'old-result-cannot-replace-newer-analysis');
   select('language','fa');select('data-group','0');assert($('data-summary').textContent.includes('1/1')&&document.documentElement.dir==='rtl','preview-coverage-remains-visible-in-persian');
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,real_files_and_crypto:true,network_requests:0,authority:'none'});

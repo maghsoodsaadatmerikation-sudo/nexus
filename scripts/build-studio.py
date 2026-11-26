@@ -35,19 +35,25 @@ for item in modules:
         writer_end = pilot.index('  function reportRows(raw){', writer_start)
         writer = dedent(pilot[writer_start:writer_end])
         code = replace_exact(code, '/* OFFICE_ZIP_HELPERS */', (reader + writer).rstrip())
-    if filename == 'studio-composer-ui.js':
-        # Explicit ordered module list; preserve source as single local closure.
+    if filename == 'studio-app.js':
+        # One reviewed engine in an immutable lexical closure, shared with
+        # the later composer. No new window export or dynamic module loader.
         import re
-        review_modules = ["studio-workflow-critique.mjs","studio-workflow-recovery.mjs","studio-workflow-outcome.mjs","studio-workflow-review.mjs"]
         review_source = []
-        for review_name in review_modules:
-            review_code = (root/'web'/review_name).read_text()
-            review_code = re.sub(r'^import[^\n]*\n', '', review_code, flags=re.M)
-            review_code = re.sub(r'^export function ', 'function ', review_code, flags=re.M)
-            if re.search(r'^\s*(import|export)\s', review_code, re.M):
-                raise ValueError('unsupported workflow module syntax')
-            review_source.append(review_code)
-        code = replace_exact(code, '/* WORKFLOW_REVIEW_ENGINE */', '\n'.join(review_source))
+        for name in ["studio-workflow-critique.mjs", "studio-workflow-recovery.mjs", "studio-workflow-outcome.mjs", "studio-workflow-review.mjs", "studio-experience-archive-edit.mjs", "studio-chat-experience-report.mjs", "studio-experience-archive-recall.mjs", "studio-chat-correction-options.mjs", "studio-evidence-review.mjs"]:
+            part = (root/'web'/name).read_text()
+            part = re.sub(r'^import[^\n]*\n', '', part, flags=re.M)
+            part = re.sub(r'^export function ', 'function ', part, flags=re.M)
+            if re.search(r'^\s*(import|export)\s', part, re.M):
+                raise ValueError('unsupported review module syntax')
+            # Preserve line boundaries (including ASI). Only strip standalone
+            # line comments in this narrow reviewed module subset, never in
+            # template literals, multiline strings or block comments.
+            if not any(token in part for token in ("`", "/*", "\\\n")):
+                part = re.sub(r'^[ \t]*//[^\n]*$', '', part, flags=re.M)
+                part = re.sub(r'^[ \t]+', '', part, flags=re.M)
+            review_source.append(part)
+        code = replace_exact(code, '/* EXPERIENCE_EDIT_ENGINE */', '\n'.join(review_source))
     if '</script' in code.lower():
         raise ValueError('script closing sequence is not permitted in bundled sources')
     shell = replace_exact(shell, marker, code)

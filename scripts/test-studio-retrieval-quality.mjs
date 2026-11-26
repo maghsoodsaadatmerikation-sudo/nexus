@@ -70,9 +70,12 @@ attributed.sources=[{id:'note',name:'note.txt',text:'No relevant line.\nOrbital 
 const t=S.append(S.thread('Question'),'user','orbital valve pressure','human');
 const context=S.context(attributed,t,{sources:true});
 assert.equal(context.citations.length,1);
-assert.deepEqual(context.citations[0],{source_id:'note',name:'note.txt',line:2,offset:1});
+assert.deepEqual(context.citations[0],{ref:'S1',source_id:'note',name:'note.txt',line:2,offset:1});
 assert(context.messages[0].content.includes('lexical overlap does not prove a claim'));
 assert(context.messages[0].content.includes('matched_terms'));
+assert(context.messages[0].content.includes('[NXS:S1]'));
+assert(context.messages[0].content.includes('"ref":"S1"'));
+assert.equal(context.evidence_passages[0].ref,context.citations[0].ref);
 assert(context.messages[0].content.includes('Orbital valve pressure is 17.'));
 assert(!S.context(attributed,t,{sources:false}).messages.some(m=>m.content.includes('17.')));
 

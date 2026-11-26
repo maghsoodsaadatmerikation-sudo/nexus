@@ -44,6 +44,8 @@ window.addEventListener('load',async()=>{
    if(replyCase==='wrong-id')Object.assign(result,{model_slot:'primary',configuration_id:'f'.repeat(64)});
    if(replyCase==='partial')Object.assign(result,{model_slot:'primary'});
    if(replyCase==='valid')Object.assign(result,{model_slot:'primary',configuration_id:rid});
+   if(replyCase==='empty-draft')result.text='  \n ';
+   if(replyCase==='structural-warning'){result.text='```js\nconst x=1;';result.truncated=true}
    return Response.json(result);
  };
  try{
@@ -98,6 +100,70 @@ window.addEventListener('load',async()=>{
    await wait(()=>NexusStudio.path(selected()).at(-1)?.text==='Reviewed model answer');
    const last=NexusStudio.path(selected()).at(-1);
    assert(!last.model_receipt&&calls===6,'legacy-unattributed-reply-is-not-falsely-verified');
+   const beforeEmpty=JSON.stringify(snapshot());
+   replyCase='empty-draft';await submit();
+   assert(JSON.stringify(snapshot())===beforeEmpty&&$('message').value==='Confirm the selected route'&&calls===7,'empty-draft-rejected-with-original-draft');
+   replyCase='structural-warning';await submit();
+   const warned=NexusStudio.path(selected()).at(-1);
+   assert(warned.text==='```js\nconst x=1;'&&calls===8,'structural-warning-does-not-rewrite-or-resend');
+   assert($('status').textContent.includes('Unclosed code block.')&&$('status').textContent.includes('facts not verified'),'structural-warning-visible');
+
+   // A deliberate second pass opens the existing exact consent review.
+   const reviewButton=$('messages').querySelector('[data-chat-review-answer]');
+   assert(reviewButton,'latest-model-answer-has-review-action');
+   fill('message','Preserve my draft');reviewButton.click();
+   assert($('message').value==='Preserve my draft'&&calls===8,'review-preserves-existing-draft');
+   fill('message','');const beforeReview=JSON.stringify(snapshot());
+   reviewButton.click();
+   const preparedReview=JSON.parse($('request-context').textContent);
+   const tail=preparedReview.messages.slice(-3);
+   assert(!$('request-review').hidden&&!$('consent').checked&&calls===8,'review-prepares-without-sending');
+   assert(tail[0].content==='Confirm the selected route'&&tail[1].content===warned.text&&tail[2].content===NexusReplyFormat.answerReviewPrompt('en')&&tail[2].content.includes('not assessable'),'review-binds-original-question-and-answer');
+   assert(JSON.stringify(snapshot())===beforeReview,'review-preparation-does-not-change-history');
+   $('consent').checked=true;$('consent').dispatchEvent(new Event('change'));
+   replyCase='missing';$('send-model').click();await wait(()=>$('request-review').hidden);
+   assert(calls===9&&NexusStudio.path(selected()).some(n=>n.id===warned.id&&n.text===warned.text),'approved-review-adds-new-turn-preserving-answer');
+   // Real controls compare the exact two turns without another provider call.
+   const comparison=$('messages').querySelector('[data-answer-comparison]');
+   assert(comparison,'review-turn-offers-local-comparison');
+   comparison.open=true;await new Promise(r=>setTimeout(r,0));
+   const beforeComparison=JSON.stringify(snapshot()),confirmRevision=comparison.querySelector('input[type="checkbox"]'),ratings=comparison.querySelectorAll('select'),run=comparison.querySelector('button');
+   assert(run.disabled&&ratings.length===3,'comparison-requires-confirmed-revision');
+   confirmRevision.checked=true;confirmRevision.dispatchEvent(new Event('change',{bubbles:true}));
+   run.click();
+   assert(comparison.textContent.includes('Incomplete assessment'),'unknown-ratings-not-treated-as-improvement');
+   for(const [i,value] of ['better','same','better'].entries()){ratings[i].value=value;ratings[i].dispatchEvent(new Event('change',{bubbles:true}))}
+   run.click();
+   assert(comparison.textContent.includes('Reported improvement')&&comparison.textContent.includes('Structural warnings resolved / added: 1 / 0'),'comparison-separates-human-rating-and-structural-review');
+   const feedbackNote=comparison.querySelector('input[type="text"]');
+   assert(feedbackNote&&feedbackNote.closest('div').hidden,'locked-archive-does-not-offer-feedback-retention');
+   assert(JSON.stringify(snapshot())===beforeComparison&&calls===9,'comparison-does-not-mutate-or-call-provider');
+   comparison.open=false;await new Promise(r=>setTimeout(r,20));
+   assert(!confirmRevision.checked&&run.disabled&&[...ratings].every(s=>s.value==='unknown'),'closing-comparison-clears-transient-assessment');
+   fill('message','Review local evidence');
+   const quoteA='The observed value increased in the sample.';
+   const quoteB='The observed value decreased in the sample.';
+   assert(NexusStudioUI.stageChatContext('Evidence A',quoteA),'evidence-a-staged');
+   assert(NexusStudioUI.stageChatContext('Evidence B',quoteB),'evidence-b-staged');
+   $('prepare').click();
+   const reviewed=JSON.parse($('request-context').textContent);
+   assert(reviewed.temporary_attachment_passages.length===2,'two-excerpts-in-reviewed-context');
+   $('consent').checked=true;$('consent').dispatchEvent(new Event('change'));
+   $('send-model').click();await wait(()=>$('request-review').hidden);
+   const evidence=$('messages').querySelector('[data-evidence-review]');
+   assert(evidence&&calls===10,'evidence-panel-on-completed-reply');
+   const beforeJudgment=JSON.stringify(snapshot());
+   const areas=evidence.querySelectorAll('textarea'),selects=evidence.querySelectorAll('select');
+   areas[0].value='Reviewed model answer';
+   selects[0].value='A1';selects[0].dispatchEvent(new Event('change'));
+   selects[2].value='A2';selects[2].dispatchEvent(new Event('change'));
+   areas[1].value=quoteA;areas[2].value=quoteB;
+   selects[1].value='supports';selects[3].value='contradicts';
+   evidence.querySelector('[data-evidence-check]').click();
+   assert(evidence.querySelector('pre').textContent.includes('conflicting_reported_evidence'),'human-judgments-conflict');
+   assert(JSON.stringify(snapshot())===beforeJudgment&&calls===10,'no-new-request-or-history-mutation');
+   fill('message','Next draft');
+   assert(!$('messages').querySelector('[data-evidence-review]'),'draft-change-clears-evidence-panel');
    $('nexus-browser-result').textContent=JSON.stringify({
       status:'PASS',checks,width:innerWidth,provider_requests:0,authority:'none'});
  }catch(error){

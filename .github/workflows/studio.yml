@@ -61,11 +61,18 @@ jobs:
           node scripts/test-studio-sky.mjs
           node scripts/test-studio-astrology.mjs
           node scripts/test-studio-core.mjs
+          node scripts/test-studio-draft-review.mjs
+          node scripts/test-studio-answer-review.mjs
+          node scripts/test-studio-reference-audit.mjs
+          node scripts/test-studio-evidence-review.mjs
           node scripts/test-studio-memory-review.mjs
           node scripts/test-studio-memory-edits.mjs
           node scripts/test-studio-workflow-outcome.mjs
           node scripts/test-studio-workflow-review.mjs
           node scripts/test-studio-chat-review-matrix.mjs
+          node scripts/test-studio-experience-archive.mjs
+          node scripts/test-studio-experience-archive-recall.mjs
+          node scripts/test-studio-chat-correction-options.mjs
           node scripts/test-studio-memory-dates.mjs
           node scripts/test-studio-memory-vectors.mjs
           node scripts/test-studio-memory-hybrid.mjs
@@ -75,6 +82,8 @@ jobs:
           node scripts/test-studio-vault-cancellation.mjs
           node scripts/test-studio-lab.mjs
           node scripts/test-studio-workflow-critique.mjs
+          node scripts/test-studio-audio-job-gate.mjs
+          node scripts/test-studio-local-tool-resource-policy.mjs
       - name: Reject ambiguous JSON fields and clear stale analysis in real downloads
         run: python3 scripts/test-studio-json-keys-browser.py
       - name: Exercise all-missing CSV and TSV records in real downloads

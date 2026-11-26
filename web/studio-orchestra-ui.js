@@ -3,8 +3,9 @@
  * in project memory or offline application cache. No microphone access.
  */
 (()=>{'use strict';
-const O=globalThis.NexusOrchestra,$=id=>document.getElementById(id);
-if(!O||!$('orchestra-card'))return;
+const O=globalThis.NexusOrchestra,gate=globalThis.NexusMusicUI,$=id=>document.getElementById(id);
+if(!O||!gate||!$('orchestra-card'))return;
+document.addEventListener('nexus-audio-job-state',buttons);
 const fa=()=>document.documentElement.lang==='fa';
 const say=(en,faText)=>fa()?faText:en;
 let plan=null,score=null,wav=null,rendering=false,mixing=false,ticket=0;
@@ -21,18 +22,19 @@ function clearMixed(){
 function status(en,faText){$('orchestra-status').textContent=say(en,faText)}
 function buttons(){
  $('orchestra-compose').disabled=rendering||!plan?.ready;
- $('orchestra-render').disabled=rendering||!score;
+ $('orchestra-render').disabled=rendering||gate.audioBusy()||!score;
  $('orchestra-xml').disabled=rendering||!score;
  $('orchestra-midi').disabled=rendering||!score;
  $('orchestra-score').disabled=rendering||!score;
  $('orchestra-wav').disabled=rendering||!wav;
  $('orchestra-cancel').disabled=!rendering;
- $('orchestra-dry-file').disabled=rendering;
+ $('orchestra-dry-file').disabled=rendering||gate.audioBusy();
  $('orchestra-dry-clear').disabled=rendering;
  $('orchestra-exclude-lead').disabled=rendering;
  $('orchestra-dry-download').disabled=rendering||!dryBytes;
  $('orchestra-together').disabled=!wav||!dryBytes||rendering;
- $('orchestra-mix').disabled=rendering||!aligned();
+ $('orchestra-mix').disabled=rendering||gate.audioBusy()||!aligned();
+ for(const id of ['orchestra-render','orchestra-mix','orchestra-dry-file'])$(id).title=gate.resourceMessage();
  $('orchestra-mix-download').disabled=rendering||!mixWav;
  for(const name of ['orchestra-offset','orchestra-dry-gain','orchestra-backing-gain'])$(name).disabled=rendering;
  document.dispatchEvent(new Event('nexus-studio-media-state'));
@@ -109,11 +111,13 @@ $('orchestra-wav').addEventListener('click',()=>{
 });
 $('orchestra-render').addEventListener('click',async()=>{
  if(!score||rendering)return;
+ const release=gate.acquireAudioJob('orchestra');
+ if(!release){$('orchestra-status').textContent=gate.resourceMessage();return}
  const id=++ticket,source=score;
- rendering=true;clearWav();buttons();
- status('Synthesizing the original score on this device...',
-        'در حال تولید صدای مستقل و آفلاین روی همین دستگاه...');
  try{
+  rendering=true;clearWav();buttons();
+  status('Synthesizing the original score on this device...',
+         'در حال تولید صدای مستقل و آفلاین روی همین دستگاه...');
   const data=await O.render(source,{sampleRate:dryInfo?.sampleRate||22050,
    excludeSyntheticLead:$('orchestra-exclude-lead').checked,
    shouldAbort:()=>id!==ticket,
@@ -126,7 +130,7 @@ $('orchestra-render').addEventListener('click',async()=>{
         'صدای سنتزی آماده است؛ پیش از داوری دربارهٔ کیفیت آن را گوش کن.');
  }catch(e){if(id===ticket)status(e?.message==='render-cancelled'?'Cancelled.':'Render failed.',
      e?.message==='render-cancelled'?'لغو شد.':'ساخت صدا ناموفق بود.')}
- finally{if(id===ticket){rendering=false;buttons()}}
+ finally{if(id===ticket)rendering=false;release();buttons()}
 });
 $('orchestra-cancel').addEventListener('click',()=>{
  if(!rendering)return;
@@ -158,13 +162,15 @@ $('orchestra-dry-clear').addEventListener('click',()=>{
                   'وکال اصلی از حافظهٔ این برگه آزاد شد.');
 });
 $('orchestra-dry-file').addEventListener('change',async()=>{
- if(rendering)return;
- const file=$('orchestra-dry-file').files[0];clearDry();
- if(!file)return;
- const id=++ticket,voiceGeneration=dryEpoch;
- dryPending=true;
+ if(rendering||gate.audioBusy()){$('orchestra-dry-file').value='';return}
+ const file=$('orchestra-dry-file').files[0];
+ if(!file){clearDry();return}
+ const release=gate.acquireAudioJob('vocal');
+ if(!release){$('orchestra-dry-file').value='';return}
+ let id,voiceGeneration;
  const current=()=>id===ticket&&voiceGeneration===dryEpoch;
  try{
+  clearDry();id=++ticket;voiceGeneration=dryEpoch;dryPending=true;buttons();
   if(file.size>20*1024*1024||file.size<48)throw Error('file-size');
   const bytes=new Uint8Array(await file.arrayBuffer());
   if(!current())return;
@@ -191,7 +197,7 @@ $('orchestra-dry-file').addEventListener('change',async()=>{
     'نرخ نمونه‌برداری دو صدا متفاوت است؛ موسیقی را پس از وارد کردن وکال دوباره تولید کن.');
  }catch{if(current())status('Dry vocal rejected: use a local PCM 16-bit WAV (22.05/44.1 kHz; 20 MiB max).',
      'فایل وکال پذیرفته نشد؛ WAV خام ۱۶ بیتی با نرخ ۲۲ یا ۴۴ کیلوهرتز، حداکثر ۲۰ مگابایت لازم است.')}
- finally{if(current()){dryPending=false;buttons()}}
+ finally{if(voiceGeneration===dryEpoch)dryPending=false;release();buttons()}
 });
 $('orchestra-dry-download').addEventListener('click',()=>{
  if(dryBytes)download(dryBytes,'original-voice-unchanged.wav','audio/wav');
@@ -220,11 +226,13 @@ for(const id of ['orchestra-offset','orchestra-dry-gain','orchestra-backing-gain
 $('orchestra-mix').addEventListener('click',async()=>{
  if(rendering||!aligned())return;
  // Clicking is explicit authority to mix two local, user-selected sounds.
+ const release=gate.acquireAudioJob('mix');
+ if(!release){$('orchestra-status').textContent=gate.resourceMessage();return}
  const id=++ticket,sourceDry=dryBytes,sourceBacking=wav;
- rendering=true;mixing=true;clearMixed();buttons();
- status('Aligning and mixing local PCM samples; original dry track untouched.',
-        'در حال میکس نمونه‌های PCM؛ فایل وکال اصلی بدون تغییر باقی می‌ماند.');
  try{
+  rendering=true;mixing=true;clearMixed();buttons();
+  status('Aligning and mixing local PCM samples; original dry track untouched.',
+         'در حال میکس نمونه‌های PCM؛ فایل وکال اصلی بدون تغییر باقی می‌ماند.');
   const opts={offsetMs:Number($('orchestra-offset').value),
    dryGain:Number($('orchestra-dry-gain').value),
    backingGain:Number($('orchestra-backing-gain').value),
@@ -255,7 +263,7 @@ $('orchestra-mix').addEventListener('click',async()=>{
     'نرخ نمونه‌برداری متفاوت است؛ پس از ورود وکال، موسیقی را دوباره تولید کن.':
     e?.message==='mobile-mix-memory-budget'?'حجم میکس برای حافظهٔ دستگاه بیش‌ازحد است.':
     e?.message==='mix-cancelled'?'میکس لغو شد.':'میکس ناموفق بود؛ زمان‌بندی و WAV را بررسی کن.')}
- finally{if(id===ticket){rendering=false;mixing=false;buttons()}}
+ finally{if(id===ticket){rendering=false;mixing=false}release();buttons()}
 });
 $('orchestra-mix-download').addEventListener('click',()=>{
  if(mixWav&&!rendering)download(mixWav,'aligned-mix.wav','audio/wav');

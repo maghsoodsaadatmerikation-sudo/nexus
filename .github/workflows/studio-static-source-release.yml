@@ -140,14 +140,23 @@ jobs:
           from pathlib import Path
           p=Path(os.environ["RUNNER_TEMP"])/"nexus-studio-public-all-assets.json"
           r=json.loads(p.read_text())
-          assert r["reviewed_public_files"]==18 and r["observed_public_files"]==18
+          manifest=json.loads((Path(os.environ["RUNNER_TEMP"])/"nexus-studio-release-manifest.json").read_text())
+          import sys
+          sys.path.insert(0, str(Path("scripts").resolve()))
+          from studio_public_assets import FILES
+          expected=set(FILES)
+          paths=[x["path"] for x in r["assets"]]
+          assert set(manifest["assets"])==expected
+          assert {"studio-orchestra.js","studio-reply-format.js"} <= expected
+          assert r["reviewed_public_files"]==r["observed_public_files"]==len(expected)
+          assert len(paths)==len(expected) and set(paths)==expected
           assert r["read_only"] is True and r["source_manifest_verified"] is True
           assert r["production_promotion_authorized"] is False
           assert r["rollback_provider_artifact_verified"] is False
           assert r["render_deploy_id_verified"] is False
           assert r["authority"]=="none"
           assert r["status"] in {"SOURCE_MATCH_ONLY","PUBLIC_SOURCE_DRIFT","INCOMPLETE_PUBLIC_OBSERVATION"}
-          print("FULL PUBLIC SOURCE OBSERVATION RECORDED (18/18), NO DEPLOY AUTHORITY")
+          print(f"PUBLIC OBSERVATION RECORDED: {len(paths)} ASSET RECORDS; {r['status']}; NO DEPLOY AUTHORITY")
           PY
       - name: Evaluate source-bound public readiness and retain explicit HOLD (never deploy)
         shell: bash
@@ -167,7 +176,12 @@ jobs:
           assert r["status"].startswith("HOLD_")
           assert r["ready_to_promote"] is False
           assert r["source_manifest_and_zip_verified"] is True
-          assert r["checked_paths"] == 18
+          manifest=json.loads((Path(os.environ["RUNNER_TEMP"])/"nexus-studio-release-manifest.json").read_text())
+          import sys
+          sys.path.insert(0, str(Path("scripts").resolve()))
+          from studio_public_assets import FILES
+          assert set(manifest["assets"]) == set(FILES)
+          assert r["checked_paths"] == len(manifest["assets"]) == len(FILES)
           assert r["render_deploy_identity_confirmed"] is False
           assert r["render_rollback_artifact_confirmed"] is False
           assert r["owner_release_approval_confirmed"] is False

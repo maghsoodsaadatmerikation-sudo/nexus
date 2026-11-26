@@ -125,6 +125,15 @@ bad(()=>O.compose(parsed.spec,0));
 await assert.rejects(O.render({...s,durationSeconds:121}));checks++;
 await assert.rejects(O.render(short,{sampleRate:12345}));checks++;
 await assert.rejects(O.render(short,{shouldAbort:()=>true}));checks++;
+// Cancellation at the normalization scan must not enter PCM encoding.
+const progress=[];
+await assert.rejects(O.render(short,{onProgress:p=>progress.push(p),shouldAbort:()=>progress.some(p=>p>.7&&p<=.74)}),e=>e.message==='render-cancelled');checks++;
+ok(()=>assert(progress.some(p=>p>.7&&p<=.74)&&!progress.some(p=>p>.74)));
+const completeProgress=[];
+const unchanged=await O.render(short,{onProgress:p=>completeProgress.push(p)});
+ok(()=>assert.deepEqual(unchanged,wav));
+ok(()=>assert(completeProgress.every((p,i)=>p>=0&&p<=1&&(i===0||p>=completeProgress[i-1]))));
+ok(()=>assert.equal(completeProgress.at(-1),1));
 const generated=readFileSync(new URL('../web/studio-orchestra.js',import.meta.url),'utf8');
 ok(()=>assert(!/fetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|api\.suno/i.test(generated)));
 const ui=readFileSync(new URL('../web/studio-orchestra-ui.js',import.meta.url),'utf8');

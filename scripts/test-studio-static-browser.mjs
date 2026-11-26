@@ -3,6 +3,8 @@
 import {spawn} from 'node:child_process';
 import {readFile,mkdtemp,rm} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
+import {checkStudioCachePolicy} from './test-studio-cache-policy.mjs';
+import {checkPdfResourcePolicy} from './test-studio-pdf-resource-policy.mjs';
 import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -16,10 +18,14 @@ const browser=process.env.NEXUS_PWA_CHROME;
 if(!browser||typeof WebSocket==='undefined')throw Error('real-chromium-and-node-required');
 const sha=buf=>createHash('sha256').update(buf).digest('hex');
 const sourceHtml=await readFile(new URL('index.html',root)),sourceDigest=sha(sourceHtml);
+const cachePolicyChecks=await checkStudioCachePolicy({worker:await readFile(new URL('service-worker.js',root),'utf8'),html:sourceHtml,orchestra:await readFile(new URL('studio-orchestra.js',root)),sha256:bytes=>createHash('sha256').update(bytes).digest()});
+const pdfResourceChecks=await checkPdfResourcePolicy(await readFile(new URL('pdf/studio-pdf.mjs',root),'utf8'));
 const assert=(v,label)=>{if(!v)throw Error(label)};
 const pdfModules=['pdf/studio-pdf.mjs','pdf/pdf.min.mjs','pdf/pdf.worker.min.mjs'];
 const astronomyModule='vendor/astronomy-2.1.19.min.js';
-const allowed={['/'+astronomyModule]:astronomyModule,...Object.fromEntries(pdfModules.map(name=>['/'+name,name])),'/':'index.html','/index.html':'index.html','/service-worker.js':'service-worker.js','/manifest.json':'manifest.json','/icons/nexus-192.png':'icons/nexus-192.png','/icons/nexus-512.png':'icons/nexus-512.png',...(packageRoot?{'/device-check.html':'device-check.html'}:{})};
+const orchestraModule='studio-orchestra.js';
+const replyModule='studio-reply-format.js';
+const allowed={['/'+replyModule]:replyModule,['/'+orchestraModule]:orchestraModule,['/'+astronomyModule]:astronomyModule,...Object.fromEntries(pdfModules.map(name=>['/'+name,name])),'/':'index.html','/index.html':'index.html','/service-worker.js':'service-worker.js','/manifest.json':'manifest.json','/icons/nexus-192.png':'icons/nexus-192.png','/icons/nexus-512.png':'icons/nexus-512.png',...(packageRoot?{'/device-check.html':'device-check.html'}:{})};
 let server;
 if(!PUBLIC_MODE){server=createServer(async(req,res)=>{const file=allowed[req.url]||(['device-engine.js','device-worker.js','device-ui.js','model-manifest.json'].some(n=>req.url==='/device/'+n)?req.url.slice(1):null);if(req.method!=='GET'||!file){res.writeHead(404);res.end();return}res.setHeader('content-type',file.endsWith('.html')?'text/html; charset=utf-8':/\.m?js$/.test(file)?'text/javascript':file.endsWith('.json')?'application/manifest+json':'image/png');res.end(await readFile(new URL(file,root)))});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))}
 // Small ASCII fixture with exact xref offsets and one selectable text line.
@@ -39,7 +45,7 @@ function samplePdf(){
  return pdf+'xref\n0 6\n0000000000 65535 f \n'+rows+'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n';
 }
 const ORIGIN=PUBLIC_MODE?'https://nexus-studio-merikation.onrender.com/':`http://127.0.0.1:${server.address().port}/`;
-for(const name of ['index.html','service-worker.js','manifest.json',astronomyModule,...pdfModules]){const response=await fetch(ORIGIN+(name==='index.html'?'':name),{redirect:'error',signal:AbortSignal.timeout(15000)});assert(response.status===200&&sha(Buffer.from(await response.arrayBuffer()))===sha(await readFile(new URL(name,root))),'public-source-identity-'+name)}
+for(const name of ['index.html','service-worker.js','manifest.json',astronomyModule,orchestraModule,replyModule,...pdfModules]){const response=await fetch(ORIGIN+(name==='index.html'?'':name),{redirect:'error',signal:AbortSignal.timeout(15000)});assert(response.status===200&&sha(Buffer.from(await response.arrayBuffer()))===sha(await readFile(new URL(name,root))),'public-source-identity-'+name)}
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const profile=await mkdtemp(path.join(tmpdir(),'nexus-pwa-private-'));
 const child=spawn(browser,[
@@ -91,7 +97,7 @@ async function setOffline(offline){
   await rpc('Network.emulateNetworkConditions',conditions,10000,session);
  }
 }
-const checks=[];
+const checks=[...cachePolicyChecks.map(label=>'synthetic-cache-policy-'+label),...pdfResourceChecks.map(label=>'synthetic-pdf-resource-'+label)];
 try{
  const port=await poll(async()=>{
   try{const s=await readFile(path.join(profile,'DevToolsActivePort'),'utf8');
@@ -221,10 +227,15 @@ try{
  checks.push('first-chat-creates-local-project-and-thread-without-sending-or-losing-draft');
 
   assert(await js("Boolean(document.getElementById('nexus-zen-menu'))&&Boolean(document.getElementById('nexus-zen-home'))&&getComputedStyle(document.getElementById('studio-focus-nav')).display==='none'"),'zen-home-has-no-tab-clutter');
+  assert(await js("document.getElementById('nexus-zen-drawer').hidden&&!document.getElementById('nexus-zen-history').childElementCount"),'hidden-drawer-must-not-render-at-startup');
   await js("document.getElementById('nexus-zen-menu').click();true");
   assert(await js("!document.getElementById('nexus-zen-drawer').hidden&&document.activeElement.id==='nexus-zen-find'"),'zen-menu-not-accessible');
   await js("document.getElementById('nexus-zen-close').click();true");
   assert(await js("document.getElementById('nexus-zen-drawer').hidden"),'zen-menu-not-dismissible');
+  assert(await js("!document.getElementById('nexus-zen-history').childElementCount"),'closed-drawer-retains-previews');
+  assert(await js("(()=>{document.dispatchEvent(new Event('nexus-studio-state'));document.getElementById('nexus-zen-find').dispatchEvent(new Event('input'));return !document.getElementById('nexus-zen-history').childElementCount})()"),'hidden-drawer-rebuilt-by-events');
+  assert(await js("(()=>{const n=document.getElementById('nexus-zen-storage-indicator'),o=new MutationObserver(()=>{});o.observe(n,{subtree:true,childList:true,characterData:true,attributes:true});document.dispatchEvent(new Event('nexus-studio-state'));const ok=o.takeRecords().length===0;o.disconnect();return ok})()"),'unchanged-safety-indicator-rewritten');
+  checks.push('zen-history-on-demand-and-idempotent-safety-indicator');
   checks.push('zen-default-and-collapsible-history');
   await js("(()=>{const m=document.getElementById('message');m.value='/music cinematic instrumental';m.dispatchEvent(new Event('input'));document.getElementById('studio-compose-send').click();return true})()");
   assert(await js("!document.getElementById('nexus-zen-offer').hidden&&NexusStudioUI.snapshot().projects[0].threads[0].nodes.length===0"),'chat-routing-must-be-consent-first');
@@ -307,12 +318,18 @@ try{
  stage='opt-in-offline';await js("document.getElementById('studio-offline').click();true");
  await poll(()=>retryJs("document.getElementById('studio-offline-state').textContent.includes('code is ready')"),25000,'offline-prepare');
  const cached=await js("(async()=>{const names=await caches.keys(),cache=await caches.open(names[0]),keys=await cache.keys();const response=await cache.match(location.origin+'/');const bytes=await response.arrayBuffer();return {names,entries:keys.map(k=>k.url),sha:Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join(''),private:new TextDecoder().decode(bytes).includes('SYNTHETIC PRIVATE QUESTION')}})()");
- assert(cached.names.length===1&&cached.names[0].startsWith('nexus-studio-shell-v1-')&&cached.entries.length===6+pdfModules.length&&cached.entries.includes(ORIGIN+astronomyModule)&&pdfModules.every(name=>cached.entries.includes(ORIGIN+name))&&cached.entries.includes(ORIGIN)&&cached.sha===sourceDigest&&!cached.private,'cache-not-public-code-only');checks.push('opt-in-cache-exact-public-code-only');
+ assert(cached.names.length===1&&cached.names[0].startsWith('nexus-studio-shell-v1-')&&cached.entries.length===8+pdfModules.length&&cached.entries.includes(ORIGIN+replyModule)&&cached.entries.includes(ORIGIN+orchestraModule)&&cached.entries.includes(ORIGIN+astronomyModule)&&pdfModules.every(name=>cached.entries.includes(ORIGIN+name))&&cached.entries.includes(ORIGIN)&&cached.sha===sourceDigest&&!cached.private,'cache-not-public-code-only');checks.push('opt-in-cache-exact-public-code-only');
  await poll(()=>retryJs("Boolean(navigator.serviceWorker.controller)"),10000,'worker-control');
  await js("window.__beforeOfflineReload=true;true");
  stage='true-offline';await setOffline(true);await rpc('Page.reload',{ignoreCache:true});
  await poll(()=>retryJs("!window.__beforeOfflineReload&&navigator.onLine===false&&document.readyState==='complete'&&Boolean(window.NexusStudioUI)&&Boolean(document.getElementById('studio-offline'))"),15000,'offline-reload');
  assert(await js("NexusStudioUI.snapshot().projects.length===0"),'automatic-private-reopen');checks.push('true-offline-reload-still-locked');
+ assert(await js("Boolean(window.NexusOrchestra&&window.NexusOrchestraUI)"),'offline-orchestra-engine-not-loaded');checks.push('split-orchestra-loaded-without-network');
+ assert(await js("typeof globalThis.NexusReplyFormat?.render==='function'"),'offline-reply-formatter-not-loaded');checks.push('split-reply-formatter-loaded-without-network');
+ const moduleIntegrity=await js(`(async()=>{const cache=await caches.open((await caches.keys())[0]),url=new URL(${JSON.stringify(orchestraModule)},location.href).href,original=await cache.match(url);if(!original)return false;
+ try{await cache.put(url,new Response('CORRUPTED ORCHESTRA ASSET',{headers:{'content-type':'text/javascript'}}));const r=await fetch(url);return r.status===503}
+ finally{await cache.put(url,original)}})()`);
+ assert(moduleIntegrity,'corrupted-orchestra-cache-accepted');checks.push('corrupted-offline-orchestra-rejected');
  await js("document.getElementById('passphrase').value='synthetic secret phrase 123';document.getElementById('unlock').click();true");
  await poll(()=>retryJs("NexusStudioUI.snapshot().projects[0]?.title==='My conversations'"),12000,'offline-unlock');checks.push('offline-encrypted-reopen');
  stage='offline-pdf';
