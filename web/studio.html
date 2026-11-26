@@ -2048,6 +2048,25 @@ function checkAnswerReviewContext(path,messages){
   sentUser?.role==='user'&&sentUser.content===user.text&&sentAnswer?.role==='assistant'&&sentAnswer.content===answer.text&&sentReview?.role==='user'&&sentReview.content===review.text);
 }
 
+// Compare only the exact original / review pair on the current branch.
+// A review message can be critique only; the user must identify a revision.
+function answerComparisonContext(path){
+ if(!Array.isArray(path)||path.length<4)return false;
+ const [question,original,request,candidate]=path.slice(-4);
+ return Boolean(question?.role==='user'&&original?.role==='assistant'&&original.origin==='model'&&request?.role==='user'&&isAnswerReviewPrompt(request.text)&&candidate?.role==='assistant'&&candidate.origin==='model'&&[question,original,candidate].every(x=>typeof x.text==='string'&&x.text.trim()&&x.text.length<=100000));
+}
+function compareReviewedAnswers(path,ratings,{candidateConfirmed=false}={}){
+ if(typeof candidateConfirmed!=='boolean'||!answerComparisonContext(path))throw Error('invalid-answer-comparison');
+ const boundary={facts_verified:false,automatic_selection:false,storage_authorized:false,execution_authorized:false};
+ if(!candidateConfirmed)return {status:'not_confirmed',...boundary};
+ const dimensions=['coverage','accuracy','clarity'];
+ if(!ratings||typeof ratings!=='object'||Array.isArray(ratings)||Object.keys(ratings).sort().join('|')!=='accuracy|clarity|coverage'||dimensions.some(k=>!['better','same','worse','unknown'].includes(ratings[k])))throw Error('invalid-answer-ratings');
+ const original=path.at(-3).text,candidate=path.at(-1).text,before=reviewDraft(original).findings,after=reviewDraft(candidate).findings;
+ const values=dimensions.map(k=>ratings[k]),better=values.includes('better'),worse=values.includes('worse'),unknown=values.includes('unknown');
+ const status=original===candidate?'identical_text':better&&worse?'mixed_report':worse?'reported_regression':unknown?'incomplete_assessment':better?'reported_improvement':'reported_no_change';
+ return {status,resolved_findings:before.filter(x=>!after.includes(x)),new_findings:after.filter(x=>!before.includes(x)),unchanged_findings:after.filter(x=>before.includes(x)),...boundary};
+}
+
 // Match explicit request-local reference markers, not factual support.
 function auditReferenceMarkers(text,refs){
  if(typeof text!=='string'||!Array.isArray(refs)||refs.length>30||refs.some(x=>typeof x!=='string'||!/^[SA][1-9]\d?$/.test(x))||new Set(refs).size!==refs.length)throw Error('invalid-reference-audit');
@@ -2123,6 +2142,8 @@ globalThis.NexusReplyFormat = Object.freeze({
  answerReviewPrompt,
  isAnswerReviewPrompt,
  checkAnswerReviewContext,
+ answerComparisonContext,
+ compareReviewedAnswers,
  exportHtml:(doc,text,{title,format})=>exportHtml(doc,[{text,format}],{title}),
  exportConversation:(doc,sections,title)=>exportHtml(doc,sections,{title})
 });
@@ -3648,6 +3669,32 @@ function renderMessage(n){
     $('message').focus();
    };
    item.append(review);
+   const pair=S.path(chat());
+   if(!chat()?.isolated&&NexusReplyFormat.answerComparisonContext(pair)){
+    const w=(en,fa)=>language==='fa'?fa:en;
+    const panel=el('details','');panel.dataset.answerComparison='';
+    panel.append(el('summary',w('Compare with original answer','مقایسه با پاسخ اولیه')),el('p',w('Local, your assessment only. A review can contain critique rather than a replacement. No answer is selected or saved by this comparison.','محلی و بر اساس ارزیابی شما؛ بازبینی ممکن است فقط نقد باشد، نه پاسخ جایگزین. هیچ پاسخی با این مقایسه انتخاب یا ذخیره نمی‌شود.')));
+    const label=el('label',w('This response contains a revised answer I can compare','این پاسخ شامل نسخهٔ اصلاح‌شدهٔ قابل مقایسه است'));
+    const confirmRevision=el('input','');confirmRevision.type='checkbox';label.prepend(confirmRevision);panel.append(label);
+    const ratings={};
+    for(const [key,en,fa] of [['coverage','Request coverage','پوشش خواسته‌ها'],['accuracy','Factual accuracy (your assessment)','صحت محتوا (ارزیابی شما)'],['clarity','Clarity','وضوح']]){
+     const field=el('label',w(en,fa)),select=el('select','');
+     for(const [v,e,f] of [['unknown','Not assessed','ارزیابی نشده'],['better','Better','بهتر'],['same','Same','بدون تغییر'],['worse','Worse','بدتر']])select.append(option(v,w(e,f)));
+     field.append(select);panel.append(field);ratings[key]=select;
+    }
+    const run=el('button',w('Compare assessments','مقایسهٔ ارزیابی‌ها'));run.type='button';run.className='secondary';run.disabled=true;
+    const result=el('p','');result.setAttribute('role','status');panel.append(run,result);
+    const reset=()=>{run.disabled=!confirmRevision.checked;result.textContent=''};
+    panel.oninput=reset;panel.onchange=reset;
+    panel.ontoggle=()=>{if(!panel.open){confirmRevision.checked=false;for(const s of Object.values(ratings))s.value='unknown';reset()}};
+    run.onclick=()=>{
+     if(!panel.isConnected||busy||chat()?.head!==n.id||chat()?.archived||chat()?.isolated||!confirmRevision.checked)return;
+     const compared=NexusReplyFormat.compareReviewedAnswers(S.path(chat()),Object.fromEntries(Object.entries(ratings).map(([k,s])=>[k,s.value])),{candidateConfirmed:true});
+     const labels={identical_text:w('Identical text','متن یکسان'),mixed_report:w('Mixed assessment','ارزیابی ترکیبی'),reported_regression:w('Reported regression','افت گزارش‌شده'),incomplete_assessment:w('Incomplete assessment','ارزیابی ناقص'),reported_improvement:w('Reported improvement','بهبود گزارش‌شده'),reported_no_change:w('No reported change','بدون تغییر گزارش‌شده')};
+     result.textContent=labels[compared.status]+' · '+w('Structural warnings resolved / added: ','هشدار ساختاری رفع‌شده / جدید: ')+compared.resolved_findings.length+' / '+compared.new_findings.length+' · '+w('Not independent verification. Nothing applied.','راستی‌آزمایی مستقل نیست. هیچ تغییری اعمال نشد.');
+    };
+    item.append(panel);
+   }
   }
  }
  return item;
