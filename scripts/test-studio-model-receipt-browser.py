@@ -46,6 +46,9 @@ window.addEventListener('load',async()=>{
    if(replyCase==='valid')Object.assign(result,{model_slot:'primary',configuration_id:rid});
    if(replyCase==='empty-draft')result.text='  \n ';
    if(replyCase==='structural-warning'){result.text='```js\nconst x=1;';result.truncated=true}
+   if(replyCase==='source-unknown')result.text='Reported result [NXS:A9]';
+   if(replyCase==='source-cited')result.text='Reported result [NXS:A1]';
+   if(replyCase==='source-insufficient')result.text='NXS_INSUFFICIENT_EVIDENCE';
    return Response.json(result);
  };
  try{
@@ -164,6 +167,35 @@ window.addEventListener('load',async()=>{
    assert(JSON.stringify(snapshot())===beforeJudgment&&calls===10,'no-new-request-or-history-mutation');
    fill('message','Next draft');
    assert(!$('messages').querySelector('[data-evidence-review]'),'draft-change-clears-evidence-panel');
+   $('source-answer').click();$('prepare').click();
+   assert($('request-review').hidden&&calls===10&&$('status').textContent.includes('No source passages'),
+    'source-mode-needs-a-selected-passage-before-review');
+   assert(NexusStudioUI.stageChatContext('Observation',quoteA),'source-mode-fixture-selected');
+   const submitSourced=async()=>{
+    $('prepare').click();
+    const summary=JSON.parse($('request-context').textContent);
+    assert(summary.response_style==='source_answer'&&summary.temporary_attachment_passages[0].ref==='A1'&&
+     summary.messages[0].content.includes('Answer from sources mode')&&!$('consent').checked,
+     'source-mode-shows-exact-passage-and-requires-approval');
+    $('consent').click();$('send-model').click();await wait(()=>$('request-review').hidden);
+   };
+   const beforeSourced=JSON.stringify(snapshot());
+   for(const bad of ['missing','source-unknown']){
+    replyCase=bad;await submitSourced();
+    assert(JSON.stringify(snapshot())===beforeSourced&&$('message').value==='Next draft'&&
+     $('status').textContent.includes('did not pass the reference check'),'source-mode-rejects-'+bad);
+   }
+   replyCase='source-cited';await submitSourced();
+   assert(calls===13&&NexusStudio.path(selected()).at(-1).text==='Reported result [NXS:A1]'&&
+    $('status').textContent.includes('Marker matching is not claim verification.'),
+    'source-mode-keeps-a-matched-reply-and-labels-the-check');
+   fill('message','What if there is no evidence?');
+   assert(NexusStudioUI.stageChatContext('Observation',quoteB),'insufficient-fixture-selected');
+   replyCase='source-insufficient';await submitSourced();
+   assert(calls===14&&NexusStudio.path(selected()).at(-1).text.includes('could not answer')&&
+    !$('messages').querySelector('[data-evidence-review]'),'source-mode-shows-a-readable-abstention');
+   $('new-thread').click();
+   assert(!$('source-answer').checked,'source-mode-resets-for-a-new-conversation');
    $('nexus-browser-result').textContent=JSON.stringify({
       status:'PASS',checks,width:innerWidth,provider_requests:0,authority:'none'});
  }catch(error){
