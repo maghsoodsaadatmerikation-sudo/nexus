@@ -419,6 +419,44 @@ class SnapshotTests(unittest.TestCase):
                 with self.assertRaisesRegex(snapshot.SnapshotError, "nesting exceeds limit"):
                     snapshot.strict_json(nested)
 
+    def test_json_preflight_blocks_depth_before_decoder(self):
+        nested = "[" * (snapshot.MAX_JSON_DEPTH + 1) + "0" + "]" * (snapshot.MAX_JSON_DEPTH + 1)
+        with patch.object(snapshot.json, "loads") as decoder:
+            with self.assertRaisesRegex(snapshot.SnapshotError, "nesting exceeds limit"):
+                snapshot.strict_json(nested.encode("utf-8"))
+            decoder.assert_not_called()
+
+    def test_json_preflight_ignores_escaped_string_punctuation(self):
+        values = ["[" * 500, "]" * 500, '\\"[{}]', '\\\\"',
+                  "a\\", "\\" * 400, "🧪", '"' * 200]
+        for value in values:
+            with self.subTest(value=value[:16]):
+                original = {"key": value, value: [1, 2]}
+                self.assertEqual(snapshot.strict_json(json.dumps(original)), original)
+
+    def test_json_preflight_mixed_containers_and_malformed_structure(self):
+        for depth in (64, 65):
+            nested = '[{"x":' * depth + "0" + "}]" * depth
+            if depth == 64:
+                snapshot.strict_json(nested)
+            else:
+                with self.assertRaisesRegex(snapshot.SnapshotError, "nesting exceeds limit"):
+                    snapshot.strict_json(nested)
+        for malformed in ('[}', '}{', '[[', '"abc', '["abc\\', '{]', '[0]]'):
+            with self.subTest(malformed=malformed):
+                with self.assertRaises(ValueError):
+                    snapshot.strict_json(malformed)
+
+    def test_non_utf8_or_bom_workspace_json_rejected(self):
+        valid = '{"schema_version":1,"workspace":{"id":"w"},"events":[]}'
+        for encoding in ("utf-16", "utf-32", "utf-8-sig"):
+            with self.subTest(encoding=encoding):
+                (self.source / "77.json").write_bytes(valid.encode(encoding))
+                with self.assertRaises(ValueError):
+                    snapshot.backup(self.source, self.archive)
+                self.assertFalse(self.archive.exists())
+                self.assertFalse(self.target.exists())
+
     def test_deep_json_fails_without_traceback_or_restore_side_effects(self):
         depth = sys.getrecursionlimit() + 100
         nested = "[" * depth + "0" + "]" * depth
