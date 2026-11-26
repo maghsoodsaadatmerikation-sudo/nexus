@@ -194,6 +194,10 @@ function testUnified(review){
  reject(()=>adaptWith({scope:{...futureScope,workflow_id:'other'}}),'adaptive-plan-scope-mismatch');
  reject(()=>adaptWith({scope}), 'adaptive-plan-scope-mismatch');
  reject(()=>adaptWith({scope:{...futureScope,plan_sha256:'bad'}}),'adaptive-plan-scope-mismatch');
+ for(const past of history)reject(()=>adaptWith({scope:{...futureScope,run_id:past.scope.run_id}}),'adaptive-plan-run-reused');
+ reject(()=>adaptWith({scope:{...futureScope,run_id:prior.run_id}}),'adaptive-plan-run-reused');
+ eq(review({...adaptiveInput,prior_run:undefined},recall).adaptive_plan.findings[0].status,'declared_checkpoint_present');
+ eq(review({...adaptiveInput,adaptive_plan:{...adaptiveRequest,scope:{...futureScope,run_id:history[0].scope.run_id}}},on).adaptive_plan.status,'off');
  reject(()=>adaptWith({checkpoints:[checkpoint,checkpoint]}),'invalid-adaptive-checkpoint');
  reject(()=>adaptWith({checkpoints:[{...checkpoint,criterion_id:'other'}]}),'invalid-adaptive-checkpoint');
  reject(()=>adaptWith({checkpoints:[{...checkpoint,protected_step_ids:['a']}]}),'invalid-adaptive-checkpoint');
