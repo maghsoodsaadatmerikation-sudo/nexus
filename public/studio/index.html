@@ -1671,7 +1671,7 @@ class Registry{
 }
 root.NexusLocales=Object.freeze({Registry,MAX_BYTES,MAX_PACKS});
 })(globalThis);
-</script><script src="./studio-reply-format.js" integrity="sha256-8fIT3iXq7m6u7LmP6uu/xJ7ZJRsL6BYwXoI+broj6Ak="></script><script>/* Bounded ZIP and XML helpers for Studio Office documents. */
+</script><script src="./studio-reply-format.js" integrity="sha256-rFgnlGIhYF2sp3SNXtJVnG+MzuZRw+PgV0A2Xnm59A4="></script><script>/* Bounded ZIP and XML helpers for Studio Office documents. */
 (function(root){'use strict';
 const PREVIEW_LIMIT=512*1024;
 // Studio exports a single document without tray attachments.
@@ -3292,6 +3292,13 @@ function renderMessage(n){
  body.className='body';body.dir='auto';
  if(n.origin==='model')NexusReplyFormat.render(body,n.text,{codeActions:true});
  item.append(body);
+ if(n.origin==='model'&&!chat()?.isolated&&!chat()?.archived)
+  NexusReplyFormat.mountFocusedFollowup(item,n.text,language,(name,text,prompt)=>{
+   if(!item.isConnected||pending||busy||hasChatDraft())return false;
+   return stageChatAttachments([{id:S.uid(),name,text,whole:true}],()=>{
+    $('source-answer').checked=false;$('message').value=prompt;
+   });
+  });
  if(n.role==='user'){
   if(n.attached_files?.length)item.append(el('small',t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' · '+t('chatFilesNotSaved')));
   const edit=el('button',t('edit'));

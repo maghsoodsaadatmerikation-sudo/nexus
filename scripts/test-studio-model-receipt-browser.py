@@ -249,6 +249,38 @@ window.addEventListener('load',async()=>{
    pair.querySelector('button').click();
    assert(selected().head===first.id&&selected().nodes.some(n=>n.id===second.id)&&
     calls===16,'user-chooses-the-original-branch-without-another-model-call');
+   const followup=$('messages').querySelector('[data-focused-followup]');
+   const area=followup?.querySelector('textarea');
+   const action=name=>followup.querySelector('[data-followup-action="'+name+'"]');
+   assert(followup&&area.readOnly&&!area.value,'focused-followup-opens-on-demand');
+   followup.open=true;await wait(()=>area.value===first.text);
+   action('explain').click();
+   assert(followup.querySelector('[role=status]').textContent.includes('Select a passage')&&calls===16,
+    'focused-followup-needs-a-selection');
+   const pickedText='Original model answer';
+   area.setSelectionRange(0,pickedText.length);
+   fill('message','An existing draft');
+   action('examine').click();
+   assert($('message').value==='An existing draft'&&
+    followup.querySelector('[role=status]').textContent.includes('current chat draft')&&
+    $('request-review').hidden&&calls===16,'focused-followup-does-not-replace-a-draft');
+   fill('message','');
+   const beforeFollowup=JSON.stringify(snapshot());
+   action('explain').click();$('prepare').click();
+   const focused=JSON.parse($('request-context').textContent);
+   assert(focused.response_style==='standard'&&focused.temporary_attachment_passages.length===1&&
+    focused.messages[0].content.includes(JSON.stringify(pickedText))&&
+    !focused.messages[0].content.includes('[NXS:A1]","partial"')&&
+    focused.messages.at(-1).content.includes('plain language')&&!$('consent').checked&&
+    calls===16&&JSON.stringify(snapshot())===beforeFollowup,'focused-explanation-stages-only-the-exact-selection');
+   $('clear-chat-files').click();fill('message','');
+   followup.open=true;await wait(()=>area.value===first.text);
+   area.setSelectionRange(0,area.value.length);
+   action('examine').click();$('prepare').click();
+   const examined=JSON.parse($('request-context').textContent);
+   assert(examined.messages[0].content.includes(JSON.stringify(first.text))&&
+    examined.messages.at(-1).content.includes('old citation markers are not evidence')&&
+    !$('consent').checked&&calls===16,'claim-followup-distinguishes-previous-model-text-from-evidence');
    $('nexus-browser-result').textContent=JSON.stringify({
       status:'PASS',checks,width:innerWidth,provider_requests:0,authority:'none'});
  }catch(error){

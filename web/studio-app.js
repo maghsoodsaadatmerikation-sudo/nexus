@@ -615,6 +615,13 @@ function renderMessage(n){
  body.className='body';body.dir='auto';
  if(n.origin==='model')NexusReplyFormat.render(body,n.text,{codeActions:true});
  item.append(body);
+ if(n.origin==='model'&&!chat()?.isolated&&!chat()?.archived)
+  NexusReplyFormat.mountFocusedFollowup(item,n.text,language,(name,text,prompt)=>{
+   if(!item.isConnected||pending||busy||hasChatDraft())return false;
+   return stageChatAttachments([{id:S.uid(),name,text,whole:true}],()=>{
+    $('source-answer').checked=false;$('message').value=prompt;
+   });
+  });
  if(n.role==='user'){
   if(n.attached_files?.length)item.append(el('small',t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' · '+t('chatFilesNotSaved')));
   const edit=el('button',t('edit'));
