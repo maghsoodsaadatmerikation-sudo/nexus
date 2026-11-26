@@ -30,27 +30,32 @@ export function reviewEvidenceClaims(passages,claims,{enabled=false,isolated=fal
    if(!p){rows.push({ref:j.ref,stance:j.stance,status:'unknown_reference'});continue}
    if(!p.text.includes(j.quote)){rows.push({ref:j.ref,stance:j.stance,status:'quote_not_found'});continue}
    const q=norm(j.quote),content=norm(p.text);
-   const g=groups.get(content)||{stances:new Set(),quotes:new Set(),refs:new Set(),files:new Set()};
-   g.stances.add(j.stance);g.quotes.add(q);g.refs.add(j.ref);g.files.add(p.kind+':'+p.source_id);groups.set(content,g);
+   const g=groups.get(content)||{stances:new Set(),quotes:new Map(),refs:new Set(),files:new Set()};
+   g.stances.add(j.stance);const stances=g.quotes.get(q)||new Set();stances.add(j.stance);g.quotes.set(q,stances);g.refs.add(j.ref);g.files.add(p.kind+':'+p.source_id);groups.set(content,g);
    files.add(p.kind+':'+p.source_id);
    rows.push({ref:j.ref,stance:j.stance,status:'exact_quote_found',partial:p.partial});
   }
   // Identical excerpts are grouped even when copied into different files.
   // Identical quotes across otherwise different excerpts are also flagged.
   const quoteGroups=new Map();
-  for(const g of groups.values())for(const q of g.quotes)quoteGroups.set(q,(quoteGroups.get(q)||0)+1);
+  for(const g of groups.values())for(const [q,stances] of g.quotes){
+   const entry=quoteGroups.get(q)||{count:0,stances:new Set()};
+   entry.count++;for(const stance of stances)entry.stances.add(stance);quoteGroups.set(q,entry);
+  }
+  const opposingRepeatedQuote=[...quoteGroups.values()].some(x=>x.count>1&&x.stances.has('supports')&&x.stances.has('contradicts'));
   const dispositions=[...groups.values()].map(g=>g.stances.has('supports')&&g.stances.has('contradicts')?'ambiguous_interpretation':g.stances.has('uncertain')?'uncertain':g.stances.has('supports')?'reported_support':'reported_contradiction');
   const support=dispositions.filter(x=>x==='reported_support').length,contradiction=dispositions.filter(x=>x==='reported_contradiction').length,ambiguous=dispositions.filter(x=>x==='ambiguous_interpretation').length,uncertain=dispositions.filter(x=>x==='uncertain').length;
   const invalid=rows.filter(x=>x.status!=='exact_quote_found').length;
-  const duplicateExcerpts=[...groups.values()].some(g=>g.refs.size>1),duplicateQuotes=[...quoteGroups.values()].some(n=>n>1);
+  const duplicateExcerpts=[...groups.values()].some(g=>g.refs.size>1),duplicateQuotes=[...quoteGroups.values()].some(x=>x.count>1);
   const flags=[];
   if(invalid)flags.push('unmatched_evidence');
   if(rows.some(x=>x.partial))flags.push('partial_passage');
   if(duplicateExcerpts||duplicateQuotes)flags.push('repeated_content');
   if(ambiguous)flags.push('opposing_interpretations_of_same_excerpt');
+  if(opposingRepeatedQuote)flags.push('opposing_interpretations_of_repeated_quote');
   if(uncertain)flags.push('uncertain_interpretation');
   if(groups.size&&files.size===1)flags.push('single_file');
-  const disposition=invalid?'reconcile_references':ambiguous?'reconcile_interpretations':support&&contradiction?'conflicting_reported_evidence':uncertain?'uncertain_evidence':support?'reported_support_only':contradiction?'reported_contradiction_only':'no_reviewed_evidence';
+  const disposition=invalid?'reconcile_references':(ambiguous||opposingRepeatedQuote)?'reconcile_interpretations':support&&contradiction?'conflicting_reported_evidence':uncertain?'uncertain_evidence':support?'reported_support_only':contradiction?'reported_contradiction_only':'no_reviewed_evidence';
   results.push({claim_id:c.claim_id,disposition,exact_quote_count:rows.length-invalid,distinct_excerpt_count:groups.size,distinct_file_count:files.size,reported_support_excerpt_count:support,reported_contradiction_excerpt_count:contradiction,flags,judgments:rows});
  }
  return {status:'review_only',basis:'exact_substrings_and_declared_stances_not_verified_entailment_or_source_quality',claims:results,...boundary};
