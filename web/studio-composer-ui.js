@@ -351,6 +351,11 @@ function completeReportRounds(current){
     current.history.some((r,i)=>r.round!==i+1))return null;
  return [...current.history,{round:current.round,steps:reviewSnapshot(current)}];
 }
+function reviewQueueText(result,words){
+ const labels={declared_plan_boundary_findings:words('plan boundaries','مرزهای برنامه'),uncertain_or_inconsistent_step_status:words('uncertain step status','وضعیت نامشخص گام‌ها'),required_evidence_reconciliation:words('required evidence conflicts','تعارض شواهد ضروری'),reported_pass_lost:words('reported passes lost','موفقیت‌های ازدست‌رفته'),other_unfinished_steps:words('unfinished steps','گام‌های ناتمام'),other_plan_findings:words('other plan findings','سایر نواقص برنامه'),other_required_evidence_actions:words('required evidence review','بازبینی شواهد ضروری'),optional_evidence_actions:words('optional evidence review','بازبینی شواهد تکمیلی')};
+ const queue=result.review_readiness.queue;
+ return queue.length?words(' · Outstanding review: ',' · موارد نیازمند بازبینی: ')+queue.map(q=>labels[q.reason]+': '+q.count).join('; '):words(' · Manual final review still required.',' · بازبینی نهایی انسانی همچنان لازم است.');
+}
 async function showEngineReview(button,notice){
  const current=workflowState,state=window.NexusStudioUI.uiStatus();
  if(!validWorkflow()||state.isolated||!current)return;
@@ -388,7 +393,7 @@ async function showEngineReview(button,notice){
    review_plan_findings:words('define success criteria','تعریف معیار موفقیت'),
    review_outcome_evidence:words('review evidence','بازبینی شواهد'),
    manual_final_review:words('manual final review','بازبینی نهایی انسانی')
-  })[result.priority]+words(' · Human-reported pass / fail: ',' · موفق / ناموفق به گزارش کاربر: ')+reviewed+'/'+failed+(result.revision?words(' · Reported gains / losses: ',' · پیشرفت / پسرفت گزارش‌شده: ')+result.revision.gained_count+'/'+result.revision.lost_count:'')+(history.length?words(' · Comparable previous rounds: ',' · دورهای قابل‌مقایسهٔ پیشین: ')+history.length+words(' · Repeated prior failures: ',' · شکست‌های مکرر پیشین: ')+(recurrent.join(', ')||'0'):'')+(preventive.length?words(' · Suggested for next round: before steps ',' · پیشنهاد برای دور بعد: پیش از گام‌های ')+preventive.map(id=>id.slice(1)).join(', ')+words(', review prior failures and agree on a verification method. Draft only; not applied.','، شکست‌های پیشین و روش اعتبارسنجی را بازبینی کنید. فقط پیش‌نویس؛ اعمال نشده.'):'' )+words(' · No completion verified; no action authorized.',' · تکمیل تأیید نشده؛ هیچ مجوز اجرایی صادر نشده.');
+  })[result.priority]+words(' · Human-reported pass / fail: ',' · موفق / ناموفق به گزارش کاربر: ')+reviewed+'/'+failed+(result.revision?words(' · Reported gains / losses: ',' · پیشرفت / پسرفت گزارش‌شده: ')+result.revision.gained_count+'/'+result.revision.lost_count:'')+(history.length?words(' · Comparable previous rounds: ',' · دورهای قابل‌مقایسهٔ پیشین: ')+history.length+words(' · Repeated prior failures: ',' · شکست‌های مکرر پیشین: ')+(recurrent.join(', ')||'0'):'')+(preventive.length?words(' · Suggested for next round: before steps ',' · پیشنهاد برای دور بعد: پیش از گام‌های ')+preventive.map(id=>id.slice(1)).join(', ')+words(', review prior failures and agree on a verification method. Draft only; not applied.','، شکست‌های پیشین و روش اعتبارسنجی را بازبینی کنید. فقط پیش‌نویس؛ اعمال نشده.'):'' )+reviewQueueText(result,words)+words(' · No completion verified; no action authorized.',' · تکمیل تأیید نشده؛ هیچ مجوز اجرایی صادر نشده.');
  }catch{if(notice.isConnected)notice.textContent=words('Central review unavailable; no action taken.','بازبینی مرکزی در دسترس نیست؛ اقدامی انجام نشد.')}
  finally{if(button.isConnected)button.disabled=false}
 }

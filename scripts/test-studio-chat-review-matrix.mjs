@@ -5,12 +5,19 @@ import {buildChatExperienceReport} from '../web/studio-chat-experience-report.mj
 const source=readFileSync(new URL('../web/studio-composer-ui.js',import.meta.url),'utf8');
 const start='function humanCriterion(step){',end='async function showEngineReview(button,notice){';
 if(source.split(start).length!==2||source.split(end).length!==2||source.indexOf(end)<source.indexOf(start))throw Error('chat bridge extraction markers changed');
-const bridge=new Function(source.slice(source.indexOf(start),source.indexOf(end))+'\nreturn {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory,adaptiveChatDraft,forgetReviewedHistory,completeReportRounds};')();
+const bridge=new Function(source.slice(source.indexOf(start),source.indexOf(end))+'\nreturn {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory,adaptiveChatDraft,forgetReviewedHistory,completeReportRounds,reviewQueueText};')();
 function testChatBridge(bridge,review){
  const {humanCriterion,engineInput,reviewSnapshot,canCompareRound,restartReviewedRound,comparableFailureHistory,adaptiveChatDraft,forgetReviewedHistory,completeReportRounds}=bridge;
  let cases=0;
  const eq=(actual,expected,msg)=>{if(JSON.stringify(actual)!==JSON.stringify(expected))throw Error(msg+' '+JSON.stringify({actual,expected}));};
  const check=(label,fn)=>{try{fn();cases++}catch(e){throw Error(label+': '+e.message)}};
+ check('review queue display in both languages',()=>{
+  const data={review_readiness:{queue:[{reason:'required_evidence_reconciliation',count:2},{reason:'other_unfinished_steps',count:1}]}};
+  const en=(a,b)=>a,fa=(a,b)=>b;
+  eq(bridge.reviewQueueText(data,en),' · Outstanding review: required evidence conflicts: 2; unfinished steps: 1','English');
+  eq(bridge.reviewQueueText(data,fa),' · موارد نیازمند بازبینی: تعارض شواهد ضروری: 2; گام‌های ناتمام: 1','Persian');
+  eq(bridge.reviewQueueText({review_readiness:{queue:[]}},en),' · Manual final review still required.','empty not verified');
+ });
  const hash='a'.repeat(64);
  const validVerdicts=['pass','fail','inconclusive'];
  const statusMap={started:'running',succeeded:'succeeded',failed:'failed',cancelled:'cancelled',partial:'blocked'};

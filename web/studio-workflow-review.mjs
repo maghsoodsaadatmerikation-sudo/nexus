@@ -45,13 +45,27 @@ export function reviewAssistantWorkflow(input,{enabled=false,isolated=false,expe
    }
   }
  }
- const priority=critique.blocking_review_count?'review_plan_boundaries':
-  unresolved.some(i=>['inconsistent_observation','reconcile_before_action'].includes(i.disposition))?'reconcile_execution_status':
-  reconciliation.length?'review_outcome_evidence':
-  revision?.lost_count?'review_lost_criteria':
-  unresolved.length?'review_unfinished_steps':
-  critique.findings.length?'review_plan_findings':
-  outcome.review_actions.length?'review_outcome_evidence':'manual_final_review';
+ // Preserve all outstanding review categories, not merely the first one.
+ // Counts describe separate dimensions and must not be summed as unique issues.
+ const queue=[];
+ const add=(priority,reason,count)=>{if(count)queue.push({priority,reason,count})};
+ const reconcileSteps=unresolved.filter(i=>['inconsistent_observation','reconcile_before_action'].includes(i.disposition));
+ const otherActions=outcome.review_actions.filter(a=>!reconciliation.includes(a.criterion_id));
+ add('review_plan_boundaries','declared_plan_boundary_findings',critique.blocking_review_count);
+ add('reconcile_execution_status','uncertain_or_inconsistent_step_status',reconcileSteps.length);
+ add('review_outcome_evidence','required_evidence_reconciliation',reconciliation.length);
+ add('review_lost_criteria','reported_pass_lost',revision?.lost_count??0);
+ add('review_unfinished_steps','other_unfinished_steps',unresolved.length-reconcileSteps.length);
+ add('review_plan_findings','other_plan_findings',critique.findings.length-critique.blocking_review_count);
+ add('review_outcome_evidence','other_required_evidence_actions',otherActions.filter(a=>a.required).length);
+ add('review_outcome_evidence','optional_evidence_actions',otherActions.filter(a=>!a.required).length);
+ const priority=queue[0]?.priority??'manual_final_review';
+ const review_readiness={
+  status:queue.length?'outstanding_review_items':'manual_final_review_required',
+  queue,basis:'declared_plan_and_supplied_reports_only',
+  limitations:['actual_effects_unverified','execution_unverified','evidence_provenance_unverified','criterion_semantics_unverified'],
+  manual_review_required:true,completion_verified:false,execution_authorized:false
+ };
  const comparison=input.correction_comparison===undefined?{}:{correction_comparison:
   !experienceEnabled?{status:'off',options:[]}:
   critique.blocking_review_count||unresolved.length||reconciliation.length?{status:'withheld_pending_review',options:[]}:
@@ -67,8 +81,9 @@ export function reviewAssistantWorkflow(input,{enabled=false,isolated=false,expe
  const adaptive=input.adaptive_plan===undefined?{}:{adaptive_plan:
   !experienceEnabled?{status:'off',findings:[]}:
   patterns.failure_patterns?.status!=='review_only'?{status:'withheld_pending_history',findings:[]}:
-  reviewAdaptivePlan(scope,input.criteria,patterns.failure_patterns,input.adaptive_plan)};
- return {status:'review_only',priority,critique,recovery,outcome,revision,experience,...comparison,...scenarios,...patterns,...adaptive,...boundary};
+  reviewAdaptivePlan(scope,input.criteria,patterns.failure_patterns,input.adaptive_plan,
+   new Set([scope.run_id,...input.failure_history.map(r=>r.scope.run_id),...(revision?[input.prior_run.scope.run_id]:[])]))};
+ return {status:'review_only',priority,review_readiness,critique,recovery,outcome,revision,experience,...comparison,...scenarios,...patterns,...adaptive,...boundary};
 }
 
 // Compare explicitly supplied estimates for one failed criterion, and only
@@ -80,16 +95,24 @@ function compareRecalledCorrections(experience,request){
  const money=v=>bounded(v,100000000),minutes=v=>bounded(v,525600);
  const risks=['low','medium','high'];
  if(!request||!id(request.criterion_id)||!money(request.max_cost_usd_cents)||!minutes(request.max_effort_minutes)||!Array.isArray(request.options)||request.options.length<1||request.options.length>10)throw Error('invalid-correction-comparison');
+ const maxRisk=request.max_risk===undefined?null:request.max_risk;
+ const requireReversible=request.require_reversible===undefined?false:request.require_reversible;
+ if(!(maxRisk===null||risks.includes(maxRisk))||typeof requireReversible!=='boolean')throw Error('invalid-correction-constraints');
  const supported=new Map(experience.matches.filter(m=>m.criterion_id===request.criterion_id).map(m=>[m.correction_code,m]));
  const seen=new Set(),rows=[];
  for(const o of request.options){
   if(!o||!id(o.correction_code)||seen.has(o.correction_code)||!(o.cost_usd_cents===null||money(o.cost_usd_cents))||!(o.effort_minutes===null||minutes(o.effort_minutes))||!(o.risk===null||risks.includes(o.risk))||!(o.reversible===null||typeof o.reversible==='boolean'))throw Error('invalid-correction-option');
   seen.add(o.correction_code);
   const match=supported.get(o.correction_code);
+  const violations=[];
+  if(o.cost_usd_cents!==null&&o.cost_usd_cents>request.max_cost_usd_cents)violations.push('cost');
+  if(o.effort_minutes!==null&&o.effort_minutes>request.max_effort_minutes)violations.push('effort');
+  if(maxRisk!==null&&o.risk!==null&&risks.indexOf(o.risk)>risks.indexOf(maxRisk))violations.push('risk');
+  if(requireReversible&&o.reversible===false)violations.push('reversibility');
   const status=!match?'no_recalled_support':
-   [o.cost_usd_cents,o.effort_minutes,o.risk,o.reversible].includes(null)?'missing_estimates':
-   o.cost_usd_cents>request.max_cost_usd_cents||o.effort_minutes>request.max_effort_minutes?'outside_limits':'eligible';
-  rows.push({correction_code:o.correction_code,cost_usd_cents:o.cost_usd_cents,effort_minutes:o.effort_minutes,risk:o.risk,reversible:o.reversible,supporting_pair_count:match?.supporting_pair_count??0,status});
+   violations.length?'outside_limits':
+   [o.cost_usd_cents,o.effort_minutes,o.risk,o.reversible].includes(null)?'missing_estimates':'eligible';
+  rows.push({correction_code:o.correction_code,cost_usd_cents:o.cost_usd_cents,effort_minutes:o.effort_minutes,risk:o.risk,reversible:o.reversible,supporting_pair_count:match?.supporting_pair_count??0,status,limit_violations:violations});
  }
  const dimensions=o=>[o.cost_usd_cents,o.effort_minutes,risks.indexOf(o.risk),Number(!o.reversible)];
  const eligible=rows.filter(o=>o.status==='eligible');
@@ -100,7 +123,7 @@ function compareRecalledCorrections(experience,request){
    return b.every((v,i)=>v<=a[i])&&b.some((v,i)=>v<a[i]);
   })?'dominated_estimates':'tradeoff_candidate';
  }
- return {status:'review_only',basis:'supplied_estimates_for_recalled_options_not_verified_cost_risk_or_success',criterion_id:request.criterion_id,options:rows,recall_truncated:experience.truncated,automatic_selection:false,execution_authorized:false};
+ return {status:'review_only',basis:'supplied_estimates_for_recalled_options_not_verified_cost_risk_or_success',criterion_id:request.criterion_id,options:rows,constraints:{max_cost_usd_cents:request.max_cost_usd_cents,max_effort_minutes:request.max_effort_minutes,max_risk:maxRisk,require_reversible:requireReversible},recall_truncated:experience.truncated,automatic_selection:false,execution_authorized:false};
 }
 
 // Stress-test supplied ranges, not predictions. Rollback is a separate
@@ -170,10 +193,13 @@ function reviewFailurePatterns(scope,criteria,evidence,outcome,history){
 
 // Prospective, advisory structural review. Mappings are caller declarations;
 // dependencies and success criteria do not prove a check will actually run.
-function reviewAdaptivePlan(scope,criteria,history,request){
+function reviewAdaptivePlan(scope,criteria,history,request,usedRunIds){
  const id=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(s);
  const next=request?.scope;
  if(!next||next.project_id!==scope.project_id||next.workflow_id!==scope.workflow_id||!id(next.run_id)||next.run_id===scope.run_id||typeof next.plan_sha256!=='string'||!/^[a-f0-9]{64}$/.test(next.plan_sha256))throw Error('adaptive-plan-scope-mismatch');
+ // A declared future run must not reuse a known historical identity.
+ // This does not establish chronology or authenticate the supplied IDs.
+ if(usedRunIds.has(next.run_id))throw Error('adaptive-plan-run-reused');
  const critique=critiqueWorkflow(request.plan,{enabled:true});
  if(!Array.isArray(request.checkpoints)||request.checkpoints.length>30)throw Error('invalid-adaptive-checkpoints');
  const steps=new Map(request.plan.steps.map(s=>[s.id,s])),catalog=new Set(criteria.map(c=>c.id)),mappings=new Map();

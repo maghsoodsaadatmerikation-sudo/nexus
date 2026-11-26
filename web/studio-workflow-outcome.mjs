@@ -43,9 +43,27 @@ export function evaluateWorkflowOutcome(scope,criteria,observations,{enabled=fal
  const required=items.filter(c=>c.required);
  const assessment=required.some(c=>c.disposition==='reported_failure')?'reported_required_failure':required.every(c=>c.disposition==='reported_pass')?'required_reports_present':'review_incomplete';
  const actionByDisposition={reported_failure:'review_failure',conflicting_reports:'reconcile_reports',requires_reconciliation:'reconcile_reports',inconclusive:'request_conclusive_evidence',missing_required_evidence_kind:'request_matching_evidence'};
- // Stable ordering: required criteria first; never request an automatic retry or action.
- const review_actions=[...required,...items.filter(c=>!c.required)].filter(c=>c.disposition!=='reported_pass').map(c=>({criterion_id:c.criterion_id,required:c.required,evidence_kind:byId.get(c.criterion_id).evidence_kind,action:actionByDisposition[c.disposition]}));
- return {review_actions,status:'review_only',basis:'supplied_evidence_metadata_not_authenticity_or_outcome_proof',assessment,completion_verified:false,execution_authorized:false,items};
+ // Separate absent evidence from supplied evidence of the wrong kind.
+ // These partitions describe reported coverage, never confidence or truth.
+ const summarize=group=>{
+  const result={criterion_count:group.length,reported_pass:0,reported_failure:0,conflicting_or_uncertain_pass:0,inconclusive:0,no_reports:0,only_nonmatching_reports:0,excluded_report_count:0};
+  for(const item of group){
+   result.excluded_report_count+=item.excluded_count;
+   if(item.disposition==='reported_pass')result.reported_pass++;
+   else if(item.disposition==='reported_failure')result.reported_failure++;
+   else if(['conflicting_reports','requires_reconciliation'].includes(item.disposition))result.conflicting_or_uncertain_pass++;
+   else if(item.disposition==='inconclusive')result.inconclusive++;
+   else if(item.excluded_count)result.only_nonmatching_reports++;
+   else result.no_reports++;
+  }
+  return result;
+ };
+ const evidence_coverage={basis:'reported_metadata_only',required:summarize(required),optional:summarize(items.filter(c=>!c.required)),provenance_verified:false,confidence_calibrated:false};
+ // Required criteria first, then reconciliation before other actions within
+ // each group; preserve catalog order for equal priority.
+ const actionPriority={reconcile_reports:0,review_failure:1,request_conclusive_evidence:2,request_matching_evidence:3};
+ const review_actions=[...items].filter(c=>c.disposition!=='reported_pass').sort((a,b)=>Number(b.required)-Number(a.required)||actionPriority[actionByDisposition[a.disposition]]-actionPriority[actionByDisposition[b.disposition]]).map(c=>({criterion_id:c.criterion_id,required:c.required,evidence_kind:byId.get(c.criterion_id).evidence_kind,action:actionByDisposition[c.disposition]}));
+ return {review_actions,evidence_coverage,status:'review_only',basis:'supplied_evidence_metadata_not_authenticity_or_outcome_proof',assessment,completion_verified:false,execution_authorized:false,items};
 }
 
 // Compare distinct declared runs against one shared criterion list, never against a
