@@ -241,6 +241,15 @@ function compareReviewedAnswers(path,ratings,{candidateConfirmed=false}={}){
  return {status,resolved_findings:before.filter(x=>!after.includes(x)),new_findings:after.filter(x=>!before.includes(x)),unchanged_findings:after.filter(x=>before.includes(x)),...boundary};
 }
 
+// Only an explicit, user-authored preference may be staged after comparison.
+// Ratings never become facts, automatically inferred preferences or training data.
+function prepareAnswerFeedback(path,ratings,note,{candidateConfirmed=false}={}){
+ const reviewed=compareReviewedAnswers(path,ratings,{candidateConfirmed});
+ if(reviewed.status==='not_confirmed'||reviewed.status==='incomplete_assessment'||reviewed.status==='identical_text'||Object.values(ratings).includes('unknown'))throw Error('feedback-review-incomplete');
+ if(typeof note!=='string'||note.length>500||!note.trim()||/[\x00-\x1f\x7f-\x9f\u2028\u2029]/u.test(note))throw Error('invalid-feedback-note');
+ return {note:note.trim(),status:'draft_only',automatic_learning:false,storage_authorized:false,model_context_authorized:false};
+}
+
 // Match explicit request-local reference markers, not factual support.
 function auditReferenceMarkers(text,refs){
  if(typeof text!=='string'||!Array.isArray(refs)||refs.length>30||refs.some(x=>typeof x!=='string'||!/^[SA][1-9]\d?$/.test(x))||new Set(refs).size!==refs.length)throw Error('invalid-reference-audit');
@@ -318,6 +327,7 @@ globalThis.NexusReplyFormat = Object.freeze({
  checkAnswerReviewContext,
  answerComparisonContext,
  compareReviewedAnswers,
+ prepareAnswerFeedback,
  exportHtml:(doc,text,{title,format})=>exportHtml(doc,[{text,format}],{title}),
  exportConversation:(doc,sections,title)=>exportHtml(doc,sections,{title})
 });
