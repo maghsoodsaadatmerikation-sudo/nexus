@@ -21,21 +21,29 @@ window.addEventListener('load',async()=>{
  const selected=()=>snapshot().projects.find(p=>p.id===NexusStudioUI.selection().projectId)
    ?.threads.find(t=>t.id===NexusStudioUI.selection().threadId);
  const rid='e'.repeat(64),model='reviewed-synthetic-route',
-       legacyId='d'.repeat(64),legacyModel='legacy-synthetic-route';
- let receiptCapable=true,replyCase='wrong-slot',calls=0;
+       legacyId='d'.repeat(64),legacyModel='legacy-synthetic-route',
+       otherId='b'.repeat(64),otherModel='other-synthetic-route';
+ let receiptCapable=true,replyCase='wrong-slot',calls=0,compareCatalog=false;
+ const requests=[];
  window.confirm=()=>true;
  window.fetch=async(url,options={})=>{
    const address=String(url);
    if(address.endsWith('/studio-api/status'))return Response.json({
     configured:true,configuration_id:receiptCapable?rid:legacyId,
     model:receiptCapable?model:legacyModel,provider_host:'review.invalid',
-    ...(receiptCapable?{reply_receipt_version:1}:{}),authority:'none'
+    ...(receiptCapable?{reply_receipt_version:1}:{}),
+    ...(compareCatalog?{models:[
+     {slot:'primary',model,provider_host:'review.invalid',configuration_id:rid},
+     {slot:'secondary',model:otherModel,provider_host:'other.invalid',configuration_id:otherId}
+    ]}:{}),authority:'none'
    });
    assert(address.endsWith('/studio-api/respond')&&options.method==='POST',
     'receipt-test-never-contacts-other-endpoints');
    const request=JSON.parse(options.body);
+   const second=request.model_slot==='secondary';
+   requests.push(request);
    assert(request.consent===true&&
-    request.configuration_id===(receiptCapable?rid:legacyId),
+    request.configuration_id===(second?otherId:receiptCapable?rid:legacyId),
     'approved-request-binds-frozen-configuration');
    calls++;
    const result={text:'Reviewed model answer',
@@ -49,6 +57,9 @@ window.addEventListener('load',async()=>{
    if(replyCase==='source-unknown')result.text='Reported result [NXS:A9]';
    if(replyCase==='source-cited')result.text='Reported result [NXS:A1]';
    if(replyCase==='source-insufficient')result.text='NXS_INSUFFICIENT_EVIDENCE';
+   if(replyCase==='compare')Object.assign(result,second?
+    {text:'Alternative model answer [NXS:A1]',model:otherModel,model_slot:'secondary',configuration_id:otherId}:
+    {text:'Original model answer [NXS:A1]',model,model_slot:'primary',configuration_id:rid});
    return Response.json(result);
  };
  try{
@@ -200,6 +211,44 @@ window.addEventListener('load',async()=>{
     !$('messages').querySelector('[data-evidence-review]'),'source-mode-shows-a-readable-abstention');
    $('new-thread').click();
    assert(!$('source-answer').checked,'source-mode-resets-for-a-new-conversation');
+   receiptCapable=true;compareCatalog=true;replyCase='compare';
+   $('check-model').click();await wait(()=>NexusStudioUI.availableModelOptions().length===2);
+   fill('model-budget','1024');
+   fill('message','Compare from the same attachment');
+   assert(NexusStudioUI.stageChatContext('Attachments stay in the exact preview',quoteA),
+    'comparison-has-a-reviewed-attachment');
+   $('source-answer').click();$('prepare').click();
+   const firstPreview=JSON.parse($('request-context').textContent);
+   $('consent').click();$('send-model').click();await wait(()=>$('request-review').hidden);
+   const first=NexusStudio.path(selected()).at(-1);
+   const compare=$('messages').querySelector('[data-model-compare] button');
+   assert(compare&&calls===15&&first.model_receipt.model_slot==='primary','first-reply-offers-another-route');
+   const afterFirst=JSON.stringify(snapshot());
+   compare.click();
+   const secondPreview=JSON.parse($('request-context').textContent);
+   assert(calls===15&&JSON.stringify(snapshot())===afterFirst&&!$('consent').checked&&
+    secondPreview.model===otherModel&&secondPreview.provider_host==='other.invalid'&&
+    secondPreview.comparison_with===model&&secondPreview.response_style==='source_answer',
+    'compare-prepares-exact-consent-for-another-model-without-sending');
+   assert(JSON.stringify(firstPreview.messages)===JSON.stringify(secondPreview.messages)&&
+    firstPreview.max_output_tokens===secondPreview.max_output_tokens&&
+    secondPreview.temporary_attachment_passages[0].ref==='A1',
+    'comparison-keeps-messages-budget-and-reference-scope-identical');
+   $('send-model').click();
+   assert(calls===15,'comparison-needs-its-own-consent');
+   $('consent').click();$('send-model').click();await wait(()=>$('request-review').hidden);
+   const second=NexusStudio.path(selected()).at(-1),pair=$('messages').querySelector('.model-compare-pair');
+   assert(calls===16&&second.model_receipt.model_slot==='secondary'&&second.parent===first.parent&&
+    selected().nodes.some(n=>n.id===first.id),'comparison-keeps-two-receipted-sibling-answers');
+   const [firstSent,secondSent]=requests.slice(-2);
+   assert(JSON.stringify(firstSent.messages)===JSON.stringify(secondSent.messages)&&
+    firstSent.max_output_tokens===secondSent.max_output_tokens,'second-gateway-receives-the-same-reviewed-context');
+   assert(pair?.children.length===2&&pair.textContent.includes('Original model answer')&&
+    pair.textContent.includes('Alternative model answer')&&
+    document.documentElement.scrollWidth<=innerWidth+2,'two-model-comparison-fits-the-viewport');
+   pair.querySelector('button').click();
+   assert(selected().head===first.id&&selected().nodes.some(n=>n.id===second.id)&&
+    calls===16,'user-chooses-the-original-branch-without-another-model-call');
    $('nexus-browser-result').textContent=JSON.stringify({
       status:'PASS',checks,width:innerWidth,provider_requests:0,authority:'none'});
  }catch(error){

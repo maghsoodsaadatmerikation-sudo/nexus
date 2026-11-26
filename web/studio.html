@@ -420,6 +420,7 @@ html.studio-focus-mode{
   font-weight: 500;
 }
 
+.model-compare-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr));gap:12px}.model-compare-pair>section{min-width:0;padding:10px;border:1px solid currentColor;border-radius:7px;overflow-wrap:anywhere}
 </style></head><body><main>
 <header class="studio-masthead">
   <div class="studio-brand">
@@ -2456,6 +2457,11 @@ const t=k=>(localePacks.get(language)?.messages||(language==='fa'?FA:EN))[k]||EN
 Object.assign(EN,{studyMode:'Study mode',modelMode:'Provider execution mode (requires a supporting gateway)',modeDefault:'Provider default',modeThinking:'Thinking',modeFast:'Non-thinking',modelBudget:'Maximum generated tokens (1–8192; existing response and time limits still apply)'});
 Object.assign(FA,{studyMode:'حالت مطالعه',modelMode:'حالت اجرای مدل — نیازمند درگاه پشتیبان',modeDefault:'پیش‌فرض ارائه‌دهنده',modeThinking:'تفکر',modeFast:'بدون تفکر',modelBudget:'حداکثر توکن تولیدی — ۱ تا ۸۱۹۲؛ محدودیت زمان و حجم پاسخ همچنان برقرار است'});
 const SOURCE_ANSWER_EN={
+ modelCompare:'Compare with another model',
+ modelCompareReview:'Compare answers for this request',
+ modelCompareContinue:'Continue from this answer',
+ modelCompareNote:'Both answers used the same reviewed messages and output limit. Review the differences before choosing which branch to continue.',
+ modelCompareUnavailable:'This comparison is no longer available.',
  sourceAnswer:'Answer from sources',
  sourceAnswerHelp:'Use passages from the project sources or files you choose for this request.',
  sourceAnswerNoEvidence:'No source passages fit this request. Attach a file or enable relevant project sources, then prepare again.',
@@ -2469,6 +2475,11 @@ const SOURCE_ANSWER_EN={
 };
 Object.assign(EN,SOURCE_ANSWER_EN);
 Object.assign(FA,{
+ modelCompare:'مقایسه با مدل دیگر',
+ modelCompareReview:'مقایسهٔ پاسخ‌های همین درخواست',
+ modelCompareContinue:'ادامه از این پاسخ',
+ modelCompareNote:'هر دو مدل همان پیام‌های بازبینی‌شده و همان سقف خروجی را دریافت کردند. تفاوت‌ها را بررسی کن و خودت شاخهٔ ادامه را انتخاب کن.',
+ modelCompareUnavailable:'این مقایسه دیگر در دسترس نیست.',
  sourceAnswer:'پاسخ با استناد',
  sourceAnswerHelp:'از گزیده‌های منابع پروژه یا فایل‌هایی استفاده کن که برای همین درخواست انتخاب می‌کنی.',
  sourceAnswerNoEvidence:'هیچ گزیده‌ای در متن ارسالی قرار نگرفت. فایلی پیوست کن یا منابع مرتبط پروژه را فعال کن و دوباره پیش‌نمایش را بساز.',
@@ -2717,7 +2728,7 @@ function clearModelReview(){
  $('model-stream-preview').hidden=true;$('model-stream-text').textContent='';
 }
 function stop({refresh=true}={}){
- $('messages')?.querySelector('[data-evidence-review]')?.remove();
+ $('messages')?.querySelectorAll('[data-evidence-review],[data-model-compare]').forEach(panel=>panel.remove());
  languageImport++;toolLifecycle('cancel');revision++;controller?.abort();controller=null;busy=false;
  clearModelReview();window.NexusSpeechPlayback?.stop();if(refresh)controls();
 }
@@ -4016,17 +4027,82 @@ $('auto-speak').onchange=()=>{if(!$('auto-speak').checked)window.NexusSpeechPlay
 function selectedModelEngine(){return document.getElementById('model-engine')?.value==='device'?'device':'gateway'}
 function prepare(regenerate=false){if(!chat()?.isolated&&(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const sourceAnswer=$('source-answer').checked;const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,relatedChats:$('use-related-chats').checked,historyDays:data.history_days,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked,sourceAnswer,onDevice:destination==='device'});if(NexusReplyFormat.isAnswerReviewPrompt(S.path(c).at(-1)?.text)&&!NexusReplyFormat.checkAnswerReviewContext(S.path(c),ctx.messages))throw Error('answer-review-context-missing');if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');const privacyAudit=destination==='gateway'?S.inspectSecrets(ctx.messages):{categories:[],possible_secrets:false};const stream=destination==='gateway'&&modelInfo.streaming===true;
  const evidenceMetadata=[...ctx.citations,...ctx.attachments_supplied];
- pending={destination,stream,sourceAnswer,thread:c,evidencePassages:ctx.evidence_passages,evidenceMetadata,referenceMarkers:evidenceMetadata.map(x=>x.ref),body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(destination==='gateway'&&selectedModelSlot!=='primary'?{model_slot:selectedModelSlot}:{}),...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,...(destination==='gateway'?{model_slot:selectedModelSlot}:{}),provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:sourceAnswer?'source_answer':ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,memory_review:ctx.memory_review,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);showPrivacy(privacyAudit);
- const searchTurn=ctx.continuation_search_turn;
+ const review={destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,...(destination==='gateway'?{model_slot:selectedModelSlot}:{}),provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:sourceAnswer?'source_answer':ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,memory_review:ctx.memory_review,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated};
+ showModelReview({destination,stream,sourceAnswer,thread:c,review,searchTurn:ctx.continuation_search_turn,expectedModel:modelInfo.model,requireReceipt:modelInfo.replyReceiptVersion===1,evidencePassages:ctx.evidence_passages,evidenceMetadata,referenceMarkers:evidenceMetadata.map(x=>x.ref),body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(destination==='gateway'&&selectedModelSlot!=='primary'?{model_slot:selectedModelSlot}:{}),...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId},privacyAudit);
+}catch(error){if(error?.message==='answer-review-context-missing')$('status').textContent=language==='fa'?'متن کامل درخواست و پاسخ پیشین در زمینه بازبینی نیست؛ ارسال انجام نشد.':'The complete previous request and answer are not in the review context. Nothing was sent.';else status(error?.message==='reattach-required'?'chatRegenRequiresFiles':error?.message==='source-answer-no-evidence'?'sourceAnswerNoEvidence':error?.message==='source-answer-incompatible'?'sourceAnswerIncompatible':'failed')}}
+function showModelReview(request,audit){
+ pending=request;
+ $('request-context').textContent=JSON.stringify(request.review,null,2);
+ $('consent').checked=false;showPrivacy(audit);
+ const searchTurn=request.searchTurn;
  if(searchTurn!==null){
   const number=new Intl.NumberFormat(language==='fa'?'fa':'en').format(searchTurn);
   $('continuation-context-summary').textContent=language==='fa'
    ?'پیام '+number+' این گفتگو، مبنای جست‌وجو'
    :'Earlier message used for search (message '+number+')';
-  $('continuation-context-message').textContent=S.path(c)[searchTurn-1].text;
+  $('continuation-context-message').textContent=S.path(request.thread)[searchTurn-1].text;
   $('continuation-context-note').hidden=false;
  }
- $('request-review').hidden=false;controls()}catch(error){if(error?.message==='answer-review-context-missing')$('status').textContent=language==='fa'?'متن کامل درخواست و پاسخ پیشین در زمینه بازبینی نیست؛ ارسال انجام نشد.':'The complete previous request and answer are not in the review context. Nothing was sent.';else status(error?.message==='reattach-required'?'chatRegenRequiresFiles':error?.message==='source-answer-no-evidence'?'sourceAnswerNoEvidence':error?.message==='source-answer-incompatible'?'sourceAnswerIncompatible':'failed')}}
+ $('request-review').hidden=false;controls();
+}
+function compatibleComparisonModels(request,original){
+ const {mode,max_output_tokens:budget}=request.review;
+ return modelChoices.filter(choice=>choice.slot!==original.model_receipt.model_slot&&
+  (choice.model!==original.model_receipt.model||choice.provider_host!==request.review.provider_host)&&
+  (mode==='standard'||choice.modes?.includes(mode))&&budget<=(choice.max_output_tokens??8192));
+}
+function mountModelComparison(request,answer){
+ const thread=chat(),parent=$('messages').lastElementChild;
+ if(!parent||!thread||thread.temporary||thread.isolated||!answer.model_receipt)return;
+ const panel=el('details','');panel.dataset.modelCompare='';
+ if(request.comparisonFrom){
+  const original=thread.nodes.find(n=>n.id===request.comparisonFrom&&n.parent===answer.parent&&n.model_receipt);
+  if(!original)return;
+  panel.append(el('summary',t('modelCompareReview')),el('p',t('modelCompareNote')));
+  const pair=el('div','');pair.className='model-compare-pair';
+  for(const node of [original,answer]){
+   const card=el('section',''),body=el('div','');
+   body.dir='auto';NexusReplyFormat.render(body,node.text);
+   const use=el('button',t('modelCompareContinue'));use.type='button';use.className='secondary';
+   use.onclick=()=>{
+    if(!panel.isConnected||busy||chat()?.head!==answer.id||
+       !Array.from($('branch').options).some(option=>option.value===node.id))return;
+    $('branch').value=node.id;$('branch').dispatchEvent(new Event('change',{bubbles:true}));
+    $('message').focus();
+   };
+   card.append(el('h4',messageOriginLabel(node)),body,use);pair.append(card);
+  }
+  panel.append(pair);panel.open=true;parent.append(panel);return;
+ }
+ if(!request.requireReceipt||!request.body.messages.length)return;
+ const alternatives=compatibleComparisonModels(request,answer);
+ if(!alternatives.length)return;
+ const readyRevision=revision;
+ panel.append(el('summary',t('modelCompare')));
+ for(const choice of alternatives){
+  const choose=el('button',choice.model+' · '+choice.slot);choose.type='button';choose.className='secondary';
+  choose.onclick=()=>{
+   try{
+    const active=chat();
+    if(!panel.isConnected||busy||pending||hasChatDraft()||revision!==readyRevision||
+       active?.head!==answer.id||active.id!==request.threadId||projectId!==request.projectId||
+       selectedModelEngine()!=='gateway'||gateway()!==request.review.gateway||
+       !compatibleComparisonModels(request,answer).includes(choice))return status('modelCompareUnavailable');
+    const body={...request.body,configuration_id:choice.configuration_id};
+    if(choice.slot==='primary')delete body.model_slot;else body.model_slot=choice.slot;
+    const stream=choice.streaming===true,review={...request.review,model:choice.model,
+     model_slot:choice.slot,provider_host:choice.provider_host,comparison_with:answer.model_receipt.model};
+    if(stream)review.response_delivery='streaming';else delete review.response_delivery;
+    stop();
+    showModelReview({...request,body,review,stream,expectedModel:choice.model,requireReceipt:true,
+     comparisonFrom:answer.id,thread:{...active,head:answer.parent},revision},
+     S.inspectSecrets(body.messages));
+   }catch{status('modelCompareUnavailable')}
+  };
+  panel.append(choose);
+ }
+ parent.append(panel);
+}
 function gateway(){const value=$('gateway').value.trim();const u=new URL(value||location.origin);if((u.protocol!=='https:'&&!(u.protocol==='http:'&&['127.0.0.1','[::1]'].includes(u.hostname)))||u.username||u.password||u.search||u.hash||!['','/'].includes(u.pathname))throw Error('gateway-url');return u.origin}
 function gatewayFailureLabel(error,request,timedOut=false){
  if(request.destination!=='gateway')return request.stream?'streamFailed':'failed';
@@ -4197,7 +4273,7 @@ $('send-model').onclick=async()=>{
    out=await window.NexusDevice.generate(request.body,abort.signal);
   }else{
    const endpoint=request.stream?'/studio-api/respond-stream':'/studio-api/respond';
-   const response=await fetch(gateway()+endpoint,{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',redirect:'error',
+   const response=await fetch(request.review.gateway+endpoint,{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',redirect:'error',
     headers:{'content-type':'application/json','authorization':'Bearer '+$('gateway-token').value},
     body:JSON.stringify(request.body),signal:abort.signal});
    out=request.stream?await streamedAnswer(response,delta=>{
@@ -4208,13 +4284,13 @@ $('send-model').onclick=async()=>{
    }):await boundedJson(response);
   }
   if(!current())return;
-  if(out.origin!=='model'||out.authority!=='none'||typeof out.text!=='string'||out.model!==modelInfo?.model)throw Error('model-response');
+  if(out.origin!=='model'||out.authority!=='none'||typeof out.text!=='string'||out.model!==request.expectedModel)throw Error('model-response');
   const gatewayReply=request.destination==='gateway';
   const expectedSlot=request.body.model_slot||'primary';
   const reported=Object.hasOwn(out,'model_slot')||Object.hasOwn(out,'configuration_id');
   // Older gateways may omit receipt support; any explicit receipt must still
   // match. Upgraded gateways advertise v1 and MUST supply both exact values.
-  if(gatewayReply&&(modelInfo?.replyReceiptVersion===1||reported)&&
+  if(gatewayReply&&(request.requireReceipt||reported)&&
      (out.model_slot!==expectedSlot||
       out.configuration_id!==request.body.configuration_id))
    throw Error('model-route-mismatch');
@@ -4229,8 +4305,9 @@ $('send-model').onclick=async()=>{
   const answer=insufficient?t('sourceAnswerInsufficient'):out.text;
   busy=false;
   const label=request.destination==='device'?'[On-device draft · SmolLM2-135M · English / limited]\n\n':'';
-  const installed=installThread(S.append(request.thread,'assistant',label+answer,'model',
-   undefined,[],receipt));
+  const next=S.append(request.thread,'assistant',label+answer,'model',undefined,[],receipt);
+  const installed=installThread(next);
+  if(installed&&gatewayReply)mountModelComparison(request,next.nodes.at(-1));
   if(installed&&!insufficient)mountEvidenceReview(answer,request.evidencePassages,request.evidenceMetadata,references.matched);
   if(installed&&!insufficient&&(draftReview.findings.length||references.status!=='no_supplied_refs')){
    const warnings={length_limit:['The response reached its length limit.','پاسخ به سقف طول رسیده است.'],control_characters:['Unusual control characters.','نویسه‌های کنترلی غیرمعمول.'],unclosed_code_fence:['Unclosed code block.','بلوک کد بسته نشده.'],repeated_paragraph:['Repeated paragraph.','پاراگراف تکراری.'],review_limit:['Structural review size limit.','محدودیت حجم بازبینی ساختاری.']};
