@@ -275,7 +275,9 @@ function showPrivacy(audit){
 privacyAck.addEventListener('change',controls);
 function clearModelReview(){
  pending=null;$('request-review').hidden=true;$('request-context').textContent='';$('consent').checked=false;privacyKinds=[];privacyAck.checked=false;refreshPrivacyWarning();
- $('continuation-context-note').hidden=true;
+ const continuationNote=$('continuation-context-note');
+ continuationNote.open=false;continuationNote.hidden=true;
+ $('continuation-context-message').textContent='';$('continuation-context-summary').textContent='';
  $('model-stream-preview').hidden=true;$('model-stream-text').textContent='';
 }
 function stop({refresh=true}={}){
@@ -750,11 +752,15 @@ $('auto-speak').onchange=()=>{if(!$('auto-speak').checked)window.NexusSpeechPlay
 function selectedModelEngine(){return document.getElementById('model-engine')?.value==='device'?'device':'gateway'}
 function prepare(regenerate=false){if(!chat()?.isolated&&(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,relatedChats:$('use-related-chats').checked,historyDays:data.history_days,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked,onDevice:destination==='device'});if(NexusReplyFormat.isAnswerReviewPrompt(S.path(c).at(-1)?.text)&&!NexusReplyFormat.checkAnswerReviewContext(S.path(c),ctx.messages))throw Error('answer-review-context-missing');if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');const privacyAudit=destination==='gateway'?S.inspectSecrets(ctx.messages):{categories:[],possible_secrets:false};const stream=destination==='gateway'&&modelInfo.streaming===true;
  pending={destination,stream,thread:c,evidencePassages:ctx.evidence_passages,referenceMarkers:[...ctx.citations,...ctx.attachments_supplied].map(x=>x.ref),body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(destination==='gateway'&&selectedModelSlot!=='primary'?{model_slot:selectedModelSlot}:{}),...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,...(destination==='gateway'?{model_slot:selectedModelSlot}:{}),provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,memory_review:ctx.memory_review,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);showPrivacy(privacyAudit);
- const continuationNote=$('continuation-context-note');
- continuationNote.textContent=language==='fa'
-  ?'نکسوس برای این درخواستِ ادامه، بخش‌های زیر را بر اساس یکی از پیام‌های قبلی همین گفتگو پیدا کرد.'
-  :'For this follow-up, NEXUS found the excerpts below using an earlier message in this conversation.';
- continuationNote.hidden=!ctx.continuation_retrieval;
+ const searchTurn=ctx.continuation_search_turn;
+ if(searchTurn!==null){
+  const number=new Intl.NumberFormat(language==='fa'?'fa':'en').format(searchTurn);
+  $('continuation-context-summary').textContent=language==='fa'
+   ?'پیام '+number+' این گفتگو، مبنای جست‌وجو'
+   :'Earlier message used for search (message '+number+')';
+  $('continuation-context-message').textContent=S.path(c)[searchTurn-1].text;
+  $('continuation-context-note').hidden=false;
+ }
  $('request-review').hidden=false;controls()}catch(error){if(error?.message==='answer-review-context-missing')$('status').textContent=language==='fa'?'متن کامل درخواست و پاسخ پیشین در زمینه بازبینی نیست؛ ارسال انجام نشد.':'The complete previous request and answer are not in the review context. Nothing was sent.';else status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
 function gateway(){const value=$('gateway').value.trim();const u=new URL(value||location.origin);if((u.protocol!=='https:'&&!(u.protocol==='http:'&&['127.0.0.1','[::1]'].includes(u.hostname)))||u.username||u.password||u.search||u.hash||!['','/'].includes(u.pathname))throw Error('gateway-url');return u.origin}
 function gatewayFailureLabel(error,request,timedOut=false){

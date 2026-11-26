@@ -630,12 +630,19 @@ window.addEventListener('load',async()=>{
   $('guide').click();
   fill('message','ادامه بده');$('prepare').click();
   const continuedReview=JSON.parse($('request-context').textContent);
-  assert(!continuationNote.hidden&&continuationNote.textContent.includes('earlier message')&&
+  assert(!continuationNote.hidden&&!continuationNote.open&&
+   $('continuation-context-summary').textContent.includes('message 1')&&
+   $('continuation-context-message').textContent==='orchard trees'&&
    continuedReview.messages.at(-1).content==='ادامه بده'&&
    continuedReview.related_chat_passages.some(p=>p.thread===priorThread.threadId)&&!$('consent').checked,
-   'continuation-note-explains-included-excerpts-before-consent');
+   'continuation-review-identifies-the-exact-earlier-message-before-consent');
+  $('continuation-context-summary').click();
+  assert(continuationNote.open&&!$('consent').checked&&$('message').value==='ادامه بده'&&
+   JSON.stringify(JSON.parse($('request-context').textContent))===JSON.stringify(continuedReview),
+   'opening-the-earlier-message-preserves-the-review-and-draft');
   $('use-related-chats').checked=false;$('use-related-chats').dispatchEvent(new Event('input'));
-  assert(continuationNote.hidden&&$('request-review').hidden,'changing-retrieval-permission-clears-continuation-note');
+  assert(continuationNote.hidden&&!continuationNote.open&&!$('continuation-context-message').textContent&&
+   $('request-review').hidden,'changing-retrieval-permission-clears-the-earlier-message');
   $('prepare').click();
   assert(continuationNote.hidden&&JSON.parse($('request-context').textContent).related_chat_passages.length===0,
    'continuation-without-retrieval-has-no-note');
