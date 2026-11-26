@@ -55,22 +55,40 @@ def finite_json_float(value):
     return number
 
 
-def validate_json_depth(value, depth=0):
-    if isinstance(value, (dict, list)):
-        require(depth < MAX_JSON_DEPTH, "JSON nesting exceeds limit")
-        children = value.values() if isinstance(value, dict) else value
-        for child in children:
-            validate_json_depth(child, depth + 1)
+def preflight_json_depth(text):
+    """Bound container depth before parsing; ignore punctuation inside strings."""
+    stack = []
+    in_string = False
+    skip_until = 0
+    for match in re.finditer(r'["\\\[\]{}]', text):
+        if match.start() < skip_until:
+            continue
+        token = match.group()
+        if in_string:
+            if token == "\\":
+                skip_until = match.start() + 2
+            elif token == '"':
+                in_string = False
+        elif token == '"':
+            in_string = True
+        elif token in ("[", "{"):
+            require(len(stack) < MAX_JSON_DEPTH, "JSON nesting exceeds limit")
+            stack.append(token)
+        elif token in ("]", "}"):
+            require(stack and stack[-1] == {"]": "[", "}": "{"}[token],
+                    "invalid JSON container structure")
+            stack.pop()
+    require(not stack and not in_string, "invalid JSON container structure")
 
 
 def strict_json(data):
-    """Reject nonstandard constants, float overflow and excessive nesting."""
+    """Require UTF-8 and bound nesting before the standard JSON decoder."""
+    text = data.decode("utf-8") if isinstance(data, bytes) else data
+    preflight_json_depth(text)
     try:
-        result = json.loads(data, object_pairs_hook=unique_object,
-                            parse_constant=reject_json_constant,
-                            parse_float=finite_json_float)
-        validate_json_depth(result)
-        return result
+        return json.loads(text, object_pairs_hook=unique_object,
+                          parse_constant=reject_json_constant,
+                          parse_float=finite_json_float)
     except RecursionError:
         raise SnapshotError("JSON nesting exceeds limit") from None
 
