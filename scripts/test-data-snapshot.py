@@ -410,6 +410,15 @@ class SnapshotTests(unittest.TestCase):
         snapshot.restore(self.archive, self.target)
         self.assertEqual((self.target / "77.json").read_bytes(), data)
 
+    def test_explicit_json_depth_boundary(self):
+        for depth in (snapshot.MAX_JSON_DEPTH, snapshot.MAX_JSON_DEPTH + 1):
+            nested = "[" * depth + "0" + "]" * depth
+            if depth == snapshot.MAX_JSON_DEPTH:
+                snapshot.strict_json(nested)
+            else:
+                with self.assertRaisesRegex(snapshot.SnapshotError, "nesting exceeds limit"):
+                    snapshot.strict_json(nested)
+
     def test_deep_json_fails_without_traceback_or_restore_side_effects(self):
         depth = sys.getrecursionlimit() + 100
         nested = "[" * depth + "0" + "]" * depth
@@ -421,7 +430,7 @@ class SnapshotTests(unittest.TestCase):
             result = subprocess.run(command, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(result.stdout, "")
-            self.assertIn("BLOCKED (JSON nesting exceeds parser limit)", result.stderr)
+            self.assertIn("BLOCKED (JSON nesting exceeds limit)", result.stderr)
             self.assertNotIn("Traceback", result.stderr)
             self.assertFalse(self.target.exists())
             self.assertFalse(list(self.root.glob(".nexus-restore-*")))
