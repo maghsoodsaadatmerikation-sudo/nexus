@@ -69,6 +69,12 @@ ok(()=>assert.deepEqual(stopped.cards[0].queries,['first']));
 const brief=L.researchBrief([...w,...c]);
 ok(()=>assert(brief.includes('[1] <img src=x>')&&brief.includes('https://doi.org/')&&brief.includes('bibliographic-metadata-only')));
 ok(()=>assert.throws(()=>L.researchBrief(Array(6).fill(w[0]))));
+const comparison=L.researchComparisonSource({...c[0],excerpt:'first line\nsecond line'});
+ok(()=>assert(comparison.text.includes(c[0].url)&&comparison.text.includes('bibliographic-metadata-only')&&
+ comparison.text.endsWith('first line second line')&&!comparison.text.includes('\n')));
+const longComparison=L.researchComparisonSource({...w[0],excerpt:'😀'.repeat(2000)});
+ok(()=>assert(longComparison.text.length<=1600&&longComparison.text.endsWith(' […]')&&
+ !/[\uD800-\uDBFF] \[…\]$/u.test(longComparison.text)));
 for(const v of [null,{type:'pie',labels:['a'],values:[1]},{type:'bar',labels:[],values:[]},{type:'line',labels:['a'],values:[NaN]},{type:'bar',labels:['a'],values:[Infinity]},{type:'bar',labels:['a'],values:[1e13]},{type:'line',labels:['a','b'],values:[1]}])ok(()=>assert.throws(()=>L.chart(v)));
 ok(()=>assert.deepEqual(L.chart({type:'bar',labels:['<script>'],values:[-2]}).values,[-2]));ok(()=>assert.equal(L.chart({type:'line',labels:['a'],values:[0],title:'Safe'}).title,'Safe'));
 console.log(JSON.stringify({status:'PASS',checks,live_provider_tested:false,browser_sandbox_tested:false}));

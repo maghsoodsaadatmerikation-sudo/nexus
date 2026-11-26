@@ -189,6 +189,10 @@ window.addEventListener('load',async()=>{
    assert(calls===13&&NexusStudio.path(selected()).at(-1).text==='Reported result [NXS:A1]'&&
     $('status').textContent.includes('Marker matching is not claim verification.'),
     'source-mode-keeps-a-matched-reply-and-labels-the-check');
+   const cited=$('messages').querySelector('[data-cited-passages]');
+   assert(cited&&cited.querySelectorAll('details').length===1&&
+    cited.querySelector('summary').textContent.includes('[NXS:A1] · Observation · line 1:1')&&
+    cited.querySelector('pre').textContent===quoteA,'cited-passage-shows-exact-request-text-and-name');
    fill('message','What if there is no evidence?');
    assert(NexusStudioUI.stageChatContext('Observation',quoteB),'insufficient-fixture-selected');
    replyCase='source-insufficient';await submitSourced();

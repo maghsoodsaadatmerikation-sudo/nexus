@@ -34,6 +34,11 @@ function renderBrief(){
  const brief=picked.length?L.researchBrief(picked):'';
  $('research-brief-text').textContent=brief;
  $('research-brief-chat').onclick=()=>{if(brief)window.NexusStudioUI.stageChatContext(t('researchBrief'),brief)};
+ const compare=$('research-compare-chat');
+ compare.disabled=picked.length<2||picked.length>4;
+ compare.onclick=()=>{
+  if(!compare.disabled)window.NexusStudioUI.stageResearchComparison(picked.map(L.researchComparisonSource),$('research-query').value);
+ };
  $('research-brief-export').onclick=()=>{if(brief&&confirm(t('plain')))download(brief,'nexus-research-brief.txt')};
  const limit=selectedSources.size===5;
  for(const checkbox of $('research-cards').querySelectorAll('input[type="checkbox"]')){
