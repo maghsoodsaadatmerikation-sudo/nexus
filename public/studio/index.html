@@ -529,7 +529,7 @@ html.studio-focus-mode{
 </form><p id="reminder-status" role="status"></p></section>
 <section class="card" id="tasks-card"><h2 data-t="tasks"></h2><p class="help" data-t="tasksHelp"></p><button id="task-sample" class="secondary" data-t="tasksSample"></button><label for="task-plan" data-t="tasksPlan"></label><textarea id="task-plan" maxlength="524288" spellcheck="false" dir="ltr"></textarea><label class="inline"><input id="task-consent" type="checkbox"><span data-t="tasksConsent"></span></label><button id="task-run" data-t="tasksRun"></button><button id="task-stop" data-t="tasksStop" disabled></button><p id="task-status" role="status"></p><pre id="task-report"></pre><button id="task-export" data-t="tasksExport" disabled></button></section>
 <section class="card" id="code-card"><h2 data-t="codeLab"></h2><p class="help" data-t="codeHelp"></p><button id="code-sample" class="secondary" data-t="codeSample"></button><label for="code" data-t="codeSource"></label><textarea id="code" maxlength="100000" spellcheck="false" dir="ltr"></textarea><label for="code-input" data-t="codeInput"></label><textarea id="code-input" maxlength="262144" dir="auto"></textarea><label class="inline"><input id="code-consent" type="checkbox"><span data-t="codeConsent"></span></label><button id="code-run" data-t="codeRun"></button><button id="code-stop" data-t="codeStop" disabled></button><p id="code-status" role="status"></p><h3 data-t="codeOutput"></h3><pre id="code-console"></pre><pre id="code-result"></pre><button id="code-copy" class="secondary" data-t="codeCopy"></button><button id="code-chat" class="secondary" data-t="codeChat">Use code result in next chat</button></section>
-<section class="card" id="data-card"><h2 data-t="dataTitle"></h2><p class="help" data-t="dataHelp"></p><label for="data-file" data-t="dataFile"></label><input id="data-file" type="file" accept=".csv,.tsv,.json"><label for="data-source" data-t="dataSource"></label><select id="data-source"></select><button id="data-run" data-t="dataRun"></button><p id="data-status" role="status"></p><div class="row"><div><label for="data-group" data-t="dataGroup"></label><select id="data-group"></select></div><div><label for="data-metric" data-t="dataMetric"></label><select id="data-metric"></select></div></div><pre id="data-summary"></pre><button id="data-chart" data-t="dataChart" disabled></button><button id="data-copy" data-t="dataCopy" disabled></button><button id="data-chat" class="secondary" data-t="dataChat" disabled>Use analysis summary in next chat</button><button id="data-export" data-t="dataExport" disabled></button></section>
+<section class="card" id="data-card"><h2 data-t="dataTitle"></h2><p class="help" data-t="dataHelp"></p><label for="data-file" data-t="dataFile"></label><input id="data-file" type="file" accept=".csv,.tsv,.json"><label for="data-source" data-t="dataSource"></label><select id="data-source"></select><button id="data-run" data-t="dataRun"></button><p id="data-status" role="status"></p><div class="row"><div><label for="data-group" data-t="dataGroup"></label><select id="data-group"></select></div><div><label for="data-metric" data-t="dataMetric"></label><select id="data-metric"></select></div></div><pre id="data-summary"></pre><button id="data-chart" data-t="dataChart" disabled></button><button id="data-copy" data-t="dataCopy" disabled></button><button id="data-chat" class="secondary" data-t="dataChat" disabled>Use analysis summary in next chat</button><p class="help" data-t="dataExplainHelp"></p><button id="data-explain-metric" class="secondary" data-t="dataExplainMetric" disabled></button><button id="data-explain-groups" class="secondary" data-t="dataExplainGroups" disabled></button><details id="data-group-key" hidden><summary data-t="dataGroupKey"></summary><pre dir="auto" id="data-group-key-text"></pre></details><button id="data-export" data-t="dataExport" disabled></button></section>
 <section class="card" id="chart-card"><h2 data-t="chartLab"></h2><p class="help" data-t="chartHelp"></p><label for="chart-json" data-t="chartJson"></label><textarea id="chart-json" maxlength="64000" dir="ltr"></textarea><button id="chart-use" class="secondary" data-t="chartUse"></button><button id="chart-draw" data-t="chartDraw"></button><button id="chart-export" data-t="chartExport"></button><p id="chart-status" role="status"></p><canvas id="chart" hidden aria-label="Local data chart" style="width:100%;height:auto;border:1px solid #cddcd5"></canvas></section>
 <section class="card" id="music-card"><h2><span class="music-en">Music Lab — original sound, no Suno</span><span class="music-fa">آزمایشگاه موسیقی — تولید مستقل، بدون سونو</span></h2>
 <p class="help music-en">Compose real MIDI notes and synthesize a local stereo WAV with no account, model or network. Santur, oud, ney, kamancheh and daf are <b>synthetic approximations</b>, not recordings. This tool does not synthesize singing or clone a real voice.</p><p class="help music-fa" lang="fa" dir="rtl">ملودی و سازبندی به‌صورت برنامه‌نویسی‌شده ساخته می‌شوند؛ خروجی استریوی WAV و MIDI بدون اتصال به سرور. صدای سنتور، عود، نی، کمانچه و دف تقریبی و الکترونیکی است، نه ضبط ساز واقعی. آواز انسان ساخته یا شبیه‌سازی نمی‌شود.</p>
@@ -785,6 +785,24 @@ const GROUP_PREVIEW_LIMIT=12;
     const groups=analysisGroups(table,index,metric,{limit:ANALYSIS_MAX_ROWS});
     return {group_by:index<0?null:table.columns[index],metric:metric<0?null:table.columns[metric],group_count:groups.length,groups_complete:true,groups};
   }
+  // Export a small descriptive snapshot for chat. The original records,
+  // source filename, digest and group labels stay in the local analysis.
+  function dataEvidence(report,metric,grouping=null){
+    if(!Number.isInteger(metric)||metric<0)return null;
+    const stats=report.column_stats[metric];
+    if(!stats?.summary)return null;
+    const header=name=>name.replace(/[\x00-\x20\x7f]+/g,' ').slice(0,64).replace(/[\uD800-\uDBFF]$/u,'');
+    const packet={kind:'local_descriptive_statistics',metric:header(stats.name),row_count:report.rows,
+      missing:stats.missing,invalid_numeric:stats.invalid_numeric,...stats.summary};
+    if(!grouping)return {text:JSON.stringify(packet),key:[]};
+    if(grouping.group_count<2)return null;
+    const sample=grouping.groups.slice(0,6);
+    const key=sample.map((group,i)=>({id:'G'+(i+1),label:group.label.slice(0,160),missing:group.missing}));
+    const groups=sample.map((g,i)=>({id:key[i].id,count:g.count,numeric_n:g.numeric_n,mean:g.metric_mean}));
+    return {text:JSON.stringify({kind:'local_descriptive_group_comparison',metric:packet.metric,
+      grouped_by:header(grouping.group_by),row_count:packet.row_count,total_groups:grouping.group_count,
+      omitted_groups:grouping.group_count-groups.length,groups}),key};
+  }
 function parse(text,extension){
  if(typeof text!=='string'||new TextEncoder().encode(text).length>ANALYSIS_MAX_BYTES)throw Error('text-budget');
  text=text.replace(/^\uFEFF/,'');const kind=String(extension).toLowerCase();
@@ -793,7 +811,7 @@ function parse(text,extension){
  const rows=parseDelimited(text,kind==='tsv'?'\t':',');
  return normalizedTable(rows[0]||[],rows.slice(1));
 }
-root.NexusTable=Object.freeze({parse,parseDelimited,normalizedTable,parseJsonTable,strictNumeric,numberStats,histogram,analyseTable,analysisGroups,groupReport,GROUP_PREVIEW_LIMIT,MAX_BYTES:ANALYSIS_MAX_BYTES,MAX_ROWS:ANALYSIS_MAX_ROWS,MAX_COLUMNS:ANALYSIS_MAX_COLUMNS});
+root.NexusTable=Object.freeze({parse,parseDelimited,normalizedTable,parseJsonTable,strictNumeric,numberStats,histogram,analyseTable,analysisGroups,groupReport,dataEvidence,GROUP_PREVIEW_LIMIT,MAX_BYTES:ANALYSIS_MAX_BYTES,MAX_ROWS:ANALYSIS_MAX_ROWS,MAX_COLUMNS:ANALYSIS_MAX_COLUMNS});
 })(globalThis);
 </script><script src="./vendor/astronomy-2.1.19.min.js" integrity="sha256-9BE5qHlB6gF6uQK5VMk4n6J+pyCD1/q0lxdW13adFOY="></script><script>/* NEXUS opt-in astrology: numerical source data and symbolic interpretation stay separate. */
 (function(root) {
@@ -1919,9 +1937,18 @@ const SOURCE_ANSWER_EN={
  sourceAnswerIncompatible:'Answer from sources needs a connected model in a regular conversation with Study mode off.',
  sourceAnswerRejected:'The model reply did not pass the reference check. Your draft is still here.',
  sourceAnswerInsufficient:'The model could not answer this question from the supplied passages.',
+ dataExplainMetric:'Explain this numeric column',
+ dataExplainGroups:'Compare these groups in chat',
+ dataExplainHelp:'Review selected statistics before sending. Group codes replace the original labels.',
+ dataGroupKey:'Group codes on this device',
+ dataUnknownGroup:'Missing group label',
+ dataMetricEvidence:'Local column statistics',
+ dataGroupEvidence:'Local group statistics',
+ dataMetricPrompt:'Explain these descriptive statistics. Discuss the typical value, spread and missing or invalid values. Cite the supplied statistics. Do not infer causes or claim conclusions beyond this dataset.',
+ dataGroupPrompt:'Compare the shown groups using these descriptive statistics. Consider the number of valid numeric rows and any omitted groups. Use the group codes as shown. Cite the supplied statistics and do not infer causes.',
  researchCompare:'Compare selected sources in chat',
  researchCompareHelp:'Select two to four sources to compare.',
- researchCompareBlocked:'Use a regular conversation with Study mode off and clear existing attachments before staging a source comparison.',
+ researchCompareBlocked:'Use a regular conversation with Study mode off and clear existing attachments before staging a source-based question.',
  researchComparePrompt:'Compare these sources in relation to my research question. Separate agreement, contradictions and gaps. Treat bibliographic metadata as metadata, and distinguish abstracts from full text. Cite each source you use.'
 };
 Object.assign(EN,SOURCE_ANSWER_EN);
@@ -1937,9 +1964,18 @@ Object.assign(FA,{
  sourceAnswerIncompatible:'پاسخ با استناد به مدل متصل و گفتگوی عادی نیاز دارد. حالت مطالعه را خاموش کن.',
  sourceAnswerRejected:'ارجاع‌های پاسخ مدل از بررسی عبور نکردند. پیش‌نویس پیام تو همچنان در دسترس است.',
  sourceAnswerInsufficient:'مدل نتوانست از گزیده‌های ارسالی به این پرسش پاسخ بدهد.',
+ dataExplainMetric:'توضیح این ستون عددی',
+ dataExplainGroups:'مقایسهٔ این گروه‌ها در گفتگو',
+ dataExplainHelp:'پیش از ارسال، آمار انتخابی را بازبینی کن. به‌جای نام اصلی گروه‌ها، کد فرستاده می‌شود.',
+ dataGroupKey:'راهنمای کد گروه‌ها در همین دستگاه',
+ dataUnknownGroup:'برچسب گروه خالی است',
+ dataMetricEvidence:'آمار محلی ستون',
+ dataGroupEvidence:'آمار محلی گروه‌ها',
+ dataMetricPrompt:'این آمار توصیفی را توضیح بده. مقدار معمول، پراکندگی و داده‌های خالی یا نامعتبر را بررسی کن. به آمار ارسالی ارجاع بده و دربارهٔ علت یا خارج از این مجموعه نتیجه‌گیری نکن.',
+ dataGroupPrompt:'گروه‌های نمایش‌داده‌شده را با این آمار توصیفی مقایسه کن. تعداد ردیف‌های عددی معتبر و گروه‌های حذف‌شده از گزارش را در نظر بگیر. همان کدهای گروه را به کار ببر، به آمار ارجاع بده و نتیجهٔ علّی نگیر.',
  researchCompare:'مقایسهٔ منابع انتخابی در گفتگو',
  researchCompareHelp:'برای مقایسه دو تا چهار منبع انتخاب کن.',
- researchCompareBlocked:'برای آماده‌کردن مقایسه، در گفتگوی عادی حالت مطالعه را خاموش کن و پیوست‌های فعلی را بردار.',
+ researchCompareBlocked:'برای آماده‌کردن سؤال با استناد، در گفتگوی عادی حالت مطالعه را خاموش کن و پیوست‌های فعلی را بردار.',
  researchComparePrompt:'این منابع را در ارتباط با پرسش پژوهشی من مقایسه کن. توافق‌ها، تناقض‌ها و خلأهای شواهد را جدا کن. اطلاعات کتاب‌شناختی را از یافته‌ها و چکیده را از متن کامل متمایز کن. به هر منبعی که استفاده می‌کنی ارجاع بده.'
 });
 Object.assign(EN,{
@@ -2042,10 +2078,13 @@ function stageChatAttachments(incoming,beforeRender=()=>{}){
 }
 // Research sends each selected source as a separate, reviewed attachment.
 function stageResearchComparison(sources,query){
- if(!Array.isArray(sources)||sources.length<2||sources.length>4||
+ if(!Array.isArray(sources)||sources.length<2||typeof query!=='string'||query.length>1003)return false;
+ return stageGroundedQuestion(sources,[query.trim(),t('researchComparePrompt')].filter(Boolean).join('\n\n'));
+}
+function stageGroundedQuestion(sources,prompt){
+ if(!sources.length||sources.length>4||
     sources.some(s=>!s||typeof s.name!=='string'||!s.name.trim()||s.name.length>160||
-     typeof s.text!=='string'||!s.text.trim()||s.text.length>1600)||
-    typeof query!=='string'||query.length>1003)return false;
+     typeof s.text!=='string'||!s.text.trim()||s.text.length>1600))return false;
  if(busy||attachmentLoading||chat()?.isolated||chat()?.archived||$('study-mode').checked||
     chatAttachments.length||$('attach-document').checked){
   status('researchCompareBlocked');return false;
@@ -2053,7 +2092,7 @@ function stageResearchComparison(sources,query){
  const incoming=sources.map(({name,text})=>({id:S.uid(),name,text}));
  return stageChatAttachments(incoming,()=>{
   $('source-answer').checked=true;
-  if(!$('message').value.trim())$('message').value=[query.trim(),t('researchComparePrompt')].filter(Boolean).join('\n\n');
+  if(!$('message').value.trim())$('message').value=prompt;
  });
 }
 function clearChatAttachments(){
@@ -4271,6 +4310,7 @@ applyLanguage();
 </script><script>'use strict';
 (function(){
 const T=NexusTable;let epoch=0,file=null,analysis=null,sourceStamp=null,summary='';
+let metricEvidence=null,groupEvidence=null;
 Object.assign(EN,{undoRemoval:'Undo last removal',undoDone:'Last removal restored in this tab. Save explicitly to retain it.',sourceNoMatch:'No whole-token source match was found.',sourceLimited:'Source search stopped at its 12,000-passage limit; some content was not searched.',capabilitiesTitle:'Capability status & shortcuts',shortcutsHelp:'Ctrl/Cmd+Enter in the message box prepares a model request when configured, otherwise opens the local guide. Ctrl/Cmd+Shift+S saves an unlocked archive. Escape stops pending work. Tools never send data merely from a shortcut.',capLocal:'Available locally: project history, encrypted archives, versioned writing, bounded table analysis, charts, code lab and sky calculations.',capRemote:'Public research requires an explicitly approved query and provider availability.',capModelReady:'Model configuration checked; each send still requires review.',capModelMissing:'Generative model is not active/checked. Local guide is non-generative. Images, live voice, background scheduling and authenticated app actions are not supplied by these tools.',dataTitle:'Integrated local data analysis',dataHelp:'Read CSV, TSV or a JSON array of flat objects locally, up to 1 MiB, 5,000 rows and 40 columns. Produces descriptive summaries, missing/invalid counts, pairwise Pearson correlations and group means/counts. These are approximate numerical summaries, not causal conclusions. Files and reports are not sent to a model automatically. Group previews show up to 12 groups; JSON exports include all groups and identify the selected measure. Large integer JSON identifiers retain their digits; nonzero values that underflow to zero are excluded from numerical summaries.',dataFile:'Temporary local dataset',dataSource:'Or choose an applied project source',dataRun:'Analyze selected data',dataGroup:'Group by (optional)',dataMetric:'Numeric column (optional)',dataChart:'Send grouped data to chart',dataCopy:'Copy summary into selected writing document',dataExport:'Export analysis JSON',dataNone:'None',dataFileOption:'Use temporary local file',dataWorking:'Analyzing locally…',dataDuplicateFields:"Analysis unavailable: duplicate JSON field names. Give each field in an object a unique name, then try again.",dataFailed:'Analysis unavailable. Check source selection, scalar CSV/JSON shape, numeric/chart bounds and capacity.',dataReady:'Analysis ready locally. The source hash identifies bytes, not truth.',dataEmpty:'Select a dataset, then analyze. No upload or code execution is performed.'});
 Object.assign(FA,{undoRemoval:'بازگردانی آخرین حذف',undoDone:'آخرین حذف در این برگه بازگردانده شد؛ برای نگهداری، خودت ذخیره کن.',sourceNoMatch:'تطبیق واژگانی در منابع پیدا نشد.',sourceLimited:'جست‌وجو پس از ۱۲٬۰۰۰ بخش متنی متوقف شد؛ بخشی از محتوا جست‌وجو نشده است.',capabilitiesTitle:'وضعیت قابلیت‌ها و میان‌برها',shortcutsHelp:'Ctrl/Cmd+Enter در کادر پیام، با مدل پیکربندی‌شده درخواست را آماده می‌کند و در غیر این صورت راهنمای محلی را اجرا می‌کند. Ctrl/Cmd+Shift+S آرشیو باز را ذخیره می‌کند. Escape کار در انتظار را متوقف می‌کند. میان‌بر به‌تنهایی داده‌ای ارسال نمی‌کند.',capLocal:'قابل استفادهٔ محلی: تاریخچه، آرشیو رمزگذاری‌شده، نوشتهٔ نسخه‌دار، تحلیل محدود داده، نمودار، آزمایشگاه کد و محاسبهٔ آسمان.',capRemote:'پژوهش عمومی به درخواست تأییدشده و در دسترس بودن ارائه‌دهنده نیاز دارد.',capModelReady:'پیکربندی مدل بررسی شده؛ هر ارسال همچنان نیاز به بازبینی دارد.',capModelMissing:'مدل مولد فعال یا بررسی نشده است؛ راهنمای محلی مولد نیست. تولید تصویر، صدای زنده، زمان‌بندی پس‌زمینه و اقدام در برنامه‌های متصل جزو این ابزارها نیستند.',dataTitle:'تحلیل یکپارچهٔ محلی داده',dataHelp:'CSV، TSV یا آرایهٔ JSON از اشیای تخت را محلی بخوان؛ تا ۱ میبی‌بایت، ۵٬۰۰۰ ردیف و ۴۰ ستون. خلاصهٔ توصیفی، شمار دادهٔ خالی و نامعتبر، همبستگی پیرسون زوجی و تعداد یا میانگین گروه‌ها ساخته می‌شود. اعداد تقریبی‌اند و نتیجهٔ علّی نیستند. فایل و گزارش خودکار به مدل فرستاده نمی‌شوند. پیش‌نمایش تا ۱۲ گروه را نشان می‌دهد؛ خروجی JSON همهٔ گروه‌ها و نام ستون عددی انتخاب‌شده را شامل می‌شود. رقم‌های شناسه‌های صحیحِ بزرگ JSON حفظ می‌شوند؛ مقادیر ناصفری که به‌علت کوچکی به صفر تبدیل می‌شوند در خلاصهٔ عددی محاسبه نمی‌شوند.',dataFile:'مجموعه‌دادهٔ محلیِ موقت',dataSource:'یا یک منبع اعمال‌شدهٔ پروژه را انتخاب کن',dataRun:'تحلیل دادهٔ انتخاب‌شده',dataGroup:'گروه‌بندی — اختیاری',dataMetric:'ستون عددی — اختیاری',dataChart:'فرستادن دادهٔ گروه‌بندی‌شده به نمودار',dataCopy:'کپی خلاصه در سند نوشتاریِ انتخاب‌شده',dataExport:'خروجی JSON تحلیل',dataNone:'هیچ‌کدام',dataFileOption:'استفاده از فایل محلی موقت',dataWorking:'در حال تحلیل محلی…',dataDuplicateFields:"تحلیل در دسترس نیست: نام فیلدهای JSON تکراری است. در هر شیء، برای هر فیلد نامی یکتا بگذار و دوباره تلاش کن.",dataFailed:'تحلیل در دسترس نیست؛ انتخاب منبع، ساختار تخت CSV یا JSON، محدودیت عدد و نمودار و ظرفیت را بررسی کن.',dataReady:'تحلیل محلی آماده شد؛ هش منبع فقط هویت بایت‌ها را مشخص می‌کند، نه درستی داده را.',dataEmpty:'داده را انتخاب و تحلیل کن؛ فایل ارسال و کدی اجرا نمی‌شود.'});
 Object.assign(EN,{dataChat:'Use analysis summary in next chat'});Object.assign(FA,{dataChat:'استفاده از خلاصهٔ تحلیل در پیام بعدی'});
@@ -4280,9 +4320,27 @@ function syncDataRun(){
  $('data-run').title=gate?.audioBusy()?(gate.resourceMessage?.()||t('localResourceBusy')):'';
 }
 document.addEventListener('nexus-audio-job-state',syncDataRun);
-document.addEventListener('nexus-studio-state',syncDataRun);
+document.addEventListener('nexus-studio-state',()=>{syncDataRun();syncEvidenceButtons()});
 function cancel(){epoch++}
-function resetResult(){analysis=sourceStamp=null;summary='';$('data-summary').textContent='';$('data-group').replaceChildren();$('data-metric').replaceChildren();for(const id of ['data-chart','data-copy','data-export','data-chat'])$(id).disabled=true;renderStorage()}
+function syncEvidenceButtons(){
+ $('data-explain-metric').disabled=busy||!metricEvidence;
+ $('data-explain-groups').disabled=busy||!groupEvidence;
+}
+function renderEvidence(grouping,metric){
+ metricEvidence=T.dataEvidence(analysis.report,metric);
+ groupEvidence=grouping.group_count>1?T.dataEvidence(analysis.report,metric,grouping):null;
+ $('data-group-key').hidden=!groupEvidence;
+ $('data-group-key-text').textContent=groupEvidence?.key.map(({id,label,missing})=>
+  id+' · '+(missing?t('dataUnknownGroup'):label)).join('\n')||'';
+ syncEvidenceButtons();
+}
+function resetResult(){
+ analysis=sourceStamp=metricEvidence=groupEvidence=null;summary='';
+ $('data-summary').textContent='';$('data-group').replaceChildren();$('data-metric').replaceChildren();
+ $('data-group-key').hidden=true;$('data-group-key-text').textContent='';syncEvidenceButtons();
+ for(const id of ['data-chart','data-copy','data-export','data-chat'])$(id).disabled=true;
+ renderStorage();
+}
 function clear(){cancel();file=null;$('data-file').value='';$('data-source').value='';resetResult();$('data-status').textContent=''}
 function render(){
  const selected=$('data-source').value,source=p()?.sources.find(s=>s.id===sourceStamp?.id);
@@ -4303,6 +4361,7 @@ function show(){
  if(groups.length){lines.push('','Groups: '+table.columns[group]+' ('+groups.length+'/'+grouping.group_count+')');for(const g of groups)lines.push(g.label.slice(0,160)+': n='+g.count+'; mean='+format(g.metric_mean)+'; numeric_n='+g.numeric_n)}
  if(report.correlations.length){lines.push('','Pearson (first 20):');for(const c of report.correlations.slice(0,20))lines.push(c.left+' / '+c.right+': r='+format(c.pearson_r)+'; n='+c.pairs)}
  lines.push('',...report.notes);summary=lines.join('\n');$('data-summary').textContent=summary;
+ renderEvidence(grouping,metric);
  $('data-chart').disabled=group<0||!groups.length;$('data-export').disabled=false;$('data-copy').disabled=!doc()||busy;$('data-chat').disabled=busy;
 }
 $('data-file').onchange=event=>{cancel();file=event.target.files[0]||null;event.target.value='';$('data-source').value='';resetResult();$('data-status').textContent=t('dataEmpty')};
@@ -4333,6 +4392,12 @@ $('data-group').onchange=show;$('data-metric').onchange=show;
 $('data-chart').onclick=()=>{if(!analysis)return;try{const group=Number($('data-group').value),metric=Number($('data-metric').value),grouping=T.groupReport(analysis.table,group,metric),groups=grouping.groups.slice(0,T.GROUP_PREVIEW_LIMIT).filter(g=>metric<0||g.metric_mean!==null);if(!groups.length)throw Error('empty-chart');NexusLabUI.setChart({type:'bar',title:analysis.table.columns[group]+' ('+groups.length+'/'+grouping.group_count+')',labels:groups.map(g=>g.label.slice(0,80)),values:groups.map(g=>metric<0?g.count:g.metric_mean)});$('chart-card').scrollIntoView({block:'start',behavior:'smooth'})}catch{$('data-status').textContent=t('dataFailed')}};
 $('data-copy').onclick=()=>{if(!analysis||!doc()||busy||summary.length>100000)return;if($('editor').value&&!confirm(t('discard')))return;$('editor').value=summary;editorDirty=true;stop();$('canvas-card').scrollIntoView({block:'start',behavior:'smooth'})};
 $('data-chat').onclick=()=>{if(analysis&&!busy)window.NexusStudioUI?.stageChatContext(('Data analysis · '+analysis.report.source.name).slice(0,160),summary)};
+$('data-explain-metric').onclick=()=>{
+ if(metricEvidence&&!busy)stageGroundedQuestion([{name:t('dataMetricEvidence'),text:metricEvidence.text}],t('dataMetricPrompt'));
+};
+$('data-explain-groups').onclick=()=>{
+ if(groupEvidence&&!busy)stageGroundedQuestion([{name:t('dataGroupEvidence'),text:groupEvidence.text}],t('dataGroupPrompt'));
+};
 $('data-export').onclick=()=>{if(!analysis||!confirm(t('plain')))return;const group=Number($('data-group').value),metric=Number($('data-metric').value);download(JSON.stringify({...analysis.report,...T.groupReport(analysis.table,group,metric)},null,2),'nexus-analysis.json','application/json')};
 window.addEventListener('keydown',event=>{if(event.key==='Escape'){stop();return}if(!(event.ctrlKey||event.metaKey)||event.altKey)return;if(event.key==='Enter'&&event.target===$('message')){event.preventDefault();if(busy)return;(modelInfo?.configured?$('prepare'):$('guide')).click()}if(event.shiftKey&&event.key.toLowerCase()==='s'){event.preventDefault();if(!$('save').disabled)$('save').click()}});
 window.NexusQualityUI=Object.freeze({cancel,clear,render,refreshStatus:capabilities,hasTransientWork:()=>Boolean(file||analysis)});applyLanguage();

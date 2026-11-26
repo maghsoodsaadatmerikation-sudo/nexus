@@ -1,6 +1,7 @@
 'use strict';
 (function(){
 const T=NexusTable;let epoch=0,file=null,analysis=null,sourceStamp=null,summary='';
+let metricEvidence=null,groupEvidence=null;
 Object.assign(EN,{undoRemoval:'Undo last removal',undoDone:'Last removal restored in this tab. Save explicitly to retain it.',sourceNoMatch:'No whole-token source match was found.',sourceLimited:'Source search stopped at its 12,000-passage limit; some content was not searched.',capabilitiesTitle:'Capability status & shortcuts',shortcutsHelp:'Ctrl/Cmd+Enter in the message box prepares a model request when configured, otherwise opens the local guide. Ctrl/Cmd+Shift+S saves an unlocked archive. Escape stops pending work. Tools never send data merely from a shortcut.',capLocal:'Available locally: project history, encrypted archives, versioned writing, bounded table analysis, charts, code lab and sky calculations.',capRemote:'Public research requires an explicitly approved query and provider availability.',capModelReady:'Model configuration checked; each send still requires review.',capModelMissing:'Generative model is not active/checked. Local guide is non-generative. Images, live voice, background scheduling and authenticated app actions are not supplied by these tools.',dataTitle:'Integrated local data analysis',dataHelp:'Read CSV, TSV or a JSON array of flat objects locally, up to 1 MiB, 5,000 rows and 40 columns. Produces descriptive summaries, missing/invalid counts, pairwise Pearson correlations and group means/counts. These are approximate numerical summaries, not causal conclusions. Files and reports are not sent to a model automatically. Group previews show up to 12 groups; JSON exports include all groups and identify the selected measure. Large integer JSON identifiers retain their digits; nonzero values that underflow to zero are excluded from numerical summaries.',dataFile:'Temporary local dataset',dataSource:'Or choose an applied project source',dataRun:'Analyze selected data',dataGroup:'Group by (optional)',dataMetric:'Numeric column (optional)',dataChart:'Send grouped data to chart',dataCopy:'Copy summary into selected writing document',dataExport:'Export analysis JSON',dataNone:'None',dataFileOption:'Use temporary local file',dataWorking:'Analyzing locally…',dataDuplicateFields:"Analysis unavailable: duplicate JSON field names. Give each field in an object a unique name, then try again.",dataFailed:'Analysis unavailable. Check source selection, scalar CSV/JSON shape, numeric/chart bounds and capacity.',dataReady:'Analysis ready locally. The source hash identifies bytes, not truth.',dataEmpty:'Select a dataset, then analyze. No upload or code execution is performed.'});
 Object.assign(FA,{undoRemoval:'بازگردانی آخرین حذف',undoDone:'آخرین حذف در این برگه بازگردانده شد؛ برای نگهداری، خودت ذخیره کن.',sourceNoMatch:'تطبیق واژگانی در منابع پیدا نشد.',sourceLimited:'جست‌وجو پس از ۱۲٬۰۰۰ بخش متنی متوقف شد؛ بخشی از محتوا جست‌وجو نشده است.',capabilitiesTitle:'وضعیت قابلیت‌ها و میان‌برها',shortcutsHelp:'Ctrl/Cmd+Enter در کادر پیام، با مدل پیکربندی‌شده درخواست را آماده می‌کند و در غیر این صورت راهنمای محلی را اجرا می‌کند. Ctrl/Cmd+Shift+S آرشیو باز را ذخیره می‌کند. Escape کار در انتظار را متوقف می‌کند. میان‌بر به‌تنهایی داده‌ای ارسال نمی‌کند.',capLocal:'قابل استفادهٔ محلی: تاریخچه، آرشیو رمزگذاری‌شده، نوشتهٔ نسخه‌دار، تحلیل محدود داده، نمودار، آزمایشگاه کد و محاسبهٔ آسمان.',capRemote:'پژوهش عمومی به درخواست تأییدشده و در دسترس بودن ارائه‌دهنده نیاز دارد.',capModelReady:'پیکربندی مدل بررسی شده؛ هر ارسال همچنان نیاز به بازبینی دارد.',capModelMissing:'مدل مولد فعال یا بررسی نشده است؛ راهنمای محلی مولد نیست. تولید تصویر، صدای زنده، زمان‌بندی پس‌زمینه و اقدام در برنامه‌های متصل جزو این ابزارها نیستند.',dataTitle:'تحلیل یکپارچهٔ محلی داده',dataHelp:'CSV، TSV یا آرایهٔ JSON از اشیای تخت را محلی بخوان؛ تا ۱ میبی‌بایت، ۵٬۰۰۰ ردیف و ۴۰ ستون. خلاصهٔ توصیفی، شمار دادهٔ خالی و نامعتبر، همبستگی پیرسون زوجی و تعداد یا میانگین گروه‌ها ساخته می‌شود. اعداد تقریبی‌اند و نتیجهٔ علّی نیستند. فایل و گزارش خودکار به مدل فرستاده نمی‌شوند. پیش‌نمایش تا ۱۲ گروه را نشان می‌دهد؛ خروجی JSON همهٔ گروه‌ها و نام ستون عددی انتخاب‌شده را شامل می‌شود. رقم‌های شناسه‌های صحیحِ بزرگ JSON حفظ می‌شوند؛ مقادیر ناصفری که به‌علت کوچکی به صفر تبدیل می‌شوند در خلاصهٔ عددی محاسبه نمی‌شوند.',dataFile:'مجموعه‌دادهٔ محلیِ موقت',dataSource:'یا یک منبع اعمال‌شدهٔ پروژه را انتخاب کن',dataRun:'تحلیل دادهٔ انتخاب‌شده',dataGroup:'گروه‌بندی — اختیاری',dataMetric:'ستون عددی — اختیاری',dataChart:'فرستادن دادهٔ گروه‌بندی‌شده به نمودار',dataCopy:'کپی خلاصه در سند نوشتاریِ انتخاب‌شده',dataExport:'خروجی JSON تحلیل',dataNone:'هیچ‌کدام',dataFileOption:'استفاده از فایل محلی موقت',dataWorking:'در حال تحلیل محلی…',dataDuplicateFields:"تحلیل در دسترس نیست: نام فیلدهای JSON تکراری است. در هر شیء، برای هر فیلد نامی یکتا بگذار و دوباره تلاش کن.",dataFailed:'تحلیل در دسترس نیست؛ انتخاب منبع، ساختار تخت CSV یا JSON، محدودیت عدد و نمودار و ظرفیت را بررسی کن.',dataReady:'تحلیل محلی آماده شد؛ هش منبع فقط هویت بایت‌ها را مشخص می‌کند، نه درستی داده را.',dataEmpty:'داده را انتخاب و تحلیل کن؛ فایل ارسال و کدی اجرا نمی‌شود.'});
 Object.assign(EN,{dataChat:'Use analysis summary in next chat'});Object.assign(FA,{dataChat:'استفاده از خلاصهٔ تحلیل در پیام بعدی'});
@@ -10,9 +11,27 @@ function syncDataRun(){
  $('data-run').title=gate?.audioBusy()?(gate.resourceMessage?.()||t('localResourceBusy')):'';
 }
 document.addEventListener('nexus-audio-job-state',syncDataRun);
-document.addEventListener('nexus-studio-state',syncDataRun);
+document.addEventListener('nexus-studio-state',()=>{syncDataRun();syncEvidenceButtons()});
 function cancel(){epoch++}
-function resetResult(){analysis=sourceStamp=null;summary='';$('data-summary').textContent='';$('data-group').replaceChildren();$('data-metric').replaceChildren();for(const id of ['data-chart','data-copy','data-export','data-chat'])$(id).disabled=true;renderStorage()}
+function syncEvidenceButtons(){
+ $('data-explain-metric').disabled=busy||!metricEvidence;
+ $('data-explain-groups').disabled=busy||!groupEvidence;
+}
+function renderEvidence(grouping,metric){
+ metricEvidence=T.dataEvidence(analysis.report,metric);
+ groupEvidence=grouping.group_count>1?T.dataEvidence(analysis.report,metric,grouping):null;
+ $('data-group-key').hidden=!groupEvidence;
+ $('data-group-key-text').textContent=groupEvidence?.key.map(({id,label,missing})=>
+  id+' · '+(missing?t('dataUnknownGroup'):label)).join('\n')||'';
+ syncEvidenceButtons();
+}
+function resetResult(){
+ analysis=sourceStamp=metricEvidence=groupEvidence=null;summary='';
+ $('data-summary').textContent='';$('data-group').replaceChildren();$('data-metric').replaceChildren();
+ $('data-group-key').hidden=true;$('data-group-key-text').textContent='';syncEvidenceButtons();
+ for(const id of ['data-chart','data-copy','data-export','data-chat'])$(id).disabled=true;
+ renderStorage();
+}
 function clear(){cancel();file=null;$('data-file').value='';$('data-source').value='';resetResult();$('data-status').textContent=''}
 function render(){
  const selected=$('data-source').value,source=p()?.sources.find(s=>s.id===sourceStamp?.id);
@@ -33,6 +52,7 @@ function show(){
  if(groups.length){lines.push('','Groups: '+table.columns[group]+' ('+groups.length+'/'+grouping.group_count+')');for(const g of groups)lines.push(g.label.slice(0,160)+': n='+g.count+'; mean='+format(g.metric_mean)+'; numeric_n='+g.numeric_n)}
  if(report.correlations.length){lines.push('','Pearson (first 20):');for(const c of report.correlations.slice(0,20))lines.push(c.left+' / '+c.right+': r='+format(c.pearson_r)+'; n='+c.pairs)}
  lines.push('',...report.notes);summary=lines.join('\n');$('data-summary').textContent=summary;
+ renderEvidence(grouping,metric);
  $('data-chart').disabled=group<0||!groups.length;$('data-export').disabled=false;$('data-copy').disabled=!doc()||busy;$('data-chat').disabled=busy;
 }
 $('data-file').onchange=event=>{cancel();file=event.target.files[0]||null;event.target.value='';$('data-source').value='';resetResult();$('data-status').textContent=t('dataEmpty')};
@@ -63,6 +83,12 @@ $('data-group').onchange=show;$('data-metric').onchange=show;
 $('data-chart').onclick=()=>{if(!analysis)return;try{const group=Number($('data-group').value),metric=Number($('data-metric').value),grouping=T.groupReport(analysis.table,group,metric),groups=grouping.groups.slice(0,T.GROUP_PREVIEW_LIMIT).filter(g=>metric<0||g.metric_mean!==null);if(!groups.length)throw Error('empty-chart');NexusLabUI.setChart({type:'bar',title:analysis.table.columns[group]+' ('+groups.length+'/'+grouping.group_count+')',labels:groups.map(g=>g.label.slice(0,80)),values:groups.map(g=>metric<0?g.count:g.metric_mean)});$('chart-card').scrollIntoView({block:'start',behavior:'smooth'})}catch{$('data-status').textContent=t('dataFailed')}};
 $('data-copy').onclick=()=>{if(!analysis||!doc()||busy||summary.length>100000)return;if($('editor').value&&!confirm(t('discard')))return;$('editor').value=summary;editorDirty=true;stop();$('canvas-card').scrollIntoView({block:'start',behavior:'smooth'})};
 $('data-chat').onclick=()=>{if(analysis&&!busy)window.NexusStudioUI?.stageChatContext(('Data analysis · '+analysis.report.source.name).slice(0,160),summary)};
+$('data-explain-metric').onclick=()=>{
+ if(metricEvidence&&!busy)stageGroundedQuestion([{name:t('dataMetricEvidence'),text:metricEvidence.text}],t('dataMetricPrompt'));
+};
+$('data-explain-groups').onclick=()=>{
+ if(groupEvidence&&!busy)stageGroundedQuestion([{name:t('dataGroupEvidence'),text:groupEvidence.text}],t('dataGroupPrompt'));
+};
 $('data-export').onclick=()=>{if(!analysis||!confirm(t('plain')))return;const group=Number($('data-group').value),metric=Number($('data-metric').value);download(JSON.stringify({...analysis.report,...T.groupReport(analysis.table,group,metric)},null,2),'nexus-analysis.json','application/json')};
 window.addEventListener('keydown',event=>{if(event.key==='Escape'){stop();return}if(!(event.ctrlKey||event.metaKey)||event.altKey)return;if(event.key==='Enter'&&event.target===$('message')){event.preventDefault();if(busy)return;(modelInfo?.configured?$('prepare'):$('guide')).click()}if(event.shiftKey&&event.key.toLowerCase()==='s'){event.preventDefault();if(!$('save').disabled)$('save').click()}});
 window.NexusQualityUI=Object.freeze({cancel,clear,render,refreshStatus:capabilities,hasTransientWork:()=>Boolean(file||analysis)});applyLanguage();

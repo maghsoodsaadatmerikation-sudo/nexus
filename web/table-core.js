@@ -173,6 +173,24 @@ const GROUP_PREVIEW_LIMIT=12;
     const groups=analysisGroups(table,index,metric,{limit:ANALYSIS_MAX_ROWS});
     return {group_by:index<0?null:table.columns[index],metric:metric<0?null:table.columns[metric],group_count:groups.length,groups_complete:true,groups};
   }
+  // Export a small descriptive snapshot for chat. The original records,
+  // source filename, digest and group labels stay in the local analysis.
+  function dataEvidence(report,metric,grouping=null){
+    if(!Number.isInteger(metric)||metric<0)return null;
+    const stats=report.column_stats[metric];
+    if(!stats?.summary)return null;
+    const header=name=>name.replace(/[\x00-\x20\x7f]+/g,' ').slice(0,64).replace(/[\uD800-\uDBFF]$/u,'');
+    const packet={kind:'local_descriptive_statistics',metric:header(stats.name),row_count:report.rows,
+      missing:stats.missing,invalid_numeric:stats.invalid_numeric,...stats.summary};
+    if(!grouping)return {text:JSON.stringify(packet),key:[]};
+    if(grouping.group_count<2)return null;
+    const sample=grouping.groups.slice(0,6);
+    const key=sample.map((group,i)=>({id:'G'+(i+1),label:group.label.slice(0,160),missing:group.missing}));
+    const groups=sample.map((g,i)=>({id:key[i].id,count:g.count,numeric_n:g.numeric_n,mean:g.metric_mean}));
+    return {text:JSON.stringify({kind:'local_descriptive_group_comparison',metric:packet.metric,
+      grouped_by:header(grouping.group_by),row_count:packet.row_count,total_groups:grouping.group_count,
+      omitted_groups:grouping.group_count-groups.length,groups}),key};
+  }
 function parse(text,extension){
  if(typeof text!=='string'||new TextEncoder().encode(text).length>ANALYSIS_MAX_BYTES)throw Error('text-budget');
  text=text.replace(/^\uFEFF/,'');const kind=String(extension).toLowerCase();
@@ -181,5 +199,5 @@ function parse(text,extension){
  const rows=parseDelimited(text,kind==='tsv'?'\t':',');
  return normalizedTable(rows[0]||[],rows.slice(1));
 }
-root.NexusTable=Object.freeze({parse,parseDelimited,normalizedTable,parseJsonTable,strictNumeric,numberStats,histogram,analyseTable,analysisGroups,groupReport,GROUP_PREVIEW_LIMIT,MAX_BYTES:ANALYSIS_MAX_BYTES,MAX_ROWS:ANALYSIS_MAX_ROWS,MAX_COLUMNS:ANALYSIS_MAX_COLUMNS});
+root.NexusTable=Object.freeze({parse,parseDelimited,normalizedTable,parseJsonTable,strictNumeric,numberStats,histogram,analyseTable,analysisGroups,groupReport,dataEvidence,GROUP_PREVIEW_LIMIT,MAX_BYTES:ANALYSIS_MAX_BYTES,MAX_ROWS:ANALYSIS_MAX_ROWS,MAX_COLUMNS:ANALYSIS_MAX_COLUMNS});
 })(globalThis);

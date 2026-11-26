@@ -19,4 +19,18 @@ const maximum=T.normalizedTable(['g','v'],Array.from({length:T.MAX_ROWS},(_,i)=>
 assert.equal(full.group_count,5000);assert.equal(full.groups.reduce((n,g)=>n+g.count,0),5000);checks++;
 assert.throws(()=>T.groupReport({...maximum,rows:[...maximum.rows,['extra','1']]},0,1));checks++;
 assert.throws(()=>T.groupReport({columns:['g','v'],rows:[['short']]},0,1));checks++;
+const privateTable=T.parse('Treatment,Score,Record\nprivate-a,1,raw-1\nprivate-a,3,raw-2\nprivate-b,,raw-3\nprivate-b,5,raw-4\n','csv');
+const report=T.analyseTable(privateTable,{name:'private.csv',sha:'private-hash',size:10});
+const profile=T.dataEvidence(report,1);
+assert.deepEqual(JSON.parse(profile.text),{kind:'local_descriptive_statistics',metric:'Score',row_count:4,
+ missing:1,invalid_numeric:0,...report.column_stats[1].summary});checks++;
+assert.equal(T.dataEvidence(report,0),null);checks++;
+assert.equal(T.dataEvidence(report,-1),null);checks++;
+const groupEvidence=T.dataEvidence(report,1,T.groupReport(privateTable,0,1));
+assert.deepEqual(groupEvidence.key.map(x=>[x.id,x.label]),[['G1','private-a'],['G2','private-b']]);checks++;
+assert.deepEqual(JSON.parse(groupEvidence.text).groups,[
+ {id:'G1',count:2,numeric_n:2,mean:2},{id:'G2',count:2,numeric_n:1,mean:5}]);checks++;
+assert.doesNotMatch(profile.text+groupEvidence.text,/private-|private\.csv|raw-/);checks++;
+const limited=JSON.parse(T.dataEvidence(T.analyseTable(table,{name:'test',sha:'',size:0}),1,all).text);
+assert.equal(limited.total_groups,14);assert.equal(limited.omitted_groups,8);assert.equal(limited.groups.length,6);checks++;
 console.log(JSON.stringify({status:'PASS',checks,scope:'complete-group-reports-and-bounded-previews'}));
