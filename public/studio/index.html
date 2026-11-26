@@ -3927,9 +3927,11 @@ $('code-run').onclick=async()=>{
  if(!$('code-consent').checked||codeController)return;
  const release=window.NexusMusicUI?.acquireAudioJob('code');
  if(!release){$('code-status').textContent=t('localResourceBusy');return}
- const scope=epoch,abort=new AbortController();codeController=abort;$('code-consent').checked=false;$('code-run').disabled=true;$('code-stop').disabled=false;$('code-status').textContent=t('codeWorking');$('code-console').textContent='';$('code-result').textContent='';result=null;
- const runId=++localAttempt;activeCodeAttempt=runId;localLifecycle('code',runId,'started');
- try{const text=await run.run($('code').value,$('code-input').value,{signal:abort.signal,onLog:line=>{if(scope===epoch)$('code-console').textContent+=line+'\n'}});if(scope!==epoch)return;result=text;$('code-result').textContent=text;$('code-status').textContent='';localLifecycle('code',runId,'succeeded')}catch{if(scope===epoch){$('code-status').textContent=t('codeFailed');localLifecycle('code',runId,'failed')}}finally{if(scope===epoch){activeCodeAttempt=null;codeController=null;$('code-stop').disabled=true}release();syncCodeRun()}
+ const scope=epoch;let runId=null;
+ try{
+ const abort=new AbortController();codeController=abort;$('code-consent').checked=false;$('code-run').disabled=true;$('code-stop').disabled=false;$('code-status').textContent=t('codeWorking');$('code-console').textContent='';$('code-result').textContent='';result=null;
+ runId=++localAttempt;activeCodeAttempt=runId;localLifecycle('code',runId,'started');
+ const text=await run.run($('code').value,$('code-input').value,{signal:abort.signal,onLog:line=>{if(scope===epoch)$('code-console').textContent+=line+'\n'}});if(scope!==epoch)return;result=text;$('code-result').textContent=text;$('code-status').textContent='';localLifecycle('code',runId,'succeeded')}catch{if(scope===epoch){$('code-status').textContent=t('codeFailed');if(runId!==null)localLifecycle('code',runId,'failed')}}finally{try{if(scope===epoch){activeCodeAttempt=null;codeController=null;$('code-stop').disabled=true}}finally{release();syncCodeRun()}}
 };
 $('code-stop').onclick=cancel;
 $('code-chat').onclick=()=>{if(result!==null)window.NexusStudioUI?.stageChatContext('Local code result · untrusted',result)};
