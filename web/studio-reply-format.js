@@ -222,6 +222,25 @@ function checkAnswerReviewContext(path,messages){
   sentUser?.role==='user'&&sentUser.content===user.text&&sentAnswer?.role==='assistant'&&sentAnswer.content===answer.text&&sentReview?.role==='user'&&sentReview.content===review.text);
 }
 
+// Compare only the exact original / review pair on the current branch.
+// A review message can be critique only; the user must identify a revision.
+function answerComparisonContext(path){
+ if(!Array.isArray(path)||path.length<4)return false;
+ const [question,original,request,candidate]=path.slice(-4);
+ return Boolean(question?.role==='user'&&original?.role==='assistant'&&original.origin==='model'&&request?.role==='user'&&isAnswerReviewPrompt(request.text)&&candidate?.role==='assistant'&&candidate.origin==='model'&&[question,original,candidate].every(x=>typeof x.text==='string'&&x.text.trim()&&x.text.length<=100000));
+}
+function compareReviewedAnswers(path,ratings,{candidateConfirmed=false}={}){
+ if(typeof candidateConfirmed!=='boolean'||!answerComparisonContext(path))throw Error('invalid-answer-comparison');
+ const boundary={facts_verified:false,automatic_selection:false,storage_authorized:false,execution_authorized:false};
+ if(!candidateConfirmed)return {status:'not_confirmed',...boundary};
+ const dimensions=['coverage','accuracy','clarity'];
+ if(!ratings||typeof ratings!=='object'||Array.isArray(ratings)||Object.keys(ratings).sort().join('|')!=='accuracy|clarity|coverage'||dimensions.some(k=>!['better','same','worse','unknown'].includes(ratings[k])))throw Error('invalid-answer-ratings');
+ const original=path.at(-3).text,candidate=path.at(-1).text,before=reviewDraft(original).findings,after=reviewDraft(candidate).findings;
+ const values=dimensions.map(k=>ratings[k]),better=values.includes('better'),worse=values.includes('worse'),unknown=values.includes('unknown');
+ const status=original===candidate?'identical_text':better&&worse?'mixed_report':worse?'reported_regression':unknown?'incomplete_assessment':better?'reported_improvement':'reported_no_change';
+ return {status,resolved_findings:before.filter(x=>!after.includes(x)),new_findings:after.filter(x=>!before.includes(x)),unchanged_findings:after.filter(x=>before.includes(x)),...boundary};
+}
+
 // Match explicit request-local reference markers, not factual support.
 function auditReferenceMarkers(text,refs){
  if(typeof text!=='string'||!Array.isArray(refs)||refs.length>30||refs.some(x=>typeof x!=='string'||!/^[SA][1-9]\d?$/.test(x))||new Set(refs).size!==refs.length)throw Error('invalid-reference-audit');
@@ -297,6 +316,8 @@ globalThis.NexusReplyFormat = Object.freeze({
  answerReviewPrompt,
  isAnswerReviewPrompt,
  checkAnswerReviewContext,
+ answerComparisonContext,
+ compareReviewedAnswers,
  exportHtml:(doc,text,{title,format})=>exportHtml(doc,[{text,format}],{title}),
  exportConversation:(doc,sections,title)=>exportHtml(doc,sections,{title})
 });
