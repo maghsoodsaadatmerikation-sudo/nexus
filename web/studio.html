@@ -1400,8 +1400,18 @@ function relatedChatExcerpts(project,thread,query,historyDays){
 }
 // Only exact continuation commands inherit a search topic. Never infer a
 // new permission, use another branch, or resurrect an omitted history turn.
+const continuationCommands=new Set([
+ 'continue','go on','keep going','next step','please continue','continue please',
+ 'continue, please','continue to the end',
+ 'ادامه','ادامه بده','ادامه دهید','ادامه بده لطفا','ادامه بده، لطفا','ادامه بده تا انتها',
+ 'گام بعد','گام بعدی','قدم بعد','قدم بعدی'
+]);
+function isContinuation(value){
+ const command=normalized(value.replace(/\u200c/g,' ')).trim()
+  .replace(/\s+/gu,' ').replace(/[\s.!?؟،,؛;]+$/gu,'');
+ return continuationCommands.has(command);
+}
 function followupTopic(messages){
- const isContinuation=value=>/^(?:continue|go on|keep going|next step|ادامه بده|ادامه|ادامه دهید|گام بعدی|قدم بعدی)[.!?؟،\s]*$/u.test(normalized(value).trim());
  const latest=messages.at(-1).content;
  if(!isContinuation(latest))return {query:latest,priorIndex:null};
  for(let i=messages.length-2;i>=0;i--){

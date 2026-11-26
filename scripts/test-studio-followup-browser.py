@@ -26,7 +26,11 @@ window.addEventListener('load',()=>{
   t=S.append(t,'assistant','violet MODEL_ONLY','model');
   p.threads=[prior,other,t];
   const before=JSON.stringify(p);
-  const commands=['continue','GO ON!','keep going','next step','ادامه بده','ادامه','ادامه دهید','گام بعدی؟','قدم بعدی'];
+  const commands=[
+   'continue','GO ON!','keep going','next step','PLEASE   CONTINUE!','continue please','continue, please','continue to the end…',
+   'ادامه بده','ادامه','ادامه دهید','ادامه‌بده؟','ادامه   بده، لطفاً!','ادامه بده لطفا','ادامه بده تا انتها',
+   'گام بعد','گام بعدی؟','قدم بعد','قدم بعدی'
+  ];
   for(const command of commands){
    const next=S.append(t,'user',command,'human');
    for(const sources of [false,true])for(const relatedChats of [false,true]){
@@ -47,10 +51,12 @@ window.addEventListener('load',()=>{
   const current=S.context(p,changed,options);
   assert(current.citations[0].name==='violet.txt','latest-substantive-user-topic-wins');
   assert(current.recalled_chats[0].thread===other.id,'chat-recall-uses-new-topic');
-  const explicit=S.context(p,S.append(t,'user','continue with violet','human'),options);
-  assert(explicit.citations[0].name==='violet.txt','explicit-request-keeps-own-query');
-  assert(!explicit.messages[0].content.includes('Search topic carried'),'explicit-request-not-marked-carried');
-  assert(explicit.continuation_search_turn===null,'new-topic-omits-review-turn');
+  for(const command of ['continue with violet','please continue with violet','ادامه بده، بعد درباره violet بنویس']){
+   const explicit=S.context(p,S.append(t,'user',command,'human'),options);
+   assert(explicit.citations[0].name==='violet.txt',command+'/explicit-request-keeps-own-query');
+   assert(!explicit.messages[0].content.includes('Search topic carried'),command+'/explicit-request-not-marked-carried');
+   assert(explicit.continuation_search_turn===null,command+'/new-topic-omits-review-turn');
+  }
   let long=S.append(S.thread('Truncated'),'user','orchard','human');
   for(let i=0;i<22;i++)long=S.append(S.append(long,'assistant','draft','model'),'user','continue','human');
   const dropped=S.context(p,long,options);
@@ -59,7 +65,7 @@ window.addEventListener('load',()=>{
   let retained=S.thread('Retained topic after truncation');
   for(let i=0;i<9;i++)retained=S.append(S.append(retained,'user','older topic '+i,'human'),'assistant','draft','model');
   retained=S.append(retained,'user','orchard','human');
-  for(let i=0;i<15;i++)retained=S.append(S.append(retained,'assistant','draft','model'),'user','continue','human');
+  for(let i=0;i<15;i++)retained=S.append(S.append(retained,'assistant','draft','model'),'user',i%2?'ادامه‌بده؟':'Please continue','human');
   const trimmed=S.context(p,retained,options);
   assert(trimmed.omitted_messages>0&&trimmed.continuation_search_turn===19&&trimmed.citations[0]?.name==='orchard.txt',
    'retained-topic-number-is-relative-to-the-original-active-path');

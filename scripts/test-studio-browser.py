@@ -628,16 +628,17 @@ window.addEventListener('load',async()=>{
   const continuationNote=$('continuation-context-note');
   assert(continuationNote.hidden,'direct-query-has-no-continuation-note');
   $('guide').click();
-  fill('message','ادامه بده');$('prepare').click();
+  const followupCommand='ادامه‌بده؟';
+  fill('message',followupCommand);$('prepare').click();
   const continuedReview=JSON.parse($('request-context').textContent);
   assert(!continuationNote.hidden&&!continuationNote.open&&
    $('continuation-context-summary').textContent.includes('message 1')&&
    $('continuation-context-message').textContent==='orchard trees'&&
-   continuedReview.messages.at(-1).content==='ادامه بده'&&
+   continuedReview.messages.at(-1).content===followupCommand&&
    continuedReview.related_chat_passages.some(p=>p.thread===priorThread.threadId)&&!$('consent').checked,
    'continuation-review-identifies-the-exact-earlier-message-before-consent');
   $('continuation-context-summary').click();
-  assert(continuationNote.open&&!$('consent').checked&&$('message').value==='ادامه بده'&&
+  assert(continuationNote.open&&!$('consent').checked&&$('message').value===followupCommand&&
    JSON.stringify(JSON.parse($('request-context').textContent))===JSON.stringify(continuedReview),
    'opening-the-earlier-message-preserves-the-review-and-draft');
   $('use-related-chats').checked=false;$('use-related-chats').dispatchEvent(new Event('input'));
