@@ -574,14 +574,33 @@ function renderMessage(n){
     }
     const run=el('button',w('Compare assessments','مقایسهٔ ارزیابی‌ها'));run.type='button';run.className='secondary';run.disabled=true;
     const result=el('p','');result.setAttribute('role','status');panel.append(run,result);
-    const reset=()=>{run.disabled=!confirmRevision.checked;result.textContent=''};
-    panel.oninput=reset;panel.onchange=reset;
+    const feedback=el('div','');feedback.hidden=true;
+    const noteLabel=el('label',w('Optional preference for future replies (your words, one line)','ترجیح اختیاری برای پاسخ‌های آینده (به زبان خودتان، یک خط)'));
+    const note=el('input','');note.type='text';note.maxLength=500;noteLabel.append(note);
+    const stage=el('button',w('Review memory draft','بازبینی پیش‌نویس حافظه'));stage.type='button';stage.className='secondary';stage.disabled=true;
+    feedback.append(noteLabel,stage,el('small',w('Apply preferences separately. Save explicitly. Included in later requests only with memory enabled.','ترجیحات را جداگانه اعمال و صریحاً ذخیره کنید. استفاده در درخواست‌های بعدی فقط با فعال‌کردن حافظه.')));
+    panel.append(feedback);
+    let reviewedRevision=null;
+    const values=()=>Object.fromEntries(Object.entries(ratings).map(([k,s])=>[k,s.value]));
+    const reset=()=>{run.disabled=!confirmRevision.checked;result.textContent='';reviewedRevision=null;feedback.hidden=true;note.value='';stage.disabled=true};
+    panel.oninput=panel.onchange=e=>{if(e.target===note){stage.disabled=!note.value.trim();return}reset()};
     panel.ontoggle=()=>{if(!panel.open){confirmRevision.checked=false;for(const s of Object.values(ratings))s.value='unknown';reset()}};
+    stage.onclick=()=>{
+     if(!panel.isConnected||!panel.open||reviewedRevision!==revision||busy||pending||hasChatDraft()||chat()?.head!==n.id||chat()?.temporary||chat()?.archived||chat()?.isolated||!vault.unlocked)return;
+     try{
+      const draft=NexusReplyFormat.prepareAnswerFeedback(S.path(chat()),values(),note.value,{candidateConfirmed:confirmRevision.checked});
+      if(p().memories.includes(draft.note)||!stageMemoryNote(draft.note))throw Error('memory-unavailable');
+      reset();window.NexusStudioFocus?.openPanel('profile-card');
+      $('status').textContent=w('Memory draft only. Review and Apply preferences; save separately.','فقط پیش‌نویس حافظه؛ بازبینی و اعمال ترجیحات، سپس ذخیرهٔ جداگانه.');
+     }catch{result.textContent=w('Memory draft unavailable. Check the note and existing preferences.','پیش‌نویس حافظه در دسترس نیست؛ یادداشت و ترجیحات موجود را بررسی کنید.')}
+    };
     run.onclick=()=>{
      if(!panel.isConnected||busy||chat()?.head!==n.id||chat()?.archived||chat()?.isolated||!confirmRevision.checked)return;
      const compared=NexusReplyFormat.compareReviewedAnswers(S.path(chat()),Object.fromEntries(Object.entries(ratings).map(([k,s])=>[k,s.value])),{candidateConfirmed:true});
      const labels={identical_text:w('Identical text','متن یکسان'),mixed_report:w('Mixed assessment','ارزیابی ترکیبی'),reported_regression:w('Reported regression','افت گزارش‌شده'),incomplete_assessment:w('Incomplete assessment','ارزیابی ناقص'),reported_improvement:w('Reported improvement','بهبود گزارش‌شده'),reported_no_change:w('No reported change','بدون تغییر گزارش‌شده')};
      result.textContent=labels[compared.status]+' · '+w('Structural warnings resolved / added: ','هشدار ساختاری رفع‌شده / جدید: ')+compared.resolved_findings.length+' / '+compared.new_findings.length+' · '+w('Not independent verification. Nothing applied.','راستی‌آزمایی مستقل نیست. هیچ تغییری اعمال نشد.');
+     reviewedRevision=revision;
+     feedback.hidden=!vault.unlocked||!!chat()?.temporary||Object.values(values()).includes('unknown')||['identical_text','incomplete_assessment'].includes(compared.status);
     };
     item.append(panel);
    }
