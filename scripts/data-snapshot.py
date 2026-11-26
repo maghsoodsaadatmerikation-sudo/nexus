@@ -11,6 +11,7 @@ import ctypes
 import errno
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -22,6 +23,7 @@ import tempfile
 SCHEMA = "nexus.data-snapshot.v1"
 MAX_BYTES = 64 * 1024 * 1024
 MAX_FILES = 20_000
+MAX_JSON_DEPTH = 128
 RECOVERY_MARKER = ".nexus-recovery-required"
 RECOVERY_BYTES = b"snapshot-restored; replay-risk-not-acknowledged\n"
 
@@ -43,6 +45,54 @@ def unique_object(pairs):
     return result
 
 
+def reject_json_constant(_value):
+    raise SnapshotError("non-finite JSON number")
+
+
+def finite_json_float(value):
+    number = float(value)
+    require(math.isfinite(number), "non-finite JSON number")
+    return number
+
+
+def preflight_json_depth(text):
+    """Bound container depth before parsing; ignore punctuation inside strings."""
+    stack = []
+    in_string = False
+    skip_until = 0
+    for match in re.finditer(r'["\\\[\]{}]', text):
+        if match.start() < skip_until:
+            continue
+        token = match.group()
+        if in_string:
+            if token == "\\":
+                skip_until = match.start() + 2
+            elif token == '"':
+                in_string = False
+        elif token == '"':
+            in_string = True
+        elif token in ("[", "{"):
+            require(len(stack) < MAX_JSON_DEPTH, "JSON nesting exceeds limit")
+            stack.append(token)
+        elif token in ("]", "}"):
+            require(stack and stack[-1] == {"]": "[", "}": "{"}[token],
+                    "invalid JSON container structure")
+            stack.pop()
+    require(not stack and not in_string, "invalid JSON container structure")
+
+
+def strict_json(data):
+    """Require UTF-8 and bound nesting before the standard JSON decoder."""
+    text = data.decode("utf-8") if isinstance(data, bytes) else data
+    preflight_json_depth(text)
+    try:
+        return json.loads(text, object_pairs_hook=unique_object,
+                          parse_constant=reject_json_constant,
+                          parse_float=finite_json_float)
+    except RecursionError:
+        raise SnapshotError("JSON nesting exceeds limit") from None
+
+
 def validate_file(name, data):
     require(isinstance(name, str), "invalid path")
     if name == RECOVERY_MARKER:
@@ -55,7 +105,7 @@ def validate_file(name, data):
     else:
         require(re.fullmatch(r"(?:[0-9a-f]{2})*\.json", name), "unsupported data path")
         workspace_id = bytes.fromhex(name[:-5]).decode("utf-8")
-        snapshot = json.loads(data, object_pairs_hook=unique_object)
+        snapshot = strict_json(data)
         require(isinstance(snapshot, dict) and type(snapshot.get("schema_version")) is int and snapshot["schema_version"] == 1,
                 "unsupported workspace schema")
         require(isinstance(snapshot.get("workspace"), dict) and
@@ -205,7 +255,7 @@ def backup(source, output):
 
 def validated_records(archive):
     raw = read_regular(archive, MAX_BYTES)
-    document = json.loads(raw, object_pairs_hook=unique_object)
+    document = strict_json(raw)
     require(isinstance(document, dict) and set(document) ==
             {"schema", "authority", "consistency", "files"}, "invalid snapshot envelope")
     require(document["schema"] == SCHEMA and document["authority"] == "none" and
