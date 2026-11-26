@@ -28,6 +28,20 @@ for(const change of [x=>x.schema='future',x=>x.projects[0].threads[0].nodes[0].p
 p.memories=['PRIVATE-MEMORY'];p.instructions='concise';p.sources=[{id:S.uid(),name:'source.txt',text:'The orchard has green trees.\nA project uses public sources.'}];let candidate=S.append(branch,'user','orchard trees','human');
 ok(()=>assert(!JSON.stringify(S.context(p,candidate)).includes('PRIVATE-MEMORY')));ok(()=>assert(JSON.stringify(S.context(p,candidate,{memory:true})).includes('PRIVATE-MEMORY')));ok(()=>assert.equal(S.context(p,candidate,{sources:true}).citations[0].line,1));ok(()=>assert.equal(S.retrieve(p,'unmatched').length,0));ok(()=>assert.equal(S.retrieve(S.project('other'),'orchard').length,0));
 p.threads=[branch];v={schema:S.SCHEMA,projects:[p]};ok(()=>assert.equal(S.search(v,'original question').length,1));p.threads[0].archived=true;ok(()=>assert.equal(S.search(v,'original').length,0));ok(()=>assert.equal(S.search(v,'original',true).length,1));p.threads[0].archived=false;
+const sourceAnswerOptions={sourceAnswer:true,sources:true};
+const sourced=S.context(p,candidate,sourceAnswerOptions);
+ok(()=>assert.match(sourced.messages[0].content,/Answer from sources mode.*NXS_INSUFFICIENT_EVIDENCE/));
+ok(()=>assert.equal(sourced.evidence_passages[0].ref,'S1'));
+ok(()=>assert.equal(sourced.messages.at(-1).content,'orchard trees'));
+ok(()=>assert.throws(()=>S.context(p,candidate,{sourceAnswer:true}),/source-answer-no-evidence/));
+const unrelated=S.append(S.thread('Unrelated'),'user','lithium spectroscopy','human');
+ok(()=>assert.throws(()=>S.context(p,unrelated,sourceAnswerOptions),/source-answer-no-evidence/));
+const withFile=S.context(p,unrelated,{sourceAnswer:true,attachments:[{id:S.uid(),name:'sample.txt',text:'Synthetic file excerpt'}]});
+ok(()=>assert.deepEqual(withFile.evidence_passages.map(x=>x.ref),['A1']));
+for(const option of ['study','onDevice']){
+ ok(()=>assert.throws(()=>S.context(p,candidate,{...sourceAnswerOptions,[option]:true}),/source-answer-incompatible/));
+}
+ok(()=>assert.throws(()=>S.context(p,{...candidate,isolated:true},sourceAnswerOptions),/source-answer-incompatible/));
 ok(()=>assert(S.guide('hello').includes('not a generative model')));ok(()=>assert(S.guide('سلام',true).includes('مدل مولد نیست')));
 ok(()=>assert.equal(S.context(p,candidate).study,false));
 ok(()=>assert.match(S.context(p,candidate).messages[0].content,/NEXUS response guidance/));

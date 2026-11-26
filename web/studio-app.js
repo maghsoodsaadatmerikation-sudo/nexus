@@ -62,6 +62,23 @@ const forms=()=>profileDirty||editorDirty||window.NexusAstrologyUI?.hasDraft()==
 const t=k=>(localePacks.get(language)?.messages||(language==='fa'?FA:EN))[k]||EN[k]||k,el=(tag,text)=>{const n=document.createElement(tag);n.textContent=text;return n},p=()=>data.projects.find(x=>x.id===projectId),chat=()=>p()?.threads.find(x=>x.id===threadId),doc=()=>p()?.documents.find(x=>x.id===documentId);
 Object.assign(EN,{studyMode:'Study mode',modelMode:'Provider execution mode (requires a supporting gateway)',modeDefault:'Provider default',modeThinking:'Thinking',modeFast:'Non-thinking',modelBudget:'Maximum generated tokens (1–8192; existing response and time limits still apply)'});
 Object.assign(FA,{studyMode:'حالت مطالعه',modelMode:'حالت اجرای مدل — نیازمند درگاه پشتیبان',modeDefault:'پیش‌فرض ارائه‌دهنده',modeThinking:'تفکر',modeFast:'بدون تفکر',modelBudget:'حداکثر توکن تولیدی — ۱ تا ۸۱۹۲؛ محدودیت زمان و حجم پاسخ همچنان برقرار است'});
+const SOURCE_ANSWER_EN={
+ sourceAnswer:'Answer from sources',
+ sourceAnswerHelp:'Use passages from the project sources or files you choose for this request.',
+ sourceAnswerNoEvidence:'No source passages fit this request. Attach a file or enable relevant project sources, then prepare again.',
+ sourceAnswerIncompatible:'Answer from sources needs a connected model in a regular conversation with Study mode off.',
+ sourceAnswerRejected:'The model reply did not pass the reference check. Your draft is still here.',
+ sourceAnswerInsufficient:'The model could not answer this question from the supplied passages.'
+};
+Object.assign(EN,SOURCE_ANSWER_EN);
+Object.assign(FA,{
+ sourceAnswer:'پاسخ با استناد',
+ sourceAnswerHelp:'از گزیده‌های منابع پروژه یا فایل‌هایی استفاده کن که برای همین درخواست انتخاب می‌کنی.',
+ sourceAnswerNoEvidence:'هیچ گزیده‌ای در متن ارسالی قرار نگرفت. فایلی پیوست کن یا منابع مرتبط پروژه را فعال کن و دوباره پیش‌نمایش را بساز.',
+ sourceAnswerIncompatible:'پاسخ با استناد به مدل متصل و گفتگوی عادی نیاز دارد. حالت مطالعه را خاموش کن.',
+ sourceAnswerRejected:'ارجاع‌های پاسخ مدل از بررسی عبور نکردند. پیش‌نویس پیام تو همچنان در دسترس است.',
+ sourceAnswerInsufficient:'مدل نتوانست از گزیده‌های ارسالی به این پرسش پاسخ بدهد.'
+});
 Object.assign(EN,{
  reminderTitle:'Reminders',reminderHelp:'Download an .ics file and import it into your calendar. The receiving calendar interprets the local time and manages alerts.',
  reminderName:'Reminder',reminderStart:'Local date and time',reminderRepeat:'Repeat',reminderOnce:'Once',reminderDaily:'Daily',reminderWeekly:'Weekly',
@@ -241,6 +258,7 @@ function toolLifecycle(phase){
  }
  if(phase==='private'){
   $('study-mode').checked=false;
+  $('source-answer').checked=false;
   $('auto-speak').checked=false;
   $('training-opt-in').checked=false;clearTrainingReview();
   document.dispatchEvent(new Event('nexus-studio-private-clear'));
@@ -422,6 +440,7 @@ function controls(){
  $('chat-file').disabled=busy||attachmentLoading||Boolean(chat()?.archived);
  $('clear-chat-files').disabled=busy||(!attachmentLoading&&!chatAttachments.length&&!$('attach-document').checked);
  const thread=chat();
+ $('source-answer').disabled=busy||Boolean(thread?.isolated||thread?.archived);
  $('isolated-chat-note').hidden=!thread?.isolated;
  $('new-temporary-chat').disabled=busy;
  for(const id of ['use-memory','use-sources','astro-historical'])$(id).disabled=busy||Boolean(thread?.isolated);
@@ -646,7 +665,7 @@ function resetConversation(id){
  // Only first-chat setup may preserve a selected image when there is no prior thread.
  if(threadId!==null&&threadId!==id)window.NexusStudioVision?.clear?.();
  threadId=id;clearChatDraft();
- for(const key of ['use-memory','use-sources','use-related-chats','use-astrology','astro-historical','study-mode','auto-speak'])$(key).checked=false;
+ for(const key of ['use-memory','use-sources','use-related-chats','use-astrology','astro-historical','study-mode','source-answer','auto-speak'])$(key).checked=false;
 }
 function resetProject(id){
  toolLifecycle('project');
@@ -712,10 +731,12 @@ function startConversation(fresh=false,{isolated=false}={}){
  }
  const draft=isolated?'':$('message').value;
  const study=!isolated&&$('study-mode').checked;
+ const sourceAnswer=!isolated&&$('source-answer').checked;
  const openWithDraft=id=>{
   resetConversation(id);
   $('message').value=draft;
   $('study-mode').checked=study;
+  $('source-answer').checked=sourceAnswer;
  };
  // First-chat setup keeps workspace tools already used in this tab.
  if(!p()&&forms()){status('needApply');return false}
@@ -750,8 +771,8 @@ function installThread(next){
 }
 $('auto-speak').onchange=()=>{if(!$('auto-speak').checked)window.NexusSpeechPlayback?.stop()};
 function selectedModelEngine(){return document.getElementById('model-engine')?.value==='device'?'device':'gateway'}
-function prepare(regenerate=false){if(!chat()?.isolated&&(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,relatedChats:$('use-related-chats').checked,historyDays:data.history_days,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked,onDevice:destination==='device'});if(NexusReplyFormat.isAnswerReviewPrompt(S.path(c).at(-1)?.text)&&!NexusReplyFormat.checkAnswerReviewContext(S.path(c),ctx.messages))throw Error('answer-review-context-missing');if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');const privacyAudit=destination==='gateway'?S.inspectSecrets(ctx.messages):{categories:[],possible_secrets:false};const stream=destination==='gateway'&&modelInfo.streaming===true;
- pending={destination,stream,thread:c,evidencePassages:ctx.evidence_passages,referenceMarkers:[...ctx.citations,...ctx.attachments_supplied].map(x=>x.ref),body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(destination==='gateway'&&selectedModelSlot!=='primary'?{model_slot:selectedModelSlot}:{}),...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,...(destination==='gateway'?{model_slot:selectedModelSlot}:{}),provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,memory_review:ctx.memory_review,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);showPrivacy(privacyAudit);
+function prepare(regenerate=false){if(!chat()?.isolated&&(profileDirty||($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())))return status('needApply');try{const destination=selectedModelEngine();if(destination==='device'){const info=window.NexusDevice?.info();if(!info?.ready)return status('noModel');modelInfo={...info,configured:true,gateway:'device',provider_host:'this device'}}if(!modelInfo?.configured||modelInfo.gateway!==(destination==='device'?'device':gateway()))return status('noModel');stop();const sourceAnswer=$('source-answer').checked;const mode=$('model-mode').value,budget=Number($('model-budget').value);if(!Number.isInteger(budget)||budget<1||budget>(destination==='device'?64:8192)||(mode!=='standard'&&(destination==='device'||!modelInfo.modes?.includes(mode))))throw Error('unsupported-mode');const materials=selectedAttachments(),c=candidate(regenerate,materials),ctx=S.context(p(),c,{attachments:materials,memory:$('use-memory').checked,sources:$('use-sources').checked,relatedChats:$('use-related-chats').checked,historyDays:data.history_days,astrology:$('use-astrology').checked,astroHistorical:$('astro-historical').checked,skyTone:$('sky-tone').checked,study:$('study-mode').checked,sourceAnswer,onDevice:destination==='device'});if(NexusReplyFormat.isAnswerReviewPrompt(S.path(c).at(-1)?.text)&&!NexusReplyFormat.checkAnswerReviewContext(S.path(c),ctx.messages))throw Error('answer-review-context-missing');if($('study-mode').checked&&!ctx.study)throw Error('study-context-capacity');if(destination==='device'&&JSON.stringify(ctx.messages).length>6000)throw Error('device-context-too-large');const privacyAudit=destination==='gateway'?S.inspectSecrets(ctx.messages):{categories:[],possible_secrets:false};const stream=destination==='gateway'&&modelInfo.streaming===true;
+ pending={destination,stream,sourceAnswer,thread:c,evidencePassages:ctx.evidence_passages,referenceMarkers:[...ctx.citations,...ctx.attachments_supplied].map(x=>x.ref),body:{consent:true,configuration_id:modelInfo.configuration_id,messages:ctx.messages,...(destination==='gateway'&&selectedModelSlot!=='primary'?{model_slot:selectedModelSlot}:{}),...(mode!=='standard'||budget!==2048?{mode,max_output_tokens:budget}:{})},revision,projectId,threadId};$('request-context').textContent=JSON.stringify({destination,gateway:destination==='device'?'on-device; no prompt transmission':gateway(),...(destination==='device'?{fixed_policy:modelInfo.policy,max_input_tokens:modelInfo.max_input_tokens}:{}),model:modelInfo.model,...(destination==='gateway'?{model_slot:selectedModelSlot}:{}),provider_host:modelInfo.provider_host,...(stream?{response_delivery:'streaming'}:{}),mode,max_output_tokens:budget,response_style:sourceAnswer?'source_answer':ctx.study?'study':'standard',omitted_earlier_messages:ctx.omitted_messages,optional_context_truncated:ctx.optional_context_truncated,presentation:ctx.presentation,messages:ctx.messages,source_passages_supplied:ctx.citations,memory_review:ctx.memory_review,related_chat_passages:ctx.recalled_chats,source_search_truncated:ctx.retrieval_truncated,temporary_attachment_passages:ctx.attachments_supplied,temporary_attachments_partial:ctx.attachments_truncated},null,2);showPrivacy(privacyAudit);
  const searchTurn=ctx.continuation_search_turn;
  if(searchTurn!==null){
   const number=new Intl.NumberFormat(language==='fa'?'fa':'en').format(searchTurn);
@@ -761,7 +782,7 @@ function prepare(regenerate=false){if(!chat()?.isolated&&(profileDirty||($('use-
   $('continuation-context-message').textContent=S.path(c)[searchTurn-1].text;
   $('continuation-context-note').hidden=false;
  }
- $('request-review').hidden=false;controls()}catch(error){if(error?.message==='answer-review-context-missing')$('status').textContent=language==='fa'?'متن کامل درخواست و پاسخ پیشین در زمینه بازبینی نیست؛ ارسال انجام نشد.':'The complete previous request and answer are not in the review context. Nothing was sent.';else status(error?.message==='reattach-required'?'chatRegenRequiresFiles':'failed')}}
+ $('request-review').hidden=false;controls()}catch(error){if(error?.message==='answer-review-context-missing')$('status').textContent=language==='fa'?'متن کامل درخواست و پاسخ پیشین در زمینه بازبینی نیست؛ ارسال انجام نشد.':'The complete previous request and answer are not in the review context. Nothing was sent.';else status(error?.message==='reattach-required'?'chatRegenRequiresFiles':error?.message==='source-answer-no-evidence'?'sourceAnswerNoEvidence':error?.message==='source-answer-incompatible'?'sourceAnswerIncompatible':'failed')}}
 function gateway(){const value=$('gateway').value.trim();const u=new URL(value||location.origin);if((u.protocol!=='https:'&&!(u.protocol==='http:'&&['127.0.0.1','[::1]'].includes(u.hostname)))||u.username||u.password||u.search||u.hash||!['','/'].includes(u.pathname))throw Error('gateway-url');return u.origin}
 function gatewayFailureLabel(error,request,timedOut=false){
  if(request.destination!=='gateway')return request.stream?'streamFailed':'failed';
@@ -860,7 +881,7 @@ $('branch').onchange=()=>{
  if(!mayReplaceChat()){$('branch').value=current.head||'';return}
  if(!mutate(v=>projectIn(v).threads.find(x=>x.id===threadId).head=head,{afterCommit:()=>{window.NexusStudioVision?.clear?.();clearChatDraft()}}))render();
 };
-$('guide').onclick=()=>{if(chatAttachments.length||$('attach-document').checked)return status('chatAttachmentRequiresModel');if($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())return status('needApply');try{const c=candidate();installThread(S.append(c,'assistant',S.guide(S.path(c).at(-1).text,language==='fa',{skyTone:!c.isolated&&$('sky-tone').checked,study:$('study-mode').checked})+(!c.isolated&&$('use-astrology').checked?'\n\n'+NexusAstrology.reflection(p().astrology,language==='fa',{historical:$('astro-historical').checked}):''),'guide'))}catch{status('failed')}};
+$('guide').onclick=()=>{if($('source-answer').checked)return status('sourceAnswerIncompatible');if(chatAttachments.length||$('attach-document').checked)return status('chatAttachmentRequiresModel');if($('use-astrology').checked&&window.NexusAstrologyUI?.hasDraft())return status('needApply');try{const c=candidate();installThread(S.append(c,'assistant',S.guide(S.path(c).at(-1).text,language==='fa',{skyTone:!c.isolated&&$('sky-tone').checked,study:$('study-mode').checked})+(!c.isolated&&$('use-astrology').checked?'\n\n'+NexusAstrology.reflection(p().astrology,language==='fa',{historical:$('astro-historical').checked}):''),'guide'))}catch{status('failed')}};
 $('prepare').onclick=()=>prepare();$('regenerate').onclick=()=>{if(!$('regenerate').disabled)prepare(true)};$('consent').onchange=controls;$('stop').onclick=()=>{stop({refresh:false});render()};
 const officeReader=file=>/\.docx$/i.test(file.name)?NexusOfficeZip.readDocx:
  /\.pptx$/i.test(file.name)?NexusOfficeZip.readPptx:null;
@@ -913,7 +934,7 @@ $('message').addEventListener('paste',event=>{
 });
 $('attach-document').onchange=()=>{stop();renderChatAttachments()};
 $('clear-chat-files').onclick=()=>{if(busy)return;clearChatAttachments();stop()};
-for(const id of ['message','gateway','gateway-token','use-memory','use-sources','use-related-chats','use-astrology','astro-historical','sky-tone','study-mode'])$(id).addEventListener('input',stop);
+for(const id of ['message','gateway','gateway-token','use-memory','use-sources','use-related-chats','use-astrology','astro-historical','sky-tone','study-mode','source-answer'])$(id).addEventListener('input',stop);
 $('send-model').onclick=async()=>{
  if(!pending||!$('consent').checked||busy||(!privacyPanel.hidden&&!privacyAck.checked))return;
  // A reviewed gateway attempt can consume local budget even on failure;
@@ -936,7 +957,7 @@ $('send-model').onclick=async()=>{
     headers:{'content-type':'application/json','authorization':'Bearer '+$('gateway-token').value},
     body:JSON.stringify(request.body),signal:abort.signal});
    out=request.stream?await streamedAnswer(response,delta=>{
-    if(!current())return;
+    if(!current()||request.sourceAnswer)return;
     const preview=$('model-stream-preview');
     $('model-stream-text').append(delta);
     if(preview.hidden){preview.hidden=false;preview.scrollIntoView({block:'nearest'})}
@@ -958,12 +979,16 @@ $('send-model').onclick=async()=>{
   const draftReview=NexusReplyFormat.reviewDraft(out.text,{truncated:Boolean(out.truncated)});
   if(draftReview.findings.includes('empty_answer'))throw Error('empty-response');
   const references=NexusReplyFormat.auditReferenceMarkers(out.text,request.referenceMarkers);
+  const insufficient=request.sourceAnswer&&out.text.trim()==='NXS_INSUFFICIENT_EVIDENCE';
+  if(request.sourceAnswer&&(out.truncated||(!insufficient&&references.status!=='matched_markers')))
+   return status('sourceAnswerRejected');
+  const answer=insufficient?t('sourceAnswerInsufficient'):out.text;
   busy=false;
   const label=request.destination==='device'?'[On-device draft · SmolLM2-135M · English / limited]\n\n':'';
-  const installed=installThread(S.append(request.thread,'assistant',label+out.text,'model',
+  const installed=installThread(S.append(request.thread,'assistant',label+answer,'model',
    undefined,[],receipt));
-  if(installed)mountEvidenceReview(out.text,request.evidencePassages);
-  if(installed&&(draftReview.findings.length||references.status!=='no_supplied_refs')){
+  if(installed&&!insufficient)mountEvidenceReview(answer,request.evidencePassages);
+  if(installed&&!insufficient&&(draftReview.findings.length||references.status!=='no_supplied_refs')){
    const warnings={length_limit:['The response reached its length limit.','پاسخ به سقف طول رسیده است.'],control_characters:['Unusual control characters.','نویسه‌های کنترلی غیرمعمول.'],unclosed_code_fence:['Unclosed code block.','بلوک کد بسته نشده.'],repeated_paragraph:['Repeated paragraph.','پاراگراف تکراری.'],review_limit:['Structural review size limit.','محدودیت حجم بازبینی ساختاری.']};
    const refStatus={unknown_markers:['Unknown request reference markers: ','شناسه ارجاع ناشناخته: '],matched_markers:['Matching request reference markers: ','شناسه ارجاع مطابق درخواست: '],no_markers:['Supplied passages have no explicit reference markers in this answer.','برای گزیده‌های ارسالی شناسه ارجاع صریح در پاسخ نیست.'],limit:['Reference scan limit.','سقف بازبینی ارجاع.']};
    const notes=draftReview.findings.map(k=>warnings[k]?.[language==='fa'?1:0]).filter(Boolean);
@@ -1171,7 +1196,7 @@ $('language-file').onchange=async event=>{
  if(!f||busy)return;if(f.size>NexusLocales.MAX_BYTES)return status('failed');
  const current=()=>task===languageImport&&rev===revision&&!busy;
  try{
-  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:[...Object.keys(PRIVACY_EN),...Object.keys(CHAT_CONTEXT_EN),'storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchAll','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed','routeMismatch',...Object.keys(EN).filter(key=>key.startsWith('gateway')),...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
+  const raw=await f.text();if(!current())return;const pack=localePacks.install(raw,EN,{retiredKeys:['decisionMode','decisionHelp'],optionalKeys:[...Object.keys(PRIVACY_EN),...Object.keys(CHAT_CONTEXT_EN),...Object.keys(SOURCE_ANSWER_EN),'storageTools','storageToolsDraft','storageToolsNone','studyMode','researchBoth','researchAll','researchPartial','researchPick','researchBrief','researchBriefChat','researchBriefExport','researchQueries','researchPlanConsent','researchProgress','researchTimeLimit','researchCardQueries','researchInvalidPlan','streamPreview','streamFailed','routeMismatch',...Object.keys(EN).filter(key=>key.startsWith('gateway')),...Object.keys(EN).filter(key=>key.startsWith('reminder')||key.startsWith('chatCopy')||key.startsWith('chatExport')||key.startsWith('chatPaste'))]});
   if(!$('language').querySelector('option[value="'+pack.code+'"]'))$('language').append(option(pack.code,pack.code));
   language=pack.code;$('language').value=pack.code;stop();applyLanguage();
  }catch{if(current())status('failed')}
