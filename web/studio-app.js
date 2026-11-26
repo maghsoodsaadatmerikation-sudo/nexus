@@ -74,6 +74,13 @@ const SOURCE_ANSWER_EN={
  sourceAnswerIncompatible:'Answer from sources needs a connected model in a regular conversation with Study mode off.',
  sourceAnswerRejected:'The model reply did not pass the reference check. Your draft is still here.',
  sourceAnswerInsufficient:'The model could not answer this question from the supplied passages.',
+ decisionPanel:'Decision support',
+ decisionOptions:'Options (2–5, one per line)',
+ decisionPriorities:'Priorities (1–4, most important first)',
+ decisionCompare:'Prepare option comparison',
+ decisionStress:'Prepare assumption test',
+ decisionInvalid:'Enter 2–5 distinct options and 1–4 distinct priorities. Keep each line under 160 characters.',
+ decisionLong:'Shorten the message to make room for the decision brief.',
  canvasReview:'Review selection',
  canvasCompare:'Explain version changes',
  canvasExcerptLimit:'Select up to 1,600 characters, or choose versions with a smaller changed section.',
@@ -107,6 +114,13 @@ Object.assign(FA,{
  sourceAnswerIncompatible:'پاسخ با استناد به مدل متصل و گفتگوی عادی نیاز دارد. حالت مطالعه را خاموش کن.',
  sourceAnswerRejected:'ارجاع‌های پاسخ مدل از بررسی عبور نکردند. پیش‌نویس پیام تو همچنان در دسترس است.',
  sourceAnswerInsufficient:'مدل نتوانست از گزیده‌های ارسالی به این پرسش پاسخ بدهد.',
+ decisionPanel:'کمک به تصمیم‌گیری',
+ decisionOptions:'گزینه‌ها (۲ تا ۵، هر کدام در یک خط)',
+ decisionPriorities:'اولویت‌ها (۱ تا ۴، مهم‌ترین در ابتدا)',
+ decisionCompare:'آماده‌کردن مقایسه',
+ decisionStress:'آماده‌کردن آزمون فرض‌ها',
+ decisionInvalid:'۲ تا ۵ گزینه و ۱ تا ۴ اولویت متفاوت وارد کن. هر خط حداکثر ۱۶۰ نویسه باشد.',
+ decisionLong:'پیام را کوتاه‌تر کن تا متن تصمیم جا بگیرد.',
  canvasReview:'بازبینی متن انتخابی',
  canvasCompare:'توضیح تغییرات نسخه',
  canvasExcerptLimit:'تا ۱۶۰۰ نویسه انتخاب کن یا دو نسخه با بخش تغییرکردهٔ کوتاه‌تر برگزین.',
@@ -503,6 +517,8 @@ function controls(){
  $('training-download').disabled=busy;
 
  $('study-mode').disabled=busy||Boolean(chat()?.archived);
+ for(const id of ['decision-options','decision-priorities','decision-compare','decision-stress'])
+  $(id).disabled=busy||Boolean(pending||chat()?.archived);
  $('canvas-chat').disabled=busy||!p()||Boolean(chat()?.archived||chat()?.isolated)||!$('editor').value.trim();
  $('canvas-review').disabled=$('canvas-chat').disabled;
  $('canvas-compare').disabled=busy||!doc()?.versions.at(-1)||$('versions').value===doc().versions.at(-1).id;
@@ -746,12 +762,31 @@ function render(){
  $('source-list').replaceChildren();for(const s of p()?.sources||[]){const row=el('div',s.name+' · '+s.text.length);const b=el('button','×');b.disabled=busy;b.setAttribute('aria-label',language==='fa'?'حذف منبع':'Remove source');b.onclick=()=>mutate(v=>{const q=projectIn(v);q.sources=q.sources.filter(x=>x.id!==s.id)},{undoable:true});row.append(b);$('source-list').append(row)}
  $('documents').replaceChildren(...(p()?.documents||[]).map(d=>option(d.id,d.title)));$('documents').value=documentId||'';window.NexusLabUI?.render();window.NexusAstrologyUI?.render();window.NexusQualityUI?.render();renderChatAttachments();controls();
 }
-function hasChatDraft(){return Boolean($('message').value||attachmentLoading||chatAttachments.length||$('attach-document').checked||window.NexusStudioVision?.hasTransientWork?.()===true)}
+function hasChatDraft(){return Boolean($('message').value||$('decision-options').value||$('decision-priorities').value||attachmentLoading||chatAttachments.length||$('attach-document').checked||window.NexusStudioVision?.hasTransientWork?.()===true)}
 function mayReplaceChat(){return !hasChatDraft()||confirm(t('discard'))}
 function mayReplace(){return (!forms()&&!hasChatDraft()&&!hasToolWork())||confirm(t('discard'))}
-function clearChatDraft(){
+function clearChatDraft({keepDecision=false}={}){
  clearChatAttachments();$('message').value='';branchBase=undefined;$('branch-notice').textContent='';
+ if(!keepDecision)clearDecisionForm();
 }
+function clearDecisionForm(){
+ $('decision-options').value='';$('decision-priorities').value='';
+ $('decision-panel').open=false;$('decision-status').textContent='';
+}
+function prepareDecisionDraft(mode){
+ if(busy||pending||chat()?.archived)return;
+ const message=$('message');
+ try{
+  const draft=S.decisionDraft({question:message.value,options:$('decision-options').value,
+   priorities:$('decision-priorities').value,mode,fa:language==='fa'});
+  clearDecisionForm();message.value=draft;stop();message.focus();
+ }catch(error){$('decision-status').textContent=t(error?.message==='decision-capacity'?'decisionLong':'decisionInvalid')}
+}
+$('decision-compare').onclick=()=>prepareDecisionDraft('compare');
+$('decision-stress').onclick=()=>prepareDecisionDraft('stress');
+for(const id of ['decision-options','decision-priorities'])$(id).addEventListener('input',()=>{
+ $('decision-status').textContent='';renderStorage();
+});
 function selectDocument(id){
  documentId=id;editorDirty=false;$('attach-document').checked=false;fillDoc();
 }
@@ -858,7 +893,7 @@ function startConversation(fresh=false,{isolated=false}={}){
 function noForms(){if(forms()||hasChatDraft()){status('needApply');return false}return true}
 function candidate(regenerate=false,materials=[]){const c=chat();if(!c||!p()||c.archived)throw Error('select-chat');if(regenerate){const path=S.path(c),last=path.at(-1);if(last?.role!=='assistant')throw Error('no-answer');if(path.at(-2)?.attached_files?.length)throw Error('reattach-required');return {...S.copy(c),head:last.parent}}return S.append(c,'user',$('message').value.trim(),'human',branchBase===undefined?c.head:branchBase,materials.map(x=>x.name))}
 function installThread(next){
- const installed=mutate(v=>{const q=projectIn(v);q.threads[q.threads.findIndex(x=>x.id===next.id)]=next},{afterCommit:clearChatDraft});
+ const installed=mutate(v=>{const q=projectIn(v);q.threads[q.threads.findIndex(x=>x.id===next.id)]=next},{afterCommit:()=>clearChatDraft({keepDecision:true})});
  if(installed&&$('auto-speak').checked&&!document.hidden){
   const reply=$('messages').lastElementChild;
   const trigger=reply?.querySelector('[data-chat-speak]');

@@ -347,6 +347,31 @@ function asksForChoice(input){
   || /تصمیم بگیر|انتخاب کنم|کدام گزینه|مزایا و معایب|چ(?:ه )?کار کنم|^(?:بهتره|بهتر است).+ یا /.test(text)
   || (/[?؟]$/.test(text)&&/\s(?:or|یا)\s/.test(text)));
 }
+function decisionDraft({question='',options,priorities,mode,fa=false}){
+ const list=(value,min,max)=>{
+  const items=text(value,1000).split(/\r\n?|\n/u).map(item=>item.trim()).filter(Boolean);
+  const unique=new Set(items.map(item=>normalized(item).replace(/\s+/gu,' ')));
+  if(items.length<min||items.length>max||items.some(item=>item.length>160)||unique.size!==items.length)
+   fail('decision-items');
+  return items.map((item,i)=>(i+1)+'. '+item).join('\n');
+ };
+ const choices=list(options,2,5),criteria=list(priorities,1,4);
+ if(!['compare','stress'].includes(mode))fail('decision-mode');
+ const comparison=fa
+  ?'همهٔ گزینه‌ها را در یک جدول بر اساس اولویت‌های من مقایسه کن. محدودیت‌ها، مزایا و بده‌بستان‌ها را توضیح بده و یک گام برگشت‌پذیر پیشنهاد کن.'
+  :'Compare all options in a table against my priorities. Explain constraints, benefits and tradeoffs, and suggest a reversible next step.';
+ const stress=fa
+  ?'بگو کدام فرض یا مشاهدهٔ تازه می‌تواند ترتیب گزینه‌ها را عوض کند. دست‌کم دو وضعیت متفاوت را بسنج و راه کم‌هزینه‌ای برای آزمودن یک فرض پیشنهاد کن.'
+  :'Identify an assumption or new observation that could reverse the ranking. Compare at least two scenarios and suggest one low-cost way to test a key assumption.';
+ const limits=fa
+  ?'داده‌های من را از فرض‌ها جدا کن. امتیاز، احتمال یا آستانهٔ عددی بی‌پشتوانه نساز. انتخاب نهایی با من است.'
+  :'Separate supplied facts from assumptions. Do not invent scores, probabilities or numeric thresholds. The decision is mine.';
+ const section=(fa?'گزینه‌ها:\n':'Options:\n')+choices+'\n\n'+
+  (fa?'اولویت‌ها به ترتیب اهمیت:\n':'Priorities in order:\n')+criteria;
+ const draft=[text(question,12000),section,mode==='compare'?comparison:stress,limits].filter(Boolean).join('\n\n');
+ if(draft.length>12000)fail('decision-capacity');
+ return draft;
+}
 function guide(input,fa=false,{skyTone=true,now=Date.now(),study=false}={}){
  if(study){
   const topic=input.slice(0,160);
@@ -453,5 +478,5 @@ class Vault{
   check();if(signal?.aborted)Object.assign(this,{key:null,salt:null,raw:null,data:null});else this.lock();
  },{signal})}
 }
-root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,retainHistory,empty,project,thread,readSources,path,append,context,search,retrieve,inspectSecrets,guide,asksForChoice,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid,reviewStoredExperienceRemoval});
+root.NexusStudio=Object.freeze({SCHEMA,MAX,MAX_SOURCES,MAX_SOURCE_BYTES,MAX_CHAT_ATTACHMENTS,state,retainHistory,empty,project,thread,readSources,path,append,context,search,retrieve,inspectSecrets,guide,decisionDraft,asksForChoice,Vault,IndexedStore,UndoSlot,normalized,decrypt,copy,uid,reviewStoredExperienceRemoval});
 })(globalThis);
