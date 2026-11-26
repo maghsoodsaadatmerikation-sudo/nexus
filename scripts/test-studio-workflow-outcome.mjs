@@ -48,6 +48,33 @@ function testOutcome(evaluate){
  reject(()=>evaluate(scoped,criteria,[good[0]],on),'observation-scope-mismatch');
  reject(()=>evaluate(scope,criteria,[scopedReceipt],on),'observation-scope-mismatch');
  for(const invalid of [null,'','bad workflow',42])reject(()=>evaluate({...scope,workflow_id:invalid},criteria,[],on),'invalid-scope');
+ const summary=x.evidence_coverage;
+ eq(summary.required,{criterion_count:2,reported_pass:2,reported_failure:0,conflicting_or_uncertain_pass:0,inconclusive:0,no_reports:0,only_nonmatching_reports:0,excluded_report_count:0});
+ eq(summary.optional.no_reports,1);
+ eq(summary.provenance_verified,false);eq(summary.confidence_calibrated,false);
+ const mixed=[obs('tests','e1','self_report','pass'),obs('approval','e2','human_review','inconclusive'),obs('optional','e3','independent_witness','fail')];
+ const mixedCoverage=evaluate(scope,criteria,mixed,on).evidence_coverage;
+ eq(mixedCoverage.required.only_nonmatching_reports,1);
+ eq(mixedCoverage.required.no_reports,0);
+ eq(mixedCoverage.required.inconclusive,1);
+ eq(mixedCoverage.required.excluded_report_count,1);
+ eq(mixedCoverage.optional.reported_failure,1);
+ const conflictAfterFail=[obs('tests','e1','automated_check','fail'),obs('approval','e2','human_review','pass'),obs('approval','e3','human_review','fail')];
+ const conflictResult=evaluate(scope,criteria,conflictAfterFail,on);
+ eq(conflictResult.evidence_coverage.required.conflicting_or_uncertain_pass,1);
+ eq(conflictResult.evidence_coverage.required.reported_failure,1);
+ eq(conflictResult.review_actions.map(a=>a.criterion_id),['approval','tests','optional']);
+ const optionalConflict=[obs('optional','e1','independent_witness','pass'),obs('optional','e2','independent_witness','fail')];
+ eq(evaluate(scope,criteria,optionalConflict,on).review_actions.map(a=>a.criterion_id),['tests','approval','optional']);
+ eq(evaluate(scope,criteria,[...good,obs('tests','e3','self_report','fail')],on).evidence_coverage.required.reported_pass,2);
+ eq(evaluate(scope,criteria,[...good,obs('tests','e3','self_report','fail')],on).evidence_coverage.required.excluded_report_count,1);
+ eq(evaluate(null,null,null).evidence_coverage,undefined);
+ eq(evaluate(null,null,null,{...on,isolated:true}).evidence_coverage,undefined);
+ eq(JSON.stringify(mixedCoverage).includes('e1'),false);
+ for(const group of [mixedCoverage.required,mixedCoverage.optional]){
+  const {criterion_count,excluded_report_count,...partitions}=group;
+  eq(Object.values(partitions).reduce((a,b)=>a+b,0),criterion_count);
+ }
  eq(good.length,2);return checks;
 }
 console.log('WORKFLOW OUTCOME: PASS ('+testOutcome(evaluateWorkflowOutcome)+' checks)');
