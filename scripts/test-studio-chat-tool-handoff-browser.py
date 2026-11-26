@@ -108,7 +108,7 @@ window.addEventListener('load',async()=>{
 
   // Real CSV parsing and group summaries can also become selected
   // next-turn context, without auto-registering a source file.
-  const csv='Group,Score\nA,1\nA,3\nB,2\n';
+  const csv='Group,Score,Record\nPRIVATE-A,1,ROW-ALPHA\nPRIVATE-A,3,ROW-BETA\nPRIVATE-B,2,ROW-GAMMA\n';
   file('data-file','local.csv',csv);$('data-run').click();
   await wait(()=>$('data-status').textContent.includes('Analysis ready'));
   fill('message','Explain these descriptive statistics');
@@ -122,6 +122,31 @@ window.addEventListener('load',async()=>{
   assert($('chat-attachment-tray').textContent.includes(EN.chatNoFiles),'explicit-clear-from-chat');
   assert($('request-review').hidden,'clear-revokes-previous-model-review');
   assert(NexusStudioCompose.mode()==='guide','clearing-handoff-restores-local-guide');
+  assert($('data-explain-metric').disabled&&$('data-explain-groups').disabled,'data-explanation-needs-a-numeric-selection');
+  $('data-metric').value='1';$('data-metric').dispatchEvent(new Event('change'));
+  fill('message','Keep my questions about Score');
+  const beforeDataExplanation=JSON.stringify(snapshot());
+  $('data-explain-metric').click();$('prepare').click();
+  assert(!$('request-review').hidden,'metric-explanation-has-a-request-preview');
+  const metricPreview=JSON.parse($('request-context').textContent),metricText=metricPreview.messages[0].content;
+  assert(metricPreview.response_style==='source_answer'&&
+   metricPreview.messages.at(-1).content==='Keep my questions about Score'&&
+   metricText.includes('local_descriptive_statistics')&&metricText.includes('mean')&&
+   !/ROW-ALPHA|PRIVATE-A|local\.csv/.test(metricText)&&providerCalls===2&&!$('consent').checked,
+   'metric-explanation-stages-only-selected-aggregates-and-preserves-draft');
+  $('clear-chat-files').click();fill('message','');
+  $('data-group').value='0';$('data-group').dispatchEvent(new Event('change'));
+  assert(!$('data-group-key').hidden&&$('data-group-key-text').textContent.includes('G1 · PRIVATE-A'),
+   'group-labels-are-available-on-device');
+  $('data-explain-groups').click();$('prepare').click();
+  assert(!$('request-review').hidden,'group-comparison-has-a-request-preview');
+  const groupPreview=JSON.parse($('request-context').textContent),groupText=groupPreview.messages[0].content;
+  assert(groupPreview.response_style==='source_answer'&&groupText.includes('local_descriptive_group_comparison')&&
+   groupText.includes('G1')&&groupText.includes('G2')&&groupText.includes('numeric_n')&&
+   !/PRIVATE-A|PRIVATE-B|ROW-ALPHA|local\.csv/.test(groupText)&&
+   JSON.stringify(snapshot())===beforeDataExplanation&&providerCalls===2,
+   'group-explanation-codes-labels-and-never-sends-or-stores-by-itself');
+  $('clear-chat-files').click();$('source-answer').click();
   const size=project().threads[0].nodes.length;
   fill('message','Different question');
   const rejected=NexusStudioUI.stageChatContext('Oversized','x'.repeat(131073));

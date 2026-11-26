@@ -74,9 +74,18 @@ const SOURCE_ANSWER_EN={
  sourceAnswerIncompatible:'Answer from sources needs a connected model in a regular conversation with Study mode off.',
  sourceAnswerRejected:'The model reply did not pass the reference check. Your draft is still here.',
  sourceAnswerInsufficient:'The model could not answer this question from the supplied passages.',
+ dataExplainMetric:'Explain this numeric column',
+ dataExplainGroups:'Compare these groups in chat',
+ dataExplainHelp:'Review selected statistics before sending. Group codes replace the original labels.',
+ dataGroupKey:'Group codes on this device',
+ dataUnknownGroup:'Missing group label',
+ dataMetricEvidence:'Local column statistics',
+ dataGroupEvidence:'Local group statistics',
+ dataMetricPrompt:'Explain these descriptive statistics. Discuss the typical value, spread and missing or invalid values. Cite the supplied statistics. Do not infer causes or claim conclusions beyond this dataset.',
+ dataGroupPrompt:'Compare the shown groups using these descriptive statistics. Consider the number of valid numeric rows and any omitted groups. Use the group codes as shown. Cite the supplied statistics and do not infer causes.',
  researchCompare:'Compare selected sources in chat',
  researchCompareHelp:'Select two to four sources to compare.',
- researchCompareBlocked:'Use a regular conversation with Study mode off and clear existing attachments before staging a source comparison.',
+ researchCompareBlocked:'Use a regular conversation with Study mode off and clear existing attachments before staging a source-based question.',
  researchComparePrompt:'Compare these sources in relation to my research question. Separate agreement, contradictions and gaps. Treat bibliographic metadata as metadata, and distinguish abstracts from full text. Cite each source you use.'
 };
 Object.assign(EN,SOURCE_ANSWER_EN);
@@ -92,9 +101,18 @@ Object.assign(FA,{
  sourceAnswerIncompatible:'پاسخ با استناد به مدل متصل و گفتگوی عادی نیاز دارد. حالت مطالعه را خاموش کن.',
  sourceAnswerRejected:'ارجاع‌های پاسخ مدل از بررسی عبور نکردند. پیش‌نویس پیام تو همچنان در دسترس است.',
  sourceAnswerInsufficient:'مدل نتوانست از گزیده‌های ارسالی به این پرسش پاسخ بدهد.',
+ dataExplainMetric:'توضیح این ستون عددی',
+ dataExplainGroups:'مقایسهٔ این گروه‌ها در گفتگو',
+ dataExplainHelp:'پیش از ارسال، آمار انتخابی را بازبینی کن. به‌جای نام اصلی گروه‌ها، کد فرستاده می‌شود.',
+ dataGroupKey:'راهنمای کد گروه‌ها در همین دستگاه',
+ dataUnknownGroup:'برچسب گروه خالی است',
+ dataMetricEvidence:'آمار محلی ستون',
+ dataGroupEvidence:'آمار محلی گروه‌ها',
+ dataMetricPrompt:'این آمار توصیفی را توضیح بده. مقدار معمول، پراکندگی و داده‌های خالی یا نامعتبر را بررسی کن. به آمار ارسالی ارجاع بده و دربارهٔ علت یا خارج از این مجموعه نتیجه‌گیری نکن.',
+ dataGroupPrompt:'گروه‌های نمایش‌داده‌شده را با این آمار توصیفی مقایسه کن. تعداد ردیف‌های عددی معتبر و گروه‌های حذف‌شده از گزارش را در نظر بگیر. همان کدهای گروه را به کار ببر، به آمار ارجاع بده و نتیجهٔ علّی نگیر.',
  researchCompare:'مقایسهٔ منابع انتخابی در گفتگو',
  researchCompareHelp:'برای مقایسه دو تا چهار منبع انتخاب کن.',
- researchCompareBlocked:'برای آماده‌کردن مقایسه، در گفتگوی عادی حالت مطالعه را خاموش کن و پیوست‌های فعلی را بردار.',
+ researchCompareBlocked:'برای آماده‌کردن سؤال با استناد، در گفتگوی عادی حالت مطالعه را خاموش کن و پیوست‌های فعلی را بردار.',
  researchComparePrompt:'این منابع را در ارتباط با پرسش پژوهشی من مقایسه کن. توافق‌ها، تناقض‌ها و خلأهای شواهد را جدا کن. اطلاعات کتاب‌شناختی را از یافته‌ها و چکیده را از متن کامل متمایز کن. به هر منبعی که استفاده می‌کنی ارجاع بده.'
 });
 Object.assign(EN,{
@@ -197,10 +215,13 @@ function stageChatAttachments(incoming,beforeRender=()=>{}){
 }
 // Research sends each selected source as a separate, reviewed attachment.
 function stageResearchComparison(sources,query){
- if(!Array.isArray(sources)||sources.length<2||sources.length>4||
+ if(!Array.isArray(sources)||sources.length<2||typeof query!=='string'||query.length>1003)return false;
+ return stageGroundedQuestion(sources,[query.trim(),t('researchComparePrompt')].filter(Boolean).join('\n\n'));
+}
+function stageGroundedQuestion(sources,prompt){
+ if(!sources.length||sources.length>4||
     sources.some(s=>!s||typeof s.name!=='string'||!s.name.trim()||s.name.length>160||
-     typeof s.text!=='string'||!s.text.trim()||s.text.length>1600)||
-    typeof query!=='string'||query.length>1003)return false;
+     typeof s.text!=='string'||!s.text.trim()||s.text.length>1600))return false;
  if(busy||attachmentLoading||chat()?.isolated||chat()?.archived||$('study-mode').checked||
     chatAttachments.length||$('attach-document').checked){
   status('researchCompareBlocked');return false;
@@ -208,7 +229,7 @@ function stageResearchComparison(sources,query){
  const incoming=sources.map(({name,text})=>({id:S.uid(),name,text}));
  return stageChatAttachments(incoming,()=>{
   $('source-answer').checked=true;
-  if(!$('message').value.trim())$('message').value=[query.trim(),t('researchComparePrompt')].filter(Boolean).join('\n\n');
+  if(!$('message').value.trim())$('message').value=prompt;
  });
 }
 function clearChatAttachments(){
