@@ -74,6 +74,12 @@ const SOURCE_ANSWER_EN={
  sourceAnswerIncompatible:'Answer from sources needs a connected model in a regular conversation with Study mode off.',
  sourceAnswerRejected:'The model reply did not pass the reference check. Your draft is still here.',
  sourceAnswerInsufficient:'The model could not answer this question from the supplied passages.',
+ canvasReview:'Review selection',
+ canvasCompare:'Explain version changes',
+ canvasExcerptLimit:'Select up to 1,600 characters, or choose versions with a smaller changed section.',
+ canvasSame:'These saved versions are identical.',
+ canvasReviewPrompt:'Review the selected text for clarity, coherence and missing support. Cite the excerpt and suggest edits.',
+ canvasComparePrompt:'Compare the earlier and later saved excerpts. Cite both, explain meaningful changes and identify anything lost.',
  dataExplainMetric:'Explain this numeric column',
  dataExplainGroups:'Compare these groups in chat',
  dataExplainHelp:'Review selected statistics before sending. Group codes replace the original labels.',
@@ -101,6 +107,12 @@ Object.assign(FA,{
  sourceAnswerIncompatible:'پاسخ با استناد به مدل متصل و گفتگوی عادی نیاز دارد. حالت مطالعه را خاموش کن.',
  sourceAnswerRejected:'ارجاع‌های پاسخ مدل از بررسی عبور نکردند. پیش‌نویس پیام تو همچنان در دسترس است.',
  sourceAnswerInsufficient:'مدل نتوانست از گزیده‌های ارسالی به این پرسش پاسخ بدهد.',
+ canvasReview:'بازبینی متن انتخابی',
+ canvasCompare:'توضیح تغییرات نسخه',
+ canvasExcerptLimit:'تا ۱۶۰۰ نویسه انتخاب کن یا دو نسخه با بخش تغییرکردهٔ کوتاه‌تر برگزین.',
+ canvasSame:'این دو نسخهٔ ذخیره‌شده یکسان‌اند.',
+ canvasReviewPrompt:'وضوح، انسجام و پشتوانهٔ متن انتخابی را بررسی کن. با ارجاع به گزیده، اصلاح پیشنهاد کن.',
+ canvasComparePrompt:'گزیده‌های ذخیره‌شدهٔ قدیم و جدید را مقایسه کن. به هر دو ارجاع بده و تغییرات مهم و بخش‌های ازدست‌رفته را نشان بده.',
  dataExplainMetric:'توضیح این ستون عددی',
  dataExplainGroups:'مقایسهٔ این گروه‌ها در گفتگو',
  dataExplainHelp:'پیش از ارسال، آمار انتخابی را بازبینی کن. به‌جای نام اصلی گروه‌ها، کد فرستاده می‌شود.',
@@ -226,7 +238,7 @@ function stageGroundedQuestion(sources,prompt){
     chatAttachments.length||$('attach-document').checked){
   status('researchCompareBlocked');return false;
  }
- const incoming=sources.map(({name,text})=>({id:S.uid(),name,text}));
+ const incoming=sources.map(({name,text})=>({id:S.uid(),name,text,whole:true}));
  return stageChatAttachments(incoming,()=>{
   $('source-answer').checked=true;
   if(!$('message').value.trim())$('message').value=prompt;
@@ -492,6 +504,8 @@ function controls(){
 
  $('study-mode').disabled=busy||Boolean(chat()?.archived);
  $('canvas-chat').disabled=busy||!p()||Boolean(chat()?.archived||chat()?.isolated)||!$('editor').value.trim();
+ $('canvas-review').disabled=$('canvas-chat').disabled;
+ $('canvas-compare').disabled=busy||!doc()?.versions.at(-1)||$('versions').value===doc().versions.at(-1).id;
  for(const id of ['new-project','delete-project','new-thread','rename-thread','archive-thread','delete-thread','guide','prepare','apply-profile','new-document','save-version','delete-document','projects','branch','documents','create-vault','unlock','save','backup','restore','erase','language-file'])$(id).disabled=busy;
  $('chat-file').disabled=busy||attachmentLoading||Boolean(chat()?.archived);
  $('clear-chat-files').disabled=busy||(!attachmentLoading&&!chatAttachments.length&&!$('attach-document').checked);
@@ -1256,7 +1270,7 @@ $('delete-document').onclick=()=>{
  mutate(v=>{const q=projectIn(v);q.documents=q.documents.filter(d=>d.id!==documentId)},
   {undoable:true,afterCommit:()=>selectDocument(null)});
 };
-$('versions').onchange=()=>{const a=doc()?.versions.find(x=>x.id===$('versions').value)?.text||'',b=doc()?.versions.at(-1)?.text||'';const left=a.split('\n'),right=b.split('\n');$('version-diff').textContent=Array.from({length:Math.max(left.length,right.length)},(_,i)=>left[i]===right[i]?null:(i+1)+':\n− '+(left[i]??'')+'\n+ '+(right[i]??'')).filter(Boolean).slice(0,200).join('\n')};
+$('versions').onchange=()=>{const a=doc()?.versions.find(x=>x.id===$('versions').value)?.text||'',b=doc()?.versions.at(-1)?.text||'';const left=a.split('\n'),right=b.split('\n');$('version-diff').textContent=Array.from({length:Math.max(left.length,right.length)},(_,i)=>left[i]===right[i]?null:(i+1)+':\n− '+(left[i]??'')+'\n+ '+(right[i]??'')).filter(Boolean).slice(0,200).join('\n');controls()};
 $('load-version').onclick=()=>{if(forms()&&!confirm(t('discard')))return;const v=doc()?.versions.find(x=>x.id===$('versions').value);if(v){$('editor').value=v.text;editorDirty=true;stop()}};
 $('export-document').onclick=()=>{if(doc()&&confirm(t('plain')))download($('editor').value,'nexus-document.md','text/markdown')};
 $('export-document-word').onclick=()=>{
@@ -1266,6 +1280,26 @@ $('canvas-chat').onclick=()=>{
  if($('canvas-chat').disabled)return;
  const label=doc()?t('canvasDraft')+' · '+doc().title:t('canvasDraft');
  stageChatContext(label.slice(0,160),$('editor').value);
+};
+$('canvas-review').onclick=()=>{
+ const editor=$('editor'),text=editor.value.slice(editor.selectionStart,editor.selectionEnd);
+ if(!text.trim()||text.length>1600)return status('canvasExcerptLimit');
+ stageGroundedQuestion([{name:t('canvasDraft'),text}],t('canvasReviewPrompt'));
+};
+$('canvas-compare').onclick=()=>{
+ const versions=doc()?.versions||[],index=versions.findIndex(v=>v.id===$('versions').value);
+ if(index<0||index===versions.length-1)return;
+ const old=versions[index].text.split('\n'),next=versions.at(-1).text.split('\n');
+ let from=0,left=old.length,right=next.length;
+ while(from<left&&from<right&&old[from]===next[from])from++;
+ if(from===left&&from===right)return status('canvasSame');
+ while(left>from&&right>from&&old[left-1]===next[right-1]){left--;right--}
+ const texts=[old.slice(from,left).join('\n'),next.slice(from,right).join('\n')];
+ if(texts.some(text=>text.length>1600))return status('canvasExcerptLimit');
+ stageGroundedQuestion(texts.map((text,i)=>({
+  name:(language==='fa'?'نسخه ':'Version ')+(i?versions.length:index+1)+' · '+(from+1),
+  text:text.trim()?text:(language==='fa'?'[بخش خالی]':'[Empty section]')
+ })),t('canvasComparePrompt'));
 };
 $('export-thread').onclick=()=>{if(chat()&&confirm(t('plain')))download('# '+chat().title+'\n\n'+S.path(chat()).map(n=>'## '+messageOriginLabel(n)+'\n\n'+n.text+(n.attached_files?.length?'\n\n'+t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' — '+t('chatFilesNotSaved'):'')).join('\n\n'),'nexus-conversation.md','text/markdown')};
 $('export-thread-html').onclick=()=>{

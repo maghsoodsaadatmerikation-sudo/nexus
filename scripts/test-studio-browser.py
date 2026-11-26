@@ -809,6 +809,36 @@ window.addEventListener('load',async()=>{
   fill('gateway-token','rotated-token');
   assert(!NexusStudioUI.modelAvailability().localReadiness,
    'changing-gateway-token-invalidates-readiness');
+  const draftSection='Selected line one.\nSelected line two.';
+  const privatePrefix='KEEP-OUT-BEGIN\n';
+  fill('editor',privatePrefix+draftSection+'\nKEEP-OUT-END');
+  fill('message','Review these selected lines');
+  $('editor').setSelectionRange(privatePrefix.length,privatePrefix.length+draftSection.length);
+  const beforeSelectedReview=JSON.stringify(snapshot());
+  $('canvas-review').click();$('prepare').click();
+  assert(!$('request-review').hidden,'document-selection-opens-reviewed-request');
+  const selectionReview=JSON.parse($('request-context').textContent);
+  assert(selectionReview.response_style==='source_answer'&&selectionReview.temporary_attachment_passages.length===1&&
+   selectionReview.messages[0].content.includes(JSON.stringify(draftSection))&&
+   !selectionReview.messages[0].content.includes('KEEP-OUT')&&
+   selectionReview.messages.at(-1).content==='Review these selected lines'&&
+   !$('consent').checked&&JSON.stringify(snapshot())===beforeSelectedReview&&forbiddenProviderRequests===0,
+   'document-selection-preserves-exact-multiline-excerpt-without-saving-or-sending');
+  $('clear-chat-files').click();fill('message','');
+  fill('editor','SAME-PREFIX\nOld paragraph\nSAME-SUFFIX');$('save-version').click();
+  const oldVersion=current().documents.find(d=>d.id===$('documents').value).versions.at(-1).id;
+  fill('editor','SAME-PREFIX\nNew paragraph\nInserted line\nSAME-SUFFIX');$('save-version').click();
+  fill('editor','UNSAVED-LOCAL-DRAFT');
+  change('versions',oldVersion);
+  const beforeVersionReview=JSON.stringify(snapshot());
+  $('canvas-compare').click();$('prepare').click();
+  assert(!$('request-review').hidden,'saved-version-comparison-opens-reviewed-request');
+  const versionReview=JSON.parse($('request-context').textContent),versionContext=versionReview.messages[0].content;
+  assert(versionReview.temporary_attachment_passages.length===2&&versionContext.includes('Old paragraph')&&
+   versionContext.includes(JSON.stringify('New paragraph\nInserted line'))&&
+   !/SAME-PREFIX|SAME-SUFFIX|UNSAVED-LOCAL-DRAFT/.test(versionContext)&&
+   $('editor').value==='UNSAVED-LOCAL-DRAFT'&&JSON.stringify(snapshot())===beforeVersionReview&&forbiddenProviderRequests===0,
+   'version-review-uses-only-changed-saved-passages-without-touching-editor');
 
   $('nexus-browser-result').textContent=JSON.stringify({status:'PASS',checks,width:innerWidth,real_model_tested:false,authority:'none'});
  }catch(e){$('nexus-browser-result').textContent=JSON.stringify({status:'FAIL',reason:e.message,checks})}
