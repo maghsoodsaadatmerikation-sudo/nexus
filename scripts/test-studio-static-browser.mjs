@@ -227,10 +227,15 @@ try{
  checks.push('first-chat-creates-local-project-and-thread-without-sending-or-losing-draft');
 
   assert(await js("Boolean(document.getElementById('nexus-zen-menu'))&&Boolean(document.getElementById('nexus-zen-home'))&&getComputedStyle(document.getElementById('studio-focus-nav')).display==='none'"),'zen-home-has-no-tab-clutter');
+  assert(await js("document.getElementById('nexus-zen-drawer').hidden&&!document.getElementById('nexus-zen-history').childElementCount"),'hidden-drawer-must-not-render-at-startup');
   await js("document.getElementById('nexus-zen-menu').click();true");
   assert(await js("!document.getElementById('nexus-zen-drawer').hidden&&document.activeElement.id==='nexus-zen-find'"),'zen-menu-not-accessible');
   await js("document.getElementById('nexus-zen-close').click();true");
   assert(await js("document.getElementById('nexus-zen-drawer').hidden"),'zen-menu-not-dismissible');
+  assert(await js("!document.getElementById('nexus-zen-history').childElementCount"),'closed-drawer-retains-previews');
+  assert(await js("(()=>{document.dispatchEvent(new Event('nexus-studio-state'));document.getElementById('nexus-zen-find').dispatchEvent(new Event('input'));return !document.getElementById('nexus-zen-history').childElementCount})()"),'hidden-drawer-rebuilt-by-events');
+  assert(await js("(()=>{const n=document.getElementById('nexus-zen-storage-indicator'),o=new MutationObserver(()=>{});o.observe(n,{subtree:true,childList:true,characterData:true,attributes:true});document.dispatchEvent(new Event('nexus-studio-state'));const ok=o.takeRecords().length===0;o.disconnect();return ok})()"),'unchanged-safety-indicator-rewritten');
+  checks.push('zen-history-on-demand-and-idempotent-safety-indicator');
   checks.push('zen-default-and-collapsible-history');
   await js("(()=>{const m=document.getElementById('message');m.value='/music cinematic instrumental';m.dispatchEvent(new Event('input'));document.getElementById('studio-compose-send').click();return true})()");
   assert(await js("!document.getElementById('nexus-zen-offer').hidden&&NexusStudioUI.snapshot().projects[0].threads[0].nodes.length===0"),'chat-routing-must-be-consent-first');
