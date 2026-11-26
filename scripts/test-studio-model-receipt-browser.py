@@ -23,11 +23,12 @@ window.addEventListener('load',async()=>{
  const rid='e'.repeat(64),model='reviewed-synthetic-route',
        legacyId='d'.repeat(64),legacyModel='legacy-synthetic-route',
        otherId='b'.repeat(64),otherModel='other-synthetic-route';
- let receiptCapable=true,replyCase='wrong-slot',calls=0,compareCatalog=false;
+ let receiptCapable=true,replyCase='wrong-slot',calls=0,compareCatalog=false,searchCalls=0;
  const requests=[];
  window.confirm=()=>true;
  window.fetch=async(url,options={})=>{
    const address=String(url);
+   if(address.startsWith('https://en.wikipedia.org/')){searchCalls++;throw Error('unexpected-search')}
    if(address.endsWith('/studio-api/status'))return Response.json({
     configured:true,configuration_id:receiptCapable?rid:legacyId,
     model:receiptCapable?model:legacyModel,provider_host:'review.invalid',
@@ -281,6 +282,24 @@ window.addEventListener('load',async()=>{
    assert(examined.messages[0].content.includes(JSON.stringify(first.text))&&
     examined.messages.at(-1).content.includes('old citation markers are not evidence')&&
     !$('consent').checked&&calls===16,'claim-followup-distinguishes-previous-model-text-from-evidence');
+   $('clear-chat-files').click();fill('message','');
+   followup.open=true;await wait(()=>area.value===first.text);
+   area.setSelectionRange(0,pickedText.length);
+   action('challenge').click();$('prepare').click();
+   const challenge=JSON.parse($('request-context').textContent);
+   assert(challenge.messages[0].content.includes(JSON.stringify(pickedText))&&
+    challenge.messages.at(-1).content.includes('strongest reasonable counterargument')&&
+    !$('consent').checked&&calls===16,'counterargument-uses-the-selected-text-and-separate-review');
+   $('clear-chat-files').click();fill('message','Existing chat draft');
+   followup.open=true;await wait(()=>area.value===first.text);
+   area.setSelectionRange(0,area.value.length);
+   fill('research-query','Earlier research question');
+   action('research').click();
+   assert($('research-query').value==='Earlier research question','source-search-preserves-existing-research-query');
+   fill('research-query','');action('research').click();
+   assert($('research-query').value===pickedText&&NexusStudioFocus.active()==='research-card'&&
+    !$('research-consent').checked&&searchCalls===0&&$('message').value==='Existing chat draft'&&calls===16,
+    'source-search-stages-editable-query-without-old-citation-or-network');
    $('nexus-browser-result').textContent=JSON.stringify({
       status:'PASS',checks,width:innerWidth,provider_requests:0,authority:'none'});
  }catch(error){

@@ -621,6 +621,13 @@ function renderMessage(n){
    return stageChatAttachments([{id:S.uid(),name,text,whole:true}],()=>{
     $('source-answer').checked=false;$('message').value=prompt;
    });
+  },query=>{
+   const input=$('research-query');
+   if(!item.isConnected||busy||pending||(input.value.trim()&&input.value.trim()!==query))return false;
+   stop();
+   if(input.value!==query){input.value=query;input.dispatchEvent(new Event('input',{bubbles:true}))}
+   window.NexusStudioFocus?.openPanel('research-card');input.focus();
+   return true;
   });
  if(n.role==='user'){
   if(n.attached_files?.length)item.append(el('small',t('chatAttachedUsed')+' '+n.attached_files.join(', ')+' · '+t('chatFilesNotSaved')));

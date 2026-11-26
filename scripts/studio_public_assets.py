@@ -39,7 +39,8 @@ ASTRONOMY_MODULE = "vendor/astronomy-2.1.19.min.js"
 HISTORICAL_LIVE_FILES = LEGACY_FILES + PDF_FILES
 ORCHESTRA_MODULE = "studio-orchestra.js"
 REPLY_MODULE = "studio-reply-format.js"
-FILES = HISTORICAL_LIVE_FILES + (ASTRONOMY_MODULE, ORCHESTRA_MODULE, REPLY_MODULE)
+CORE_MODULE = "studio-core.js"
+FILES = HISTORICAL_LIVE_FILES + (ASTRONOMY_MODULE, ORCHESTRA_MODULE, REPLY_MODULE, CORE_MODULE)
 
 def asset_limit(name):
     if name == 'pdf/pdf.worker.min.mjs':

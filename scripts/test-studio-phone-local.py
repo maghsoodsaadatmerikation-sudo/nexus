@@ -47,17 +47,18 @@ class StudioLocalTests(unittest.TestCase):
         self.assertTrue(kit.verify(self.zip, exact_commit=COMMIT))
         with zipfile.ZipFile(self.zip) as archive:
             names = archive.namelist()
-            self.assertEqual(len(names), 24)
+            self.assertEqual(len(names), 25)
             self.assertIn(kit.BUNDLE + '/vendor/astronomy-2.1.19.min.js', names)
             self.assertIn(kit.BUNDLE + '/studio-orchestra.js', names)
             self.assertIn(kit.BUNDLE + '/studio-reply-format.js', names)
+            self.assertIn(kit.BUNDLE + '/studio-core.js', names)
             self.assertEqual(
                 set(names),
                 {kit.BUNDLE + "/" + n for n in kit.SOURCE_NAMES + (kit.CHECK_NAME,
                     "run-local.py", "README.txt", "source-manifest.json")})
             receipt = json.loads(archive.read(kit.BUNDLE + "/source-manifest.json"))
             self.assertEqual(receipt["source_commit"], COMMIT)
-            self.assertEqual(len(receipt["assets"]), 21)
+            self.assertEqual(len(receipt["assets"]), 22)
             check = archive.read(kit.BUNDLE + "/" + kit.CHECK_NAME)
             self.assertIn(receipt["assets"]["index.html"]["sha256"].encode(), check)
             self.assertIn(receipt["assets"]["service-worker.js"]["sha256"].encode(), check)
@@ -148,7 +149,7 @@ class StudioLocalTests(unittest.TestCase):
         for name in ("/", "/index.html", "/manifest.json", "/service-worker.js",
                      "/device/device-ui.js", "/device/model-manifest.json",
                      "/icons/nexus-192.png", "/device-check.html",
-                     "/vendor/astronomy-2.1.19.min.js", "/studio-orchestra.js", "/studio-reply-format.js"):
+                     "/vendor/astronomy-2.1.19.min.js", "/studio-orchestra.js", "/studio-reply-format.js", "/studio-core.js"):
             with self.subTest(name=name):
                 url = f"http://127.0.0.1:{port}{name}"
                 with urllib.request.urlopen(url, timeout=3) as response:
