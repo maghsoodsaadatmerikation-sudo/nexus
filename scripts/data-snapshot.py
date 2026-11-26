@@ -23,6 +23,7 @@ import tempfile
 SCHEMA = "nexus.data-snapshot.v1"
 MAX_BYTES = 64 * 1024 * 1024
 MAX_FILES = 20_000
+MAX_JSON_DEPTH = 128
 RECOVERY_MARKER = ".nexus-recovery-required"
 RECOVERY_BYTES = b"snapshot-restored; replay-risk-not-acknowledged\n"
 
@@ -54,14 +55,24 @@ def finite_json_float(value):
     return number
 
 
+def validate_json_depth(value, depth=0):
+    if isinstance(value, (dict, list)):
+        require(depth < MAX_JSON_DEPTH, "JSON nesting exceeds limit")
+        children = value.values() if isinstance(value, dict) else value
+        for child in children:
+            validate_json_depth(child, depth + 1)
+
+
 def strict_json(data):
-    """Reject nonstandard constants, float overflow and parser recursion."""
+    """Reject nonstandard constants, float overflow and excessive nesting."""
     try:
-        return json.loads(data, object_pairs_hook=unique_object,
-                          parse_constant=reject_json_constant,
-                          parse_float=finite_json_float)
+        result = json.loads(data, object_pairs_hook=unique_object,
+                            parse_constant=reject_json_constant,
+                            parse_float=finite_json_float)
+        validate_json_depth(result)
+        return result
     except RecursionError:
-        raise SnapshotError("JSON nesting exceeds parser limit") from None
+        raise SnapshotError("JSON nesting exceeds limit") from None
 
 
 def validate_file(name, data):
