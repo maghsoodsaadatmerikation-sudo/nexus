@@ -224,9 +224,15 @@ function checkAnswerReviewContext(path,messages){
 function auditReferenceMarkers(text,refs){
  if(typeof text!=='string'||!Array.isArray(refs)||refs.length>30||refs.some(x=>typeof x!=='string'||!/^[SA][1-9]\d?$/.test(x))||new Set(refs).size!==refs.length)throw Error('invalid-reference-audit');
  const allowed=new Set(refs),matched=new Set(),unknown=new Set();
- if(text.length>100000)return {status:'limit',matched:[],unknown:[],facts_verified:false};
- for(const m of text.matchAll(/\[NXS:([SA][1-9]\d?)\]/g))(allowed.has(m[1])?matched:unknown).add(m[1]);
- return {status:unknown.size?'unknown_markers':matched.size?'matched_markers':refs.length?'no_markers':'no_supplied_refs',matched:[...matched],unknown:[...unknown],facts_verified:false};
+ let malformed_count=0;
+ if(text.length>100000)return {status:'limit',matched:[],unknown:[],malformed_count,facts_verified:false};
+ // Bounded lookahead; never echo the malformed payload.
+ for(const m of text.matchAll(/\[NXS\s*:/gi)){
+  const valid=/^\[NXS:([SA][1-9]\d?)\]/.exec(text.slice(m.index,m.index+12));
+  if(!valid){malformed_count++;continue}
+  (allowed.has(valid[1])?matched:unknown).add(valid[1]);
+ }
+ return {status:unknown.size?'unknown_markers':malformed_count?'malformed_markers':matched.size?'matched_markers':refs.length?'no_markers':'no_supplied_refs',matched:[...matched],unknown:[...unknown],malformed_count,facts_verified:false};
 }
 
 const exportStyle = `
