@@ -54,4 +54,16 @@ assert.throws(()=>compare({...ratings,extra:'better'}),/invalid-answer-ratings/)
 assert.throws(()=>compare({...ratings,coverage:'verified'}),/invalid-answer-ratings/);
 assert.throws(()=>compare(ratings,pair.slice(1)),/invalid-answer-comparison/);
 assert.equal(JSON.stringify(compare()).includes('Original answer'),false);
-console.log('ANSWER REVIEW CONTEXT & COMPARISON: PASS (65 checks)');
+const feedback=(note,r=ratings,p=pair,confirmed=true)=>R.prepareAnswerFeedback(p,r,note,{candidateConfirmed:confirmed});
+assert.equal(feedback('  Prefer concise replies.  ').note,'Prefer concise replies.');
+assert.equal(feedback('Use headings.').status,'draft_only');
+assert.equal(feedback('Use headings.',{...ratings,accuracy:'worse'}).status,'draft_only');
+for(const k of ['automatic_learning','storage_authorized','model_context_authorized'])assert.equal(feedback('Use headings.')[k],false);
+assert.equal(JSON.stringify(feedback('Use headings.')).includes('Original answer'),false);
+for(const bad of ['',null,'a'.repeat(501),'a\nb','a\u0000b','a\u2028b'])assert.throws(()=>feedback(bad),/invalid-feedback-note/);
+assert.throws(()=>feedback('Note',{...ratings,accuracy:'unknown'}),/feedback-review-incomplete/);
+assert.throws(()=>feedback('Note',{...ratings,accuracy:'worse',clarity:'unknown'}),/feedback-review-incomplete/);
+assert.throws(()=>feedback('Note',ratings,pair,false),/feedback-review-incomplete/);
+assert.throws(()=>feedback('Note',ratings,[...pair.slice(0,3),{...pair[3],text:pair[1].text}]),/feedback-review-incomplete/);
+assert.throws(()=>feedback('Note',ratings,pair.slice(1)),/invalid-answer-comparison/);
+console.log('ANSWER REVIEW CONTEXT, COMPARISON & FEEDBACK: PASS (83 checks)');
