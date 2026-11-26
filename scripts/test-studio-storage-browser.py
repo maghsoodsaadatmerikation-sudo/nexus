@@ -152,6 +152,56 @@ window.addEventListener('load',async()=>{
   assert(JSON.stringify(NexusStudioUI.snapshot())===comparisonBefore&&await store.read()===comparisonCipher,'comparison-no-mutation');
   assert(compareChatExperienceReports(selectedReports,recallContext,recallArgs,comparison,scenario).status==='unavailable','comparison-rejects-stale-context');
 
+  // Exercise the actual chat controls in the unlocked browser, not only host functions.
+  const uiDraft='/plan\n/code\n/write';
+  const uiCriteria=['UI criterion one','UI criterion two'];
+  const uiHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([uiDraft,uiCriteria])))),b=>b.toString(16).padStart(2,'0')).join('');
+  const uiRounds=[1,2,3,4].map(round=>({round,steps:recallSteps.map((s,i)=>({...s,command:i?'write':'code',criterion:uiCriteria[i],verdict:i===0&&round%2?'fail':'pass'}))}));
+  const uiReport=(code,session)=>experienceImportEngine.buildChatExperienceReport(uiRounds,{project_id:project.id,plan_sha256:uiHash,session_id:session,correction_code:code,criterion_id:'s1',kind:'accept',same_correction_reported:true,complete_relevant_history_reported:true},{enabled:true}).report;
+  const uiA=uiReport('ui_fixture_a','ui-history-a'),uiB=uiReport('ui_fixture_b','ui-history-b');
+  assert(uiA&&uiB&&applyChatExperienceReport(uiA,NexusStudioUI.selection())==='applied'&&applyChatExperienceReport(uiB,NexusStudioUI.selection())==='applied','chat-ui-historical-fixtures-retained');
+  $('studio-compose-mode').value='guide';$('studio-compose-mode').dispatchEvent(new Event('change',{bubbles:true}));
+  fill('message',uiDraft);$('studio-compose-send').click();
+  const workflow=$('studio-chat-workflow');
+  for(let i=0;i<2;i++){
+   const criterion=workflow.querySelector('[data-central-criterion="'+i+'"]');
+   criterion.value=uiCriteria[i];criterion.dispatchEvent(new Event('input',{bubbles:true}));
+   workflow.querySelector('li:nth-child('+(i+1)+') button').click();
+   const verdict=workflow.querySelector('[data-central-verdict="'+i+'"]');
+   assert(!verdict.disabled,'chat-ui-opened-step-assessable-'+i);
+   verdict.value=i?'pass':'fail';verdict.dispatchEvent(new Event('change',{bubbles:true}));
+   workflow.querySelectorAll('li button')[1].click();
+  }
+  const recallInput=workflow.querySelector('[data-chat-recall-file]'),compareInput=workflow.querySelector('[data-chat-compare-files]');
+  assert(recallInput&&!recallInput.disabled&&compareInput&&!compareInput.disabled,'chat-ui-completed-failure-enables-review');
+  recallInput.closest('details').open=true;
+  compareInput.closest('details').open=true;
+  await new Promise(r=>setTimeout(r,0));
+  const chooseReports=(input,reports)=>{const dt=new DataTransfer();reports.forEach((r,i)=>dt.items.add(new File([JSON.stringify(r)],'report-'+i+'.json',{type:'application/json'})));input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}))};
+  const uiBefore=JSON.stringify(NexusStudioUI.snapshot()),uiCipher=await store.read();
+  let uiConsents=0;window.confirm=()=>{uiConsents++;return false};
+  chooseReports(recallInput,[uiA]);
+  assert(uiConsents===1&&!workflow.querySelector('[data-chat-recall-result]').textContent,'chat-ui-declined-recall-no-result');
+  window.confirm=()=>{uiConsents++;return true};
+  chooseReports(recallInput,[uiA]);
+  await wait(()=>workflow.querySelector('[data-chat-recall-result]').textContent.includes('ui_fixture_a'));
+  assert(workflow.querySelector('[data-chat-recall-result]').textContent.includes('Nothing applied.'),'chat-ui-recall-discloses-advisory-boundary');
+  chooseReports(compareInput,[uiA,uiA]);
+  await wait(()=>workflow.querySelector('[data-chat-compare-result]').textContent.includes('Reports rejected'));
+  assert(!workflow.querySelector('[data-chat-compare-run]'),'chat-ui-duplicate-corrections-rejected');
+  chooseReports(compareInput,[uiA,uiB]);
+  await wait(()=>!!workflow.querySelector('[data-chat-compare-run]'));
+  const estimates=compareInput.closest('details').querySelectorAll('input[type="number"]');
+  estimates[0].value='100';estimates[1].value='60';
+  workflow.querySelector('[data-chat-compare-run]').click();
+  assert(workflow.querySelector('[data-chat-compare-result]').textContent.includes('Comparison withheld'),'chat-ui-unobserved-tool-steps-withhold-comparison');
+  assert(JSON.stringify(NexusStudioUI.snapshot())===uiBefore&&await store.read()===uiCipher&&!$('code-consent').checked,'chat-ui-review-no-storage-or-code-authority');
+  const changedCriterion=workflow.querySelector('[data-central-criterion="0"]');
+  changedCriterion.value='Changed UI criterion';changedCriterion.dispatchEvent(new Event('input',{bubbles:true}));
+  assert(recallInput.disabled&&compareInput.disabled&&!workflow.querySelector('[data-chat-recall-result]').textContent&&!workflow.querySelector('[data-chat-compare-run]'),'chat-ui-criterion-change-revokes-recall-and-comparison');
+  fill('message','');assert(workflow.hidden,'chat-ui-draft-clear-removes-review');
+  window.confirm=()=>true;
+ 
   $('history-days').value='0';$('history-days').dispatchEvent(new Event('change',{bubbles:true}));
   $('save').click();await wait(()=>$('status').textContent.includes('encrypted data')&&!$('save').disabled);
   const off=(await S.decrypt(await store.read(),pass)).data;
