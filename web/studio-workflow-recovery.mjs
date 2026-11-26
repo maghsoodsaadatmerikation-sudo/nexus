@@ -32,8 +32,10 @@ export function reviewWorkflowRecovery(steps,observations,{enabled=false,isolate
   let disposition;
   if(observed==='succeeded')disposition=unresolved.length?'inconsistent_observation':'reported_success';
   else if(observed==='running'||observed==='unknown')disposition='reconcile_before_action';
-  else if(observed==='failed'||observed==='cancelled')disposition='review_retry';
+  // A failed or cancelled dependent may have been stopped before execution.
+  // Never suggest retry until its entire prerequisite chain reports consistent success.
   else if(unresolved.length)disposition='wait_for_dependencies';
+  else if(observed==='failed'||observed==='cancelled')disposition='review_retry';
   else if(observed==='blocked')disposition='review_blocked_state';
   else disposition='review_next_step';
   effective.set(id,disposition);

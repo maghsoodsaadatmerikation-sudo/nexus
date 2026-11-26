@@ -50,6 +50,20 @@ function testRecovery(review){
  eq(review(plan,[obs('right','running')],on).items[1].disposition,'reconcile_before_action');
  eq(review(plan,[],on).items.every(x=>x.disposition==='reconcile_before_action'),true);
  eq(review(plan,[obs('left','cancelled')],on).items[0].disposition,'review_retry');
+ // A failed or cancelled dependent is not a retry candidate until prerequisites succeed.
+ for(const status of ['failed','cancelled']){
+  const pending=review(plan,[obs('left','failed'),obs('right','succeeded'),obs('final',status)],on).items[2];
+  eq(pending.disposition,'wait_for_dependencies');eq(pending.unresolved_dependencies,['left']);
+  const ready=review(plan,[obs('left','succeeded'),obs('right','succeeded'),obs('final',status)],on).items[2];
+  eq(ready.disposition,'review_retry');eq(ready.unresolved_dependencies,[]);
+  const unknown=review(plan,[obs('final',status)],on).items[2];
+  eq(unknown.disposition,'wait_for_dependencies');eq(unknown.unresolved_dependencies,['left','right']);
+ }
+ const chain=[{id:'a',needs:[]},{id:'b',needs:['a']},{id:'c',needs:['b']}];
+ const inconsistent=review(chain,[obs('a','failed'),obs('b','succeeded'),obs('c','cancelled')],on);
+ eq(inconsistent.items.map(x=>x.disposition),['review_retry','inconsistent_observation','wait_for_dependencies']);
+ eq(inconsistent.execution_authorized,false);
+
  eq(review(plan,[obs('left','blocked')],on).items[0].disposition,'review_blocked_state');
  eq(review(null,null).status,'off');eq(review(null,null,{enabled:true,isolated:true}).status,'isolated');
  eq(review([{id:'a',needs:[]},{id:'b',needs:['a']},{id:'c',needs:['b']}],[obs('a','failed'),obs('b','succeeded'),obs('c','queued')],on).items.map(x=>x.disposition),['review_retry','inconsistent_observation','wait_for_dependencies']);
