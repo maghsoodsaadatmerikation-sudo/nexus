@@ -376,6 +376,56 @@ class SnapshotTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 snapshot.restore(self.archive, self.target)
 
+    def test_nonfinite_workspace_json_is_blocked_in_backup_and_restore(self):
+        document = self.capture()
+        archive_before = self.archive.read_bytes()
+        for token in ("NaN", "Infinity", "-Infinity", "1e9999", "-1e9999"):
+            with self.subTest(token=token):
+                data = ('{"schema_version":1,"workspace":{"id":"w"},'
+                        '"events":[],"metadata":' + token + '}').encode()
+                (self.source / "77.json").write_bytes(data)
+                output = self.root / "bad-backup.json"
+                with self.assertRaisesRegex(snapshot.SnapshotError, "non-finite"):
+                    snapshot.backup(self.source, output)
+                self.assertFalse(output.exists())
+                record = next(r for r in document["files"] if r["path"] == "77.json")
+                record.update(size=len(data), sha256=hashlib.sha256(data).hexdigest(),
+                              data=base64.b64encode(data).decode("ascii"))
+                self.archive.write_text(json.dumps(document))
+                before = self.archive.read_bytes()
+                for read in (snapshot.inspect_snapshot,
+                             lambda p: snapshot.restore(p, self.target)):
+                    with self.assertRaisesRegex(snapshot.SnapshotError, "non-finite"):
+                        read(self.archive)
+                self.assertEqual(self.archive.read_bytes(), before)
+                self.assertFalse(self.target.exists())
+                self.assertFalse(list(self.root.glob(".nexus-restore-*")))
+        self.archive.write_bytes(archive_before)
+
+    def test_finite_workspace_numbers_preserve_exact_bytes(self):
+        data = (b'{"schema_version":1,"workspace":{"id":"w"},'
+                b'"events":[],"metadata":[-1.25,2e3,0]}')
+        (self.source / "77.json").write_bytes(data)
+        self.capture()
+        snapshot.restore(self.archive, self.target)
+        self.assertEqual((self.target / "77.json").read_bytes(), data)
+
+    def test_deep_json_fails_without_traceback_or_restore_side_effects(self):
+        depth = sys.getrecursionlimit() + 100
+        nested = "[" * depth + "0" + "]" * depth
+        self.archive.write_text(nested)
+        for operation in ("inspect", "restore"):
+            command = [sys.executable, str(SCRIPT), operation, str(self.archive)]
+            if operation == "restore":
+                command += [str(self.target), "--offline"]
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertIn("BLOCKED (JSON nesting exceeds parser limit)", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertFalse(self.target.exists())
+            self.assertFalse(list(self.root.glob(".nexus-restore-*")))
+
     def test_duplicate_manifest_keys_are_rejected(self):
         self.archive.write_text('{"schema":"a","schema":"b"}')
         with self.assertRaises(ValueError):
