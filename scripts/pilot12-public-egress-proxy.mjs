@@ -21,6 +21,15 @@ export async function startProbeProxy() {
     socket.destroy();
   };
   const server = net.createServer(client => {
+    client.on('error', () => closeSocket(client));
+    // Chrome can open replacement proxy sockets after its tunnels are cut.
+    // Refuse them at admission: a pending inbound CONNECT is not restored
+    // external egress, and must not enter the active tunnel accounting.
+    if(!live) {
+      blocked++;
+      client.destroy();
+      return;
+    }
     sockets.add(client);
     let buf = Buffer.alloc(0);
     let accepted = false;
@@ -76,7 +85,6 @@ export async function startProbeProxy() {
       sockets.delete(client);
       if(upstream) closeSocket(upstream);
     });
-    client.on('error', () => closeSocket(client));
   });
   await new Promise((resolve, reject) => {
     server.once('error', reject);
