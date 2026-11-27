@@ -43,6 +43,7 @@ const offer=document.createElement('div');offer.id='nexus-zen-offer';offer.hidde
 // One reviewed discovery catalog: command, UI destination, languages, prompt field, aliases.
 // Listing a capability never proves model or provider availability or grants execution.
 const routes=Object.freeze([
+ ...($('device-model-card')?[['device','device-model-card','On-device AI','هوش مصنوعی روی دستگاه',null,'local-ai']]:[]),
  ['orchestra','orchestra-card','Orchestra & vocal','ارکستر و آواز','orchestra-prompt','vocal'],
  ['music','music-card','Music Lab','موسیقی',null,'song'],
  ['research','research-card','Research','پژوهش','research-query','search'],
@@ -61,8 +62,9 @@ const routes=Object.freeze([
  ['connections','studio-connections','Connections','اتصال‌ها',null,'connect'],
  ['tools','studio-tool-directory','Capabilities','قابلیت‌ها',null,'help capabilities']
 ].map(row=>Object.freeze(row)));
-for(const id of ['music','research','data']){
- const [,panel,en,fa]=routes.find(row=>row[0]===id);
+for(const id of ['music','research','data','device']){
+ const route=routes.find(row=>row[0]===id);if(!route)continue;
+ const [,panel,en,fa]=route;
  const b=document.createElement('button');b.type='button';b.className='secondary';b.dataset.en=en;b.dataset.fa=fa;
  b.addEventListener('click',()=>window.NexusStudioFocus?.openPanel(panel));
  suggestions.append(b);
@@ -167,6 +169,9 @@ function reviewedJavaScript(message){
 // A proposal explains permissions before opening any separate tool review.
 function toolBoundary(command){
  switch(command){
+ case 'device': return words(
+  'Small English drafting model on this device. About 167 MB initial download; data and battery use remain. Opening does not download or generate. Review download consent and each model request separately.',
+  'مدل کوچک پیش‌نویس انگلیسی روی دستگاه؛ دانلود اولیه حدود ۱۶۷ مگابایت است و اینترنت و باتری مصرف می‌شود. بازکردن ابزار، دانلود یا تولید متن را شروع نمی‌کند؛ دانلود و هر درخواست تأیید جداگانه دارند.');
  case 'code': return words(
   'Local JavaScript worker: a literal fenced snippet may be copied into an empty editor. Execution requires separate exact-code consent. No network or private archive access is granted.',
   'اجرای محلی JavaScript: قطعه‌کد صریح و محصور ممکن است فقط در ویرایشگر خالی کپی شود. اجرا به تأیید جداگانهٔ همان کد نیاز دارد؛ دسترسی به شبکه یا آرشیو خصوصی داده نمی‌شود.');

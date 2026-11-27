@@ -7,6 +7,7 @@ const targets=[
   ['vault-card','save','Save','ذخیره']
 ];
 const tools=[
+  ...($('device-model-card')?[['device-model-card','On-device AI','هوش مصنوعی روی دستگاه','◉','No API key; small English drafts','بدون کلید API؛ پیش‌نویس کوتاه انگلیسی']]:[]),
   ['canvas-card','Writing','نوشتن','¶','Draft and revisit versions','پیش‌نویس و بازبینی نسخه‌ها'],
   ['research-card','Research','پژوهش','⌕','Look up public sources','جست‌وجوی منابع عمومی'],
   ['music-card','Music Lab','موسیقی','♪','Compose and export WAV or MIDI','آهنگ‌سازی و خروجی WAV یا MIDI'],
@@ -25,6 +26,9 @@ const sections=[...targets.map(x=>x[0]),...tools.map(x=>x[0])];
 if(sections.some(id=>!$(id))||!$('language')||!$('conversation-card'))return;
 const main=document.querySelector('body>main');
 const conversation=$('conversation-card'),workspace=conversation.parentElement;
+// The static package initially nests this optional card inside closed model
+// settings. Give it the same visible workspace destination as other tools.
+if($('device-model-card'))conversation.after($('device-model-card'));
 const returnToMessage=document.createElement('button');
 returnToMessage.type='button';returnToMessage.className='secondary studio-return-to-message';
 returnToMessage.onclick=()=>{openPanel('conversation-card');$('message').focus({preventScroll:true})};
