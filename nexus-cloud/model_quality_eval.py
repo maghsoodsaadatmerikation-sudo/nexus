@@ -93,6 +93,7 @@ PROBES = (
         "Fictional inventory: 7 boxes have 12 pencils each and 19 pencils "
         "are given away. Return only the integer count remaining.",
         "65",
+        critical=True,
     ),
     Probe(
         "structured_json", "structured_output",
@@ -100,6 +101,7 @@ PROBES = (
         "project string Atlas, count integer 3, approved boolean false. "
         "Do not include Markdown.",
         '{"project":"Atlas","count":3,"approved":false}',
+        critical=True,
     ),
     Probe(
         "professional_rewrite", "writing",
@@ -113,6 +115,7 @@ PROBES = (
         "Write ONLY Python source defining def clamp(x, low, high) that returns x "
         "bounded between low and high using min and max. Do not execute code.",
         "def clamp(x, low, high):\n    return max(low, min(x, high))",
+        critical=True,
     ),
     Probe(
         "decision_support", "planning",
@@ -275,6 +278,15 @@ def grade(answers: dict[str, str | None], *, live: bool,
     errors = sum(item["result"] == "ERROR" for item in cases)
     skipped = sum(item["result"] == "SKIPPED" for item in cases)
     critical_failures = [item["id"] for item in cases if item["critical"] and item["result"] not in {"PASS", "SKIPPED"}]
+    dimensions = {}
+    for dimension in sorted({probe.dimension for probe in PROBES}):
+        grouped = [item for item in cases if item["dimension"] == dimension]
+        counts = {result.lower(): sum(item["result"] == result for item in grouped)
+                  for result in ("PASS", "FAIL", "ERROR", "SKIPPED")}
+        dimensions[dimension] = {
+            "total": len(grouped), **counts,
+            "pass_rate": round(counts["pass"] / len(grouped), 4),
+        }
     return {
         "scope": "synthetic_heuristic_model_answers",
         "live_model_evaluated": live,
@@ -288,6 +300,7 @@ def grade(answers: dict[str, str | None], *, live: bool,
         "skipped": skipped,
         "evaluated": len(PROBES) - skipped,
         "critical_failures": critical_failures,
+        "dimensions": dimensions,
         "pass_rate": round(passed / len(PROBES), 4),
         "cases": cases,
     }
