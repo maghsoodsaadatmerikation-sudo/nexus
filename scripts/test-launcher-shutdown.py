@@ -36,7 +36,10 @@ class Opener:
   return Response(data)
 urllib.request.build_opener=lambda *args:Opener()
 sys.modules['uvicorn']=types.ModuleType('uvicorn')
-model=types.ModuleType('studio_model');model.config=lambda:None;sys.modules['studio_model']=model
+model=types.ModuleType('studio_model')
+model.MODEL_ENV_FIELDS=('URL','ID','ADAPTER','API_KEY','WORKSPACE_ID','STREAMING')
+model.read_model_catalog=lambda snapshot=None:{}
+sys.modules['studio_model']=model
 sys.argv=[script,'--state-dir',state]+(['--binary',sys.executable,'--port','0'] if script.endswith('run-local-pilot.py') else ['--port','0'])
 runpy.run_path(script,run_name='__main__')
 '''

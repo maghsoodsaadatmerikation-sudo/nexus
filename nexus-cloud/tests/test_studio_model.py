@@ -491,6 +491,7 @@ def test_durable_budget_prevents_model_calls_after_gateway_restart(monkeypatch, 
         assert status["budget_scope"] == "one_private_host_directory_until_explicit_reset"
         assert status["readiness"] == "LOCAL_BUDGET_EXHAUSTED"
         assert status["local_request_budget"] == {"limit": 1, "attempted": 1, "remaining": 0}
+        assert status["operator_next_step"] == "review_persistent_attempt_limit_and_provider_quota"
         assert client.post("/studio-api/respond", json=BODY, headers=AUTH).status_code == 429
         assert client.app.state.model_budget.snapshot()["attempted"] == 1
     assert calls == [1]
