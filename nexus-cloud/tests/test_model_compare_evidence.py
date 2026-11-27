@@ -78,6 +78,21 @@ def receipt(report, *, mode="full_quality"):
     )
 
 
+@pytest.mark.parametrize("key", ["arithmetic", "structured_json", "code_clamp"])
+def test_core_capability_veto_survives_comparison_receipt(key):
+    report = full(passed=(14, 15))
+    report["models"][0]["critical_failures"] = [key]
+    report["models"][0]["status"] = "FAIL"
+    report["status"] = "FAIL"
+    result = receipt(report)
+    assert verify_receipt(result)
+    assert result["release_state"] == HOLD
+    forged = copy.deepcopy(report)
+    forged["models"][0]["status"] = "PASS"
+    with pytest.raises(InvalidEvidence):
+        receipt(forged)
+
+
 def test_valid_full_comparison_receipt_is_deterministic_and_always_holds():
     original = full()
     a = receipt(original)

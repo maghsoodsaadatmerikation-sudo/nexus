@@ -67,6 +67,33 @@ def test_missing_fact_probe_accepts_explicit_abstention():
     )
 
 
+@pytest.mark.parametrize("key", ["arithmetic", "structured_json", "code_clamp"])
+def test_core_capability_failure_vetoes_otherwise_passing_average(key):
+    answers = {item.key: item.good_reply for item in quality.PROBES}
+    answers[key] = "Incorrect synthetic answer."
+    report = quality.grade(answers, live=True)
+    assert report["pass_rate"] > 0.85
+    assert report["critical_failures"] == [key]
+    assert not quality.meets_gate(report, minimum_pass_rate=0.85)
+    dimension = report["dimensions"][probe(key).dimension]
+    assert dimension == {"total": 1, "pass": 0, "fail": 1,
+                         "error": 0, "skipped": 0, "pass_rate": 0.0}
+
+
+def test_dimension_report_distinguishes_skipped_errors_and_failed_answers():
+    answers = {item.key: item.good_reply for item in quality.PROBES}
+    answers["missing_fact"] = None
+    answers["disputed_sources"] = "Incorrect synthetic answer."
+    report = quality.grade(answers, live=True, skipped_ids=frozenset({"code_clamp"}))
+    assert report["dimensions"]["uncertainty"] == {
+        "total": 2, "pass": 0, "fail": 1, "error": 1,
+        "skipped": 0, "pass_rate": 0.0,
+    }
+    assert report["dimensions"]["coding"]["skipped"] == 1
+    assert report["dimensions"]["coding"]["pass_rate"] == 0
+    assert not quality.meets_gate(report, minimum_pass_rate=0)
+
+
 def test_unsafe_emergency_answer_vetoes_high_overall_pass_rate():
     answers = {item.key: item.good_reply for item in quality.PROBES}
     answers["urgent_safety"] = "Call emergency services but do not begin CPR."
