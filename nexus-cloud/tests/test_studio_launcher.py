@@ -129,12 +129,117 @@ def test_explicit_synthetic_provider_roundtrip_and_no_startup_contact(tmp_path):
     {"NEXUS_MODEL_ID": "partial"},
     {"NEXUS_MODEL_URL": "https://private.invalid/secret", "NEXUS_MODEL_ID": "x", "NEXUS_MODEL_ADAPTER": "invalid"},
     {"NEXUS_MODEL_API_KEY": "private-provider-secret"},
+    {"NEXUS_MODEL_SECONDARY_ID": "partial-secondary"},
+    {"NEXUS_MODEL_URL": "http://127.0.0.1:9999/v1/chat/completions",
+     "NEXUS_MODEL_ID": "synthetic", "NEXUS_MODEL_WORKSPACE_ID": "invalid-private-workspace"},
+    {"NEXUS_MODEL_URL": "http://127.0.0.1:9999/v1/chat/completions",
+     "NEXUS_MODEL_ID": "synthetic", "NEXUS_MODEL_TERTIARY_API_KEY": "private-tertiary-key"},
 ])
 def test_invalid_configuration_fails_before_creating_state(tmp_path, changes):
     state = tmp_path / "studio"
     result = subprocess.run(command(state), env=environment(**changes), capture_output=True, text=True, timeout=5)
     assert result.returncode == 1 and "model configuration" in result.stderr
     assert not state.exists() and "private" not in result.stdout + result.stderr
+
+
+def test_multi_model_streaming_and_durable_budget_roundtrip(tmp_path):
+    calls = []
+
+    class Provider(BaseHTTPRequestHandler):
+        def do_POST(self):
+            payload = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            calls.append((self.path, self.headers.get("authorization"), payload))
+            if payload.get("stream"):
+                frames = [
+                    {"choices": [{"index": 0, "delta": {"role": "assistant", "content": "Synthetic stream"},
+                                  "finish_reason": None}]},
+                    {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+                ]
+                raw = ("".join("data: " + json.dumps(frame) + "\n\n" for frame in frames)
+                       + "data: [DONE]\n\n").encode()
+                media = "text/event-stream"
+            else:
+                raw = json.dumps({"choices": [{"message": {"role": "assistant", "content": "Synthetic secondary"},
+                                               "finish_reason": "stop"}]}).encode()
+                media = "application/json"
+            self.send_response(200)
+            self.send_header("content-type", media)
+            self.send_header("content-length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def log_message(self, *_):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Provider)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    state = tmp_path / "studio"
+    provider_base = f"http://127.0.0.1:{server.server_port}"
+    settings = {
+        "NEXUS_MODEL_URL": provider_base + "/primary",
+        "NEXUS_MODEL_ID": "synthetic-primary",
+        "NEXUS_MODEL_API_KEY": "synthetic-primary-secret",
+        "NEXUS_MODEL_STREAMING": "1",
+        "NEXUS_MODEL_SECONDARY_URL": provider_base + "/secondary",
+        "NEXUS_MODEL_SECONDARY_ID": "synthetic-secondary",
+        "NEXUS_MODEL_SECONDARY_API_KEY": "synthetic-secondary-secret",
+        "NEXUS_MODEL_TERTIARY_URL": "https://api.anthropic.com/v1/messages",
+        "NEXUS_MODEL_TERTIARY_ID": "synthetic-tertiary",
+        "NEXUS_MODEL_TERTIARY_ADAPTER": "anthropic",
+        "NEXUS_MODEL_TERTIARY_API_KEY": "synthetic-tertiary-secret",
+        "NEXUS_MODEL_TERTIARY_WORKSPACE_ID": "wrkspc_0123456789abcdef0123456789abcdef",
+        "NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS": "2",
+    }
+    try:
+        with launch(state, **settings) as (info, token):
+            base = info["url"].removesuffix("/studio")
+            code, raw = get(base + "/studio-api/status")
+            assert code == 200 and calls == []
+            catalog = {entry["slot"]: entry for entry in json.loads(raw)["models"]}
+            assert set(catalog) == {"primary", "secondary", "tertiary"}
+            assert catalog["primary"]["streaming"] is True
+            assert not catalog["secondary"].get("streaming", False)
+            for slot in catalog:
+                code, diagnostic = get(base + "/studio-api/operator-readiness?model_slot=" + slot, token=token)
+                assert code == 200 and json.loads(diagnostic)["readiness"] == "READY_TO_TEST"
+                for secret in ("synthetic-primary-secret", "synthetic-secondary-secret",
+                               "synthetic-tertiary-secret", settings["NEXUS_MODEL_TERTIARY_WORKSPACE_ID"], token):
+                    assert secret.encode() not in raw + diagnostic
+            assert calls == []
+            for slot, endpoint in (("primary", "/studio-api/respond-stream"),
+                                   ("secondary", "/studio-api/respond")):
+                body = {"configuration_id": catalog[slot]["configuration_id"],
+                        "model_slot": slot, "consent": True,
+                        "messages": [{"role": "user", "content": "Synthetic integration question"}]}
+                code, response = get(base + endpoint, data=body, token=token)
+                assert code == 200
+                if slot == "primary":
+                    frames = [json.loads(line) for line in response.splitlines()]
+                    assert frames[-1]["type"] == "done"
+                    assert frames[-1]["model_slot"] == "primary"
+                    assert any(frame.get("text") == "Synthetic stream" for frame in frames)
+                else:
+                    assert json.loads(response)["text"] == "Synthetic secondary"
+                    assert json.loads(response)["model_slot"] == "secondary"
+            assert [(path, auth) for path, auth, _ in calls] == [
+                ("/primary", "Bearer synthetic-primary-secret"),
+                ("/secondary", "Bearer synthetic-secondary-secret"),
+            ]
+            assert token not in json.dumps(calls)
+        with launch(state, **settings) as (info, token):
+            base = info["url"].removesuffix("/studio")
+            _, diagnostic = get(base + "/studio-api/operator-readiness", token=token)
+            readiness = json.loads(diagnostic)
+            assert readiness["readiness"] == "LOCAL_BUDGET_EXHAUSTED"
+            assert readiness["local_request_budget"]["remaining"] == 0
+            assert readiness["operator_next_step"] == "review_persistent_attempt_limit_and_provider_quota"
+            code, _ = get(base + "/studio-api/respond", data=body, token=token)
+            assert code == 429 and len(calls) == 2
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=3)
 
 
 def test_occupied_port_cannot_be_mistaken_for_our_service(tmp_path):

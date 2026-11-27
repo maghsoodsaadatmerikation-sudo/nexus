@@ -198,12 +198,13 @@ def read_model_settings(snapshot: dict[str, str] | None = None) -> ModelSettings
 # retains the legacy environment variables and auth token. Other slots never
 # inherit its URL, key, mode, streaming switch or workspace selection.
 MODEL_SLOTS = ("primary", "secondary", "tertiary")
-_SLOT_FIELDS = ("URL", "ID", "ADAPTER", "API_KEY", "WORKSPACE_ID", "STREAMING")
+MODEL_ENV_FIELDS = ("URL", "ID", "ADAPTER", "API_KEY", "WORKSPACE_ID", "STREAMING")
+_SLOT_FIELDS = MODEL_ENV_FIELDS  # Compatibility for existing catalog consumers.
 
 
-def read_model_catalog() -> dict[str, ModelSettings]:
+def read_model_catalog(snapshot: dict[str, str] | None = None) -> dict[str, ModelSettings]:
     """Validate up to three separately credentialed model routes in one snapshot."""
-    snapshot = os.environ.copy()
+    snapshot = os.environ.copy() if snapshot is None else snapshot.copy()
     primary = read_model_settings(snapshot)
     if primary is None:
         return {}  # No secondary-only public gateway with missing primary auth.
@@ -571,6 +572,13 @@ def register(app):
                      else "LOCAL_BUDGET_UNAVAILABLE" if budget["attempted"] is None
                      else "LOCAL_BUDGET_EXHAUSTED" if budget["remaining"] == 0
                      else "READY_TO_TEST")
+        budget_scope = getattr(request.app.state.model_budget, "scope",
+                               "one_process_until_restart")
+        exhausted_next_step = (
+            "review_persistent_attempt_limit_and_provider_quota"
+            if budget_scope == "one_private_host_directory_until_explicit_reset"
+            else "restart_or_set_provider_quota"
+        )
         return JSONResponse({
             "readiness": readiness,
             "configuration_valid": c is not None,
@@ -579,14 +587,13 @@ def register(app):
             "adapter": c.adapter if c else None,
             "streaming": c.streaming if c else False,
             "local_request_budget": budget,
-            "budget_scope": getattr(request.app.state.model_budget, "scope",
-                                     "one_process_until_restart"),
+            "budget_scope": budget_scope,
             "provider_live_verification": "NOT_RECORDED",
             "provider_contact_attempted": False,
             "operator_next_step": ("configure_model_on_server" if c is None
                                    else "repair_private_budget_storage"
                                    if budget["attempted"] is None
-                                   else "restart_or_set_provider_quota"
+                                   else exhausted_next_step
                                    if budget["remaining"] == 0
                                    else "explicit_single_probe_smoke"),
             "authority": "none",

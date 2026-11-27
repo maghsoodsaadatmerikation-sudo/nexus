@@ -30,8 +30,9 @@ paste provider credentials into Studio. To rotate the gateway token, stop the
 server, move the private token file to a secure location and restart. Deleting
 or losing the token does not recover encrypted browser archives.
 
-This directory stores launcher credentials and a lock, **not conversation
-history**. Studio retains its existing explicit encrypted browser save and
+This directory stores launcher credentials, a lock and the durable model-attempt
+counter, **not conversation history**. Restarting preserves the counter; the
+allowance is shared by all model slots in this launcher state directory. Studio retains its existing explicit encrypted browser save and
 portable backup behavior. Keep using a fixed port and browser profile to reopen
 the same browser archive: changing the port changes the browser storage origin.
 `--port 0` is useful for disposable runs, not stable browser history.
@@ -47,7 +48,17 @@ Supply these variables through your shell or private secret configuration:
 | `NEXUS_MODEL_URL` | Exact completion endpoint, HTTPS or literal loopback HTTP |
 | `NEXUS_MODEL_ID` | Actual model identifier accepted by that server |
 | `NEXUS_MODEL_API_KEY` | Optional provider credential; retained only by the server |
-| `NEXUS_MODEL_ADAPTER` | Optional `generic` (default) or `deepseek` |
+| `NEXUS_MODEL_ADAPTER` | Optional `generic` (default), `deepseek`, `gemini` or `anthropic`; provider-specific validation still applies |
+| `NEXUS_MODEL_STREAMING` | Optional `1` for supported SSE providers; native Anthropic streaming is rejected |
+| `NEXUS_MODEL_WORKSPACE_ID` | Optional validated Anthropic workspace identifier; never displayed publicly |
+| `NEXUS_MODEL_SECONDARY_*`, `NEXUS_MODEL_TERTIARY_*` | Optional independent `URL`, `ID`, `API_KEY`, `ADAPTER`, `STREAMING`, `WORKSPACE_ID` fields; a valid primary is required |
+| `NEXUS_MODEL_MAX_REQUESTS_PER_PROCESS` | Optional attempt allowance, enforced against this launcher's durable counter across restarts |
+
+Alternative slots do not inherit the primary key, workspace or streaming flag.
+An incomplete or invalid nonempty slot prevents startup before creating state.
+Model availability and quality are still separate from syntactic configuration.
+Use the provider-specific settings in [the adapter guide](../nexus-cloud/README.md)
+for the exact supported Gemini and Anthropic endpoints.
 
 A separately installed local model server may provide a loopback completion
 endpoint without a paid provider, if the host has sufficient compute. This
@@ -70,6 +81,11 @@ Real-process acceptance checks start the server on a reserved loopback socket,
 fetch the integrated HTML, test restart and lock behavior, refuse an occupied
 port and unsafe credentials, then terminate it. A synthetic local HTTP provider
 checks explicit authentication and response forwarding with no startup contact.
+Further real-process checks cover a streamed primary reply, a separately keyed
+secondary reply, workspace configuration validation, and exhausted allowance
+surviving a full launcher restart. Overlapping ASGI tests saturate the four model
+request slots, verify both response routes reject excess traffic without charging
+attempts, keep liveness responsive, and recover after completion or cancellation.
 These checks run in the frozen cloud-adapter suite; launcher sources and the
 bundled HTML are included in its evidence input hashes and bundle.
 

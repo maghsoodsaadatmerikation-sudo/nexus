@@ -55,7 +55,14 @@ def main():
         import studio_model
         if not (ROOT / "web/studio.html").is_file():
             raise ValueError("Studio HTML is missing; use a complete repository checkout")
-        provider_names = ("NEXUS_MODEL_URL", "NEXUS_MODEL_ID", "NEXUS_MODEL_API_KEY", "NEXUS_MODEL_ADAPTER")
+        # Use the gateway's exact slot field allowlist. Prefix forwarding would
+        # inherit unrelated settings; the old four-field list silently lost
+        # streaming, workspace routing and every alternative model.
+        provider_names = tuple(
+            "NEXUS_MODEL_" + prefix + field
+            for prefix in ("", "SECONDARY_", "TERTIARY_")
+            for field in studio_model.MODEL_ENV_FIELDS
+        )
         provider_env = {name: os.environ[name] for name in provider_names if name in os.environ}
         # Forward the separate local attempt guard without treating it as a
         # provider credential or silently discarding the operator's limit.
@@ -66,16 +73,15 @@ def main():
                            "NEXUS_CONNECTOR_GITHUB_BRANCH_TOKEN", "NEXUS_CONNECTOR_GITHUB_FILE_TOKEN")
         connector_env = {name: os.environ[name] for name in connector_names if name in os.environ}
         # A saved operator credential, not an ambient Studio token, is used below.
-        previous = os.environ.get("NEXUS_STUDIO_TOKEN")
-        try:
-            os.environ["NEXUS_STUDIO_TOKEN"] = "x" * 64
-            configured = studio_model.config() is not None
-        finally:
-            if previous is None:
-                os.environ.pop("NEXUS_STUDIO_TOKEN", None)
-            else:
-                os.environ["NEXUS_STUDIO_TOKEN"] = previous
-        if any(provider_env.values()) and not configured:
+        catalog = studio_model.read_model_catalog({**provider_env, "NEXUS_STUDIO_TOKEN": "x" * 64})
+        configured = "primary" in catalog
+        requested_slots = {
+            slot for slot, prefix in (("primary", "NEXUS_MODEL_"),
+                                      ("secondary", "NEXUS_MODEL_SECONDARY_"),
+                                      ("tertiary", "NEXUS_MODEL_TERTIARY_"))
+            if any(provider_env.get(prefix + field, "") for field in studio_model.MODEL_ENV_FIELDS)
+        }
+        if requested_slots - catalog.keys():
             raise ValueError("incomplete or invalid model configuration; review NEXUS_MODEL settings")
         helpers = pilot_helpers()
         state = args.state_dir.absolute()
