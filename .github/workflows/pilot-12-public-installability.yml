@@ -12,6 +12,7 @@ on:
       - 'web/offline-pilot.html'
       - 'scripts/prepare-public-pilot-witness.sh'
       - 'scripts/pilot12-public-egress-proxy.mjs'
+      - 'scripts/test-pilot12-public-egress-proxy.mjs'
       - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
   push:
     branches: [main]
@@ -25,6 +26,7 @@ on:
       - 'web/offline-pilot.html'
       - 'scripts/prepare-public-pilot-witness.sh'
       - 'scripts/pilot12-public-egress-proxy.mjs'
+      - 'scripts/test-pilot12-public-egress-proxy.mjs'
       - 'docs/PILOT-12-INSTALLABLE-OFFLINE.md'
   workflow_dispatch:
   schedule:
@@ -81,6 +83,9 @@ jobs:
           assert r['authority']=='none' and not r['production_mutation']
           print('PASS: exact app HTML/manifest/worker bytes and identical decoded PNG icon pixels')
           PY
+      - name: Verify proxy cut admission and real local tunnel teardown
+        run: node --test scripts/test-pilot12-public-egress-proxy.mjs
+
       - name: Test real public Chromium after browser-wide bounded CONNECT proxy egress cut
         working-directory: ${{ runner.temp }}/nexus-live-pilot
         shell: bash

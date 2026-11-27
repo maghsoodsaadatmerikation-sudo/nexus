@@ -213,7 +213,8 @@ replace_exact(" checks.push('real-chrome-network-offline-reload-served-cached-ap
     """ const navProof=await retryJs("(()=>{const n=performance.getEntriesByType('navigation')[0];return {worker_started:Number(n?.workerStart)>0,controller:navigator.serviceWorker?.controller?.scriptURL===location.origin+'/service-worker.js'}})()");
  assert(navProof?.worker_started===true&&navProof.controller===true,
    'public-offline-navigation-not-proved-worker-delivered');
- assert(proxy.stats().live===false&&proxy.stats().active===0,
+ assert(proxy.stats().live===false&&proxy.stats().active===0&&
+   proxy.stats().allowed===beforeCut.allowed,
    'public-egress-regained-unexpectedly');
  const observed=navTrace.responses.filter(r=>r.stage==='real-network-offline'&&r.app_origin);
  assert(observed.every(r=>r.from_service_worker&&r.status===200&&r.html),
