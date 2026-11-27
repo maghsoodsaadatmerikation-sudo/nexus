@@ -85,6 +85,8 @@ def create_model_request_budget():
 # destination is required when Gemini credentials are used, preventing a
 # misconfigured arbitrary host from receiving the provider key.
 GEMINI_CHAT_COMPLETIONS = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+OPENROUTER_CHAT_COMPLETIONS = "https://openrouter.ai/api/v1/chat/completions"
+FREE_MODEL_ID = re.compile(r"[A-Za-z0-9._-]+/[A-Za-z0-9._-]+:free\Z")
 # The Anthropic Messages protocol is NOT OpenAI Chat Completions-compatible.
 # Keep its endpoint and API version exact; never forward its secret to arbitrary URLs.
 ANTHROPIC_MESSAGES = "https://api.anthropic.com/v1/messages"
@@ -169,13 +171,17 @@ def read_model_settings(snapshot: dict[str, str] | None = None) -> ModelSettings
         _ = p.port
     except ValueError:
         return None
-    if (kind not in {"generic", "deepseek", "gemini", "anthropic"} or not model or len(model) > 150
+    if (kind not in {"generic", "deepseek", "gemini", "anthropic", "openrouter-free"} or not model or len(model) > 150
         or len(token) < 32 or not p.hostname
         or p.username is not None or p.password is not None or p.query or p.fragment
         or any(c.isspace() for c in endpoint)
         or not (p.scheme == "https" or (p.scheme == "http" and p.hostname in {"127.0.0.1", "::1"}))):
         return None
     if kind == "gemini" and (endpoint != GEMINI_CHAT_COMPLETIONS or not key):
+        return None
+    if kind == "openrouter-free" and (
+        endpoint != OPENROUTER_CHAT_COMPLETIONS or not key or not FREE_MODEL_ID.fullmatch(model)
+    ):
         return None
     # Explicit workspace routing is Anthropic-only. Do not silently send traffic
     # to an unrelated provider when an Anthropic workspace was expected.
@@ -254,7 +260,7 @@ def provider_payload(model_id: str, messages: list[dict], *, stream: bool,
     field. Provider-specific advanced functions are deliberately excluded.
     """
     kind = adapter() if adapter_name is None else adapter_name
-    if kind not in {"generic", "deepseek", "gemini", "anthropic"}:
+    if kind not in {"generic", "deepseek", "gemini", "anthropic", "openrouter-free"}:
         raise ValueError("Unsupported model adapter")
     if mode not in {"standard", "thinking", "non-thinking"} or (
         mode != "standard" and kind != "deepseek"
@@ -269,6 +275,15 @@ def provider_payload(model_id: str, messages: list[dict], *, stream: bool,
             "model": model_id, "system": messages[0]["content"],
             "messages": messages[1:], "stream": False,
             "max_tokens": max_output_tokens,
+        }
+    if kind == "openrouter-free":
+        if not FREE_MODEL_ID.fullmatch(model_id):
+            raise ValueError("An explicit free model is required")
+        return {
+            "model": model_id, "messages": messages, "stream": stream,
+            "max_tokens": max_output_tokens,
+            "provider": {"max_price": {"prompt": 0, "completion": 0, "request": 0},
+                         "allow_fallbacks": False},
         }
     payload = {"model": model_id, "messages": messages, "stream": stream}
     if kind != "gemini":

@@ -85,6 +85,9 @@ the secure upstream through `NEXUS_CORE_URL`.
 
 ## Optional Studio model bridge
 
+For an account-free local drafting route and the opt-in `openrouter-free`
+adapter, see [zero-budget model paths](../docs/ZERO-BUDGET-MODELS.md).
+
 This adapter also exposes `/studio-api/status` and `/studio-api/respond`. Model
 use is disabled unless `NEXUS_MODEL_URL`, `NEXUS_MODEL_ID` and the separate
 `NEXUS_STUDIO_TOKEN` are configured by the operator. The optional provider key

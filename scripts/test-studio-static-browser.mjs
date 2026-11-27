@@ -211,6 +211,9 @@ try{
  checks.push('one-step-onboarding-available-with-no-project');
  assert(await js("navigator.serviceWorker.getRegistration(location.href).then(r=>!r)"),'unapproved-worker');checks.push('no-automatic-worker');
  await poll(()=>retryJs('Boolean(window.NexusDevice)'),10000,'device-controls-not-ready');await js("document.getElementById('device-check').click();true");await poll(()=>retryJs("document.getElementById('device-readiness').textContent.includes('not been verified')"),10000,'readiness-not-rendered');assert(await js("NexusDevice.worker===null&&NexusDevice.report().generation_observed===false"),'readiness-started-model');checks.push('readiness-does-not-load-model-or-claim-execution');
+ assert(await js("(()=>{const m=document.getElementById('message');m.value='SYNTHETIC NO-KEY DRAFT';m.dispatchEvent(new Event('input',{bubbles:true}));const chip=[...document.querySelectorAll('#nexus-zen-suggestions button')].find(b=>b.textContent==='On-device AI');if(!chip)return false;chip.click();const panel=document.getElementById('device-model-card');return NexusStudioFocus.active()==='device-model-card'&&!panel.hidden&&panel.getBoundingClientRect().height>0&&!panel.closest('details')&&!document.getElementById('conversation-card').hidden&&m.value==='SYNTHETIC NO-KEY DRAFT'&&!document.getElementById('device-consent').checked&&NexusDevice.worker===null&&NexusStudioUI.snapshot().projects.length===0})()"),'no-key-chip-must-open-visible-tool-without-download-or-chat-mutation');
+ await js("NexusStudioFocus.openPanel('conversation-card');document.getElementById('message').value='';document.getElementById('message').dispatchEvent(new Event('input',{bubbles:true}));true");
+ checks.push('no-key-ai-discovery-preserves-draft-and-separate-download-consent');
  await js("document.getElementById('check-model').click();true");
  assert(await js("document.getElementById('model-status').textContent.includes('No model hosted here')&&performance.getEntriesByType('resource').every(r=>!r.name.includes('/studio-api/'))"),'static-model-truthfulness');checks.push('no-model-no-api-contact');
  await js("(()=>{const m=document.getElementById('message');m.value='SYNTHETIC FIRST DRAFT';m.dispatchEvent(new Event('input',{bubbles:true}));return true})()");
@@ -256,7 +259,7 @@ try{
    query('ميكس');if(choices().join()!=='orchestra-card')return false;
    query('Reminders');if(choices().join()!=='reminders-card')return false;
    query('xyz-no-such-tool');if(choices().length||tray.querySelector('[role=status]').hidden)return false;
-   query('');return choices().length===13&&tray.querySelector('[role=status]').hidden;
+   query('');return choices().length===14&&choices().includes('device-model-card')&&tray.querySelector('[role=status]').hidden;
  })()`),'tool-catalog-search-and-empty-state');
  await js("document.querySelector('#studio-focus-tools button[data-panel=data-card]').click();true");
  assert(await js("NexusStudioFocus.active()==='data-card'&&!document.getElementById('data-card').hidden&&!document.getElementById('conversation-card').hidden"),'data-panel-route-keeps-the-conversation');
